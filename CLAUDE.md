@@ -12,7 +12,7 @@ particular upstream API.
 2. `docs/adr/` — the decisions behind them (0001 layering, 0002 runtime stack, 0003 upstream fidelity)
 3. `docs/definition-of-done.md` — what a PR must satisfy before it is opened
 
-The workspace file `../CLAUDE.md` and the org file `../../CLAUDE.md` apply as well.
+The family file `../CLAUDE.md` applies as well.
 
 ## Layout
 

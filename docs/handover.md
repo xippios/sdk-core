@@ -4,8 +4,8 @@ Date: 2026-10-20 · Author: Johannes Didaskalu (with Claude)
 
 ## State at handover
 
-Done: WSL2 user `xippios`, toolchain (uv 0.13, copier, pre-commit, gh 2.102, direnv),
-folder tree `~/github/xippios/sdk/`, family `CLAUDE.md`, `.envrc`, Claude Code
+Done: WSL2 distro Ubuntu-22.04-ex, user johan, toolchain (uv 0.13, copier, pre-commit, gh 2.102, direnv),
+folder tree `~/github/sdk/`, family `CLAUDE.md`, `.envrc`, Claude Code
 permissions, Cursor workspace; GitHub org ruleset `sdk-main-protection` (PR + `ci`
 check on `main` for `sdk-*`); repos `sdk-core`, `sdk-template`, `.github` created,
 cloned, topics set, `pypi` environments with required reviewer `jdidaskalu`;
@@ -19,7 +19,7 @@ as org secrets; Claude GitHub App after the template is proven.
 Place this bundle in the repo first:
 
 ```bash
-cd ~/github/xippios/sdk/sdk-core
+cd ~/github/sdk/sdk-core
 # CLAUDE.md, docs/conventions.md, docs/adr/, docs/definition-of-done.md, docs/handover.md
 git checkout -b chore/governing-docs
 git add -A && git commit -m "docs: add conventions, ADRs, definition of done, handover"
@@ -33,7 +33,7 @@ scaffold branch — your choice. Then start the session from inside the repo so 
 is loaded:
 
 ```bash
-cd ~/github/xippios/sdk/sdk-core && claude
+cd ~/github/sdk/sdk-core && claude
 ```
 
 Opening prompt:
@@ -75,7 +75,7 @@ git tag v0.1.0 && git push origin v0.1.0
 Start after `xippios-core` 0.1.0 is on PyPI (or installable from git).
 
 ```bash
-cd ~/github/xippios/sdk/sdk-template && claude
+cd ~/github/sdk/sdk-template && claude
 ```
 
 Opening prompt:
