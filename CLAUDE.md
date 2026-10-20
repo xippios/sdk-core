@@ -9,7 +9,8 @@ particular upstream API.
 ## Read first, in this order
 
 1. `docs/conventions.md` — the family-wide rules this repo implements and enforces
-2. `docs/adr/` — the decisions behind them (0001 layering, 0002 runtime stack, 0003 upstream fidelity)
+2. `docs/adr/` — the decisions behind them (0001 layering, 0002 runtime stack,
+   0003 upstream fidelity, 0004 core layout and MCP SDK)
 3. `docs/definition-of-done.md` — what a PR must satisfy before it is opened
 
 The family file `../CLAUDE.md` applies as well.
@@ -18,17 +19,20 @@ The family file `../CLAUDE.md` applies as well.
 
 ```
 src/xippios/core/
-  __init__.py        public surface, re-exports only
-  client.py          HTTP client (httpx), retries, rate limiting, caching hooks
-  config.py          settings loading (env vars), per-source key resolution
-  errors.py          error taxonomy
-  models.py          ResultMeta, Result[T], base model config
-  reference.py       loader for packaged reference data (code lists, calendars)
-  pagination.py      page/cursor helpers
-  mcp.py             FastMCP helpers: tool registration, result caps, error-to-text   [extra: mcp]
-  http.py            FastAPI helpers: router factory from task functions             [extra: http]
-  testing.py         respx fixtures and live-test gate shared by all source repos    [extra: testing]
-tests/
+  __init__.py        public surface, re-exports only; adapters are NOT re-exported
+  py.typed           PEP 561 marker; without it mypy --strict fails in every source repo
+  _version.py        __version__ from distribution metadata
+  _loop.py           one background event loop; sync() derives sync functions from async
+  errors.py          error taxonomy, response/exception classifiers
+  models.py          UpstreamModel, ResultMeta, Result[T], parse()
+  config.py          SourceSettings base, resolve_api_key()
+  pagination.py      offset / page-number / cursor iterators, collect()
+  reference.py       loader for packaged reference data (CSV, JSON)
+  client/            httpx client: config, retry, ratelimit, cache, _core (async), Client (sync)
+  mcp/               MCP server helpers: server, results (caps), errors (to text), cli   [extra: mcp]
+  http/              FastAPI helpers: router (from tasks), problems (RFC 9457)          [extra: http]
+  testing/           pytest plugin (live gate), fixtures, record, replay, scrub          [extra: testing]
+tests/               mirrors the tree: tests/client/, tests/mcp/, tests/http/, tests/testing/
 docs/
   conventions.md  adr/  definition-of-done.md  handover.md
 .github/workflows/
@@ -37,7 +41,20 @@ docs/
 ```
 
 `src/xippios/` has **no** `__init__.py` — it is a PEP 420 namespace package shared
-with every `xippios-<source>` distribution.
+with every `xippios-<source>` distribution. `tests/test_public_surface.py` fails if one
+appears.
+
+Rules of the tree (ADR-0004):
+
+- A concern is a subpackage when it has an optional dependency or more than one
+  internal module; otherwise it is a single module. Do not add empty directories.
+- Imports point downward only: `errors` and `models` at the bottom; `config`, `client`,
+  `pagination`, `reference` above; `mcp`, `http`, `testing` on top. Nothing below an
+  adapter imports an adapter.
+- The MCP adapter targets the official `mcp` SDK 2.x (`mcp.server.mcpserver.MCPServer`).
+  `FastMCP` no longer exists there; the standalone `fastmcp` package is not used.
+- The public surface is `__init__.py` and nothing else. `xippios.core.mcp`,
+  `xippios.core.http` and `xippios.core.testing` are imported explicitly by their users.
 
 ## Commands
 
@@ -52,11 +69,14 @@ uv run pre-commit run --all-files
 
 ## Workflow rules
 
-- Branch from `main` as `feature/<topic>`, `fix/<topic>` or `chore/<topic>`. Never commit to `main`.
+- Branch from `main` as `feature/<topic>`, `fix/<topic>`, `chore/<topic>` or `docs/<topic>`.
+  Never commit to `main`.
 - Commit small, with Conventional Commits messages (`feat(client): add retry budget`).
 - Open the PR with `gh pr create`, body = the definition-of-done checklist, ticked honestly.
 - Never tag, merge, release, force-push, or touch `gh secret`. Those are human actions.
 - Never read or print `.envrc`, `.env`, or any variable ending in `_API_KEY`.
+- `ruff` is configured to leave `docs/` alone; never reformat code blocks in the
+  governing documents.
 - If a convention seems wrong, say so in the PR description and follow it anyway; changing
   a convention is its own PR against `docs/conventions.md` plus an ADR.
 
