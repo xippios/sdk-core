@@ -71,7 +71,9 @@ def sync[**P, T](fn: Callable[P, Coroutine[Any, Any, T]]) -> SyncFunction[P, T]:
 
     The result has the same signature and docstring, runs the coroutine on the
     background loop, and exposes the original as ``.async_fn`` so adapters can
-    await it natively instead of blocking their own loop.
+    await it natively instead of blocking their own loop. A trailing ``_async`` is
+    dropped from the name, so ``get_series = sync(get_series_async)`` is named
+    ``get_series`` wherever the name is shown, such as in MCP tool names.
 
     Args:
         fn: An ``async def`` function.
@@ -81,6 +83,8 @@ def sync[**P, T](fn: Callable[P, Coroutine[Any, Any, T]]) -> SyncFunction[P, T]:
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
         return run(fn(*args, **kwargs))
 
+    wrapper.__name__ = fn.__name__.removesuffix("_async")
+    wrapper.__qualname__ = fn.__qualname__.removesuffix("_async")
     wrapper.async_fn = fn  # type: ignore[attr-defined]
     return cast(SyncFunction[P, T], wrapper)
 

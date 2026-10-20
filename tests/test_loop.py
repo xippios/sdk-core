@@ -29,6 +29,16 @@ def test_sync_keeps_signature_and_docstring() -> None:
     assert add_sync.async_fn is add
 
 
+def test_sync_strips_async_suffix_from_name() -> None:
+    async def get_series_async() -> int:
+        return 1
+
+    facade = sync(get_series_async)
+    assert facade.__name__ == "get_series"
+    assert facade.__qualname__.endswith("get_series")
+    assert facade.async_fn.__name__ == "get_series_async"
+
+
 def test_sync_works_inside_a_running_loop() -> None:
     async def caller() -> int:
         return add_sync(40, 2)
