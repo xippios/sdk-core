@@ -7,6 +7,16 @@ subpackages and are imported explicitly: ``xippios.core.mcp``, ``xippios.core.ht
 
 from xippios.core._loop import sync
 from xippios.core._version import __version__
+from xippios.core.client import (
+    AsyncClient,
+    CacheBackend,
+    Client,
+    ClientConfig,
+    MemoryCache,
+    RateLimit,
+    RetryPolicy,
+    Timeouts,
+)
 from xippios.core.config import SourceSettings, resolve_api_key
 from xippios.core.errors import (
     AuthError,
@@ -23,13 +33,21 @@ from xippios.core.pagination import collect, paginate_cursor, paginate_offset, p
 from xippios.core.reference import load_csv, load_json, load_table
 
 __all__ = [
+    "AsyncClient",
     "AuthError",
+    "CacheBackend",
+    "Client",
+    "ClientConfig",
     "ConfigError",
+    "MemoryCache",
     "NotFoundError",
+    "RateLimit",
     "RateLimitError",
     "Result",
     "ResultMeta",
+    "RetryPolicy",
     "SourceSettings",
+    "Timeouts",
     "TransportError",
     "UpstreamError",
     "UpstreamModel",
