@@ -86,8 +86,9 @@ class AsyncClient:
         params: Params = None,
         json: Any = None,
         headers: Mapping[str, str] | None = None,
+        raise_on_error: bool = True,
     ) -> httpx.Response:
-        """Send one request and return the successful response.
+        """Send one request and return the response.
 
         Retries, rate limiting and caching apply as configured. A 4xx/5xx that survives
         the retry policy is raised as the matching error from the taxonomy; a transport
@@ -99,6 +100,8 @@ class AsyncClient:
             params: Query parameters.
             json: JSON body for write methods.
             headers: Extra headers for this request only.
+            raise_on_error: ``False`` returns 4xx/5xx responses instead of raising, for
+                callers that record fixtures or inspect error bodies.
         """
         pool = self._pool()
         method = method.upper()
@@ -118,7 +121,8 @@ class AsyncClient:
         response = await send_with_retries(
             send, policy=self.config.retry, method=method, source=self.source, sleep=self._sleep
         )
-        raise_for_status(response, source=self.source)
+        if raise_on_error:
+            raise_for_status(response, source=self.source)
         if key is not None and self.config.cache is not None and response.status_code == 200:
             self.config.cache.set(
                 key,

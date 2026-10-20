@@ -65,10 +65,18 @@ class Client:
         params: Params = None,
         json: Any = None,
         headers: Mapping[str, str] | None = None,
+        raise_on_error: bool = True,
     ) -> httpx.Response:
         """See ``AsyncClient.request``."""
         return run(
-            self.async_client.request(method, path, params=params, json=json, headers=headers)
+            self.async_client.request(
+                method,
+                path,
+                params=params,
+                json=json,
+                headers=headers,
+                raise_on_error=raise_on_error,
+            )
         )
 
     def get(
