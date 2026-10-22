@@ -6,26 +6,9 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Added
-
-- `UpstreamModel` serialises `Decimal` fields as JSON numbers in both adapters
-  (ADR-0008); `UpstreamModel.project` builds projections; `parse_decimal` reads
-  published figures with separators or suppression codes.
-- `ClientConfig.classify`: a source's error mapping, called on every response before
-  the default status mapping.
-- `xippios.core.reference.render_str_enums` and `enum_member_name`: generated
-  `StrEnum` source for packaged value lists.
-- `xippios.core.testing.assert_projection` and `mcp_call`.
-- `InvalidRequestError` in the taxonomy (ADR-0007): a request refused before it is
-  sent; HTTP 422, MCP text. Re-exported from `xippios.core`.
-- `xippios.core.http.is_scalar`.
-
-### Changed
-
-- `router_from_tasks`: a task with any non-scalar parameter becomes a `POST` route whose
-  JSON body is an object keyed by parameter name; scalar-only tasks stay `GET`.
-
 ## [0.1.0] - 2026-10-22
+
+First release, cut after the first source package (sdk-usda-nass) had exercised it.
 
 ### Added
 
@@ -52,3 +35,19 @@ All notable changes to this project are documented here. The format follows
 - `xippios.core.testing` (extra `testing`): pytest plugin with the `live` gate,
   fixture format, `record`, `replay`, scrubbing helpers.
 - CI on Python 3.12, 3.13 and 3.14; trusted publishing on `v*` tags.
+- `UpstreamModel` serialises `Decimal` fields as JSON numbers in both adapters
+  (ADR-0008); `UpstreamModel.project` builds projections; `parse_decimal` reads
+  published figures with separators or suppression codes.
+- `ClientConfig.classify`: a source's error mapping, called on every response before
+  the default status mapping.
+- `xippios.core.reference.render_str_enums` and `enum_member_name`: generated
+  `StrEnum` source for packaged value lists.
+- `xippios.core.testing.assert_projection` and `mcp_call`.
+- `InvalidRequestError` in the taxonomy (ADR-0007): a request refused before it is
+  sent; HTTP 422, MCP text. Re-exported from `xippios.core`.
+- `xippios.core.http.is_scalar`.
+
+### Changed
+
+- `router_from_tasks`: a task with any non-scalar parameter becomes a `POST` route whose
+  JSON body is an object keyed by parameter name; scalar-only tasks stay `GET`.

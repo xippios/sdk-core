@@ -22,7 +22,26 @@ Open (human): merge sdk-core #2 and the release PR, tag `v0.1.0`, approve the `p
 (pending publisher first); merge sdk-template#1 and tag it `v0.1.0`; API keys in `.envrc`
 and as org secrets; Claude GitHub App after the pilot.
 
-## Session 3 — `sdk-usda-nass` (pilot)
+## Session 3 — `sdk-usda-nass` (pilot): done
+
+Completed 2026-10-22: scaffold, documentation snapshot, `get_counts`, `get_data`,
+`list_param_values`, packaged reference lists with generated enums, filter-key
+validation, and the four task-shaped slices (crop progress and condition, county yield
+and production, acreage, prices received). What the pilot taught core is ADR-0007 and
+ADR-0008. The architect's review fixes (raw value plus `value_number` on projections,
+slices skipping the count, `get_acreage_forecasts`, `published_at` from `load_time`)
+land in the pilot's adoption PR before its first tag.
+
+## Session 4 — `sdk-comtrade`
+
+Decided 2026-10-22: UN Comtrade is a single-API provider, so it exercises the flat branch
+of ADR-0006 (`xippios.comtrade`), and it is wrapped through core's client against the
+documented REST endpoints (ADR-0002 holds); the official `comtradeapicall` package is a
+second reference next to the documentation, not a dependency. Same sequence as the
+pilot: `/new-source comtrade`, snapshot PR first, API-shaped tasks, reference data, then
+task-shaped slices after a pattern review.
+
+## Session 3 — original plan
 
 Decisions already taken (2026-10-22 interview):
 
