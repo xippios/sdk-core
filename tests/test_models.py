@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
-from pydantic import Field
+from pydantic import Field, computed_field
 
 from xippios.core.errors import ValidationError
 from xippios.core.models import (
@@ -156,3 +156,23 @@ def test_project_copies_same_named_fields_and_applies_overrides() -> None:
 def test_project_names_the_missing_field() -> None:
     with pytest.raises(TypeError, match=r"Row\.project: Wide has no field amounts"):
         Row.project(Wide(label="x", amount=None, extra=1))
+
+
+class Priced(UpstreamModel):
+    label: str
+    value: str
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def value_number(self) -> Decimal | None:
+        return parse_decimal(self.value)
+
+
+def test_computed_decimal_fields_serialise_as_json_numbers() -> None:
+    priced = Priced(label="x", value="1,234.5")
+    assert priced.value_number == Decimal("1234.5")
+    dumped = priced.model_dump(mode="json")
+    assert dumped == {"label": "x", "value": "1,234.5", "value_number": 1234.5}
+    assert json.loads(priced.model_dump_json())["value_number"] == 1234.5
+    assert Priced(label="x", value="(D)").model_dump(mode="json")["value_number"] is None
+    assert priced.model_dump()["value_number"] == Decimal("1234.5")
