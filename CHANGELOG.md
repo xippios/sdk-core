@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-22
+
 ### Added
 
 - `xippios.core.errors`: the family error taxonomy (`XippiosError` and seven
@@ -16,6 +18,11 @@ All notable changes to this project are documented here. The format follows
   background event loop.
 - `xippios.core.client`: `AsyncClient` and `Client` with `ClientConfig`, `Timeouts`,
   `RetryPolicy`, `RateLimit`, `MemoryCache` and the `CacheBackend` protocol.
+- `xippios.core.client.auth`: `QueryKeyAuth`, `HeaderKeyAuth`, `BearerAuth`,
+  `BasicKeyAuth` and the `EnvKeyAuth` base, resolving the key from the environment on
+  the first request. Re-exported from `xippios.core`.
+- `ResultMeta` redacts credential-like keys in `request` at construction (ADR-0005).
+- `resolve_api_key` is typed to return `SecretStr` when the key is required.
 - `xippios.core.pagination`: `paginate_offset`, `paginate_pages`, `paginate_cursor`,
   `collect`.
 - `xippios.core.reference`: `load_csv`, `load_json`, `load_table`.

@@ -4,7 +4,15 @@ import pytest
 from pydantic import Field
 
 from xippios.core.errors import ValidationError
-from xippios.core.models import Result, ResultMeta, UpstreamModel, parse
+from xippios.core.models import (
+    REDACTED,
+    Result,
+    ResultMeta,
+    UpstreamModel,
+    is_credential_key,
+    parse,
+    redact_credentials,
+)
 
 
 class Series(UpstreamModel):
@@ -68,3 +76,36 @@ def test_parse_wraps_validation_error_with_raw() -> None:
     assert info.value.raw is raw
     assert info.value.source == "example"
     assert str(info.value).startswith("example get_thing: 1 validation error(s); first at value:")
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("key", True), ("api_key", True), ("apikey", True), ("API_KEY", True), ("x-api-key", True),
+        ("access_token", True), ("client_secret", True), ("password", True), ("auth", True),
+        ("Authorization", True), ("signature", True), ("credentials", True), ("sort_key", True),
+        ("keyword", False), ("author", False), ("commodity_desc", False), ("year", False),
+        ("tokens_used", False), ("design", False),
+    ],
+)  # fmt: skip
+def test_is_credential_key(name: str, expected: bool) -> None:
+    assert is_credential_key(name) is expected
+
+
+def test_redact_credentials_is_deep_and_copies() -> None:
+    params = {"key": "SECRET", "year": 2024, "nested": {"token": "T", "ok": [{"secret": "S"}, 1]}}
+    redacted = redact_credentials(params)
+    assert redacted == {
+        "key": REDACTED,
+        "year": 2024,
+        "nested": {"token": REDACTED, "ok": [{"secret": REDACTED}, 1]},
+    }
+    assert params["key"] == "SECRET"
+
+
+def test_result_meta_never_carries_credentials() -> None:
+    meta = ResultMeta(
+        source="usda-nass", endpoint="api_GET", request={"key": "SECRET", "commodity_desc": "CORN"}
+    )
+    assert meta.request == {"key": REDACTED, "commodity_desc": "CORN"}
+    assert "SECRET" not in meta.model_dump_json()

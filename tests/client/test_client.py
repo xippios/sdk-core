@@ -217,13 +217,13 @@ def test_one_pool_per_event_loop(respx_mock: respx.MockRouter, config: ClientCon
     respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
     client = AsyncClient(config)
 
-    async def use() -> int:
+    async def use() -> httpx.AsyncClient:
         await client.get("/v1/x")
-        return id(client._pool())
+        return client._pool()
 
-    first = asyncio.run(use())
+    first = asyncio.run(use())  # held alive, so the second pool cannot reuse its address
     second = asyncio.run(use())
-    assert first != second
+    assert first is not second
 
 
 def test_sync_client_facade(respx_mock: respx.MockRouter, config: ClientConfig) -> None:

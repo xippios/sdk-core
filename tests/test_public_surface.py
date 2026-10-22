@@ -8,6 +8,7 @@ EXPECTED = {
     # client
     "AsyncClient", "CacheBackend", "Client", "ClientConfig", "MemoryCache",
     "RateLimit", "RetryPolicy", "Timeouts",
+    "EnvKeyAuth", "QueryKeyAuth", "HeaderKeyAuth", "BearerAuth", "BasicKeyAuth",
     # errors
     "AuthError", "ConfigError", "NotFoundError", "RateLimitError", "TransportError",
     "UpstreamError", "ValidationError", "XippiosError",

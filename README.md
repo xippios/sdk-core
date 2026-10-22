@@ -7,8 +7,10 @@ upstream API.
 It gives a source package the things that should be identical across the family:
 
 - **HTTP client** on `httpx` with retries, a per-source rate limiter, an optional
-  response cache, explicit timeouts and one `User-Agent`. Async at the core, a sync
-  facade on top.
+  response cache (off by default; the in-memory one is bounded by TTL and size),
+  explicit timeouts and one `User-Agent`. Async at the core, a sync facade on top.
+- **Auth helpers** that read the key from the environment on the first request:
+  query parameter, header, bearer token or basic auth.
 - **Error taxonomy**: `ConfigError`, `AuthError`, `RateLimitError`, `NotFoundError`,
   `ValidationError`, `UpstreamError`, `TransportError`, all under `XippiosError`.
 - **Result envelope**: every task function returns `Result[T]` with `ResultMeta`
@@ -40,6 +42,7 @@ from pydantic import Field
 from xippios.core import (
     AsyncClient,
     ClientConfig,
+    QueryKeyAuth,
     RateLimit,
     Result,
     ResultMeta,
@@ -54,7 +57,8 @@ client = AsyncClient(
         version="0.1.0",
         base_url="https://api.example.org",
         rate_limit=RateLimit(per_minute=60),
-    )
+    ),
+    auth=QueryKeyAuth("key", "EXAMPLE_API_KEY", source="example"),  # read on first request
 )
 
 
@@ -70,9 +74,10 @@ async def get_series_async(series_id: str, year: int = 2024) -> Result[list[Seri
         series_id: Upstream identifier, e.g. ``"CORN_YIELD"``.
         year: Four-digit year, e.g. ``2024``.
     """
-    raw = await client.get_json("/v1/series", params={"id": series_id, "year": year})
+    params = {"id": series_id, "year": year}
+    raw = await client.get_json("/v1/series", params=params)
     rows = parse(list[Series], raw["data"], source="example", endpoint="series")
-    meta = ResultMeta(source="example", endpoint="series", request={"id": series_id, "year": year})
+    meta = ResultMeta(source="example", endpoint="series", request=params)
     return Result(data=rows, meta=meta)
 
 
@@ -84,6 +89,10 @@ get_series = sync(get_series_async)  # same signature, same docstring, blocks un
 >>> result.data[0].value, result.meta.retrieved_at
 (177.3, datetime.datetime(2026, 10, 20, 12, 0, tzinfo=datetime.timezone.utc))
 ```
+
+`meta.request` is provenance, not a copy of the call: `ResultMeta` redacts any key that
+looks like a credential (`key`, `token`, `secret`, ...) so an envelope is safe to hand
+to an agent or return over HTTP.
 
 Upstream failures arrive as taxonomy errors, never as raw `httpx` exceptions:
 
@@ -158,15 +167,18 @@ pytest_plugins = ["xippios.core.testing.plugin"]
 
 | Module | What | Status |
 | --- | --- | --- |
-| `xippios.core.client` | httpx client, retries, rate limit, cache, sync facade | stable |
-| `xippios.core.errors` | taxonomy and response classification | stable |
-| `xippios.core.models` | `UpstreamModel`, `Result`, `ResultMeta`, `parse` | stable |
-| `xippios.core.config` | `SourceSettings`, `resolve_api_key` | stable |
-| `xippios.core.reference` | packaged CSV/JSON loaders | stable |
-| `xippios.core.pagination` | offset, page and cursor iterators | stable |
-| `xippios.core.mcp` | tool registration, result caps, error text, CLI | stable |
-| `xippios.core.http` | router factory, problem details | stable |
-| `xippios.core.testing` | live gate, record, replay, scrub | stable |
+| `xippios.core.client` | httpx client, retries, rate limit, cache, sync facade | alpha |
+| `xippios.core.errors` | taxonomy and response classification | alpha |
+| `xippios.core.models` | `UpstreamModel`, `Result`, `ResultMeta`, `parse` | alpha |
+| `xippios.core.config` | `SourceSettings`, `resolve_api_key` | alpha |
+| `xippios.core.reference` | packaged CSV/JSON loaders | alpha |
+| `xippios.core.pagination` | offset, page and cursor iterators | alpha |
+| `xippios.core.mcp` | tool registration, result caps, error text, CLI | alpha |
+| `xippios.core.http` | router factory, problem details | alpha |
+| `xippios.core.testing` | live gate, record, replay, scrub | alpha |
+
+Alpha: the public surface may change in a minor version until the first source
+package, `sdk-usda-nass`, has exercised it.
 
 ## Conventions
 

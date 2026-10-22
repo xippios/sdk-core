@@ -8,6 +8,13 @@ import httpx
 
 from xippios.core._loop import run
 from xippios.core.client._core import AsyncClient, Params
+from xippios.core.client.auth import (
+    BasicKeyAuth,
+    BearerAuth,
+    EnvKeyAuth,
+    HeaderKeyAuth,
+    QueryKeyAuth,
+)
 from xippios.core.client.cache import CacheBackend, CachedResponse, MemoryCache, cache_key
 from xippios.core.client.config import ClientConfig, RateLimit, RetryPolicy, Timeouts
 from xippios.core.client.ratelimit import TokenBucket
@@ -15,12 +22,17 @@ from xippios.core.client.retry import send_with_retries
 
 __all__ = [
     "AsyncClient",
+    "BasicKeyAuth",
+    "BearerAuth",
     "CacheBackend",
     "CachedResponse",
     "Client",
     "ClientConfig",
+    "EnvKeyAuth",
+    "HeaderKeyAuth",
     "MemoryCache",
     "Params",
+    "QueryKeyAuth",
     "RateLimit",
     "RetryPolicy",
     "Timeouts",

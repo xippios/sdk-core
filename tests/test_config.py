@@ -58,3 +58,11 @@ def test_resolve_treats_empty_as_missing(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setenv(ENV, "")
     with pytest.raises(ConfigError):
         resolve_api_key(ENV)
+
+
+def test_required_key_is_typed_as_secret(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(ENV, VALUE)
+    key: SecretStr = resolve_api_key(ENV)  # the default overload returns SecretStr, not Optional
+    assert key.get_secret_value() == VALUE
+    optional: SecretStr | None = resolve_api_key(ENV, required=False)
+    assert optional is not None

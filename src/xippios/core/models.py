@@ -1,5 +1,7 @@
 """Result envelope, release metadata and the base for upstream payload models (conventions §4)."""
 
+import re
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -9,12 +11,49 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator
 from xippios.core.errors import ValidationError
 
 __all__ = [
+    "REDACTED",
     "Result",
     "ResultMeta",
     "UpstreamModel",
+    "is_credential_key",
     "parse",
+    "redact_credentials",
     "utcnow",
 ]
+
+REDACTED = "REDACTED"
+"""What a credential-like value in ``ResultMeta.request`` is replaced with."""
+
+_CREDENTIAL_KEY = re.compile(
+    r"(?i)(?:^|[_-])"
+    r"(?:api_?key|key|token|secret|password|passwd|auth|authorization|signature|credentials?)"
+    r"(?:[_-]|$)"
+)
+
+
+def is_credential_key(name: str) -> bool:
+    """True when a parameter name looks like it carries a credential (ADR-0005).
+
+    Matches whole words separated by ``_`` or ``-``: ``key``, ``api_key``, ``x-api-key``,
+    ``access_token``, ``client_secret``, ``sort_key`` all match; ``keyword`` does not.
+    """
+    return _CREDENTIAL_KEY.search(name) is not None
+
+
+def _redact_value(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return redact_credentials(value)
+    if isinstance(value, list):
+        return [_redact_value(item) for item in value]
+    return value
+
+
+def redact_credentials(mapping: Mapping[str, Any]) -> dict[str, Any]:
+    """A copy of ``mapping`` with credential-like keys set to ``REDACTED`` at any depth."""
+    return {
+        key: REDACTED if is_credential_key(key) else _redact_value(value)
+        for key, value in mapping.items()
+    }
 
 
 class UpstreamModel(BaseModel):
@@ -44,7 +83,8 @@ class ResultMeta(BaseModel):
         retrieved_at: When we fetched the data; timezone-aware UTC, defaults to now.
         published_at: Upstream publication or release time when known.
         vintage: Upstream release identifier when the source has one.
-        request: The parameters used, for reproducibility.
+        request: The parameters used, for reproducibility. Credential-like keys are
+            redacted at construction (ADR-0005); record the variable name, never the value.
     """
 
     source: str
@@ -60,6 +100,11 @@ class ResultMeta(BaseModel):
         if value is not None and value.tzinfo is None:
             raise ValueError("datetime must be timezone-aware")
         return value
+
+    @field_validator("request")
+    @classmethod
+    def _no_credentials(cls, value: dict[str, Any]) -> dict[str, Any]:
+        return redact_credentials(value)
 
 
 class Result[T](BaseModel):
