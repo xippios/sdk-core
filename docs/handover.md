@@ -35,7 +35,18 @@ Decisions already taken (2026-10-22 interview):
   convenience tasks come later, once the `source_desc`/`sector_desc` combinations that
   matter are named.
 - `api_base_url` is `https://quickstats.nass.usda.gov/api`; the key is sent as the `key`
-  query parameter from `NASS_API_KEY`; the rate limit comes from the NASS documentation.
+  query parameter from `NASS_API_KEY`. NASS documents no per-minute limit; the client
+  enforces a self-imposed 30 per minute, and the generated CLAUDE.md says so.
+- Import path `xippios.usda.nass` (ADR-0006): the `/new-source` answer `import_path`
+  keeps its default, `usda.nass`.
+- Quick Stats rejects queries over 50,000 records and does not paginate: `get_data`
+  calls `get_counts` first and raises a taxonomy error with the count and a narrowing
+  hint before fetching.
+- Reference data: package only the small stable parameter lists (`sector_desc`,
+  `group_desc`, `agg_level_desc`, `source_desc`, `freq_desc`, `state_alpha`) with
+  provenance; `commodity_desc` and other large lists stay live via `list_param_values`.
+- Second wave, task-shaped functions after the three API-shaped ones: crop progress and
+  condition, county yield and production, planted and harvested acreage, prices received.
 
 Opening prompt, from inside `sdk-template`:
 

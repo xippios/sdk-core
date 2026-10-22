@@ -1,6 +1,6 @@
 # xippios SDK family — conventions
 
-Version 1.1 · 2026-10-22 · applies to every `sdk-*` repository under github.com/xippios.
+Version 1.2 · 2026-10-22 · applies to every `sdk-*` repository under github.com/xippios.
 Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 
 ## 1. Naming
@@ -9,7 +9,7 @@ Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 | --- | --- | --- |
 | GitHub repo | `sdk-<source>` | `sdk-usda-nass` |
 | PyPI distribution | `xippios-<source>` | `xippios-usda-nass` |
-| Import path | `xippios.<source>` (underscores) | `xippios.usda_nass` |
+| Import path | `xippios.<source>`; a provider with several APIs nests: `xippios.<provider>.<api>` | `xippios.comtrade`, `xippios.usda.nass` |
 | MCP entry point | `xippios-<source>-mcp` | `xippios-usda-nass-mcp` |
 | MCP tool | `<source>_<verb>_<noun>` | `usda_nass_get_series` |
 | Env var for a key | `<SOURCE>_API_KEY` | `NASS_API_KEY` |
@@ -19,20 +19,31 @@ Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 No domain prefixes (`ag`, `agri`): sources are domain-neutral; grouping happens via
 GitHub topics (`xippios-sdk`) and the org README.
 
-`src/xippios/` is a PEP 420 namespace package: **no** `src/xippios/__init__.py` in any repo.
+The import path nests only where one provider has several APIs (ADR-0006): `usda-nass`
+imports as `xippios.usda.nass`, `comtrade` as `xippios.comtrade`. Repository and
+distribution names stay flat and hyphenated. Each generated repository records its
+import path explicitly (`import_path` in `.copier-answers.yml`); the default turns every
+hyphen into a dot, and a single-API provider whose name carries a hyphen overrides it
+(`world-bank` → `xippios.world_bank`). MCP tool names keep the flat prefix
+(`usda_nass_get_data`).
+
+`src/xippios/` is a PEP 420 namespace package, and so is every provider level such as
+`src/xippios/usda/`: **no** `__init__.py` at those levels in any repo. Only the package
+itself (`src/xippios/usda/nass/`) has one.
 
 ## 2. Layering (ADR-0001)
 
-Every source package has three layers, top to bottom, and nothing skips a layer:
+Every source package has three layers, top to bottom, and nothing skips a layer.
+`<pkg>` below is the import path under `xippios` as a directory: `comtrade`, `usda/nass`.
 
-1. **Endpoint wrappers** — `xippios/<source>/api/*.py`. One function per upstream
+1. **Endpoint wrappers** — `xippios/<pkg>/api/*.py`. One function per upstream
    endpoint, named after the upstream operation, parameters as upstream names them
    (snake_cased), returning typed models that mirror the upstream payload.
-2. **Task-shaped functions** — `xippios/<source>/tasks.py`. The functions a person
+2. **Task-shaped functions** — `xippios/<pkg>/tasks.py`. The functions a person
    or an agent actually wants: `get_balance_sheet(commodity, marketing_year)`. They
    compose endpoint wrappers, handle pagination and reference lookups, and return
    `Result[T]`. This is the public API and the only layer adapters may call.
-3. **Adapters** — `xippios/<source>/mcp.py` and `xippios/<source>/http.py`.
+3. **Adapters** — `xippios/<pkg>/mcp.py` and `xippios/<pkg>/http.py`.
    Thin: register task functions, apply result caps, map errors. Target ≤ 60 lines
    each. If logic appears here, it belongs in `tasks.py`.
 
