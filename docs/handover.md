@@ -29,8 +29,10 @@ Completed 2026-10-22: scaffold, documentation snapshot, `get_counts`, `get_data`
 validation, and the four task-shaped slices (crop progress and condition, county yield
 and production, acreage, prices received). What the pilot taught core is ADR-0007 and
 ADR-0008. The architect's review fixes (raw value plus `value_number` on projections,
-slices skipping the count, `get_acreage_forecasts`, `published_at` from `load_time`)
-land in the pilot's adoption PR before its first tag.
+slices skipping the count, `get_acreage_forecasts`) landed in the pilot's adoption
+PR (#15). `published_at` stays empty: Quick Stats publishes no release time and
+`load_time` carries no zone, so reading one into it would be a guess (ADR-0003).
+The pilot depends on core from PyPI since its PR #16.
 
 ## Session 4 — `sdk-comtrade`
 
