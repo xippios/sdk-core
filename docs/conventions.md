@@ -1,6 +1,6 @@
 # xippios SDK family — conventions
 
-Version 1.2 · 2026-10-22 · applies to every `sdk-*` repository under github.com/xippios.
+Version 1.3 · 2026-10-22 · applies to every `sdk-*` repository under github.com/xippios.
 Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 
 ## 1. Naming
@@ -100,11 +100,16 @@ XippiosError
 ├── NotFoundError        404 or empty where upstream signals absence
 ├── ValidationError      we could not parse what upstream returned (carries raw body)
 ├── UpstreamError        other 4xx/5xx (carries status, body)
-└── TransportError       network, timeout
+├── TransportError       network, timeout
+└── InvalidRequestError  the request cannot be sent as given: a bad argument, or a query
+                         the source documents it will refuse (ADR-0007); raised before
+                         any upstream call
 ```
 
-Source packages subclass only when upstream has a distinct, documented failure mode.
-Adapters convert these to structured text (MCP) or problem+json (HTTP); they never
+Source packages subclass only when upstream has a distinct, documented failure mode;
+a refusal the package makes itself, such as a query over a documented record limit or
+an unknown filter name, subclasses `InvalidRequestError`. Adapters convert these to
+structured text (MCP) or problem+json (HTTP; `InvalidRequestError` is 422); they never
 leak tracebacks.
 
 ## 6. HTTP client (`xippios.core.client`)
@@ -144,7 +149,10 @@ the contract (direnv in development, secrets in CI).
 
 FastAPI router generated from task functions via `xippios.core.http.router_from_tasks`;
 one tag per source; responses are the `Result[T]` envelope; errors as RFC 9457
-problem details. Mounted by the consumer, never served standalone from the package.
+problem details. A task whose parameters are all scalars is a `GET` with query
+parameters; a task with any non-scalar parameter (a mapping, a list, a model) is a
+`POST` whose JSON body is an object keyed by parameter name (ADR-0007). Mounted by the
+consumer, never served standalone from the package.
 
 ## 10. Testing
 
