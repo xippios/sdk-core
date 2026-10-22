@@ -5,6 +5,7 @@ direnv in development, secrets in CI.
 """
 
 import os
+from typing import Literal, overload
 
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -31,6 +32,26 @@ class SourceSettings(BaseSettings):
     )
 
     api_key: SecretStr | None = None
+
+
+@overload
+def resolve_api_key(
+    env_var: str,
+    override: str | SecretStr | None = None,
+    *,
+    required: Literal[True] = True,
+    source: str | None = None,
+) -> SecretStr: ...
+
+
+@overload
+def resolve_api_key(
+    env_var: str,
+    override: str | SecretStr | None = None,
+    *,
+    required: bool,
+    source: str | None = None,
+) -> SecretStr | None: ...
 
 
 def resolve_api_key(
