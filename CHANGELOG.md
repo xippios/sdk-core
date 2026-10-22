@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `InvalidRequestError` in the taxonomy (ADR-0007): a request refused before it is
+  sent; HTTP 422, MCP text. Re-exported from `xippios.core`.
+- `xippios.core.http.is_scalar`.
+
+### Changed
+
+- `router_from_tasks`: a task with any non-scalar parameter becomes a `POST` route whose
+  JSON body is an object keyed by parameter name; scalar-only tasks stay `GET`.
+
 ## [0.1.0] - 2026-10-22
 
 ### Added

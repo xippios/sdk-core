@@ -1,4 +1,4 @@
-from xippios.core.errors import NotFoundError, RateLimitError, UpstreamError
+from xippios.core.errors import InvalidRequestError, NotFoundError, RateLimitError, UpstreamError
 from xippios.core.mcp import error_to_text
 
 
@@ -14,3 +14,9 @@ def test_rate_limit_hint() -> None:
         "error: RateLimitError: slow down (retry after 30 s)"
     )
     assert error_to_text(RateLimitError("slow down")) == "error: RateLimitError: slow down"
+
+
+def test_invalid_request_text() -> None:
+    assert error_to_text(InvalidRequestError("unknown column 'bad'")) == (
+        "error: InvalidRequestError: unknown column 'bad'"
+    )

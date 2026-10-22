@@ -27,12 +27,13 @@ from xippios.core.http.problems import (
     problem_response,
     status_for,
 )
-from xippios.core.http.router import router_from_tasks
+from xippios.core.http.router import is_scalar, router_from_tasks
 
 __all__ = [
     "PROBLEM_MEDIA_TYPE",
     "STATUS_BY_ERROR",
     "install_error_handlers",
+    "is_scalar",
     "problem_response",
     "router_from_tasks",
     "status_for",

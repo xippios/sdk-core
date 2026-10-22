@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from xippios.core.errors import (
     AuthError,
     ConfigError,
+    InvalidRequestError,
     NotFoundError,
     RateLimitError,
     TransportError,
@@ -38,6 +39,7 @@ class SpecialNotFound(NotFoundError):
         (TransportError("x"), 504),
         (XippiosError("x"), 500),
         (SpecialNotFound("x"), 404),
+        (InvalidRequestError("x"), 422),
     ],
 )
 def test_status_table(exc: XippiosError, status: int) -> None:

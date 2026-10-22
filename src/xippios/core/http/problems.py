@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from xippios.core.errors import (
     AuthError,
     ConfigError,
+    InvalidRequestError,
     NotFoundError,
     RateLimitError,
     TransportError,
@@ -34,6 +35,7 @@ STATUS_BY_ERROR: dict[type[XippiosError], int] = {
     ValidationError: 502,
     UpstreamError: 502,
     TransportError: 504,
+    InvalidRequestError: 422,
     XippiosError: 500,
 }
 """HTTP status for each error class. Subclasses inherit their nearest ancestor's."""
