@@ -3,10 +3,19 @@
 import re
 from collections.abc import Mapping
 from datetime import UTC, datetime
-from typing import Any
+from decimal import Decimal, InvalidOperation
+from typing import Any, Self
 
 import pydantic
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    TypeAdapter,
+    field_serializer,
+    field_validator,
+)
 
 from xippios.core.errors import ValidationError
 
@@ -17,6 +26,7 @@ __all__ = [
     "UpstreamModel",
     "is_credential_key",
     "parse",
+    "parse_decimal",
     "redact_credentials",
     "utcnow",
 ]
@@ -56,17 +66,73 @@ def redact_credentials(mapping: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def parse_decimal(text: str) -> Decimal | None:
+    """A published figure as a number, or ``None`` when it is a code rather than a value.
+
+    Thousands separators are removed (``"510,000"`` → ``510000``); anything that is not
+    a number, such as a suppression code like ``"(D)"`` or an empty string, gives
+    ``None``. Within-source hygiene only: the text is never reinterpreted.
+    """
+    try:
+        return Decimal(text.replace(",", "").strip())
+    except InvalidOperation:
+        return None
+
+
+def _as_json_number(value: Any, rendered: Any) -> Any:
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, list | tuple) and isinstance(rendered, list):
+        return [
+            float(item) if isinstance(item, Decimal) else out
+            for item, out in zip(value, rendered, strict=True)
+        ]
+    return rendered
+
+
 class UpstreamModel(BaseModel):
     """Base for models that mirror an upstream payload field by field.
 
     Instances are frozen. Fields upstream adds later are ignored rather than rejected,
     and fields can be populated by name as well as by alias, so upstream ``camelCase``
     maps onto ``snake_case`` attributes without breaking construction in tests.
+    ``Decimal`` fields serialise as JSON numbers in both adapters (ADR-0008); Python
+    keeps the ``Decimal``.
     """
 
     model_config = ConfigDict(
         frozen=True, extra="ignore", validate_by_name=True, validate_by_alias=True
     )
+
+    @field_serializer("*", mode="wrap", when_used="json")
+    def _decimal_as_json_number(self, value: Any, handler: SerializerFunctionWrapHandler) -> Any:
+        return _as_json_number(value, handler(value))
+
+    @classmethod
+    def project(cls, source: BaseModel, **overrides: Any) -> Self:
+        """Build this model from another model's same-named fields.
+
+        A projection keeps a subset of the source's columns under their upstream names
+        (ADR-0008). ``overrides`` are for parsing only, e.g. ``value=parse_decimal(...)``;
+        every other field is copied from ``source`` unchanged.
+
+        Args:
+            source: The record to project, usually the full upstream record.
+            **overrides: Values for fields that are parsed rather than copied.
+
+        Raises:
+            TypeError: When a field of this model is neither on ``source`` nor overridden.
+        """
+        missing = [
+            name for name in cls.model_fields if name not in overrides and not hasattr(source, name)
+        ]
+        if missing:
+            raise TypeError(
+                f"{cls.__name__}.project: {type(source).__name__} has no field "
+                + ", ".join(missing)
+            )
+        copied = {name: getattr(source, name) for name in cls.model_fields if name not in overrides}
+        return cls(**copied, **overrides)
 
 
 def utcnow() -> datetime:

@@ -1,12 +1,13 @@
 """Value objects configuring a client: timeouts, retry policy, rate limit, cache."""
 
 import random
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 
 import httpx
 
 from xippios.core.client.cache import CacheBackend
+from xippios.core.errors import XippiosError
 
 __all__ = ["ClientConfig", "RateLimit", "RetryPolicy", "Timeouts"]
 
@@ -112,6 +113,10 @@ class ClientConfig:
         rate_limit: Client-side limit; ``None`` disables it.
         cache: Backend for GET responses; ``None`` disables caching.
         headers: Extra headers sent with every request.
+        classify: The source's own error mapping (ADR-0008): called with every response
+            before the default status mapping; return a taxonomy error to raise it, or
+            ``None`` to fall through. Where a source states its documented error shapes,
+            including errors upstream sends with a 200.
     """
 
     source: str
@@ -122,6 +127,7 @@ class ClientConfig:
     rate_limit: RateLimit | None = None
     cache: CacheBackend | None = None
     headers: Mapping[str, str] = field(default_factory=dict)
+    classify: Callable[[httpx.Response], XippiosError | None] | None = None
 
     @property
     def user_agent(self) -> str:

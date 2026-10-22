@@ -13,7 +13,7 @@ EXPECTED = {
     "AuthError", "ConfigError", "InvalidRequestError", "NotFoundError", "RateLimitError",
     "TransportError", "UpstreamError", "ValidationError", "XippiosError",
     # models, config, helpers
-    "Result", "ResultMeta", "UpstreamModel", "parse",
+    "Result", "ResultMeta", "UpstreamModel", "parse", "parse_decimal",
     "SourceSettings", "resolve_api_key",
     "collect", "paginate_cursor", "paginate_offset", "paginate_pages",
     "load_csv", "load_json", "load_table",

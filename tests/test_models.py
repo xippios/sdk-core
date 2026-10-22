@@ -1,4 +1,6 @@
+import json
 from datetime import UTC, datetime
+from decimal import Decimal
 
 import pytest
 from pydantic import Field
@@ -11,6 +13,7 @@ from xippios.core.models import (
     UpstreamModel,
     is_credential_key,
     parse,
+    parse_decimal,
     redact_credentials,
 )
 
@@ -109,3 +112,47 @@ def test_result_meta_never_carries_credentials() -> None:
     )
     assert meta.request == {"key": REDACTED, "commodity_desc": "CORN"}
     assert "SECRET" not in meta.model_dump_json()
+
+
+class Row(UpstreamModel):
+    label: str
+    amount: Decimal | None
+    amounts: list[Decimal]
+
+
+class Wide(UpstreamModel):
+    label: str
+    amount: Decimal | None
+    extra: int
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [("510,000", Decimal("510000")), ("4.61", Decimal("4.61")), (" 98 ", Decimal("98")),
+     ("(D)", None), ("", None), ("(NA)", None), ("1,234.5", Decimal("1234.5"))],
+)  # fmt: skip
+def test_parse_decimal(text: str, expected: Decimal | None) -> None:
+    assert parse_decimal(text) == expected
+
+
+def test_decimal_fields_serialise_as_json_numbers() -> None:
+    row = Row(label="x", amount=Decimal("98.5"), amounts=[Decimal("1"), Decimal("2.25")])
+    assert row.model_dump(mode="json") == {"label": "x", "amount": 98.5, "amounts": [1.0, 2.25]}
+    assert json.loads(row.model_dump_json())["amount"] == 98.5
+    assert row.model_dump()["amount"] == Decimal("98.5")
+    assert Row(label="x", amount=None, amounts=[]).model_dump(mode="json")["amount"] is None
+    envelope = Result[list[Row]](data=[row], meta=ResultMeta(source="s", endpoint="e"))
+    assert envelope.model_dump(mode="json")["data"][0]["amounts"] == [1.0, 2.25]
+
+
+def test_project_copies_same_named_fields_and_applies_overrides() -> None:
+    wide = Wide(label="corn", amount=Decimal("3"), extra=7)
+    row = Row.project(wide, amounts=[Decimal("1")])
+    assert row == Row(label="corn", amount=Decimal("3"), amounts=[Decimal("1")])
+    parsed = Row.project(wide, amount=parse_decimal("(D)"), amounts=[])
+    assert parsed.amount is None
+
+
+def test_project_names_the_missing_field() -> None:
+    with pytest.raises(TypeError, match=r"Row\.project: Wide has no field amounts"):
+        Row.project(Wide(label="x", amount=None, extra=1))
