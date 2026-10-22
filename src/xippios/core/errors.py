@@ -14,6 +14,7 @@ __all__ = [
     "BODY_LIMIT",
     "AuthError",
     "ConfigError",
+    "InvalidRequestError",
     "NotFoundError",
     "RateLimitError",
     "TransportError",
@@ -111,6 +112,15 @@ class UpstreamError(XippiosError):
 
 class TransportError(XippiosError):
     """Network failure or timeout before a usable response arrived."""
+
+
+class InvalidRequestError(XippiosError):
+    """The request cannot be sent as given (ADR-0007).
+
+    A bad argument, or a query the source documents it will refuse, detected before any
+    upstream call. Source packages subclass it for their documented refusals. Adapters
+    answer with text (MCP) or HTTP 422.
+    """
 
 
 def parse_retry_after(value: str | None, *, now: datetime | None = None) -> float | None:

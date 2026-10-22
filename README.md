@@ -12,7 +12,8 @@ It gives a source package the things that should be identical across the family:
 - **Auth helpers** that read the key from the environment on the first request:
   query parameter, header, bearer token or basic auth.
 - **Error taxonomy**: `ConfigError`, `AuthError`, `RateLimitError`, `NotFoundError`,
-  `ValidationError`, `UpstreamError`, `TransportError`, all under `XippiosError`.
+  `ValidationError`, `UpstreamError`, `TransportError` and `InvalidRequestError` (a
+  request refused before it is sent), all under `XippiosError`.
 - **Result envelope**: every task function returns `Result[T]` with `ResultMeta`
   (source, endpoint, retrieved_at, published_at, vintage, request).
 - **Reference-data loader** for code lists shipped inside a package.
@@ -148,8 +149,10 @@ from xippios.core.http import router_from_tasks
 router = router_from_tasks("example", [tasks.get_series])  # GET /example/get_series?series_id=...
 ```
 
-Mount it on your FastAPI app. Responses are the `Result[T]` envelope; errors are
-RFC 9457 problem details (`application/problem+json`).
+Mount it on your FastAPI app. A task whose parameters are all scalars is a `GET` with
+query parameters; a task with a mapping, list or model parameter is a `POST` whose JSON
+body is keyed by parameter name. Responses are the `Result[T]` envelope; errors are
+RFC 9457 problem details (`application/problem+json`), `InvalidRequestError` as 422.
 
 ## Testing a source package
 

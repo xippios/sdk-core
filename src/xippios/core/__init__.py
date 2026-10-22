@@ -26,6 +26,7 @@ from xippios.core.config import SourceSettings, resolve_api_key
 from xippios.core.errors import (
     AuthError,
     ConfigError,
+    InvalidRequestError,
     NotFoundError,
     RateLimitError,
     TransportError,
@@ -48,6 +49,7 @@ __all__ = [
     "ConfigError",
     "EnvKeyAuth",
     "HeaderKeyAuth",
+    "InvalidRequestError",
     "MemoryCache",
     "NotFoundError",
     "QueryKeyAuth",

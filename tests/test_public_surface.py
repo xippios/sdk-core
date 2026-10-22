@@ -10,8 +10,8 @@ EXPECTED = {
     "RateLimit", "RetryPolicy", "Timeouts",
     "EnvKeyAuth", "QueryKeyAuth", "HeaderKeyAuth", "BearerAuth", "BasicKeyAuth",
     # errors
-    "AuthError", "ConfigError", "NotFoundError", "RateLimitError", "TransportError",
-    "UpstreamError", "ValidationError", "XippiosError",
+    "AuthError", "ConfigError", "InvalidRequestError", "NotFoundError", "RateLimitError",
+    "TransportError", "UpstreamError", "ValidationError", "XippiosError",
     # models, config, helpers
     "Result", "ResultMeta", "UpstreamModel", "parse",
     "SourceSettings", "resolve_api_key",
