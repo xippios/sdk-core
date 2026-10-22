@@ -1,6 +1,6 @@
 # xippios SDK family — conventions
 
-Version 1.3 · 2026-10-22 · applies to every `sdk-*` repository under github.com/xippios.
+Version 1.4 · 2026-10-22 · applies to every `sdk-*` repository under github.com/xippios.
 Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 
 ## 1. Naming
@@ -57,7 +57,12 @@ plus a loader), `_client.py` (the configured `xippios.core.client` instance).
   reference for the agent; refresh it deliberately, by PR, and diff it.
 - Within-source hygiene is required: dates → `datetime.date`/`datetime`, numbers →
   `int`/`Decimal`/`float` as appropriate, upstream enums → `StrEnum`, pagination
-  resolved, errors typed. Field names are upstream names in snake_case.
+  resolved, errors typed. Field names are upstream names in snake_case. A `Decimal`
+  field of an `UpstreamModel` serialises as a JSON number in every adapter
+  (ADR-0008); Python keeps the `Decimal`.
+- Task-shaped functions may return a *projection* of an upstream record: a subset of
+  its columns under their upstream names, typed, built with `UpstreamModel.project`.
+  Nothing is renamed or computed; parsing a value is the only permitted override.
 - **No cross-source normalization.** A USDA `marketing_year` stays a USDA concept.
   Mapping between sources is business logic and lives outside this family.
 - Reference data (commodity codes, country codes, report calendars) ships inside the
@@ -117,6 +122,9 @@ leak tracebacks.
 - `httpx`, async core, sync facade (ADR-0002). Source packages expose sync functions;
   async variants are optional and suffixed `_async`.
 - Retries with exponential backoff and jitter on 429 and 5xx; never on 4xx otherwise.
+- A source maps its documented error shapes once, in `ClientConfig.classify`, which
+  sees every response before the default status mapping (ADR-0008); endpoint
+  wrappers then use `get_json` and never inspect status codes themselves.
 - A per-source rate limiter configured from the source's documented limits.
 - Optional response cache (in-memory by default, pluggable) keyed on method+URL+params.
 - One `User-Agent`: `xippios-<source>/<version> (+https://github.com/xippios)`.
