@@ -10,7 +10,7 @@ particular upstream API.
 
 1. `docs/conventions.md` — the family-wide rules this repo implements and enforces
 2. `docs/adr/` — the decisions behind them (0001 layering, 0002 runtime stack,
-   0003 upstream fidelity, 0004 core layout and MCP SDK)
+   0003 upstream fidelity, 0004 core layout and MCP SDK, 0005 no credentials in the envelope)
 3. `docs/definition-of-done.md` — what a PR must satisfy before it is opened
 
 The family file `../CLAUDE.md` applies as well.
@@ -28,7 +28,7 @@ src/xippios/core/
   config.py          SourceSettings base, resolve_api_key()
   pagination.py      offset / page-number / cursor iterators, collect()
   reference.py       loader for packaged reference data (CSV, JSON)
-  client/            httpx client: config, retry, ratelimit, cache, _core (async), Client (sync)
+  client/            httpx client: config, retry, ratelimit, cache, auth (env-key helpers), _core, Client
   mcp/               MCP server helpers: server, results (caps), errors (to text), cli   [extra: mcp]
   http/              FastAPI helpers: router (from tasks), problems (RFC 9457)          [extra: http]
   testing/           pytest plugin (live gate), fixtures, record, replay, scrub          [extra: testing]

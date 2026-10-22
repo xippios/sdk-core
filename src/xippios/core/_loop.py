@@ -4,6 +4,10 @@ One daemon thread owns one event loop for the whole process. Sync facades submit
 coroutines to it and block until they finish, which works from plain scripts, from
 Jupyter, and from inside another running loop. Nothing here is public API except
 through ``xippios.core.sync``.
+
+Not fork-safe: a process forked after the loop thread started (``multiprocessing`` with
+the ``fork`` start method) inherits a loop whose thread does not exist. Use the
+``spawn`` start method, or fork before the first sync call.
 """
 
 import asyncio
@@ -73,7 +77,8 @@ def sync[**P, T](fn: Callable[P, Coroutine[Any, Any, T]]) -> SyncFunction[P, T]:
     background loop, and exposes the original as ``.async_fn`` so adapters can
     await it natively instead of blocking their own loop. A trailing ``_async`` is
     dropped from the name, so ``get_series = sync(get_series_async)`` is named
-    ``get_series`` wherever the name is shown, such as in MCP tool names.
+    ``get_series`` wherever the name is shown, such as in MCP tool names. The loop
+    is not fork-safe; see the module docstring.
 
     Args:
         fn: An ``async def`` function.
