@@ -1,6 +1,6 @@
 # xippios SDK family — conventions
 
-Version 1.0 · 2026-10-20 · applies to every `sdk-*` repository under github.com/xippios.
+Version 1.1 · 2026-10-22 · applies to every `sdk-*` repository under github.com/xippios.
 Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 
 ## 1. Naming
@@ -72,6 +72,12 @@ class Result(BaseModel, Generic[T]):
 ```
 
 `meta` is never optional. It is what makes a later as-of/vintage store possible.
+
+`request` never carries credentials (ADR-0005). `ResultMeta` redacts the value of any
+key that looks like one (`key`, `api_key`, `token`, `secret`, `password`, `auth`,
+`signature`, `credential`) to `"REDACTED"` at construction, so an envelope is safe to
+hand to an agent, return over HTTP, or write to a store. A task that wants the
+credential's provenance records the variable name, never the value.
 
 ## 5. Errors (`xippios.core.errors`)
 
@@ -159,7 +165,8 @@ lower bounds only.
 - Branches: trunk-based. `main` protected by the org ruleset; feature branches
   `feature/`, `fix/`, `chore/`, `docs/`. Conventional Commits.
 - Required files: `README.md`, `CHANGELOG.md`, `LICENSE` (Apache-2.0), `CLAUDE.md`,
-  `docs/upstream/FETCHED.md`, `pyproject.toml`, `uv.lock`.
+  `docs/upstream/FETCHED.md`, `pyproject.toml`, `uv.lock`. `sdk-core` wraps no upstream
+  and is exempt from `docs/upstream/` (ADR-0005).
 - README structure: what it wraps · install (`uv add xippios-<source>[mcp]`) ·
   30-second example · MCP client config snippet · status table of covered endpoints ·
   upstream terms and attribution · licence.
