@@ -109,10 +109,10 @@ def render_str_enums(
         "values, values are upstream's.",
         '"""',
         "",
-        "from enum import StrEnum",
-        "",
-        "__all__ = [" + ", ".join(f'"{names[key]}"' for key in lists) + "]",
     ]
+    if lists:
+        lines += ["from enum import StrEnum", ""]
+    lines.append("__all__ = [" + ", ".join(f'"{names[key]}"' for key in lists) + "]")
     for key, values in lists.items():
         members = [enum_member_name(value) for value in values]
         if len(set(members)) != len(members):

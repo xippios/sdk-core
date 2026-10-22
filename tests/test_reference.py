@@ -117,3 +117,16 @@ def test_render_str_enums_is_valid_formatted_python(tmp_path: Path) -> None:
 def test_render_str_enums_rejects_colliding_members() -> None:
     with pytest.raises(ValueError, match="collide"):
         render_str_enums({"x": ["A B", "A-B"]})
+
+
+def test_render_str_enums_with_no_lists_imports_nothing(tmp_path: Path) -> None:
+    source = render_str_enums({}, generator="tests")
+    assert "import" not in source
+    assert "__all__ = []" in source
+    path = tmp_path / "enums.py"
+    path.write_text(source)
+    check = subprocess.run(
+        [sys.executable, "-m", "ruff", "check", "--select", "F,E,W,D", str(path)],
+        capture_output=True, text=True, check=False,
+    )  # fmt: skip
+    assert check.returncode == 0, check.stdout + check.stderr
