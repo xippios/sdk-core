@@ -34,7 +34,7 @@ from xippios.core.errors import (
     ValidationError,
     XippiosError,
 )
-from xippios.core.models import Result, ResultMeta, UpstreamModel, parse
+from xippios.core.models import Result, ResultMeta, UpstreamModel, parse, parse_decimal
 from xippios.core.pagination import collect, paginate_cursor, paginate_offset, paginate_pages
 from xippios.core.reference import load_csv, load_json, load_table
 
@@ -74,6 +74,7 @@ __all__ = [
     "paginate_offset",
     "paginate_pages",
     "parse",
+    "parse_decimal",
     "resolve_api_key",
     "sync",
 ]

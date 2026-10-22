@@ -14,11 +14,13 @@ from xippios.core.client import (
 )
 from xippios.core.errors import (
     AuthError,
+    InvalidRequestError,
     NotFoundError,
     RateLimitError,
     TransportError,
     UpstreamError,
     ValidationError,
+    XippiosError,
 )
 
 BASE = "https://api.example.test"
@@ -242,3 +244,38 @@ def test_sync_client_raises_taxonomy_errors(
     respx_mock.get(f"{BASE}/v1/x").respond(403)
     with pytest.raises(AuthError), Client(config) as client:
         client.get("/v1/x")
+
+
+def _classify(response: httpx.Response) -> XippiosError | None:
+    body = (
+        response.json()
+        if response.headers.get("content-type", "").startswith("application/json")
+        else {}
+    )
+    if response.status_code == 200 and body.get("error") == "no rows":
+        return NotFoundError("upstream says no rows", source="example")
+    if response.status_code == 413:
+        return InvalidRequestError("too big", source="example")
+    return None
+
+
+@pytest.mark.anyio
+async def test_classify_sees_every_response_first(respx_mock: respx.MockRouter) -> None:
+    config = ClientConfig(
+        source="example", version="1", base_url=BASE,
+        retry=RetryPolicy(max_attempts=1), classify=_classify,
+    )  # fmt: skip
+    client = AsyncClient(config)
+    respx_mock.get(f"{BASE}/v1/empty").respond(200, json={"error": "no rows"})
+    respx_mock.get(f"{BASE}/v1/big").respond(413, json={"error": "exceeds limit"})
+    respx_mock.get(f"{BASE}/v1/other").respond(404)
+    respx_mock.get(f"{BASE}/v1/ok").respond(200, json={"rows": 1})
+    with pytest.raises(NotFoundError, match="no rows"):
+        await client.get("/v1/empty")
+    with pytest.raises(InvalidRequestError, match="too big"):
+        await client.get("/v1/big")
+    with pytest.raises(NotFoundError, match="404"):
+        await client.get("/v1/other")
+    assert (await client.get_json("/v1/ok")) == {"rows": 1}
+    raw = await client.request("GET", "/v1/empty", raise_on_error=False)
+    assert raw.status_code == 200

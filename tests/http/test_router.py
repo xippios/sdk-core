@@ -180,3 +180,28 @@ def test_post_route_openapi_and_errors() -> None:
     assert response.status_code == 422
     assert response.headers["content-type"] == PROBLEM_MEDIA_TYPE
     assert response.json()["title"] == "InvalidRequestError"
+
+
+class Priced(UpstreamModel):
+    name: str
+    price: Decimal | None
+
+
+async def priced_async(name: str) -> Result[list[Priced]]:
+    """Priced things.
+
+    Args:
+        name: Which.
+    """
+    return Result(
+        data=[Priced(name=name, price=Decimal("4.61"))],
+        meta=ResultMeta(source="example", endpoint="p"),
+    )
+
+
+def test_http_responses_carry_decimals_as_numbers() -> None:
+    app = FastAPI()
+    app.include_router(router_from_tasks("example", [sync(priced_async)]))
+    response = TestClient(app).get("/example/priced", params={"name": "corn"})
+    assert response.status_code == 200
+    assert response.json()["data"] == [{"name": "corn", "price": 4.61}]

@@ -10,12 +10,16 @@ It gives a source package the things that should be identical across the family:
   response cache (off by default; the in-memory one is bounded by TTL and size),
   explicit timeouts and one `User-Agent`. Async at the core, a sync facade on top.
 - **Auth helpers** that read the key from the environment on the first request:
-  query parameter, header, bearer token or basic auth.
+  query parameter, header, bearer token or basic auth. A source's documented error
+  shapes go into `ClientConfig.classify`, consulted on every response.
 - **Error taxonomy**: `ConfigError`, `AuthError`, `RateLimitError`, `NotFoundError`,
   `ValidationError`, `UpstreamError`, `TransportError` and `InvalidRequestError` (a
   request refused before it is sent), all under `XippiosError`.
 - **Result envelope**: every task function returns `Result[T]` with `ResultMeta`
-  (source, endpoint, retrieved_at, published_at, vintage, request).
+  (source, endpoint, retrieved_at, published_at, vintage, request). `Decimal` fields
+  of upstream models arrive as JSON numbers in both adapters; `UpstreamModel.project`
+  builds a projection of a record under upstream names, `parse_decimal` reads a
+  published figure.
 - **Reference-data loader** for code lists shipped inside a package.
 - **Adapters** that turn task functions into MCP tools (`xippios.core.mcp`) and FastAPI
   routes (`xippios.core.http`) without any logic of their own.

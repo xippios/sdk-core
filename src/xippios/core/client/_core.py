@@ -90,9 +90,10 @@ class AsyncClient:
     ) -> httpx.Response:
         """Send one request and return the response.
 
-        Retries, rate limiting and caching apply as configured. A 4xx/5xx that survives
-        the retry policy is raised as the matching error from the taxonomy; a transport
-        failure as ``TransportError``.
+        Retries, rate limiting and caching apply as configured. The source's
+        ``classify`` hook, if any, sees the response first; otherwise a 4xx/5xx that
+        survives the retry policy is raised as the matching error from the taxonomy; a
+        transport failure as ``TransportError``.
 
         Args:
             method: HTTP method.
@@ -122,6 +123,10 @@ class AsyncClient:
             send, policy=self.config.retry, method=method, source=self.source, sleep=self._sleep
         )
         if raise_on_error:
+            if self.config.classify is not None:
+                classified = self.config.classify(response)
+                if classified is not None:
+                    raise classified
             raise_for_status(response, source=self.source)
         if key is not None and self.config.cache is not None and response.status_code == 200:
             self.config.cache.set(

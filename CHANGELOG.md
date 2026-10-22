@@ -8,6 +8,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `UpstreamModel` serialises `Decimal` fields as JSON numbers in both adapters
+  (ADR-0008); `UpstreamModel.project` builds projections; `parse_decimal` reads
+  published figures with separators or suppression codes.
+- `ClientConfig.classify`: a source's error mapping, called on every response before
+  the default status mapping.
+- `xippios.core.reference.render_str_enums` and `enum_member_name`: generated
+  `StrEnum` source for packaged value lists.
+- `xippios.core.testing.assert_projection` and `mcp_call`.
 - `InvalidRequestError` in the taxonomy (ADR-0007): a request refused before it is
   sent; HTTP 422, MCP text. Re-exported from `xippios.core`.
 - `xippios.core.http.is_scalar`.
