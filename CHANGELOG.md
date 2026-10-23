@@ -6,6 +6,24 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `xippios.core.mcp.quiet_request_logging()`: sets the `httpx` and `httpcore` loggers
+  to `WARNING`. Idempotent; `build_server` and `main` call it.
+
+### Security
+
+- The MCP servers no longer log request URLs. Constructing an `MCPServer` (`mcp` SDK
+  2.x) configures root logging at `INFO` on stderr, and httpx logs every request at
+  `INFO` with its full URL, so every `xippios-<source>-mcp` entry point wrote each
+  upstream URL to stderr, which MCP clients keep in their logs. For a source that sends
+  its key as a query parameter (`QueryKeyAuth`; usda-nass sends `key=`) that put the
+  API key into the client's logs; for a multi-tenant source (cashctrl) it put the tenant
+  host there. `build_server` now sets the `httpx` and `httpcore` loggers to `WARNING`
+  right after constructing the server, and `main` does so again before running it
+  (ADR-0005). A consumer who wants the request log raises the level after building the
+  server and runs it without `main`.
+
 ## [0.1.0] - 2026-10-22
 
 First release, cut after the first source package (sdk-usda-nass) had exercised it.

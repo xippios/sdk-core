@@ -55,6 +55,10 @@ Rules of the tree (ADR-0004):
   adapter imports an adapter.
 - The MCP adapter targets the official `mcp` SDK 2.x (`mcp.server.mcpserver.MCPServer`).
   `FastMCP` no longer exists there; the standalone `fastmcp` package is not used.
+- Constructing an `MCPServer` configures root logging at `INFO`, and httpx logs every
+  request URL at `INFO`; URLs can carry a key or a tenant host (ADR-0005). `build_server`
+  and `main` therefore call `quiet_request_logging()`. Keep both calls; the tests in
+  `tests/mcp/` guard them, and `tests/conftest.py` restores the logger levels per test.
 - The public surface is `__init__.py` and nothing else. `xippios.core.mcp`,
   `xippios.core.http` and `xippios.core.testing` are imported explicitly by their users.
 

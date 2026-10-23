@@ -130,6 +130,9 @@ Tool names are `<source>_<function>` (`example_get_series`), the docstring is th
 description, the signature is the input schema. Results are capped at 200 rows or
 64 KB with a note on how to narrow the query; errors come back as
 `error: <Class>: <message>`. `--http` serves streamable HTTP instead of stdio.
+Request URLs are not logged: `build_server` and `main` set the `httpx` and `httpcore`
+loggers to `WARNING` (`quiet_request_logging`), because a URL can carry an API key or a
+tenant host.
 
 Client configuration, for Claude Desktop or any MCP client:
 
@@ -180,7 +183,7 @@ pytest_plugins = ["xippios.core.testing.plugin"]
 | `xippios.core.config` | `SourceSettings`, `resolve_api_key` | alpha |
 | `xippios.core.reference` | packaged CSV/JSON loaders | alpha |
 | `xippios.core.pagination` | offset, page and cursor iterators | alpha |
-| `xippios.core.mcp` | tool registration, result caps, error text, CLI | alpha |
+| `xippios.core.mcp` | tool registration, result caps, error text, CLI, quiet request log | alpha |
 | `xippios.core.http` | router factory, problem details | alpha |
 | `xippios.core.testing` | live gate, record, replay, scrub | alpha |
 

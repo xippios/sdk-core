@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 
 import pytest
@@ -24,3 +25,18 @@ def test_main_dispatches_to_transport(monkeypatch: pytest.MonkeyPatch) -> None:
         ("stdio", {}),
         ("streamable-http", {"host": "0.0.0.0", "port": 9000}),
     ]
+
+
+def test_main_quiets_request_loggers_before_running(monkeypatch: pytest.MonkeyPatch) -> None:
+    server = build_server("example", [])
+    seen: dict[str, int] = {}
+
+    def fake_run(transport: str = "stdio", **kwargs: Any) -> None:
+        seen.update({name: logging.getLogger(name).level for name in ("httpx", "httpcore")})
+
+    monkeypatch.setattr(server, "run", fake_run)
+    # Something between build_server and main puts the request log back on.
+    logging.getLogger("httpx").setLevel(logging.INFO)
+    logging.getLogger("httpcore").setLevel(logging.DEBUG)
+    main(server, [])
+    assert seen == {"httpx": logging.WARNING, "httpcore": logging.WARNING}

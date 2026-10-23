@@ -1,11 +1,19 @@
 import json
+import logging
 
+import httpx
 import pytest
 from mcp.types import CallToolResult, TextContent
 
 from xippios.core import sync
 from xippios.core.errors import NotFoundError
-from xippios.core.mcp import ResultCap, build_server, register_tasks, tool_name
+from xippios.core.mcp import (
+    ResultCap,
+    build_server,
+    quiet_request_logging,
+    register_tasks,
+    tool_name,
+)
 from xippios.core.models import Result, ResultMeta, UpstreamModel
 
 
@@ -115,3 +123,56 @@ async def test_register_tasks_on_existing_server_and_write_flag() -> None:
     assert tool.annotations is not None
     assert tool.annotations.read_only_hint is False
     assert tool.annotations.destructive_hint is True
+
+
+REQUEST_LOGGERS = ("httpx", "httpcore")
+
+
+def _unset_request_logger_levels() -> None:
+    # Start from the library default, whatever an earlier build_server left behind.
+    for name in REQUEST_LOGGERS:
+        logging.getLogger(name).setLevel(logging.NOTSET)
+
+
+def _request_with_key() -> None:
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json={}))
+    with httpx.Client(transport=transport) as client:
+        assert client.get("https://example.test/x?key=FAKE-KEY-123").status_code == 200
+
+
+def test_build_server_quiets_request_loggers() -> None:
+    _unset_request_logger_levels()
+    build_server("example", [])
+    for name in REQUEST_LOGGERS:
+        assert logging.getLogger(name).level == logging.WARNING
+
+
+def test_request_urls_are_not_logged_after_build_server(caplog: pytest.LogCaptureFixture) -> None:
+    _unset_request_logger_levels()
+    build_server("example", [])
+    with caplog.at_level(logging.INFO):
+        _request_with_key()
+    assert [r for r in caplog.records if r.name.split(".")[0] in REQUEST_LOGGERS] == []
+    assert not any("FAKE-KEY-123" in r.getMessage() for r in caplog.records)
+
+
+def test_consumer_can_raise_the_request_log_level_again(caplog: pytest.LogCaptureFixture) -> None:
+    _unset_request_logger_levels()
+    build_server("example", [])
+    logging.getLogger("httpx").setLevel(logging.INFO)
+    with caplog.at_level(logging.INFO):
+        _request_with_key()
+    assert [r.name for r in caplog.records] == ["httpx"]
+    assert "example.test/x?key=FAKE-KEY-123" in caplog.records[0].getMessage()
+
+
+def test_quiet_request_logging_is_idempotent() -> None:
+    _unset_request_logger_levels()
+    loggers = [logging.getLogger(name) for name in REQUEST_LOGGERS]
+    before = [(lg.handlers[:], lg.propagate, lg.disabled) for lg in loggers]
+    root_before = (logging.getLogger().level, logging.getLogger().handlers[:])
+    quiet_request_logging()
+    quiet_request_logging()
+    assert [lg.level for lg in loggers] == [logging.WARNING, logging.WARNING]
+    assert [(lg.handlers, lg.propagate, lg.disabled) for lg in loggers] == before
+    assert (logging.getLogger().level, logging.getLogger().handlers) == root_before
