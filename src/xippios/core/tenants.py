@@ -40,6 +40,8 @@ from xippios.core.models import Result, ResultMeta
 __all__ = ["Tenants", "list_task"]
 
 _NAME = re.compile(r"[a-z0-9_]+")
+_LISTS_TENANTS = "__xippios_lists_tenants__"
+"""Marks a ``list_task``: the MCP adapter narrows its result to a locked server's tenant."""
 _FIELD = re.compile(r"[A-Z0-9_]+")
 
 
@@ -312,7 +314,8 @@ def list_task(
 
     The task is synchronous and takes no argument; it reads ``tenants.names()`` on every
     call and returns names only (ADR-0005), with ``meta.endpoint`` set to ``name`` and no
-    ``meta.tenant``. Register it with the source's other tasks.
+    ``meta.tenant``. Register it with the source's other tasks. On an MCP server locked
+    to one tenant (``xippios.core.mcp.TenantLock``) its tool lists that tenant only.
 
     Args:
         tenants: The source's registry.
@@ -335,4 +338,5 @@ def list_task(
     task.__name__ = name
     task.__qualname__ = name
     task.__doc__ = _LIST_DOC if doc is None else doc
+    setattr(task, _LISTS_TENANTS, True)
     return task

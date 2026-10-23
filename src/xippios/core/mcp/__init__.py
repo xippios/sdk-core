@@ -21,14 +21,23 @@ except ImportError as exc:  # pragma: no cover - exercised only without the extr
 from xippios.core.mcp.cli import build_parser, main
 from xippios.core.mcp.errors import error_to_text
 from xippios.core.mcp.results import ResultCap, cap_result
-from xippios.core.mcp.server import build_server, quiet_request_logging, register_tasks, tool_name
+from xippios.core.mcp.server import (
+    TenantLock,
+    build_server,
+    is_write_server,
+    quiet_request_logging,
+    register_tasks,
+    tool_name,
+)
 
 __all__ = [
     "ResultCap",
+    "TenantLock",
     "build_parser",
     "build_server",
     "cap_result",
     "error_to_text",
+    "is_write_server",
     "main",
     "quiet_request_logging",
     "register_tasks",

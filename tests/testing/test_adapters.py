@@ -6,7 +6,7 @@ import pytest
 
 from xippios.core import NotFoundError, Result, ResultMeta, UpstreamModel, parse_decimal, sync
 from xippios.core.http import router_from_tasks
-from xippios.core.mcp import build_server, register_tasks
+from xippios.core.mcp import TenantLock, build_server, register_tasks
 from xippios.core.testing import assert_projection, assert_write_tools, mcp_call, mcp_call_text
 
 
@@ -73,6 +73,16 @@ async def test_mcp_call_text_returns_the_text_error_text_included() -> None:
     text = await mcp_call_text(server, "example_get_thing", {"name": "missing"})
     assert text == "error: NotFoundError: no such thing"
     assert (await mcp_call_text(server, "example_get_thing", {"name": "a"})).startswith('{"data"')
+
+
+@pytest.mark.anyio
+async def test_mcp_call_goes_through_the_middleware() -> None:
+    server = build_server("example", [get_thing], tenant_lock=TenantLock("name", "a"))
+    assert (await mcp_call(server, "example_get_thing", {"name": "a"}))["data"][0]["name"] == "a"
+    refusal = "error: InvalidRequestError: this server is locked to name=a"
+    assert (await mcp_call_text(server, "example_get_thing", {"name": "b"})).startswith(refusal)
+    with pytest.raises(AssertionError, match=refusal):
+        await mcp_call(server, "example_get_thing", {"name": "b"})
 
 
 @pytest.mark.anyio
