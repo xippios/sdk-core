@@ -12,7 +12,8 @@ particular upstream API.
 2. `docs/adr/` — the decisions behind them (0001 layering, 0002 runtime stack,
    0003 upstream fidelity, 0004 core layout and MCP SDK, 0005 no credentials in the envelope,
    0006 nested import paths, 0007 InvalidRequestError and POST routes,
-   0008 hardening from the first source)
+   0008 hardening from the first source, 0009 one key variable per issuer,
+   0010 rate-limit policy)
 3. `docs/definition-of-done.md` — what a PR must satisfy before it is opened
 
 The family file `../CLAUDE.md` applies as well.

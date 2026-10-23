@@ -1,6 +1,6 @@
 # xippios SDK family — conventions
 
-Version 1.4 · 2026-10-22 · applies to every `sdk-*` repository under github.com/xippios.
+Version 1.5 · 2026-10-23 · applies to every `sdk-*` repository under github.com/xippios.
 Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 
 ## 1. Naming
@@ -12,10 +12,11 @@ Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 | Import path | `xippios.<source>`; a provider with several APIs nests: `xippios.<provider>.<api>` | `xippios.comtrade`, `xippios.usda.nass` |
 | MCP entry point | `xippios-<source>-mcp` | `xippios-usda-nass-mcp` |
 | MCP tool | `<source>_<verb>_<noun>` | `usda_nass_get_series` |
-| Env var for a key | `<SOURCE>_API_KEY` | `NASS_API_KEY` |
+| Env var for a key | `<SOURCE>_API_KEY`, or the issuer's variable when one key serves several sources (ADR-0009) | `NASS_API_KEY`, `DATA_GOV_API_KEY` |
 
 `<source>` names the data provider and, where one provider has several APIs, the API:
-`usda-nass`, `usda-fas`, `usda-esmis`, `comtrade`, `eurostat`, `faostat`, `cashctrl`.
+`usda-nass`, `usda-psd`, `usda-esr`, `usda-gats`, `usda-esmis`, `comtrade`, `eurostat`,
+`faostat`, `cashctrl`.
 No domain prefixes (`ag`, `agri`): sources are domain-neutral; grouping happens via
 GitHub topics (`xippios-sdk`) and the org README.
 
@@ -125,16 +126,24 @@ leak tracebacks.
 - A source maps its documented error shapes once, in `ClientConfig.classify`, which
   sees every response before the default status mapping (ADR-0008); endpoint
   wrappers then use `get_json` and never inspect status codes themselves.
-- A per-source rate limiter configured from the source's documented limits.
+- A per-source rate limiter sets a fast pace within the source's documented per-second
+  or per-minute limit or, where none is documented, a self-imposed pace that the
+  package's CLAUDE.md names as such; longer-window quotas (hourly, daily) may be
+  exhausted, not rationed (ADR-0010). `classify` interprets the upstream's 429, or
+  its documented answer to a spent limit, as `RateLimitError` with `retry_after`
+  (from `Retry-After`, the quota headers or a documented fallback); retries honour
+  it up to `RetryPolicy.backoff_max`, a request into a quota known to be spent waits
+  it out first, and adapters state the pause, never silently.
 - Optional response cache (in-memory by default, pluggable) keyed on method+URL+params.
 - One `User-Agent`: `xippios-<source>/<version> (+https://github.com/xippios)`.
 - Timeouts explicit; defaults 10 s connect, 60 s read.
 
 ## 7. Configuration
 
-`pydantic-settings`; keys read from `<SOURCE>_API_KEY`, overridable by constructor
-argument. No config files, no dotenv loading inside the package — the environment is
-the contract (direnv in development, secrets in CI).
+`pydantic-settings`; keys read from `<SOURCE>_API_KEY`, or the issuer's variable where
+ADR-0009 applies, overridable by constructor argument. No config files, no dotenv
+loading inside the package — the environment is the contract (direnv in development,
+secrets in CI).
 
 ## 8. MCP conventions
 
