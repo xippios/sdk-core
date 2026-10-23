@@ -12,9 +12,12 @@ class Row(UpstreamModel):
     when: datetime
 
 
-def envelope(count: int) -> Result[list[Row]]:
+def envelope(count: int, total: int | None = None) -> Result[list[Row]]:
     meta = ResultMeta(
-        source="example", endpoint="rows", retrieved_at=datetime(2026, 10, 20, tzinfo=UTC)
+        source="example",
+        endpoint="rows",
+        retrieved_at=datetime(2026, 10, 20, tzinfo=UTC),
+        total=total,
     )
     return Result[list[Row]](
         data=[Row(n=i, when=datetime(2026, 1, 1, tzinfo=UTC)) for i in range(count)], meta=meta
@@ -37,6 +40,15 @@ def test_row_cap_adds_note() -> None:
     assert payload["note"].startswith("showing 10 of 500 rows")
     assert "narrow the query" in payload["note"]
     assert payload["meta"]["endpoint"] == "rows"
+
+
+def test_capped_result_keeps_the_upstream_total() -> None:
+    payload = json.loads(cap_result(envelope(500, total=1234), ResultCap(max_rows=10)))
+    assert len(payload["data"]) == 10
+    assert payload["note"].startswith("showing 10 of 500 rows")
+    assert payload["meta"]["total"] == 1234
+    assert json.loads(cap_result(envelope(2, total=2)))["meta"]["total"] == 2
+    assert json.loads(cap_result(envelope(2)))["meta"]["total"] is None
 
 
 def test_byte_cap_shrinks_rows_to_fit() -> None:

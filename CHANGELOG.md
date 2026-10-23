@@ -26,6 +26,12 @@ All notable changes to this project are documented here. The format follows
   failure for POST, PUT, PATCH and DELETE too, for sources whose upstream makes a
   repeated write safe, e.g. by an idempotency key, or that only read through POST
   (ADR-0011).
+- `ResultMeta.total` (default `None`): upstream's count of the records matching the
+  request, when the source reports one. A paginated task sets it from upstream's count
+  whether it collects every page or returns one, so the caller can page; it is never
+  computed from `len(data)`, and a negative count is refused. `cap_result` keeps it next
+  to the capped rows, and HTTP responses carry it, as `null` when unset. Optional, so
+  sources on 0.1.0 are unaffected. Needed first by sdk-cashctrl.
 
 ### Changed
 
@@ -44,6 +50,8 @@ All notable changes to this project are documented here. The format follows
   `<host>` in a `TransportError` message, since a transport failure's text can quote it
   (a TLS hostname mismatch does).
 - Conventions 1.6: §5 and §6 as above; ADR-0011 added.
+- Conventions 1.7: §4 lists `ResultMeta.total` with its paginated-task semantics;
+  ADR-0012 added.
 
 ### Fixed
 

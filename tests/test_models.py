@@ -41,6 +41,7 @@ def test_result_meta_defaults() -> None:
     assert meta.published_at is None
     assert meta.vintage is None
     assert meta.request == {}
+    assert meta.total is None
 
 
 def test_result_meta_rejects_naive_datetimes() -> None:
@@ -48,6 +49,31 @@ def test_result_meta_rejects_naive_datetimes() -> None:
         ResultMeta(source="x", endpoint="y", retrieved_at=datetime(2026, 1, 1))
     with pytest.raises(ValueError, match="timezone-aware"):
         ResultMeta(source="x", endpoint="y", published_at=datetime(2026, 1, 1))
+
+
+def test_result_meta_total_serialises_as_an_integer() -> None:
+    meta = ResultMeta(source="cashctrl", endpoint="journal/list.json", total=1234)
+    assert meta.total == 1234
+    dumped = meta.model_dump(mode="json")
+    assert dumped["total"] == 1234
+    assert type(dumped["total"]) is int
+    assert json.loads(meta.model_dump_json())["total"] == 1234
+    assert ResultMeta(source="s", endpoint="e", total=0).total == 0
+    assert ResultMeta(source="s", endpoint="e").model_dump(mode="json")["total"] is None
+
+
+def test_result_meta_rejects_a_negative_total() -> None:
+    with pytest.raises(ValueError, match="total must not be negative"):
+        ResultMeta(source="s", endpoint="e", total=-1)
+
+
+def test_result_meta_total_is_never_computed_from_data() -> None:
+    rows = [Series(series_id=str(i), value=i) for i in range(3)]
+    result = Result[list[Series]](data=rows, meta=ResultMeta(source="s", endpoint="e"))
+    assert result.meta.total is None
+    page = Result[list[Series]](data=rows, meta=ResultMeta(source="s", endpoint="e", total=40))
+    assert page.meta.total == 40
+    assert Result[list[Series]].model_validate(page.model_dump(mode="json")) == page
 
 
 def test_result_envelope_round_trips() -> None:
