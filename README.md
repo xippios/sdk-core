@@ -198,9 +198,12 @@ xippios_placeholder_key_envs = ["EXAMPLE_API_KEY"]
   `httpx` and `httpcore` logger levels come back after every test.
 - `replay_fixture("api_GET", "corn_2024")` mounts `tests/fixtures/api_GET/corn_2024.json`
   on its method, host and path; `match_params=["countOnly"]` makes the route match those
-  recorded query parameters too. The request body is never matched: assert it from the
-  route's calls against `fixture.request.body`. `sent_urls(route)` gives the URLs the
-  route received as scrubbed strings, so no request has to sit in the test's frame.
+  recorded query parameters too. A parameter's absence cannot be matched: where two
+  fixtures share a path, mount the one with `match_params` first, since `respx` tries
+  routes in order. The request body is never matched: assert it from the route's calls
+  against `fixture.request.body`. `sent_urls(route)` gives the URLs the route received
+  as scrubbed strings, so no request has to sit in the test's frame. Annotate the
+  fixture as `ReplayFixture`.
 - `record(client, "/v1/series", fixture_path(...), params=...)` records a live response
   with credentials scrubbed. Never hand-write a fixture. `json=` or `data=` (a form) send
   a body, recorded with its content type; `retry=` and `timeouts=` override the
@@ -234,8 +237,10 @@ record_sync(
 )
 ```
 
-The fixture is scrubbed in memory and written once. A body that is not UTF-8 text cannot
-be scrubbed and is refused unless `Scrub(allow_binary=True)` stores it base64, flagged.
+The fixture is scrubbed in memory, verified and written once: if the tenant's host or a
+named value is still anywhere, a JSON body decoded included, nothing is written and the
+error says where, never what. A body that is not UTF-8 text cannot be scrubbed and is
+refused unless `Scrub(allow_binary=True)` stores it base64, flagged.
 
 ## Status
 

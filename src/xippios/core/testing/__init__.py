@@ -1,9 +1,10 @@
 """Test support shared by every source repo (conventions §10).
 
-Four things live here: the pytest plugin, which gates live tests and keeps every
-other test offline (no network, no rate-limit wait, a placeholder key; ADR-0013),
-fixture recording with secrets scrubbed in memory before the write (``Scrub``), fixture
-replay through ``respx``, and checks for adapters (``mcp_call``, ``assert_write_tools``).
+Four things live here: the pytest plugin, which gates live tests and keeps the run
+offline (no network for the session; no rate-limit wait and a placeholder key in every
+test not marked live; ADR-0013), fixture recording with secrets scrubbed in memory and
+verified before the write (``Scrub``), fixture replay through ``respx``, and checks for
+adapters (``mcp_call``, ``assert_write_tools``).
 Enable the plugin in a repo's ``tests/conftest.py``::
 
     pytest_plugins = ["xippios.core.testing.plugin"]
