@@ -38,6 +38,12 @@ def mount_fixture(
     sent from the route's calls: the URLs with ``sent_urls(route)``, the body inline,
     e.g. ``route.calls.last.request.content`` against ``fixture.request.body``.
 
+    ``match_params`` cannot say that a parameter must be absent. Where one recorded
+    request carries a parameter that another on the same path lacks (a
+    ``countOnly=true`` count and the data call), mount the more specific fixture, with
+    ``match_params``, first: ``respx`` tries routes in the order they were added, and the
+    first that matches answers.
+
     Args:
         router: The ``respx`` router, usually the ``respx_mock`` fixture.
         fixture: The recorded exchange.

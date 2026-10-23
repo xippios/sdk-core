@@ -199,6 +199,10 @@ consumer, never served standalone from the package.
 - Unit tests run offline against recorded fixtures (`respx`); fixtures live in
   `tests/fixtures/<endpoint>/<case>.json` and are recorded by the `record-fixture`
   command, never hand-written.
+- Replay matches a fixture on method, host and path, and on the recorded query
+  parameters a test names (`match_params`). A parameter's absence cannot be matched:
+  where two fixtures share a path, the more specific one is mounted first, since `respx`
+  tries routes in the order they were added.
 - The recorder scrubs in memory and writes once, so nothing unscrubbed touches disk: a
   multi-tenant source records with a placeholder host that its offline tests replay
   against, and names the values that must never be written (`xippios.core.testing.Scrub`).

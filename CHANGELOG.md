@@ -63,11 +63,13 @@ All notable changes to this project are documented here. The format follows
   override goes through `client.derive`. A recording could not override the client's
   retry policy or timeouts (sdk-comtrade).
 - `match_params=` (keyword-only) for `mount_fixture`, `replay` and the plugin's
-  `replay_fixture`: names of recorded query parameters whose recorded values a request must carry too; a name
-  absent from the recorded URL or recorded as `REDACTED` raises `ValueError`. Replay
-  matched on method, host and path only, so a count call (`countOnly=true`) and the data
-  call on the same path could not be told apart (sdk-comtrade). The request body is
-  never matched; a test asserts it from the route's calls.
+  `replay_fixture`: names of recorded query parameters whose recorded values a request
+  must carry too; a name absent from the recorded URL or recorded as `REDACTED` raises
+  `ValueError`. Replay matched on method, host and path only, so a count call
+  (`countOnly=true`) and the data call on the same path could not be told apart
+  (sdk-comtrade). Absence cannot be matched: the more specific fixture is mounted
+  first, since `respx` tries routes in order. The request body is never matched; a
+  test asserts it from the route's calls.
 - `xippios.core.testing.sent_urls(route)`: the URLs a `respx` route received, oldest
   first, as strings through `scrub_url`, so a key sent as a query parameter reads
   `REDACTED`. A test compares these instead of keeping a request from `route.calls` in

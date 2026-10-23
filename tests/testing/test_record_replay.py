@@ -329,3 +329,17 @@ def test_replay_fixture_is_typed_as_replay_fixture(replay_fixture: ReplayFixture
     with Client(ClientConfig(source="example", version="1", base_url=BASE)) as client:
         assert client.get_json("/v1/x", params={"year": 2024}) == {"n": 1}
     assert sent_urls(route) == [f"{BASE}/v1/x?year=2024"]
+
+
+def test_the_more_specific_fixture_is_mounted_first(
+    respx_mock: respx.MockRouter, tmp_path: Path
+) -> None:
+    # match_params cannot say "countOnly absent"; mount order does it (documented).
+    count = httpx.Request("GET", f"{BASE}/v1/get", params={"countOnly": "true", "r": 1})
+    data = httpx.Request("GET", f"{BASE}/v1/get", params={"r": 1})
+    write_fixture(httpx.Response(200, json={"count": 3}, request=count), tmp_path / "c.json")
+    write_fixture(httpx.Response(200, json={"rows": []}, request=data), tmp_path / "d.json")
+    replay(respx_mock, tmp_path / "c.json", match_params=["countOnly"])
+    replay(respx_mock, tmp_path / "d.json")
+    assert httpx.get(f"{BASE}/v1/get?countOnly=true&r=1").json() == {"count": 3}
+    assert httpx.get(f"{BASE}/v1/get?r=1").json() == {"rows": []}
