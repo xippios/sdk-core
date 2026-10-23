@@ -63,6 +63,11 @@ All notable changes to this project are documented here. The format follows
   matched on method, host and path only, so a count call (`countOnly=true`) and the data
   call on the same path could not be told apart (sdk-comtrade). The request body is
   never matched; a test asserts it from the route's calls.
+- `xippios.core.testing.sent_urls(route)`: the URLs a `respx` route received, oldest
+  first, as strings through `scrub_url`, so a key sent as a query parameter reads
+  `REDACTED`. A test compares these instead of keeping a request from `route.calls` in
+  its own frame, where a failing assertion or `pytest -l` prints it, key included
+  (sdk-usda-nass).
 
 ### Changed
 

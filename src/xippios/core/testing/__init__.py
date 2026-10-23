@@ -28,7 +28,7 @@ from xippios.core.testing.fixtures import (
 )
 from xippios.core.testing.plugin import LIVE_ENV, live_enabled
 from xippios.core.testing.record import record, record_sync
-from xippios.core.testing.replay import mount_fixture, replay
+from xippios.core.testing.replay import mount_fixture, replay, sent_urls
 from xippios.core.testing.scrub import REDACTED, Scrub, scrub_headers, scrub_params, scrub_url
 
 __all__ = [
@@ -50,5 +50,6 @@ __all__ = [
     "scrub_headers",
     "scrub_params",
     "scrub_url",
+    "sent_urls",
     "write_fixture",
 ]

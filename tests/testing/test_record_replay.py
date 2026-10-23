@@ -17,6 +17,7 @@ from xippios.core.testing import (
     record,
     record_sync,
     replay,
+    sent_urls,
     write_fixture,
 )
 from xippios.core.testing.fixtures import fixture_from_response
@@ -291,10 +292,24 @@ async def test_replay_ignores_the_body_and_the_test_asserts_it(
     respx_mock.routes.clear()
     route = replay(respx_mock, fixture_file)
     await client.request("POST", "/v1/create.json", data={"name": "Corn", "n": 2})
-    sent = route.calls.last.request
-    assert sent.content.decode() == recorded.request.body == "name=Corn&n=2"
-    assert sent.headers["content-type"] == recorded.request.content_type
+    assert route.calls.last.request.content.decode() == recorded.request.body == "name=Corn&n=2"
+    assert route.calls.last.request.headers["content-type"] == recorded.request.content_type
 
     await client.request("POST", "/v1/create.json", data={"name": "Rice"})
     assert route.call_count == 2  # the body is not matched; the assertion is the test's
     assert route.calls.last.request.content.decode() != recorded.request.body
+
+
+@pytest.mark.anyio
+async def test_sent_urls_are_scrubbed_strings_in_order(
+    respx_mock: respx.MockRouter, config: ClientConfig
+) -> None:
+    # sdk-usda-nass: a test that kept the request in its locals would print the key.
+    route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
+    assert sent_urls(route) == []
+    client = AsyncClient(config)
+    await client.get("/v1/x", params={"key": "SECRET", "year": 2024})
+    await client.get("/v1/x", params={"year": 2025})
+    urls = sent_urls(route)
+    assert urls == [f"{BASE}/v1/x?key={REDACTED}&year=2024", f"{BASE}/v1/x?year=2025"]
+    assert all(isinstance(url, str) for url in urls)

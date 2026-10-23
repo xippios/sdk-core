@@ -8,9 +8,9 @@ import httpx
 import respx
 
 from xippios.core.testing.fixtures import Fixture, load_fixture
-from xippios.core.testing.scrub import REDACTED
+from xippios.core.testing.scrub import REDACTED, scrub_url
 
-__all__ = ["mount_fixture", "replay"]
+__all__ = ["mount_fixture", "replay", "sent_urls"]
 
 
 def mount_fixture(
@@ -20,8 +20,8 @@ def mount_fixture(
 
     Query parameters are not matched unless named in ``match_params``, because recorded
     ones may be scrubbed; the request body is never matched. A test asserts what was
-    sent from the route's calls, e.g. ``route.calls.last.request.content`` against
-    ``fixture.request.body``.
+    sent from the route's calls: the URLs with ``sent_urls(route)``, the body inline,
+    e.g. ``route.calls.last.request.content`` against ``fixture.request.body``.
 
     Args:
         router: The ``respx`` router, usually the ``respx_mock`` fixture.
@@ -70,3 +70,17 @@ def replay(
 ) -> respx.Route:
     """Load the fixture at ``path`` and mount it on ``router``; see ``mount_fixture``."""
     return mount_fixture(router, load_fixture(path), match_params=match_params)
+
+
+def sent_urls(route: respx.Route) -> list[str]:
+    """The URLs ``route`` received, oldest first, as text with credentials redacted.
+
+    Each URL goes through ``scrub_url``, so a key sent as a query parameter reads
+    ``REDACTED``. A test compares these strings instead of keeping a request from
+    ``route.calls`` in its own frame, where a failing assertion or ``pytest -l`` would
+    print it with its URL, key included.
+
+    Args:
+        route: A ``respx`` route, e.g. from ``replay_fixture`` or ``respx_mock.get(url)``.
+    """
+    return [scrub_url(call.request.url) for call in route.calls]

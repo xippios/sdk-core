@@ -29,6 +29,7 @@ from xippios.core.errors import (
     ValidationError,
     XippiosError,
 )
+from xippios.core.testing import sent_urls
 
 BASE = "https://api.example.test"
 
@@ -62,10 +63,10 @@ async def test_headers_url_and_params(respx_mock: respx.MockRouter, config: Clie
     route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={"ok": True})
     async with AsyncClient(config) as client:
         assert await client.get_json("/v1/x", params={"a": 1}) == {"ok": True}
-    request = route.calls.last.request
-    assert request.headers["user-agent"] == "xippios-example/1.2.3 (+https://github.com/xippios)"
-    assert request.headers["x-family"] == "xippios"
-    assert str(request.url) == f"{BASE}/v1/x?a=1"
+    headers = route.calls.last.request.headers
+    assert headers["user-agent"] == "xippios-example/1.2.3 (+https://github.com/xippios)"
+    assert headers["x-family"] == "xippios"
+    assert sent_urls(route) == [f"{BASE}/v1/x?a=1"]
 
 
 @pytest.mark.anyio
@@ -278,18 +279,16 @@ async def test_data_is_sent_form_encoded(
     route = respx_mock.post(f"{BASE}/v1/x").respond(200, json={"success": True})
     client = AsyncClient(config)
     await client.request("POST", "/v1/x", data={"a": 1, "b": "x y/é"})
-    request = route.calls.last.request
-    assert request.headers["content-type"] == "application/x-www-form-urlencoded"
-    assert request.content == b"a=1&b=x+y%2F%C3%A9"
+    assert route.calls.last.request.headers["content-type"] == "application/x-www-form-urlencoded"
+    assert route.calls.last.request.content == b"a=1&b=x+y%2F%C3%A9"
 
 
 @pytest.mark.anyio
 async def test_json_is_sent_as_json(respx_mock: respx.MockRouter, config: ClientConfig) -> None:
     route = respx_mock.post(f"{BASE}/v1/x").respond(200, json={})
     await AsyncClient(config).request("POST", "/v1/x", json={"a": 1})
-    request = route.calls.last.request
-    assert request.headers["content-type"] == "application/json"
-    assert request.content == b'{"a":1}'
+    assert route.calls.last.request.headers["content-type"] == "application/json"
+    assert route.calls.last.request.content == b'{"a":1}'
 
 
 @pytest.mark.anyio
@@ -405,10 +404,9 @@ async def test_derive_shares_auth_limiter_and_cache_and_changes_only_the_policy(
     assert sleeper.calls == []
     await derived.get("/v1/x", params={"a": 2})  # waits on the shared bucket, shared sleep
     assert sleeper.calls == [pytest.approx(1.0)]
-    request = route.calls.last.request
-    assert request.headers["authorization"].startswith("Basic ")
-    assert request.headers["x-family"] == "xippios"
-    assert request.extensions["timeout"] == {
+    assert route.calls.last.request.headers["authorization"].startswith("Basic ")
+    assert route.calls.last.request.headers["x-family"] == "xippios"
+    assert route.calls.last.request.extensions["timeout"] == {
         "connect": 10.0,
         "read": 300.0,
         "write": 10.0,
