@@ -34,7 +34,7 @@ import threading
 from collections.abc import Callable, Mapping, Sequence
 
 from xippios.core.client import AsyncClient
-from xippios.core.errors import ConfigError
+from xippios.core.errors import ConfigError, InvalidRequestError
 from xippios.core.models import Result, ResultMeta
 
 __all__ = ["Tenants", "list_task"]
@@ -191,9 +191,10 @@ class Tenants:
         """Return ``name`` when it is a declared tenant, a reserved one that is present included.
 
         Raises:
-            ConfigError: ``name`` is not declared; the message lists the declared tenants
-                or, when there are none, the variables to set, and never a value. Also
-                when ``list_var`` is malformed (see ``names``).
+            InvalidRequestError: ``name`` is not declared, the caller's bad argument
+                (ADR-0007); the message lists the declared tenants or, when there are
+                none, the variables to set, and never a value.
+            ConfigError: ``list_var`` is malformed (see ``names``).
         """
         declared = self.names()
         if name in declared:
@@ -206,7 +207,7 @@ class Tenants:
             for reserved in self.reserved:
                 variables = " and ".join(self.var(reserved, field) for field in self.fields)
                 hint += f"; {reserved!r} is declared by {variables} alone"
-        raise ConfigError(f"unknown tenant {name!r}; {hint}", source=self.source)
+        raise InvalidRequestError(f"unknown tenant {name!r}; {hint}", source=self.source)
 
     def field(self, name: str, field: str) -> str:
         """The value of tenant ``name``'s ``field`` variable, stripped and checked.
@@ -220,8 +221,10 @@ class Tenants:
             when the source gave one.
 
         Raises:
-            ConfigError: ``name`` is not declared; the variable is unset or blank; the
-                check refused the value. The message names the variable, never the value.
+            InvalidRequestError: ``name`` is not declared (see ``require``).
+            ConfigError: The variable of a declared tenant is unset or blank, or the
+                check refused its value: the operator's environment. The message names
+                the variable, never the value.
             ValueError: ``field`` is not one of ``fields``.
         """
         self._known_field(field)
@@ -262,8 +265,9 @@ class Tenants:
                 ``var(name, ...)`` that reads the key on the first request.
 
         Raises:
-            ConfigError: ``name`` is not declared, or ``build`` raised it, e.g. from
-                ``field`` for a missing or invalid value.
+            InvalidRequestError: ``name`` is not declared; ``build`` is not called.
+            ConfigError: ``build`` raised it, e.g. from ``field`` for a missing or
+                invalid value.
         """
         self.require(name)
         with self._lock:

@@ -12,7 +12,15 @@ from concurrent.futures import ThreadPoolExecutor
 import httpx
 import pytest
 
-from xippios.core import AsyncClient, BasicKeyAuth, ClientConfig, ConfigError, RateLimit, Tenants
+from xippios.core import (
+    AsyncClient,
+    BasicKeyAuth,
+    ClientConfig,
+    ConfigError,
+    InvalidRequestError,
+    RateLimit,
+    Tenants,
+)
 from xippios.core.mcp import build_server
 from xippios.core.models import Result
 from xippios.core.tenants import list_task
@@ -218,7 +226,7 @@ def test_require_returns_a_declared_name_and_lists_them_otherwise(
     tenants = make()
     assert tenants.require("xa") == "xa"
     assert tenants.require("demo") == "demo"
-    with pytest.raises(ConfigError) as info:
+    with pytest.raises(InvalidRequestError) as info:
         tenants.require("nope")
     message = str(info.value)
     assert message == "unknown tenant 'nope'; declared tenants: xa, xb, demo"
@@ -227,7 +235,7 @@ def test_require_returns_a_declared_name_and_lists_them_otherwise(
 
 
 def test_require_without_any_declaration_names_the_variables() -> None:
-    with pytest.raises(ConfigError) as info:
+    with pytest.raises(InvalidRequestError) as info:
         make().require("demo")
     assert str(info.value) == (
         "unknown tenant 'demo'; no tenant is declared; set FICTIVE_SRC_TENANTS and, per "
@@ -284,7 +292,7 @@ def test_a_refused_value_names_the_variable_and_not_the_value(
 
 def test_field_of_an_undeclared_tenant_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
     declare(monkeypatch, "xa")  # its variables are set, but it is not listed
-    with pytest.raises(ConfigError, match="unknown tenant 'xa'"):
+    with pytest.raises(InvalidRequestError, match="unknown tenant 'xa'"):
         make().field("xa", "SUBDOMAIN")
 
 
@@ -375,7 +383,7 @@ def test_the_cache_keeps_no_value(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_client_for_refuses_an_undeclared_tenant_without_building() -> None:
     tenants = make()
     build = Builder(tenants)
-    with pytest.raises(ConfigError, match="unknown tenant 'xa'"):
+    with pytest.raises(InvalidRequestError, match="unknown tenant 'xa'"):
         tenants.client_for("xa", build)
     assert build.built == []
 

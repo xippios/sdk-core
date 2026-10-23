@@ -181,8 +181,10 @@ digits and underscores (`CASHCTRL_ORGS=acme,acme_test`); each tenant's values si
 `CASHCTRL_ACME_API_KEY`). The reserved test tenant (`demo`) is declared by its own
 variables alone and never listed: it exists when all of them are set. Every tenant has
 one client of its own, with its own rate limiter and no cache shared with another
-tenant, built on first use and rebuilt when one of its values changes. Messages and
-results name tenants and variables, never a value.
+tenant, built on first use and rebuilt when one of its values changes. A name that is
+not declared is the caller's mistake, `InvalidRequestError`; a missing or malformed
+variable of a declared tenant is the operator's, `ConfigError`. Messages and results
+name tenants and variables, never a value.
 
 ## 8. MCP conventions
 

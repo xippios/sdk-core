@@ -109,16 +109,16 @@ All notable changes to this project are documented here. The format follows
   variable's name). `names()` reads the list on every call, in declared order, and
   appends each reserved name whose field variables are all set; a reserved name in the
   list, a malformed name or a name listed twice is a `ConfigError`. `require(name)`
-  returns a declared name or raises `ConfigError` listing the declared names, or the
-  variables to set when there are none. `field(name, field)` returns a value stripped
-  and passed through `validate[field]`; a missing value, or one the check refuses, is a
-  `ConfigError` naming the variable, never the value. `client_for(name, build)` builds a
+  returns a declared name or raises `InvalidRequestError`, the caller's bad argument
+  (MCP text, HTTP 422), listing the declared names, or the variables to set when there
+  are none. `field(name, field)` returns a value stripped and passed through
+  `validate[field]`; a missing value of a declared tenant, or one the check refuses, is
+  a `ConfigError` naming the variable, never the value. `client_for(name, build)` builds a
   tenant's client with `build(name)` on first use and keeps it, thread-safe, under a
   digest of the tenant's current values, so a changed value builds a new client;
   `reset()` drops them. Generalises sdk-cashctrl's organisation registry (`orgs()`,
   `require_org()`, `client_for()`), which every multi-tenant source would otherwise
-  write again. Unlike sdk-cashctrl's `require_org`, an undeclared name is a
-  `ConfigError`.
+  write again.
 - `xippios.core.tenants.list_task(tenants, *, name, doc=None)`: a synchronous task named
   `name` (`list_organisations`) that returns the declared tenants' names in the
   envelope, names only (ADR-0005), for a `<source>_list_<tenants>` reference tool. Its
