@@ -15,12 +15,20 @@ from xippios.core.client.auth import (
     HeaderKeyAuth,
     QueryKeyAuth,
 )
-from xippios.core.client.cache import CacheBackend, CachedResponse, MemoryCache, cache_key
+from xippios.core.client.cache import (
+    WIRE_HEADERS,
+    CacheBackend,
+    CachedResponse,
+    MemoryCache,
+    cache_key,
+    strip_wire_headers,
+)
 from xippios.core.client.config import ClientConfig, RateLimit, RetryPolicy, Timeouts
 from xippios.core.client.ratelimit import TokenBucket
 from xippios.core.client.retry import send_with_retries
 
 __all__ = [
+    "WIRE_HEADERS",
     "AsyncClient",
     "BasicKeyAuth",
     "BearerAuth",
@@ -39,6 +47,7 @@ __all__ = [
     "TokenBucket",
     "cache_key",
     "send_with_retries",
+    "strip_wire_headers",
 ]
 
 

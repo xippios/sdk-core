@@ -10,7 +10,7 @@ from typing import Any, Self
 
 import httpx
 
-from xippios.core.client.cache import CachedResponse, cache_key
+from xippios.core.client.cache import CachedResponse, cache_key, strip_wire_headers
 from xippios.core.client.config import ClientConfig
 from xippios.core.client.ratelimit import TokenBucket
 from xippios.core.client.retry import send_with_retries
@@ -129,11 +129,13 @@ class AsyncClient:
                     raise classified
             raise_for_status(response, source=self.source)
         if key is not None and self.config.cache is not None and response.status_code == 200:
+            # The content is already decoded: keeping content-encoding would make the
+            # replay decode it a second time (httpx.DecodingError on a gzip answer).
             self.config.cache.set(
                 key,
                 CachedResponse(
                     status=response.status_code,
-                    headers=tuple(response.headers.multi_items()),
+                    headers=tuple(strip_wire_headers(response.headers.multi_items())),
                     content=response.content,
                     stored_at=time.time(),
                 ),
@@ -181,8 +183,12 @@ class AsyncClient:
 
 
 def _from_cache(cached: CachedResponse, request: httpx.Request) -> httpx.Response:
+    # Stripped again: a persistent backend may hold entries stored with wire headers (0.1.0).
     response = httpx.Response(
-        cached.status, headers=list(cached.headers), content=cached.content, request=request
+        cached.status,
+        headers=strip_wire_headers(cached.headers),
+        content=cached.content,
+        request=request,
     )
     response.extensions["xippios_cache"] = "hit"
     return response

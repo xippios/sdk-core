@@ -1,4 +1,5 @@
 import asyncio
+import gzip
 
 import httpx
 import pytest
@@ -6,12 +7,15 @@ import respx
 
 from xippios.core.client import (
     AsyncClient,
+    CachedResponse,
     Client,
     ClientConfig,
     MemoryCache,
     RateLimit,
     RetryPolicy,
+    cache_key,
 )
+from xippios.core.client._core import _from_cache
 from xippios.core.errors import (
     AuthError,
     InvalidRequestError,
@@ -188,6 +192,55 @@ async def test_get_responses_are_cached(respx_mock: respx.MockRouter) -> None:
     assert "xippios_cache" not in first.extensions
     await client.get("/v1/x", params={"a": 2})
     assert route.call_count == 2
+
+
+@pytest.mark.anyio
+async def test_gzip_answer_replays_from_the_cache(respx_mock: respx.MockRouter) -> None:
+    # Found by sdk-usda-psd PR 3: the cache kept the decoded body with content-encoding,
+    # so the replay tried to gunzip plain JSON and raised httpx.DecodingError.
+    body = gzip.compress(b'{"a": 1}')
+    route = respx_mock.get(f"{BASE}/v1/x").respond(
+        200,
+        content=body,
+        headers={"Content-Type": "application/json", "Content-Encoding": "gzip"},
+    )
+    cache = MemoryCache()
+    config = ClientConfig(source="example", version="1", base_url=BASE, cache=cache)
+    client = AsyncClient(config)
+    first = await client.get("/v1/x")
+    assert first.json() == {"a": 1}
+    second = await client.get("/v1/x")
+    assert route.call_count == 1
+    assert second.extensions["xippios_cache"] == "hit"
+    assert second.json() == first.json()
+    stored = cache.get(cache_key("GET", httpx.URL(f"{BASE}/v1/x")))
+    assert stored is not None
+    names = {name.lower() for name, _ in stored.headers}
+    assert "content-type" in names
+    assert not names & {"content-encoding", "content-length"}
+
+
+def test_from_cache_strips_wire_headers_of_an_old_entry() -> None:
+    # A persistent backend may still hold entries stored by 0.1.0, wire headers and all.
+    entry = CachedResponse(
+        status=200,
+        headers=(
+            ("content-type", "application/json"),
+            ("Content-Encoding", "gzip"),
+            ("content-length", "99"),
+            ("transfer-encoding", "chunked"),
+            ("connection", "keep-alive"),
+        ),
+        content=b'{"a": 1}',
+        stored_at=0.0,
+    )
+    response = _from_cache(entry, httpx.Request("GET", f"{BASE}/v1/x"))
+    assert response.json() == {"a": 1}
+    assert response.headers.get("content-type") == "application/json"
+    for name in ("content-encoding", "transfer-encoding", "connection"):
+        assert name not in response.headers
+    assert response.headers.get("content-length") == "8"  # httpx's own, for the decoded body
+    assert response.extensions["xippios_cache"] == "hit"
 
 
 @pytest.mark.anyio
