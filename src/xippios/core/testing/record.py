@@ -35,8 +35,14 @@ async def record(
     """Perform one live request and write the scrubbed exchange to ``fixture``.
 
     With ``retry`` or ``timeouts`` the request goes through ``client.derive(...)``,
-    which shares the client's auth, rate limiter and cache; otherwise through
-    ``client`` itself. A refused body (see ``Scrub.allow_binary``) writes nothing.
+    which shares the client's auth, rate limiter and cache and is closed afterwards;
+    otherwise through ``client`` itself. ``derive`` returns a plain ``AsyncClient``: the
+    request logic of a subclass of ``AsyncClient`` is not carried over, so a source
+    that overrides ``request`` records without ``retry`` and ``timeouts``.
+
+    A refusal writes nothing. One raised after the request was sent (a binary body, or
+    the verify step finding the original host or a secret value) comes after upstream
+    has answered: a write may have been applied all the same.
 
     Args:
         client: The source's configured client.
@@ -56,8 +62,11 @@ async def record(
             keeps the client's.
 
     Raises:
-        ValueError: A binary body without ``Scrub(allow_binary=True)``, or both
-            ``json`` and ``data``.
+        ValueError: Both ``json`` and ``data``, before anything is sent. After the
+            request: a request or response body that is not UTF-8 text without
+            ``Scrub(allow_binary=True)``; the verify step finding the original host
+            ("request host") or a secret value ("secret value") left by the scrub; a
+            ``Scrub.host`` that is the request's own host.
     """
     if retry is None and timeouts is None:
         response = await client.request(
