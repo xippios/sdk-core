@@ -17,7 +17,7 @@ except ImportError as exc:  # pragma: no cover - exercised only without the extr
         "xippios.core.testing needs the 'testing' extra: uv add 'xippios-core[testing]'"
     ) from exc
 
-from xippios.core.testing.adapters import assert_projection, mcp_call
+from xippios.core.testing.adapters import assert_projection, assert_write_tools, mcp_call
 from xippios.core.testing.fixtures import (
     Fixture,
     FixtureRequest,
@@ -40,6 +40,7 @@ __all__ = [
     "FixtureResponse",
     "Scrub",
     "assert_projection",
+    "assert_write_tools",
     "fixture_path",
     "live_enabled",
     "load_fixture",

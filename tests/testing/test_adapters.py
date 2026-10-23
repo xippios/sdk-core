@@ -1,10 +1,13 @@
+from collections.abc import Callable
 from decimal import Decimal
+from typing import Annotated, Any
 
 import pytest
 
 from xippios.core import NotFoundError, Result, ResultMeta, UpstreamModel, parse_decimal, sync
+from xippios.core.http import router_from_tasks
 from xippios.core.mcp import build_server
-from xippios.core.testing import assert_projection, mcp_call
+from xippios.core.testing import assert_projection, assert_write_tools, mcp_call
 
 
 class Full(UpstreamModel):
@@ -62,3 +65,123 @@ async def test_mcp_call_fails_on_error_text() -> None:
     server = build_server("example", [get_thing])
     with pytest.raises(AssertionError, match="error: NotFoundError: no such thing"):
         await mcp_call(server, "example_get_thing", {"name": "missing"})
+
+
+def create_thing(name: str, confirm: bool = False) -> dict[str, str]:
+    """Create a thing; without confirm, return a preview.
+
+    Args:
+        name: The thing's name, e.g. ``"Corn"``.
+        confirm: ``True`` writes, ``False`` previews.
+    """
+    return {"name": name, "written": str(confirm)}
+
+
+def delete_thing(thing_id: int, confirm: Annotated[bool, "write"] = False) -> dict[str, int]:
+    """Delete a thing; without confirm, return a preview.
+
+    Args:
+        thing_id: The thing's id, e.g. ``4``.
+        confirm: ``True`` deletes, ``False`` previews.
+    """
+    return {"id": thing_id}
+
+
+def list_things() -> list[str]:
+    """List the things."""
+    return ["a"]
+
+
+WRITE: list[Callable[..., Any]] = [create_thing, delete_thing]
+READ: list[Callable[..., Any]] = [list_things]
+
+
+def test_assert_write_tools_accepts_a_separate_write_server() -> None:
+    assert_write_tools(
+        build_server("example", WRITE, read_only=False),
+        WRITE,
+        source="example",
+        read_server=build_server("example", READ),
+        router=router_from_tasks("example", READ),
+    )
+
+
+@pytest.mark.anyio
+async def test_assert_write_tools_works_in_an_async_test() -> None:
+    assert_write_tools(build_server("example", WRITE, read_only=False), WRITE, source="example")
+
+
+def test_assert_write_tools_wants_exactly_the_write_tasks() -> None:
+    write = build_server("example", [*WRITE, list_things], read_only=False)
+    with pytest.raises(AssertionError, match=r"not write tasks: \['example_list_things'\]"):
+        assert_write_tools(write, WRITE, source="example")
+    write = build_server("example", [create_thing], read_only=False)
+    with pytest.raises(AssertionError, match=r"missing .*: \['example_delete_thing'\]"):
+        assert_write_tools(write, WRITE, source="example")
+
+
+def no_confirm(name: str) -> None:
+    """No confirm at all."""
+
+
+def confirm_true(confirm: bool = True) -> None:
+    """Writes unless told not to."""
+
+
+def confirm_required(confirm: bool) -> None:
+    """Must be told."""
+
+
+def confirm_unannotated(confirm=False):  # type: ignore[no-untyped-def]
+    """Not annotated."""
+
+
+def confirm_optional(confirm: bool | None = False) -> None:
+    """Optional."""
+
+
+def confirm_zero(confirm: int = 0) -> None:
+    """An int."""
+
+
+@pytest.mark.parametrize(
+    ("task", "problem"),
+    [
+        (no_confirm, "no parameter confirm"),
+        (confirm_true, "confirm defaults to True, not False"),
+        (confirm_required, "confirm has no default"),
+        (confirm_unannotated, "confirm is not annotated"),
+        (confirm_optional, r"confirm is annotated bool \| None, not bool"),
+        (confirm_zero, "confirm is annotated <class 'int'>, not bool"),
+    ],
+)
+def test_assert_write_tools_wants_confirm_false(task: Callable[..., Any], problem: str) -> None:
+    write = build_server("example", [create_thing, task], read_only=False)
+    with pytest.raises(AssertionError, match=f"^example_{task.__name__}: {problem}; "):
+        assert_write_tools(write, [create_thing, task], source="example")
+
+
+def test_assert_write_tools_keeps_write_tools_off_the_read_adapters() -> None:
+    write = build_server("example", WRITE, read_only=False)
+    read = build_server("example", [list_things, delete_thing])
+    with pytest.raises(AssertionError, match=r"on the read server: \['example_delete_thing'\]"):
+        assert_write_tools(write, WRITE, source="example", read_server=read)
+    router = router_from_tasks("example", [list_things, create_thing])
+    with pytest.raises(
+        AssertionError,
+        match=r"^example_create_thing: a write task has an HTTP route, GET /example/create_thing",
+    ):
+        assert_write_tools(write, WRITE, source="example", router=router)
+    router = router_from_tasks("example", [delete_thing], prefix="/v1")
+    with pytest.raises(AssertionError, match=r"^example_delete_thing: .* GET /v1/delete_thing"):
+        assert_write_tools(write, WRITE, source="example", router=router)
+
+
+def test_assert_write_tools_names_tools_with_the_underscored_source() -> None:
+    write = build_server("usda-nass", WRITE, read_only=False)
+    assert_write_tools(
+        write, WRITE, source="usda-nass", router=router_from_tasks("usda-nass", READ)
+    )
+    router = router_from_tasks("usda-nass", WRITE)
+    with pytest.raises(AssertionError, match=r"^usda_nass_create_thing: "):
+        assert_write_tools(write, WRITE, source="usda-nass", router=router)

@@ -94,6 +94,13 @@ All notable changes to this project are documented here. The format follows
   every test. Building an MCP server sets both to `WARNING`, and only core's own
   `tests/conftest.py` restored them, so a source test that built a server left httpx
   at `WARNING` for the rest of the run (sdk-cashctrl).
+- `xippios.core.testing.assert_write_tools(write_server, write_tasks, *, source,
+  read_server=None, router=None)`: fails the test, naming the offending tool, unless
+  the write server's tools are exactly the write tasks by `tool_name`, every write task
+  takes `confirm: bool = False`, and, when given, no write tool is on the read server
+  and no route of the router serves a write task. Works in sync and async tests.
+  Conventions §8's write-server rules had no check in `xippios.core.testing`
+  (sdk-cashctrl).
 
 ### Changed
 
