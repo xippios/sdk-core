@@ -1,11 +1,9 @@
-import json
 import logging
 from collections.abc import Callable
 from typing import Annotated, Any
 
 import httpx
 import pytest
-from mcp.types import CallToolResult, TextContent
 
 from xippios.core import sync
 from xippios.core.errors import NotFoundError
@@ -17,6 +15,7 @@ from xippios.core.mcp import (
     tool_name,
 )
 from xippios.core.models import Result, ResultMeta, UpstreamModel
+from xippios.core.testing import mcp_call, mcp_call_text
 
 
 class Series(UpstreamModel):
@@ -80,12 +79,7 @@ async def test_tools_keep_signature_and_docstring() -> None:
 @pytest.mark.anyio
 async def test_call_returns_capped_json_text() -> None:
     server = build_server("example", [get_series], cap=ResultCap(max_rows=3))
-    result = await server.call_tool("example_get_series", {"series_id": "CORN", "year": 2010})
-    assert isinstance(result, CallToolResult)
-    assert not result.is_error
-    content = result.content[0]
-    assert isinstance(content, TextContent)
-    payload = json.loads(content.text)
+    payload = await mcp_call(server, "example_get_series", {"series_id": "CORN", "year": 2010})
     assert [row["id"] for row in payload["data"]] == ["CORN"] * 3
     assert payload["note"].startswith("showing 3 of 10 rows")
     assert payload["meta"]["source"] == "example"
@@ -94,25 +88,15 @@ async def test_call_returns_capped_json_text() -> None:
 @pytest.mark.anyio
 async def test_taxonomy_errors_become_text_not_errors() -> None:
     server = build_server("example", [get_series])
-    result = await server.call_tool("example_get_series", {"series_id": "missing"})
-    assert isinstance(result, CallToolResult)
-    assert not result.is_error
-    content = result.content[0]
-    assert isinstance(content, TextContent)
-    assert content.text == "error: NotFoundError: no series missing"
+    text = await mcp_call_text(server, "example_get_series", {"series_id": "missing"})
+    assert text == "error: NotFoundError: no series missing"  # mcp_call_text: not is_error
 
 
 @pytest.mark.anyio
 async def test_async_and_plain_functions_work() -> None:
     server = build_server("example", [example_list_things, plain])
-    listed = await server.call_tool("example_list_things", {})
-    assert isinstance(listed, CallToolResult)
-    assert isinstance(listed.content[0], TextContent)
-    assert json.loads(listed.content[0].text) == {"data": ["a", "b"]}
-    doubled = await server.call_tool("example_plain", {"x": 21})
-    assert isinstance(doubled, CallToolResult)
-    assert isinstance(doubled.content[0], TextContent)
-    assert json.loads(doubled.content[0].text) == {"x": 42}
+    assert await mcp_call(server, "example_list_things", {}) == {"data": ["a", "b"]}
+    assert await mcp_call(server, "example_plain", {"x": 21}) == {"x": 42}
 
 
 def create_thing(name: str, confirm: bool = False) -> dict[str, str]:

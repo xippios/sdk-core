@@ -7,7 +7,7 @@ import pytest
 from xippios.core import NotFoundError, Result, ResultMeta, UpstreamModel, parse_decimal, sync
 from xippios.core.http import router_from_tasks
 from xippios.core.mcp import build_server, register_tasks
-from xippios.core.testing import assert_projection, assert_write_tools, mcp_call
+from xippios.core.testing import assert_projection, assert_write_tools, mcp_call, mcp_call_text
 
 
 class Full(UpstreamModel):
@@ -65,6 +65,23 @@ async def test_mcp_call_fails_on_error_text() -> None:
     server = build_server("example", [get_thing])
     with pytest.raises(AssertionError, match="error: NotFoundError: no such thing"):
         await mcp_call(server, "example_get_thing", {"name": "missing"})
+
+
+@pytest.mark.anyio
+async def test_mcp_call_text_returns_the_text_error_text_included() -> None:
+    server = build_server("example", [get_thing])
+    text = await mcp_call_text(server, "example_get_thing", {"name": "missing"})
+    assert text == "error: NotFoundError: no such thing"
+    assert (await mcp_call_text(server, "example_get_thing", {"name": "a"})).startswith('{"data"')
+
+
+@pytest.mark.anyio
+async def test_mcp_call_fails_when_the_server_reports_an_error() -> None:
+    server = build_server("example", [get_thing])
+    with pytest.raises(AssertionError, match="name"):
+        await mcp_call_text(server, "example_get_thing", {})  # the schema requires name
+    with pytest.raises(AssertionError):
+        await mcp_call(server, "example_no_such_tool", {})
 
 
 def create_thing(name: str, confirm: bool = False) -> dict[str, str]:

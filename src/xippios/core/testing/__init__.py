@@ -4,7 +4,7 @@ Four things live here: the pytest plugin, which gates live tests and keeps the r
 offline (no network for the session; no rate-limit wait and a placeholder key in every
 test not marked live; ADR-0013), fixture recording with secrets scrubbed in memory and
 verified before the write (``Scrub``), fixture replay through ``respx``, and checks for
-adapters (``mcp_call``, ``assert_write_tools``).
+adapters (``mcp_call``, ``mcp_call_text``, ``assert_write_tools``).
 Enable the plugin in a repo's ``tests/conftest.py``::
 
     pytest_plugins = ["xippios.core.testing.plugin"]
@@ -20,7 +20,12 @@ except ImportError as exc:  # pragma: no cover - exercised only without the extr
         "xippios.core.testing needs the 'testing' extra: uv add 'xippios-core[testing]'"
     ) from exc
 
-from xippios.core.testing.adapters import assert_projection, assert_write_tools, mcp_call
+from xippios.core.testing.adapters import (
+    assert_projection,
+    assert_write_tools,
+    mcp_call,
+    mcp_call_text,
+)
 from xippios.core.testing.fixtures import (
     Fixture,
     FixtureRequest,
@@ -51,6 +56,7 @@ __all__ = [
     "live_enabled",
     "load_fixture",
     "mcp_call",
+    "mcp_call_text",
     "mount_fixture",
     "record",
     "record_sync",
