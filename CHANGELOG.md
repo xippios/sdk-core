@@ -68,6 +68,12 @@ All notable changes to this project are documented here. The format follows
   `REDACTED`. A test compares these instead of keeping a request from `route.calls` in
   its own frame, where a failing assertion or `pytest -l` prints it, key included
   (sdk-usda-nass).
+- The pytest plugin keeps every test not marked `live` offline (ADR-0013): a request
+  through httpx's default transports raises `RuntimeError` naming its method and path,
+  never its host or query. Requests `respx` answers, replayed fixtures included, and
+  transports a test passes itself (`httpx.MockTransport`, FastAPI's `TestClient`) are
+  unaffected; the marker `network` lifts the block for one test. Nothing enforced the
+  definition of done's "no network in the default test run" (sdk-cashctrl).
 
 ### Changed
 

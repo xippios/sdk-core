@@ -1,6 +1,21 @@
+import httpx
 import pytest
 
 from xippios.core.testing import LIVE_ENV, live_enabled
+
+# The pytester runs below install the plugin's patches themselves; the outer layer must
+# not stack its own under them, or a marker in an inner run would prove nothing.
+pytestmark = [pytest.mark.network]
+
+SEND = httpx.HTTPTransport.handle_request
+SEND_ASYNC = httpx.AsyncHTTPTransport.handle_async_request
+ANYIO_CONFTEST = """
+import pytest
+
+@pytest.fixture
+def anyio_backend():
+    return "asyncio"
+"""
 
 TEST_FILE = """
 import pytest
@@ -91,3 +106,83 @@ def test_replay_fixture_helper_matches_params(pytester: pytest.Pytester) -> None
     )
     result = pytester.runpytest("-p", "xippios.core.testing.plugin")
     result.assert_outcomes(passed=2)
+
+
+OFFLINE_TESTS = """
+import socket
+
+import httpx
+import pytest
+
+SEND = httpx.HTTPTransport.handle_request
+SEND_ASYNC = httpx.AsyncHTTPTransport.handle_async_request
+URL = "https://tenant.example.test/v1/series?key=SECRET"
+
+
+def test_an_unmocked_request_is_refused():
+    with pytest.raises(RuntimeError) as info:
+        httpx.get(URL)
+    message = str(info.value)
+    assert message.startswith("network access in an offline test: GET /v1/series; ")
+    assert "tenant" not in message
+    assert "SECRET" not in message
+
+
+@pytest.mark.anyio
+async def test_an_unmocked_async_request_is_refused():
+    refused = "^network access in an offline test: POST /v1/series; "
+    async with httpx.AsyncClient() as client:
+        with pytest.raises(RuntimeError, match=refused):
+            await client.post(URL, json={})
+
+
+def test_a_mocked_request_is_answered(respx_mock):
+    respx_mock.get("https://tenant.example.test/v1/series").respond(200, json={"ok": True})
+    assert httpx.get(URL).json() == {"ok": True}
+
+
+@pytest.mark.anyio
+async def test_a_mocked_async_request_is_answered(respx_mock):
+    respx_mock.post("https://tenant.example.test/v1/series").respond(201)
+    async with httpx.AsyncClient() as client:
+        assert (await client.post(URL, json={})).status_code == 201
+
+
+def test_a_transport_of_the_test_is_untouched():
+    transport = httpx.MockTransport(lambda request: httpx.Response(204))
+    with httpx.Client(transport=transport) as client:
+        assert client.get(URL).status_code == 204
+
+
+def closed_port():
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+@pytest.mark.network
+def test_a_network_test_reaches_the_real_transport():
+    assert httpx.HTTPTransport.handle_request is SEND
+    assert httpx.AsyncHTTPTransport.handle_async_request is SEND_ASYNC
+    with pytest.raises(httpx.ConnectError):
+        httpx.get(f"http://127.0.0.1:{closed_port()}/v1/series", timeout=2.0)
+
+
+@pytest.mark.live
+def test_a_live_test_keeps_the_real_transports():
+    assert httpx.HTTPTransport.handle_request is SEND
+    assert httpx.AsyncHTTPTransport.handle_async_request is SEND_ASYNC
+"""
+
+
+def test_offline_tests_cannot_reach_the_network(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Row 7 (sdk-cashctrl): nothing enforced "no network in the default test run".
+    monkeypatch.setenv(LIVE_ENV, "1")
+    pytester.makeconftest(ANYIO_CONFTEST)
+    pytester.makepyfile(OFFLINE_TESTS)
+    result = pytester.runpytest("-p", "xippios.core.testing.plugin", "--strict-markers")
+    result.assert_outcomes(passed=7)
+    assert httpx.HTTPTransport.handle_request is SEND
+    assert httpx.AsyncHTTPTransport.handle_async_request is SEND_ASYNC
