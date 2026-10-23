@@ -1,6 +1,7 @@
 """The async client: one request path with retries, rate limiting, caching and errors."""
 
 import asyncio
+import dataclasses
 import threading
 import time
 import weakref
@@ -11,7 +12,7 @@ from typing import Any, Self
 import httpx
 
 from xippios.core.client.cache import CachedResponse, cache_key, strip_wire_headers
-from xippios.core.client.config import ClientConfig
+from xippios.core.client.config import ClientConfig, RetryPolicy, Timeouts
 from xippios.core.client.ratelimit import TokenBucket
 from xippios.core.client.retry import send_with_retries
 from xippios.core.errors import BODY_LIMIT, ValidationError, raise_for_status
@@ -69,6 +70,38 @@ class AsyncClient:
     def limiter(self) -> TokenBucket | None:
         """The rate limiter every request waits on; ``None`` when there is none."""
         return self._bucket
+
+    def derive(
+        self, *, retry: RetryPolicy | None = None, timeouts: Timeouts | None = None
+    ) -> "AsyncClient":
+        """A new client like this one with another retry policy or other timeouts.
+
+        The new client runs on ``dataclasses.replace(self.config, ...)`` with only the
+        given values changed, and shares this client's auth, transport, sleep and rate
+        limiter, and through the configuration its cache: a request through either
+        waits on the same pace and finds the same cache entries. It keeps connection
+        pools of its own (they carry the timeouts); close them with ``aclose`` or
+        ``async with``. It is a plain ``AsyncClient``: a subclass's own behaviour is
+        not carried over.
+
+        Args:
+            retry: The retry policy for the new client, e.g.
+                ``RetryPolicy(max_attempts=1)``; ``None`` keeps this client's.
+            timeouts: The timeouts for the new client, e.g. ``Timeouts(read=300.0)``;
+                ``None`` keeps this client's.
+        """
+        changes: dict[str, Any] = {}
+        if retry is not None:
+            changes["retry"] = retry
+        if timeouts is not None:
+            changes["timeouts"] = timeouts
+        return AsyncClient(
+            dataclasses.replace(self.config, **changes),
+            auth=self._auth,
+            transport=self._transport,
+            sleep=self._sleep,
+            limiter=self._bucket,
+        )
 
     def _pool(self) -> httpx.AsyncClient:
         loop = asyncio.get_running_loop()

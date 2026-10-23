@@ -1,4 +1,5 @@
 import asyncio
+import dataclasses
 import gzip
 
 import httpx
@@ -13,6 +14,7 @@ from xippios.core.client import (
     MemoryCache,
     RateLimit,
     RetryPolicy,
+    Timeouts,
     TokenBucket,
     cache_key,
 )
@@ -363,6 +365,70 @@ def test_limiter_defaults_to_the_configured_rate_limit(config: ClientConfig) -> 
     assert own.limit == RateLimit(per_minute=30)
     shared = TokenBucket(RateLimit(per_minute=60))
     assert Client(limited, limiter=shared).async_client.limiter is shared
+
+
+@pytest.mark.anyio
+async def test_derive_shares_auth_limiter_and_cache_and_changes_only_the_policy(
+    respx_mock: respx.MockRouter, sleeper: Sleeper
+) -> None:
+    # sdk-comtrade: a recording needs longer timeouts than the source's client has.
+    route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={"n": 1})
+    cache = MemoryCache()
+    bucket = TokenBucket(RateLimit(per_minute=60, burst=1), clock=Clock())
+    config = ClientConfig(
+        source="example",
+        version="1",
+        base_url=BASE,
+        retry=RetryPolicy(max_attempts=1),
+        cache=cache,
+        headers={"X-Family": "xippios"},
+    )
+    client = AsyncClient(config, auth=httpx.BasicAuth("user", "pw"), sleep=sleeper, limiter=bucket)
+    retry = RetryPolicy(max_attempts=5, jitter=False)
+    timeouts = Timeouts(read=300.0)
+    derived = client.derive(retry=retry, timeouts=timeouts)
+
+    assert derived is not client
+    assert type(derived) is AsyncClient
+    assert derived.config == dataclasses.replace(config, retry=retry, timeouts=timeouts)
+    assert client.config is config
+    assert derived.config.cache is cache
+    assert derived.limiter is bucket
+    assert client.derive(timeouts=timeouts).config.retry is config.retry
+    assert client.derive(retry=retry).config.timeouts is config.timeouts
+    assert client.derive().config == config
+
+    await client.get("/v1/x", params={"a": 1})  # takes the bucket's one token, fills the cache
+    hit = await derived.get("/v1/x", params={"a": 1})
+    assert hit.extensions["xippios_cache"] == "hit"
+    assert route.call_count == 1
+    assert sleeper.calls == []
+    await derived.get("/v1/x", params={"a": 2})  # waits on the shared bucket, shared sleep
+    assert sleeper.calls == [pytest.approx(1.0)]
+    request = route.calls.last.request
+    assert request.headers["authorization"].startswith("Basic ")
+    assert request.headers["x-family"] == "xippios"
+    assert request.extensions["timeout"] == {
+        "connect": 10.0,
+        "read": 300.0,
+        "write": 10.0,
+        "pool": 10.0,
+    }
+    await derived.aclose()
+
+
+@pytest.mark.anyio
+async def test_derive_shares_the_transport(config: ClientConfig) -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={})
+
+    client = AsyncClient(config, transport=httpx.MockTransport(handler))
+    async with client.derive(retry=RetryPolicy(max_attempts=1)) as derived:
+        await derived.get("/v1/x")
+    assert [str(request.url) for request in seen] == [f"{BASE}/v1/x"]
 
 
 @pytest.mark.anyio
