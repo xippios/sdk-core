@@ -132,6 +132,8 @@ All notable changes to this project are documented here. The format follows
     every test, live ones included. Building an MCP server sets both to `WARNING`, and
     only core's own `tests/conftest.py` restored them, so a source test that built a
     server left httpx at `WARNING` for the rest of the run (sdk-cashctrl).
+- The `testing` extra declares `httpcore>=1.0`: the plugin patches httpcore's
+  connection pools and imports it, which only httpx's own dependency provided before.
 - **Breaking:** a 5xx and a transport failure are retried for GET, HEAD and OPTIONS
   only. A POST, PUT, PATCH or DELETE answered with a 5xx is returned after one attempt
   and raised as `UpstreamError`; a 429 is still retried for every method. Before, every

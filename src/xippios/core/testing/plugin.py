@@ -208,10 +208,14 @@ def pytest_unconfigure(config: pytest.Config) -> None:
 
 @pytest.hookimpl(wrapper=True)
 def pytest_runtest_setup(item: pytest.Item) -> Generator[None, None, None]:
-    """Lift the refusal for a test marked ``network`` or ``live``, before its fixtures."""
+    """Refuse or lift for this test before its fixtures: lifted when marked ``network`` or ``live``.
+
+    The state is set for every test, not left over from the previous teardown.
+    """
     guard = item.config.stash.get(_GUARD, None)
-    if guard is not None and any(item.get_closest_marker(name) for name in ("network", "live")):
-        guard.refusing = False
+    if guard is not None:
+        marked = any(item.get_closest_marker(name) is not None for name in ("network", "live"))
+        guard.refusing = not marked
     return (yield)
 
 

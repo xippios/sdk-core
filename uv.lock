@@ -1445,6 +1445,7 @@ mcp = [
 ]
 testing = [
     { name = "anyio" },
+    { name = "httpcore" },
     { name = "pytest" },
     { name = "respx" },
 ]
@@ -1464,6 +1465,7 @@ dev = [
 requires-dist = [
     { name = "anyio", marker = "extra == 'testing'", specifier = ">=4" },
     { name = "fastapi", marker = "extra == 'http'", specifier = ">=0.115" },
+    { name = "httpcore", marker = "extra == 'testing'", specifier = ">=1.0" },
     { name = "httpx", specifier = ">=0.28" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=2.0" },
     { name = "pydantic", specifier = ">=2.11" },
