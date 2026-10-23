@@ -279,7 +279,7 @@ def test_a_refused_value_names_the_variable_and_not_the_value(
     assert message == "FICTIVE_SRC_XA_SUBDOMAIN does not hold a valid SUBDOMAIN for tenant 'xa'"
     assert value not in message
     assert info.value.__cause__ is None
-    assert info.value.__suppress_context__  # the check's message, which quotes it, is hidden
+    assert info.value.__context__ is None  # the check's error, which quotes it, is not kept
 
 
 def test_field_of_an_undeclared_tenant_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -238,11 +238,12 @@ class Tenants:
         try:
             return check(os.environ[variable].strip())
         except ValueError:
-            # The check's message may quote the value: neither it nor the cause is kept.
-            raise ConfigError(
-                f"{variable} does not hold a valid {field} for tenant {name!r}",
-                source=self.source,
-            ) from None
+            pass
+        # Raised outside the handler: the check's error may quote the value, so it is
+        # neither the cause nor the context of this one.
+        raise ConfigError(
+            f"{variable} does not hold a valid {field} for tenant {name!r}", source=self.source
+        )
 
     def client_for(self, name: str, build: Callable[[str], AsyncClient]) -> AsyncClient:
         """Tenant ``name``'s client: ``build(name)`` on first use, the same client after.
