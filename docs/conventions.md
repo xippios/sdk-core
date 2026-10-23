@@ -1,6 +1,6 @@
 # xippios SDK family — conventions
 
-Version 1.8 · 2026-10-23 · applies to every `sdk-*` repository under github.com/xippios.
+Version 1.9 · 2026-10-23 · applies to every `sdk-*` repository under github.com/xippios.
 Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 
 ## 1. Naming
@@ -12,7 +12,7 @@ Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 | Import path | `xippios.<source>`; a provider with several APIs nests: `xippios.<provider>.<api>` | `xippios.comtrade`, `xippios.usda.nass` |
 | MCP entry point | `xippios-<source>-mcp` | `xippios-usda-nass-mcp` |
 | MCP tool | `<source>_<verb>_<noun>` | `usda_nass_get_series` |
-| Env var for a key | `<SOURCE>_API_KEY`, or the issuer's variable when one key serves several sources (ADR-0009) | `COMTRADE_API_KEY`, `DATA_GOV_API_KEY` |
+| Env var for a key | `<SOURCE>_API_KEY`, or the issuer's variable when one key serves several sources (ADR-0009); per tenant of a multi-tenant source `<SOURCE>_<NAME>_API_KEY`, its other values `<SOURCE>_<NAME>_<FIELD>` (ADR-0014, §7) | `COMTRADE_API_KEY`, `DATA_GOV_API_KEY`, `CASHCTRL_ACME_API_KEY` |
 
 `<source>` names the data provider and, where one provider has several APIs, the API:
 `usda-nass`, `usda-psd`, `usda-esr`, `usda-gats`, `usda-esmis`, `comtrade`, `eurostat`,
@@ -194,14 +194,25 @@ name tenants and variables, never a value.
   this; write it for them.
 - Read-only by default. A tool that writes to the upstream (CashCtrl) lives in a
   separate server entry point (`xippios-<source>-mcp-write`), takes `confirm: bool`
-  and returns a dry-run preview when `confirm=False`.
+  and returns a dry-run preview when `confirm=False`. `register_tasks(read_only=False)`
+  enforces it: a task without `confirm: bool = False` is refused before anything is
+  registered (ADR-0014). A write server carries no authentication, so `--http` serves
+  it on a loopback host only (`127.0.0.1`, `localhost`, `::1`) unless `--allow-remote`
+  is passed, with a gateway in front.
 - Result cap: default 200 rows or 64 KB, whichever first. Over the cap, return the
   first page plus a note on how to narrow the query. Never truncate silently.
 - Reference lookups are tools too: `<source>_list_<thing>` (commodities, countries,
-  attributes). Agents need them to form valid calls.
+  attributes). Agents need them to form valid calls. A multi-tenant source lists its
+  tenants the same way, names only (`list_task`, `cashctrl_list_organisations`).
+- A multi-tenant source's servers take an option that locks them to one tenant
+  (`--org acme`), passed to `build_server` as `TenantLock` (ADR-0014): a tool call
+  naming another tenant is refused with `error: InvalidRequestError: ...` before the
+  tool runs, the instructions name the tenant, and the list tool lists it alone.
 - Errors return as text starting with `error: <ErrorClass>: <message>`; never raise
   through the MCP boundary.
 - Entry point `xippios-<source>-mcp` runs stdio by default; `--http` for streamable HTTP.
+  A source's own options reach core's `main` through `add_options` and `apply_options`,
+  parsed once with core's; an error applying them stops the process with exit status 2.
 
 ## 9. HTTP adapter conventions
 
