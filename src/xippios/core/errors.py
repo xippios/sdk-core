@@ -7,6 +7,7 @@ tracebacks.
 
 import email.utils
 from datetime import UTC, datetime
+from typing import Any
 
 import httpx
 
@@ -48,6 +49,18 @@ class XippiosError(Exception):
 
     def __str__(self) -> str:
         return self.message
+
+    def __reduce__(self) -> tuple[Any, ...]:
+        # Exception's default rebuilds with cls(*args), which the keyword-only arguments
+        # of AuthError, ValidationError, UpstreamError and source subclasses refuse
+        # (TypeError). Rebuild without __init__, then restore every attribute, so copy,
+        # deepcopy and pickle work for the whole taxonomy.
+        return (_rebuild, (type(self), self.args), self.__dict__)
+
+
+def _rebuild(cls: type[XippiosError], args: tuple[Any, ...]) -> XippiosError:
+    """An instance of ``cls`` with ``args`` and no attributes yet; see ``__reduce__``."""
+    return cls.__new__(cls, *args)
 
 
 class ConfigError(XippiosError):
