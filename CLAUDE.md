@@ -13,7 +13,8 @@ particular upstream API.
    0003 upstream fidelity, 0004 core layout and MCP SDK, 0005 no credentials in the envelope,
    0006 nested import paths, 0007 InvalidRequestError and POST routes,
    0008 hardening from the first source, 0009 one key variable per issuer,
-   0010 rate-limit policy, 0012 upstream totals in the result envelope)
+   0010 rate-limit policy, 0011 retries and non-idempotent methods,
+   0012 upstream totals in the result envelope)
 3. `docs/definition-of-done.md` — what a PR must satisfy before it is opened
 
 The family file `../CLAUDE.md` applies as well.

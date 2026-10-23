@@ -10,7 +10,7 @@ from typing import Any, Self
 
 import httpx
 
-from xippios.core.client.cache import CachedResponse, cache_key
+from xippios.core.client.cache import CachedResponse, cache_key, strip_wire_headers
 from xippios.core.client.config import ClientConfig
 from xippios.core.client.ratelimit import TokenBucket
 from xippios.core.client.retry import send_with_retries
@@ -26,13 +26,17 @@ class AsyncClient:
 
     One instance can be shared by sync facades and async servers alike: it keeps one
     ``httpx`` connection pool per event loop, while the rate limiter and the cache are
-    shared across all of them.
+    shared across all of them. Clients that must share one pace, say a keyed and a
+    keyless client of the same upstream, share one ``TokenBucket`` through ``limiter``.
 
     Args:
         config: Base URL, timeouts, retry policy, rate limit, cache and headers.
         auth: An ``httpx.Auth`` adding credentials, e.g. a query key or basic auth.
         transport: Replacement transport, for tests.
         sleep: Async sleep used by retries and the rate limiter, replaceable in tests.
+        limiter: A ``TokenBucket`` to use instead of one built from
+            ``config.rate_limit``, which is then ignored; pass another client's
+            ``limiter`` to share its pace.
     """
 
     def __init__(
@@ -42,12 +46,15 @@ class AsyncClient:
         auth: httpx.Auth | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        limiter: TokenBucket | None = None,
     ) -> None:
         self.config = config
         self._auth = auth
         self._transport = transport
         self._sleep = sleep
-        self._bucket = TokenBucket(config.rate_limit) if config.rate_limit is not None else None
+        if limiter is None and config.rate_limit is not None:
+            limiter = TokenBucket(config.rate_limit)
+        self._bucket = limiter
         self._pools: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, httpx.AsyncClient] = (
             weakref.WeakKeyDictionary()
         )
@@ -57,6 +64,11 @@ class AsyncClient:
     def source(self) -> str:
         """Source slug from the configuration."""
         return self.config.source
+
+    @property
+    def limiter(self) -> TokenBucket | None:
+        """The rate limiter every request waits on; ``None`` when there is none."""
+        return self._bucket
 
     def _pool(self) -> httpx.AsyncClient:
         loop = asyncio.get_running_loop()
@@ -78,6 +90,14 @@ class AsyncClient:
             return None
         return cache_key(method, url)
 
+    def _cache_key_for(self, probe: httpx.Request) -> str | None:
+        """The cache key for ``probe``, or ``None`` when the cache or its filter skips it."""
+        key = self._cache_key(probe.method, probe.url)
+        cache_filter = self.config.cache_filter
+        if key is None or cache_filter is None or cache_filter(probe):
+            return key
+        return None
+
     async def request(
         self,
         method: str,
@@ -90,7 +110,8 @@ class AsyncClient:
     ) -> httpx.Response:
         """Send one request and return the response.
 
-        Retries, rate limiting and caching apply as configured. The source's
+        Retries, rate limiting and caching (GET only, narrowed by
+        ``ClientConfig.cache_filter``) apply as configured. The source's
         ``classify`` hook, if any, sees the response first; otherwise a 4xx/5xx that
         survives the retry policy is raised as the matching error from the taxonomy; a
         transport failure as ``TransportError``.
@@ -107,7 +128,7 @@ class AsyncClient:
         pool = self._pool()
         method = method.upper()
         probe = pool.build_request(method, path, params=params)
-        key = self._cache_key(method, probe.url)
+        key = self._cache_key_for(probe)
         if key is not None and self.config.cache is not None:
             cached = self.config.cache.get(key)
             if cached is not None:
@@ -129,11 +150,13 @@ class AsyncClient:
                     raise classified
             raise_for_status(response, source=self.source)
         if key is not None and self.config.cache is not None and response.status_code == 200:
+            # The content is already decoded: keeping content-encoding would make the
+            # replay decode it a second time (httpx.DecodingError on a gzip answer).
             self.config.cache.set(
                 key,
                 CachedResponse(
                     status=response.status_code,
-                    headers=tuple(response.headers.multi_items()),
+                    headers=tuple(strip_wire_headers(response.headers.multi_items())),
                     content=response.content,
                     stored_at=time.time(),
                 ),
@@ -181,8 +204,12 @@ class AsyncClient:
 
 
 def _from_cache(cached: CachedResponse, request: httpx.Request) -> httpx.Response:
+    # Stripped again: a persistent backend may hold entries stored with wire headers (0.1.0).
     response = httpx.Response(
-        cached.status, headers=list(cached.headers), content=cached.content, request=request
+        cached.status,
+        headers=strip_wire_headers(cached.headers),
+        content=cached.content,
+        request=request,
     )
     response.extensions["xippios_cache"] = "hit"
     return response

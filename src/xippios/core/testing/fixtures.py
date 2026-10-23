@@ -13,6 +13,7 @@ from pathlib import Path
 import httpx
 from pydantic import BaseModel, ConfigDict
 
+from xippios.core.client.cache import strip_wire_headers
 from xippios.core.models import utcnow
 from xippios.core.testing.scrub import scrub_headers, scrub_url
 
@@ -24,8 +25,6 @@ __all__ = [
     "load_fixture",
     "write_fixture",
 ]
-
-_WIRE_HEADERS = frozenset({"content-length", "content-encoding", "transfer-encoding", "connection"})
 
 
 class FixtureRequest(BaseModel):
@@ -79,11 +78,7 @@ def fixture_path(root: Path, endpoint: str, case: str) -> Path:
 
 def fixture_from_response(response: httpx.Response) -> Fixture:
     """Build a scrubbed ``Fixture`` from a fully read ``httpx.Response``."""
-    headers = [
-        (name, value)
-        for name, value in scrub_headers(response.headers.multi_items())
-        if name.lower() not in _WIRE_HEADERS
-    ]
+    headers = strip_wire_headers(scrub_headers(response.headers.multi_items()))
     try:
         body, is_base64 = response.content.decode("utf-8"), False
     except UnicodeDecodeError:

@@ -28,7 +28,11 @@ class Timeouts:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class RetryPolicy:
-    """Exponential backoff with jitter on 429 and 5xx (conventions §6).
+    """Exponential backoff with jitter (conventions §6, ADR-0011).
+
+    A 429 is retried for every method. A 5xx and a transport failure are retried for
+    idempotent methods only (GET, HEAD, OPTIONS) unless ``retry_non_idempotent`` is set.
+    Another 4xx is never retried.
 
     Attributes:
         max_attempts: Total attempts including the first; ``1`` disables retries.
@@ -36,8 +40,13 @@ class RetryPolicy:
         backoff_max: Upper bound for one delay. A ``Retry-After`` beyond it stops retrying,
             so the caller sees the ``RateLimitError`` instead of a long silent wait.
         jitter: Randomise each delay within ``[delay / 2, delay]``.
-        retry_transport_errors: Also retry timeouts and connection failures, for
-            idempotent methods only (GET, HEAD, OPTIONS).
+        retry_transport_errors: Also retry timeouts and connection failures; for which
+            methods follows ``retry_non_idempotent``.
+        retry_non_idempotent: Also retry a 5xx and a transport failure for the other
+            methods (POST, PUT, PATCH, DELETE). Off by default: such a request may have
+            been applied before the failure, and a repeat can apply it twice. Set it
+            only where upstream makes a repeated write safe, e.g. by an idempotency key
+            it honours, or where the client only reads through POST.
     """
 
     max_attempts: int = 4
@@ -45,6 +54,7 @@ class RetryPolicy:
     backoff_max: float = 30.0
     jitter: bool = True
     retry_transport_errors: bool = True
+    retry_non_idempotent: bool = False
 
     def __post_init__(self) -> None:
         if self.max_attempts < 1:
@@ -112,6 +122,11 @@ class ClientConfig:
         retry: Retry policy for 429, 5xx and transport failures.
         rate_limit: Client-side limit; ``None`` disables it.
         cache: Backend for GET responses; ``None`` disables caching.
+        cache_filter: Which GET requests the cache takes: called with the request as
+            built from the base URL, path and query parameters (``request.url.path``,
+            ``request.url.params``; credentials from ``auth`` are not on it yet); a GET
+            is looked up and stored only when it returns ``True``. ``None`` caches every
+            GET. Lets one client cache a reference endpoint and nothing else.
         headers: Extra headers sent with every request.
         classify: The source's own error mapping (ADR-0008): called with every response
             before the default status mapping; return a taxonomy error to raise it, or
@@ -126,6 +141,7 @@ class ClientConfig:
     retry: RetryPolicy = field(default_factory=RetryPolicy)
     rate_limit: RateLimit | None = None
     cache: CacheBackend | None = None
+    cache_filter: Callable[[httpx.Request], bool] | None = None
     headers: Mapping[str, str] = field(default_factory=dict)
     classify: Callable[[httpx.Response], XippiosError | None] | None = None
 

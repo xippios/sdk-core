@@ -4,13 +4,32 @@ import hashlib
 import threading
 import time
 from collections import OrderedDict
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Protocol
 
 import httpx
 
-__all__ = ["CacheBackend", "CachedResponse", "MemoryCache", "cache_key"]
+__all__ = [
+    "WIRE_HEADERS",
+    "CacheBackend",
+    "CachedResponse",
+    "MemoryCache",
+    "cache_key",
+    "strip_wire_headers",
+]
+
+WIRE_HEADERS = frozenset({"content-length", "content-encoding", "transfer-encoding", "connection"})
+"""Headers that describe how a body travelled, not the body itself.
+
+``httpx`` hands out the decoded body, so a stored copy (a cache entry, a fixture) that
+kept them would claim an encoding and a length the stored bytes no longer have.
+"""
+
+
+def strip_wire_headers(items: Iterable[tuple[str, str]]) -> list[tuple[str, str]]:
+    """The ``(name, value)`` pairs of ``items`` minus ``WIRE_HEADERS``, in any letter case."""
+    return [(name, value) for name, value in items if name.lower() not in WIRE_HEADERS]
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,8 +38,8 @@ class CachedResponse:
 
     Attributes:
         status: HTTP status code.
-        headers: Response headers as ``(name, value)`` pairs.
-        content: Raw body bytes.
+        headers: Response headers as ``(name, value)`` pairs, without ``WIRE_HEADERS``.
+        content: Body bytes as decoded by ``httpx`` (gzip and the like already undone).
         stored_at: Epoch seconds when the entry was stored.
     """
 

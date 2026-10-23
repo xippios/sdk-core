@@ -1,6 +1,12 @@
 import httpx
 
-from xippios.core.client import CachedResponse, MemoryCache, cache_key
+from xippios.core.client import (
+    WIRE_HEADERS,
+    CachedResponse,
+    MemoryCache,
+    cache_key,
+    strip_wire_headers,
+)
 
 
 class Clock:
@@ -62,3 +68,25 @@ def test_clear() -> None:
     cache.set("k", entry(clock))
     cache.clear()
     assert len(cache) == 0
+
+
+def test_strip_wire_headers_ignores_case_and_keeps_order() -> None:
+    wire = {"content-length", "content-encoding", "transfer-encoding", "connection"}
+    assert wire == WIRE_HEADERS
+    items = [
+        ("Content-Type", "application/json"),
+        ("Content-Encoding", "gzip"),
+        ("x-ratelimit-remaining", "9"),
+        ("CONTENT-LENGTH", "42"),
+        ("Transfer-Encoding", "chunked"),
+        ("Connection", "keep-alive"),
+        ("set-cookie", "a=1"),
+        ("set-cookie", "b=2"),
+    ]
+    assert strip_wire_headers(items) == [
+        ("Content-Type", "application/json"),
+        ("x-ratelimit-remaining", "9"),
+        ("set-cookie", "a=1"),
+        ("set-cookie", "b=2"),
+    ]
+    assert strip_wire_headers(iter(())) == []

@@ -10,14 +10,60 @@ All notable changes to this project are documented here. The format follows
 
 - `xippios.core.mcp.quiet_request_logging()`: sets the `httpx` and `httpcore` loggers
   to `WARNING`. Idempotent; `build_server` and `main` call it.
+- `ClientConfig.cache_filter`: called with each GET as built from base URL, path and
+  query parameters; the GET is looked up in and stored to the cache only when it
+  returns `True`. `None` caches every GET, as before. Cache keys are hashes, so a
+  backend cannot tell one path from another, and a source that wanted one cached
+  endpoint needed a second client (sdk-usda-psd).
+- `limiter` keyword for `AsyncClient` and `Client`: a `TokenBucket` used instead of one
+  built from `config.rate_limit`, which is then ignored. `AsyncClient.limiter` returns
+  the bucket in use, so a second client can share the first one's pace; before, a
+  limiter could not be shared through any public API (sdk-usda-psd).
+- `xippios.core.client.WIRE_HEADERS` and `strip_wire_headers`: the headers that describe
+  how a body travelled (`content-length`, `content-encoding`, `transfer-encoding`,
+  `connection`), dropped from cache entries and recorded fixtures alike.
+- `RetryPolicy.retry_non_idempotent` (default `False`): retry a 5xx and a transport
+  failure for POST, PUT, PATCH and DELETE too, for sources whose upstream makes a
+  repeated write safe, e.g. by an idempotency key, or that only read through POST
+  (ADR-0011).
 - `ResultMeta.total` (default `None`): upstream's count of the records matching the
   request, when the source reports one. A paginated task sets it from upstream's count
   whether it collects every page or returns one, so the caller can page; it is never
   computed from `len(data)`, and a negative count is refused. `cap_result` keeps it next
   to the capped rows, and HTTP responses carry it, as `null` when unset. Optional, so
   sources on 0.1.0 are unaffected. Needed first by sdk-cashctrl.
-- ADR-0012, upstream totals in the result envelope; conventions 1.7 lists `total` in
-  §4 with its paginated-task semantics.
+
+### Changed
+
+- **Breaking:** a 5xx and a transport failure are retried for GET, HEAD and OPTIONS
+  only. A POST, PUT, PATCH or DELETE answered with a 5xx is returned after one attempt
+  and raised as `UpstreamError`; a 429 is still retried for every method. Before, every
+  5xx was retried for every method, so a POST that upstream had applied before
+  answering 502, 503 or 504 was sent again and could duplicate a booking
+  (sdk-cashctrl). `RetryPolicy(retry_non_idempotent=True)` retries writes again
+  (ADR-0011; conventions 1.6, §6).
+- Error messages from `error_from_response` name the method and path, never the host:
+  `404 from GET /v1/series: ...`, no longer `404 from GET api.example.org/v1/series: ...`.
+  For a multi-tenant source the host names the tenant, which sdk-cashctrl had to mask in
+  its own `classify` (ADR-0005 amendment; conventions 1.6, §5). The query string was
+  left out before already. `error_from_exception` replaces the request's host with
+  `<host>` in a `TransportError` message, since a transport failure's text can quote it
+  (a TLS hostname mismatch does).
+- Conventions 1.6: §5 and §6 as above; ADR-0011 added.
+- Conventions 1.7: §4 lists `ResultMeta.total` with its paginated-task semantics;
+  ADR-0012 added.
+
+### Fixed
+
+- A gzip answer replayed from the cache raised `httpx.DecodingError`: the client stored
+  the decoded body together with `content-encoding`, so the replay decoded it again.
+  Cache entries are stored without wire headers now, and entries a persistent backend
+  kept from 0.1.0 are stripped when replayed (sdk-usda-psd PR 3 live tests).
+- Taxonomy errors survive `copy.copy`, `copy.deepcopy` and `pickle`: `AuthError`,
+  `ValidationError`, `UpstreamError` and source subclasses with keyword-only arguments
+  raised `TypeError`, because `Exception` rebuilds with positional arguments only.
+  `XippiosError.__reduce__` restores every attribute without calling `__init__`
+  (sdk-cashctrl).
 
 ### Security
 
@@ -31,6 +77,13 @@ All notable changes to this project are documented here. The format follows
   right after constructing the server, and `main` does so again before running it
   (ADR-0005). A consumer who wants the request log raises the level after building the
   server and runs it without `main`.
+- `.gitignore` also ignores `.env.*` and `.envrc.*` (sdk-comtrade).
+- The secret scan no longer skips paths containing "swagger": detect-secrets'
+  `is_swagger_file` filter is dropped from `.secrets.baseline`, because it exempted
+  every such path, a verbatim upstream Swagger snapshot included (sdk-usda-psd).
+  `.secrets.baseline` and the detect-secrets hook exclude `.copier-answers.yml` with
+  sdk-template's pattern, so the template can copy both files verbatim again
+  (sdk-comtrade).
 
 ## [0.1.0] - 2026-10-22
 
