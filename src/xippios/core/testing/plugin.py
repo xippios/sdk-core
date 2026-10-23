@@ -286,9 +286,17 @@ def placeholder_api_key(
     setting the variables alone would leave that key in place. A subclass that overrides
     ``key`` itself is not pinned.
 
-    A ``placeholder_api_key`` fixture in a source's ``conftest.py`` or test module
-    overrides this one, as pytest overrides any fixture by name; a test module that
-    checks how keys are resolved overrides it with a fixture that pins nothing.
+    A ``live`` test is exempt: nothing is set or pinned, and it uses the key in the
+    environment. There is no marker to lift the pin for one test: a test that needs
+    real key resolution (a missing key raising ``ConfigError``, an explicit key winning)
+    lives in a module that overrides this fixture with one that pins nothing::
+
+        @pytest.fixture
+        def placeholder_api_key() -> None:
+            return None  # the tests in this module resolve keys themselves
+
+    A ``placeholder_api_key`` fixture in a source's ``conftest.py`` overrides this one
+    the same way, as pytest overrides any fixture by name.
 
     Returns:
         ``PLACEHOLDER_KEY``, or ``None`` in a live test, which uses the key in the
