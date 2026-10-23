@@ -99,11 +99,14 @@ credential's provenance records the variable name, never the value.
 
 `total` is upstream's count of the records matching the request, or `None` when the
 source reports none or the count is unknown (ADR-0012). A paginated task called without
-its page parameter collects every page; called with one, it returns that page. Either
-way `total` is upstream's count for the whole request, so the caller can page
-deliberately. It is provenance like the rest of `meta`: set only from what upstream
-reports, never computed from `len(data)`; a mismatch with `len(data)` is upstream's and
-is not corrected.
+its page parameter collects every page; called with one, it returns that page. For
+offset paging, `limit` given means one page starting at `start` (default 0); `limit`
+omitted means every page from `start` onward. Either way `total` is upstream's count for
+the whole request, so the caller can page deliberately. It is provenance like the rest
+of `meta`: set only from what upstream reports, never computed from `len(data)`. When
+every page is collected, the count kept is the one upstream reported on the last page
+fetched, and a mismatch with `len(data)` is upstream's and is not corrected; a task that
+returns one page, or caps what it collects, has `total > len(data)` by design.
 
 ## 5. Errors (`xippios.core.errors`)
 

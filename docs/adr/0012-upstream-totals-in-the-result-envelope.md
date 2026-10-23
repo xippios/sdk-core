@@ -29,8 +29,9 @@ Two alternatives were rejected:
   matching the request, when the source reports one; `None` when it does not or the
   count is unknown. A negative count is refused at construction.
 - A paginated task called without its page parameter collects every page with core's
-  paginators and sets `total` from upstream's count. That equals `len(data)` when
-  upstream is consistent; a mismatch is upstream's and is not corrected.
+  paginators and sets `total` from the count upstream reported on the last page fetched.
+  That equals `len(data)` when upstream is consistent; a mismatch is upstream's and is
+  not corrected.
 - A paginated task called with a page parameter returns that page, and `total` is
   upstream's count for the whole request, so the caller can page.
 - `total` is provenance like the rest of `meta`: set only from what upstream reports,
