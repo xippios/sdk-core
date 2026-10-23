@@ -15,7 +15,7 @@ It gives a source package the things that should be identical across the family:
   `ClientConfig.cache_filter` narrows the cache to chosen requests; clients built with
   the same `limiter` share one pace. A body goes as JSON (`json=`) or form-encoded
   (`data=`); `AsyncClient.derive` gives a client with another retry policy or other
-  timeouts that shares auth, pace and cache.
+  timeouts that shares auth, pace, cache and transport, and never closes the transport.
 - **Auth helpers** that read the key from the environment on the first request:
   query parameter, header, bearer token or basic auth. A source's documented error
   shapes go into `ClientConfig.classify`, consulted on every response.

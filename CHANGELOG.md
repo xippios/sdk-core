@@ -217,6 +217,12 @@ All notable changes to this project are documented here. The format follows
   raised `TypeError`, because `Exception` rebuilds with positional arguments only.
   `XippiosError.__reduce__` restores every attribute without calling `__init__`
   (sdk-cashctrl).
+- A client from `AsyncClient.derive` no longer closes a transport it did not create.
+  It shares the parent's transport, and closing the derived client, as `record` does
+  after a recording with `retry=` or `timeouts=`, closed that transport under the
+  parent, which still uses it. The derived client's pools are still
+  closed; the borrowed transport is left for the parent's `aclose`. A transport passed
+  to a client by its own caller is still closed with that client.
 
 ### Security
 

@@ -52,6 +52,8 @@ class AsyncClient:
         self.config = config
         self._auth = auth
         self._transport = transport
+        # Set by derive: the transport belongs to the parent, and aclose leaves it open.
+        self._transport_borrowed = False
         self._sleep = sleep
         if limiter is None and config.rate_limit is not None:
             limiter = TokenBucket(config.rate_limit)
@@ -77,12 +79,13 @@ class AsyncClient:
         """A new client like this one with another retry policy or other timeouts.
 
         The new client runs on ``dataclasses.replace(self.config, ...)`` with only the
-        given values changed, and shares this client's auth, transport, sleep and rate
-        limiter, and through the configuration its cache: a request through either
-        waits on the same pace and finds the same cache entries. It keeps connection
-        pools of its own (they carry the timeouts); close them with ``aclose`` or
-        ``async with``. It is a plain ``AsyncClient``: a subclass's own behaviour is
-        not carried over.
+        given values changed, and shares this client's auth, sleep and rate limiter,
+        and through the configuration its cache: a request through either waits on the
+        same pace and finds the same cache entries. It shares this client's transport,
+        when one was passed, without closing it: the transport stays this client's to
+        close. It keeps connection pools of its own (they carry the timeouts); close
+        them with ``aclose`` or ``async with``. It is a plain ``AsyncClient``: a
+        subclass's own behaviour is not carried over.
 
         Args:
             retry: The retry policy for the new client, e.g.
@@ -95,25 +98,30 @@ class AsyncClient:
             changes["retry"] = retry
         if timeouts is not None:
             changes["timeouts"] = timeouts
-        return AsyncClient(
+        derived = AsyncClient(
             dataclasses.replace(self.config, **changes),
             auth=self._auth,
             transport=self._transport,
             sleep=self._sleep,
             limiter=self._bucket,
         )
+        derived._transport_borrowed = True
+        return derived
 
     def _pool(self) -> httpx.AsyncClient:
         loop = asyncio.get_running_loop()
         with self._lock:
             pool = self._pools.get(loop)
             if pool is None:
+                transport = self._transport
+                if transport is not None and self._transport_borrowed:
+                    transport = _BorrowedTransport(transport)
                 pool = httpx.AsyncClient(
                     base_url=self.config.base_url,
                     headers={"User-Agent": self.config.user_agent, **self.config.headers},
                     timeout=self.config.timeouts.to_httpx(),
                     auth=self._auth,
-                    transport=self._transport,
+                    transport=transport,
                 )
                 self._pools[loop] = pool
             return pool
@@ -228,7 +236,11 @@ class AsyncClient:
             ) from exc
 
     async def aclose(self) -> None:
-        """Close the connection pool bound to the current event loop."""
+        """Close the connection pool bound to the current event loop.
+
+        A transport passed to this client is closed with it, as httpx does; one borrowed
+        from the parent through ``derive`` is left open for the parent to close.
+        """
         loop = asyncio.get_running_loop()
         with self._lock:
             pool = self._pools.pop(loop, None)
@@ -245,6 +257,20 @@ class AsyncClient:
         tb: TracebackType | None,
     ) -> None:
         await self.aclose()
+
+
+class _BorrowedTransport(httpx.AsyncBaseTransport):
+    """Another client's transport: requests go through it, closing leaves it open."""
+
+    def __init__(self, transport: httpx.AsyncBaseTransport) -> None:
+        self._transport = transport
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        """Send ``request`` through the owner's transport."""
+        return await self._transport.handle_async_request(request)
+
+    async def aclose(self) -> None:
+        """Do nothing: the owner closes its transport with its own ``aclose``."""
 
 
 def _from_cache(cached: CachedResponse, request: httpx.Request) -> httpx.Response:
