@@ -39,7 +39,7 @@ Two alternatives were rejected:
 ## Consequences
 
 - Conventions §4 lists the field and states the paginated-task semantics (conventions
-  1.6).
+  1.7).
 - Sources set `total` from upstream's count where upstream reports one; sdk-cashctrl
   does so first, for its list tasks (PR 4). A source whose upstream reports no count
   leaves it `None`.

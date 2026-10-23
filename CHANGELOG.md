@@ -16,7 +16,7 @@ All notable changes to this project are documented here. The format follows
   computed from `len(data)`, and a negative count is refused. `cap_result` keeps it next
   to the capped rows, and HTTP responses carry it, as `null` when unset. Optional, so
   sources on 0.1.0 are unaffected (sdk-cashctrl).
-- ADR-0012, upstream totals in the result envelope; conventions 1.6 lists `total` in
+- ADR-0012, upstream totals in the result envelope; conventions 1.7 lists `total` in
   §4 with its paginated-task semantics.
 
 ### Security

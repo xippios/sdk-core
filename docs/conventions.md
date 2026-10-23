@@ -1,6 +1,6 @@
 # xippios SDK family — conventions
 
-Version 1.6 · 2026-10-23 · applies to every `sdk-*` repository under github.com/xippios.
+Version 1.7 · 2026-10-23 · applies to every `sdk-*` repository under github.com/xippios.
 Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 
 ## 1. Naming
