@@ -1,6 +1,6 @@
 # xippios SDK family — conventions
 
-Version 1.7 · 2026-10-23 · applies to every `sdk-*` repository under github.com/xippios.
+Version 1.8 · 2026-10-23 · applies to every `sdk-*` repository under github.com/xippios.
 Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 
 ## 1. Naming
@@ -158,6 +158,8 @@ or query string: the host can name a tenant, the query can carry a key (ADR-0005
 - Optional response cache (in-memory by default, pluggable) keyed on method+URL+params.
 - One `User-Agent`: `xippios-<source>/<version> (+https://github.com/xippios)`.
 - Timeouts explicit; defaults 10 s connect, 60 s read.
+- A request body is JSON (`json=`) or form-encoded (`data=`, for an upstream whose
+  writes take form fields), as upstream documents it; never both.
 
 ## 7. Configuration
 
@@ -197,6 +199,11 @@ consumer, never served standalone from the package.
 - Unit tests run offline against recorded fixtures (`respx`); fixtures live in
   `tests/fixtures/<endpoint>/<case>.json` and are recorded by the `record-fixture`
   command, never hand-written.
+- The recorder scrubs in memory and writes once, so nothing unscrubbed touches disk: a
+  multi-tenant source records with a placeholder host that its offline tests replay
+  against, and names the values that must never be written (`xippios.core.testing.Scrub`).
+  A body that is not UTF-8 text cannot be scrubbed and is refused unless the recording
+  flags it (`allow_binary=True`, stored base64 with `body_base64`).
 - Live tests are marked `@pytest.mark.live`, skipped unless `XIPPIOS_LIVE_TESTS=1`,
   and run in CI only on a nightly schedule with org secrets.
 - Every task function has at least one fixture-backed test and one live smoke test.

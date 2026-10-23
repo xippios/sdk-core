@@ -13,7 +13,9 @@ It gives a source package the things that should be identical across the family:
   and OPTIONS unless `RetryPolicy.retry_non_idempotent` is set, because upstream makes a
   repeated write safe, or because the source only reads through POST.
   `ClientConfig.cache_filter` narrows the cache to chosen requests; clients built with
-  the same `limiter` share one pace.
+  the same `limiter` share one pace. A body goes as JSON (`json=`) or form-encoded
+  (`data=`); `AsyncClient.derive` gives a client with another retry policy or other
+  timeouts that shares auth, pace and cache.
 - **Auth helpers** that read the key from the environment on the first request:
   query parameter, header, bearer token or basic auth. A source's documented error
   shapes go into `ClientConfig.classify`, consulted on every response.
@@ -178,9 +180,34 @@ pytest_plugins = ["xippios.core.testing.plugin"]
 ```
 
 - `@pytest.mark.live` tests are skipped unless `XIPPIOS_LIVE_TESTS=1`.
-- `replay_fixture("api_GET", "corn_2024")` mounts `tests/fixtures/api_GET/corn_2024.json`.
+- `replay_fixture("api_GET", "corn_2024")` mounts `tests/fixtures/api_GET/corn_2024.json`
+  on its method, host and path; `match_params=["countOnly"]` makes the route match those
+  recorded query parameters too. The request body is never matched: assert it from the
+  route's calls against `fixture.request.body`.
 - `record(client, "/v1/series", fixture_path(...), params=...)` records a live response
-  with credentials scrubbed. Never hand-write a fixture.
+  with credentials scrubbed. Never hand-write a fixture. `json=` or `data=` (a form) send
+  a body, recorded with its content type; `retry=` and `timeouts=` override the
+  client's for the recording.
+
+A multi-tenant source tells the recorder what else must never be written:
+
+```python
+from xippios.core.testing import Scrub, fixture_path, record_sync
+
+record_sync(
+    client,
+    "/account/list.json",
+    fixture_path(FIXTURES, "account_list", "one"),
+    scrub=Scrub(
+        host="demo.example.test",  # the tenant's host, everywhere; tests replay against it
+        secrets=[tenant_name],  # REDACTED wherever it appears, plain or percent-encoded
+        rewrite=strip_signatures,  # text hook for bodies and header values (Location)
+    ),
+)
+```
+
+The fixture is scrubbed in memory and written once. A body that is not UTF-8 text cannot
+be scrubbed and is refused unless `Scrub(allow_binary=True)` stores it base64, flagged.
 
 ## Status
 

@@ -32,6 +32,37 @@ All notable changes to this project are documented here. The format follows
   computed from `len(data)`, and a negative count is refused. `cap_result` keeps it next
   to the capped rows, and HTTP responses carry it, as `null` when unset. Optional, so
   sources on 0.1.0 are unaffected. Needed first by sdk-cashctrl.
+- `xippios.core.testing.Scrub(host, secrets, rewrite, allow_binary)`: what a recording
+  removes besides credentials, applied in memory to the request URL, request body,
+  response headers and response body before the fixture is written once, so the file
+  never holds the removed text, not even briefly. `host` replaces the request's host
+  with a placeholder and every occurrence of the original host (any letter case, its
+  IDNA form too, plain or percent-encoded) with it; `secrets` turns each value into
+  `REDACTED`, plain and percent-encoded, the longest first; `rewrite` is a text hook
+  for the request body, the response body and every response header value (`Location`
+  included), for pre-authenticated URLs. `write_fixture`, `fixture_from_response` and
+  `record` take it as `scrub=`. The credential scrubbing of 0.1.0 still always
+  applies. Ports the recorder pattern sdk-cashctrl had to keep locally: `write_fixture`
+  kept the tenant host in `request.url`, and CashCtrl's `file/prepare.json` answers with
+  signed storage URLs that `file/get` redirects to.
+- `FixtureRequest.body`, `body_base64` and `content_type`: the request body as scrubbed
+  UTF-8 text (the form or JSON text sent; `None` without a body) and the request's
+  `Content-Type`, so a write fixture can assert its payload (sdk-cashctrl). Fixtures
+  written by 0.1.0 still load.
+- `data=` for `AsyncClient.request`, `Client.request`, `record` and `record_sync`: a body
+  sent form-encoded (`application/x-www-form-urlencoded`) next to `json=`; passing both
+  raises `ValueError`. CashCtrl's writes are form-encoded (sdk-cashctrl).
+- `AsyncClient.derive(retry=..., timeouts=...)`: a new client on the same configuration
+  with only those replaced, sharing auth, transport, sleep, rate limiter and cache.
+- `record` and `record_sync` take `headers=`, `scrub=`, `retry=` and `timeouts=`; an
+  override goes through `client.derive`. A recording could not override the client's
+  retry policy or timeouts (sdk-comtrade).
+- `match_params=` for `mount_fixture`, `replay` and the plugin's `replay_fixture`: names
+  of recorded query parameters whose recorded values a request must carry too; a name
+  absent from the recorded URL or recorded as `REDACTED` raises `ValueError`. Replay
+  matched on method, host and path only, so a count call (`countOnly=true`) and the data
+  call on the same path could not be told apart (sdk-comtrade). The request body is
+  never matched; a test asserts it from the route's calls.
 
 ### Changed
 
@@ -52,6 +83,14 @@ All notable changes to this project are documented here. The format follows
 - Conventions 1.6: §5 and §6 as above; ADR-0011 added.
 - Conventions 1.7: §4 lists `ResultMeta.total` with its paginated-task semantics;
   ADR-0012 added.
+- **Breaking:** recording a request or response body that is not UTF-8 text raises
+  `ValueError` ("binary body cannot be scrubbed") and writes nothing, unless
+  `Scrub(allow_binary=True)` is passed; then it is stored base64 with
+  `body_base64: true`, unscrubbed, as 0.1.0 stored every such body without asking. No
+  scrub can read a binary body (sdk-cashctrl refused them locally).
+- Conventions 1.8: §6 names form bodies next to JSON ones; §10 states the recorder's
+  rules (scrub in memory before the one write, a placeholder host for a multi-tenant
+  source, no binary body unless flagged).
 
 ### Fixed
 
