@@ -10,6 +10,14 @@ All notable changes to this project are documented here. The format follows
 
 - `xippios.core.mcp.quiet_request_logging()`: sets the `httpx` and `httpcore` loggers
   to `WARNING`. Idempotent; `build_server` and `main` call it.
+- `ResultMeta.total` (default `None`): upstream's count of the records matching the
+  request, when the source reports one. A paginated task sets it from upstream's count
+  whether it collects every page or returns one, so the caller can page; it is never
+  computed from `len(data)`, and a negative count is refused. `cap_result` keeps it next
+  to the capped rows, and HTTP responses carry it, as `null` when unset. Optional, so
+  sources on 0.1.0 are unaffected (sdk-cashctrl).
+- ADR-0012, upstream totals in the result envelope; conventions 1.6 lists `total` in
+  §4 with its paginated-task semantics.
 
 ### Security
 
