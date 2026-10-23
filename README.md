@@ -138,8 +138,17 @@ first use and rebuilt when one of its values changes. Errors name tenants and va
 never a value.
 
 ```python
+import re
+
 from xippios.core import AsyncClient, BasicKeyAuth, ClientConfig, Tenants
 from xippios.core.tenants import list_task
+
+
+def check_subdomain(value: str) -> str:
+    if not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", value):
+        raise ValueError("not a subdomain")  # never the value: it names the tenant
+    return value
+
 
 # EXAMPLE_TENANTS=acme,acme_test
 # EXAMPLE_ACME_SUBDOMAIN=acme-books   EXAMPLE_ACME_API_KEY=...
@@ -149,7 +158,7 @@ tenants = Tenants(
     list_var="EXAMPLE_TENANTS",
     fields=("SUBDOMAIN", "API_KEY"),
     reserved=("demo",),
-    validate={"SUBDOMAIN": check_subdomain},  # returns the value, raises ValueError
+    validate={"SUBDOMAIN": check_subdomain},
 )
 
 
