@@ -200,14 +200,18 @@ consumer, never served standalone from the package.
   `tests/fixtures/<endpoint>/<case>.json` and are recorded by the `record-fixture`
   command, never hand-written.
 - Replay matches a fixture on method, host and path, and on the recorded query
-  parameters a test names (`match_params`). A parameter's absence cannot be matched:
-  where two fixtures share a path, the more specific one is mounted first, since `respx`
-  tries routes in the order they were added.
+  parameters a test names (`match_params`); a parameter whose recorded value holds
+  `REDACTED` cannot be matched and is refused by name. A parameter's absence cannot be
+  matched: where two fixtures share a path, the more specific one is mounted first,
+  since `respx` tries routes in the order they were added.
 - The recorder scrubs in memory and writes once, so nothing unscrubbed touches disk: a
   multi-tenant source records with a placeholder host that its offline tests replay
   against, and names the values that must never be written (`xippios.core.testing.Scrub`).
   The scrubbed exchange is verified before the write, a JSON body also decoded; the
   original host or a named value still present refuses it, the error naming where.
+  The verify is best effort, one JSON-aware pass over URL, headers and bodies; the
+  backstops are recording only against synthetic or demo tenants and the fixture grep
+  of the definition of done.
   A body that is not UTF-8 text cannot be scrubbed and is refused unless the recording
   flags it (`allow_binary=True`, stored base64 with `body_base64`).
 - Live tests are marked `@pytest.mark.live`, skipped unless `XIPPIOS_LIVE_TESTS=1`,

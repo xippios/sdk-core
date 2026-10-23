@@ -77,6 +77,19 @@ in memory, verifies the result (the original host or a secret value still presen
 JSON body decoded included, refuses the exchange) and writes once (`Scrub`, conventions
 §10).
 
+This ADR also covers the conventions 1.8 additions that came with the change. §6 names
+form bodies next to JSON ones: a request body goes as `data=` (form-encoded) or as
+`json=`, never both. §10 states how replay matches: `match_params` names recorded query
+parameters whose recorded values a request must carry, a parameter whose recorded value
+holds `REDACTED` is refused by name, absence cannot be expressed, and where two
+fixtures share a path the more specific one is mounted first, since `respx` tries
+routes in order. §10 also states the recorder's rules (scrub in memory, a placeholder
+host for a multi-tenant source, named secret values, no binary body unless flagged, one
+write) and the verify step before the write. The verify is best effort: one JSON-aware
+pass over the URL, the headers and the bodies with the scrub's own patterns. The
+backstops are recording only against synthetic or demo tenants, and the definition of
+done's grep of every fixture for key patterns before it is committed.
+
 ## Consequences
 
 - A source adopting core 0.2.0 deletes from its `tests/conftest.py` the
