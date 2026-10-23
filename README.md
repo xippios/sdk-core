@@ -23,8 +23,9 @@ It gives a source package the things that should be identical across the family:
   `ValidationError`, `UpstreamError`, `TransportError` and `InvalidRequestError` (a
   request refused before it is sent), all under `XippiosError`.
 - **Result envelope**: every task function returns `Result[T]` with `ResultMeta`
-  (source, endpoint, retrieved_at, published_at, vintage, request, and total: upstream's
-  count of the matching records when the source reports one). `Decimal` fields
+  (source, endpoint, retrieved_at, published_at, vintage, request, total: upstream's
+  count of the matching records when the source reports one, and tenant: the tenant the
+  data came from, by name, for a multi-tenant source). `Decimal` fields
   of upstream models arrive as JSON numbers in both adapters; `UpstreamModel.project`
   builds a projection of a record under upstream names, `parse_decimal` reads a
   published figure.

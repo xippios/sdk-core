@@ -97,6 +97,11 @@ All notable changes to this project are documented here. The format follows
   can annotate it; the fixture is annotated with it instead of `Callable[..., Route]`.
 - `fixture_from_response` is exported from `xippios.core.testing`; sdk-cashctrl's
   recorder imported it from `xippios.core.testing.fixtures`.
+- `ResultMeta.tenant` (default `None`): the tenant the data came from, by name, for a
+  multi-tenant source; never a credential, a host or another of the tenant's values.
+  A source carried the tenant only inside `request` (`request.org` in sdk-cashctrl),
+  where nothing marked it as the tenant. Optional, so single-tenant sources are
+  unaffected; conventions §4 lists it.
 
 ### Changed
 

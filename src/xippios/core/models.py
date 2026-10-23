@@ -154,6 +154,9 @@ class ResultMeta(BaseModel):
         total: Upstream's count of the records matching the request, when the source
             reports one; ``None`` when it does not or the count is unknown. Set only from
             what upstream reports, never computed from ``len(data)`` (ADR-0012).
+        tenant: The tenant the data came from, by name, e.g. ``"acme"``; never a
+            credential, nor a host or another value of the tenant's (conventions §7).
+            ``None`` for a single-tenant source and for the list of tenant names.
     """
 
     source: str
@@ -163,6 +166,7 @@ class ResultMeta(BaseModel):
     vintage: str | None = None
     request: dict[str, Any] = Field(default_factory=dict)
     total: int | None = None
+    tenant: str | None = None
 
     @field_validator("retrieved_at", "published_at")
     @classmethod

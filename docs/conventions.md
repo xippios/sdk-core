@@ -83,6 +83,7 @@ class ResultMeta(BaseModel):
     vintage: str | None           # upstream release identifier if the source has one
     request: dict[str, Any]       # the parameters used, for reproducibility
     total: int | None             # upstream's record count, if it reports one
+    tenant: str | None            # the tenant the data came from, by name (§7)
 
 class Result(BaseModel, Generic[T]):
     data: T
@@ -96,6 +97,10 @@ key that looks like one (`key`, `api_key`, `token`, `secret`, `password`, `auth`
 `signature`, `credential`) to `"REDACTED"` at construction, so an envelope is safe to
 hand to an agent, return over HTTP, or write to a store. A task that wants the
 credential's provenance records the variable name, never the value.
+
+`tenant` is the name of the tenant a multi-tenant source served the data for (§7),
+never a credential, a host or another of the tenant's values; `None` for a
+single-tenant source.
 
 `total` is upstream's count of the records matching the request, or `None` when the
 source reports none or the count is unknown (ADR-0012). A paginated task called without
