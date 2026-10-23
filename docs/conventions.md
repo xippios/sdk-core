@@ -223,8 +223,11 @@ consumer, never served standalone from the package.
 - The recorder scrubs in memory and writes once, so nothing unscrubbed touches disk: a
   multi-tenant source records with a placeholder host that its offline tests replay
   against, and names the values that must never be written (`xippios.core.testing.Scrub`).
-  The scrubbed exchange is verified before the write, a JSON body also decoded; the
-  original host or a named value still present refuses it, the error naming where.
+  A placeholder that contains the original host (`demo.example.test` for
+  `example.test`) is allowed and written as such, never scrubbed again; one that is the
+  original host is refused. The scrubbed exchange is verified before the write, a JSON
+  body also decoded; the original host or a named value still present refuses it, the
+  error naming where.
   The verify is best effort, one JSON-aware pass over URL, headers and bodies; the
   backstops are recording only against synthetic or demo tenants and the fixture grep
   of the definition of done.
