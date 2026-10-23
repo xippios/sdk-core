@@ -85,3 +85,6 @@ Decided 2026-10-23 for every package.
   their next PR (the pace's provenance in CLAUDE.md, the spent-limit answer mapped in
   `classify` with `retry_after`) and decision 4 once the core helper exists.
 - Nothing about retries on 5xx or on transport failures changes.
+
+Amended by ADR-0011 (2026-10-23): a 5xx and a transport failure are retried for
+idempotent methods only.
