@@ -129,6 +129,34 @@ def test_transport_error_from_httpx() -> None:
     assert error.source == "example"
 
 
+def test_transport_error_never_names_the_host() -> None:
+    # CPython's text for a TLS hostname mismatch quotes the host, here a tenant's.
+    request = httpx.Request("GET", "https://tenant.cashctrl.com/x")
+    exc = httpx.ConnectError(
+        "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname mismatch, "
+        "certificate is not valid for 'tenant.cashctrl.com'. (TENANT.CASHCTRL.COM)",
+        request=request,
+    )
+    message = str(error_from_exception(exc, source="example"))
+    assert message == (
+        "ConnectError: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname "
+        "mismatch, certificate is not valid for '<host>'. (<host>)"
+    )
+    assert "tenant" not in message.lower()
+
+
+def test_transport_error_masks_the_ascii_form_of_an_idn_host() -> None:
+    request = httpx.Request("GET", "https://bücher.example/x")
+    exc = httpx.ConnectError("not valid for 'xn--bcher-kva.example'", request=request)
+    assert str(error_from_exception(exc)) == "ConnectError: not valid for '<host>'"
+
+
+def test_transport_error_without_a_request() -> None:
+    error = error_from_exception(httpx.ConnectError("connection refused"), source="example")
+    assert isinstance(error, TransportError)
+    assert str(error) == "ConnectError: connection refused"
+
+
 class RequestRejected(InvalidRequestError):
     """A source's subclass with keyword-only attributes of its own (module level: picklable)."""
 

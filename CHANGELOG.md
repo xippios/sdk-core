@@ -39,7 +39,9 @@ All notable changes to this project are documented here. The format follows
   `404 from GET /v1/series: ...`, no longer `404 from GET api.example.org/v1/series: ...`.
   For a multi-tenant source the host names the tenant, which sdk-cashctrl had to mask in
   its own `classify` (ADR-0005 amendment; conventions 1.6, §5). The query string was
-  left out before already.
+  left out before already. `error_from_exception` replaces the request's host with
+  `<host>` in a `TransportError` message, since a transport failure's text can quote it
+  (a TLS hostname mismatch does).
 - Conventions 1.6: §5 and §6 as above; ADR-0011 added.
 
 ### Fixed

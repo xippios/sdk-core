@@ -6,6 +6,7 @@ tracebacks.
 """
 
 import email.utils
+import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -210,5 +211,21 @@ def raise_for_status(response: httpx.Response, *, source: str | None = None) -> 
 
 
 def error_from_exception(exc: httpx.RequestError, *, source: str | None = None) -> TransportError:
-    """Wrap an ``httpx`` request failure (timeout, connection, protocol) as TransportError."""
-    return TransportError(f"{type(exc).__name__}: {exc}", source=source)
+    """Wrap an ``httpx`` request failure (timeout, connection, protocol) as TransportError.
+
+    The request's host is replaced by ``<host>`` wherever the failure's text quotes it, as
+    a TLS hostname mismatch does: the host may name a tenant (ADR-0005).
+    """
+    text = str(exc)
+    for host in _hosts(exc):
+        text = re.sub(re.escape(host), "<host>", text, flags=re.IGNORECASE)
+    return TransportError(f"{type(exc).__name__}: {text}", source=source)
+
+
+def _hosts(exc: httpx.RequestError) -> set[str]:
+    """The request's host as written and in its ASCII (IDNA) form; empty without a request."""
+    try:
+        url = exc.request.url
+    except RuntimeError:  # httpx raises it when no request is attached
+        return set()
+    return {host for host in (url.host, url.raw_host.decode("ascii")) if host}
