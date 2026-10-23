@@ -206,6 +206,20 @@ consumer, never served standalone from the package.
   flags it (`allow_binary=True`, stored base64 with `body_base64`).
 - Live tests are marked `@pytest.mark.live`, skipped unless `XIPPIOS_LIVE_TESTS=1`,
   and run in CI only on a nightly schedule with org secrets.
+- The pytest plugin (`pytest_plugins = ["xippios.core.testing.plugin"]`) guarantees
+  every test not marked `live` an offline run without real keys (ADR-0013):
+  - No network: a request through httpx's default transports raises `RuntimeError`
+    naming its method and path; `respx` answers replayed and mocked requests as
+    before, and a transport the test passes itself is untouched. A test that must
+    reach the network is marked `network`.
+  - No rate-limit wait: a client's limiter neither waits nor takes a token. A test
+    that asserts the limiter's waits is marked `rate_limited`.
+  - Placeholder key: every `EnvKeyAuth` sends `PLACEHOLDER_KEY`, pinned on the class,
+    and the variables named in the ini option `xippios_placeholder_key_envs` hold it;
+    the fixture `placeholder_api_key` returns it, `None` in a live test. A source names
+    its key variable there and carries no placeholder fixture of its own.
+  - Logger levels: the `httpx` and `httpcore` logger levels are restored after every
+    test, live ones included.
 - Every task function has at least one fixture-backed test and one live smoke test.
 - Coverage is reported, not gated; mypy strict and ruff are gated.
 

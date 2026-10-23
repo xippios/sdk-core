@@ -136,7 +136,8 @@ All notable changes to this project are documented here. The format follows
   the parameter and calls `self.key()` where it attaches the key; none is known.
 - Conventions 1.8: §6 names form bodies next to JSON ones; §10 states the recorder's
   rules (scrub in memory before the one write, a placeholder host for a multi-tenant
-  source, no binary body unless flagged).
+  source, no binary body unless flagged) and the plugin's offline guarantees with the
+  markers `network` and `rate_limited`; ADR-0013 added.
 
 ### Fixed
 

@@ -31,8 +31,10 @@ It gives a source package the things that should be identical across the family:
 - **Reference-data loader** for code lists shipped inside a package.
 - **Adapters** that turn task functions into MCP tools (`xippios.core.mcp`) and FastAPI
   routes (`xippios.core.http`) without any logic of their own.
-- **Test support**: a live-test gate, fixture recording with secrets scrubbed, and
-  replay through `respx` (`xippios.core.testing`).
+- **Test support**: a live-test gate, offline guarantees for every other test (no
+  network, no rate-limit wait, a placeholder key), fixture recording with secrets
+  scrubbed, replay through `respx`, and a check for write servers
+  (`xippios.core.testing`).
 
 ## Install
 
@@ -179,15 +181,40 @@ RFC 9457 problem details (`application/problem+json`), `InvalidRequestError` as 
 pytest_plugins = ["xippios.core.testing.plugin"]
 ```
 
+```toml
+# pyproject.toml: the variables that hold the placeholder key in offline tests
+[tool.pytest.ini_options]
+xippios_placeholder_key_envs = ["EXAMPLE_API_KEY"]
+```
+
 - `@pytest.mark.live` tests are skipped unless `XIPPIOS_LIVE_TESTS=1`.
+- Every other test runs offline (ADR-0013). A request through httpx's default
+  transports raises `RuntimeError` naming its method and path unless `respx` answers
+  it; mark a test `network` to let it through. The rate limiter never waits; mark a
+  test `rate_limited` to keep it. Every `EnvKeyAuth` sends `PLACEHOLDER_KEY`, and the
+  variables named in `xippios_placeholder_key_envs` hold it (fixture
+  `placeholder_api_key`), whatever the shell or an earlier live test left behind. The
+  `httpx` and `httpcore` logger levels come back after every test.
 - `replay_fixture("api_GET", "corn_2024")` mounts `tests/fixtures/api_GET/corn_2024.json`
   on its method, host and path; `match_params=["countOnly"]` makes the route match those
   recorded query parameters too. The request body is never matched: assert it from the
-  route's calls against `fixture.request.body`.
+  route's calls against `fixture.request.body`. `sent_urls(route)` gives the URLs the
+  route received as scrubbed strings, so no request has to sit in the test's frame.
 - `record(client, "/v1/series", fixture_path(...), params=...)` records a live response
   with credentials scrubbed. Never hand-write a fixture. `json=` or `data=` (a form) send
   a body, recorded with its content type; `retry=` and `timeouts=` override the
   client's for the recording.
+
+A source with a write server checks it against its write tasks: exactly those tools,
+each taking `confirm: bool = False`, none of them on the read server or the HTTP router.
+
+```python
+from xippios.core.testing import assert_write_tools
+
+assert_write_tools(
+    write_server, [tasks.create_account], source="example", read_server=server, router=router
+)
+```
 
 A multi-tenant source tells the recorder what else must never be written:
 
@@ -221,7 +248,7 @@ be scrubbed and is refused unless `Scrub(allow_binary=True)` stores it base64, f
 | `xippios.core.pagination` | offset, page and cursor iterators | alpha |
 | `xippios.core.mcp` | tool registration, result caps, error text, CLI, quiet request log | alpha |
 | `xippios.core.http` | router factory, problem details | alpha |
-| `xippios.core.testing` | live gate, record, replay, scrub | alpha |
+| `xippios.core.testing` | live gate, offline guarantees, record, replay, scrub, write-server check | alpha |
 
 Alpha: the public surface may change in a minor version until the first source
 package, `sdk-usda-nass`, has exercised it.
