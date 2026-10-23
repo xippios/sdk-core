@@ -10,7 +10,8 @@ It gives a source package the things that should be identical across the family:
   response cache (off by default; the in-memory one is bounded by TTL and size),
   explicit timeouts and one `User-Agent`. Async at the core, a sync facade on top.
   A 429 is retried for every method, a 5xx or a transport failure only for GET, HEAD
-  and OPTIONS unless `RetryPolicy.retry_non_idempotent` says a repeated write is safe.
+  and OPTIONS unless `RetryPolicy.retry_non_idempotent` is set, because upstream makes a
+  repeated write safe, or because the source only reads through POST.
   `ClientConfig.cache_filter` narrows the cache to chosen requests; clients built with
   the same `limiter` share one pace.
 - **Auth helpers** that read the key from the environment on the first request:

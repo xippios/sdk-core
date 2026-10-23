@@ -45,8 +45,8 @@ class RetryPolicy:
         retry_non_idempotent: Also retry a 5xx and a transport failure for the other
             methods (POST, PUT, PATCH, DELETE). Off by default: such a request may have
             been applied before the failure, and a repeat can apply it twice. Set it
-            only where upstream makes a repeat safe, e.g. writes carrying an
-            idempotency key that upstream honours.
+            only where upstream makes a repeated write safe, e.g. by an idempotency key
+            it honours, or where the client only reads through POST.
     """
 
     max_attempts: int = 4

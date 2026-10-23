@@ -24,7 +24,8 @@ All notable changes to this project are documented here. The format follows
   `connection`), dropped from cache entries and recorded fixtures alike.
 - `RetryPolicy.retry_non_idempotent` (default `False`): retry a 5xx and a transport
   failure for POST, PUT, PATCH and DELETE too, for sources whose upstream makes a
-  repeated write safe, e.g. by an idempotency key (ADR-0011).
+  repeated write safe, e.g. by an idempotency key, or that only read through POST
+  (ADR-0011).
 
 ### Changed
 
