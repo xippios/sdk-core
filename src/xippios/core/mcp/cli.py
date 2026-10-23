@@ -12,9 +12,16 @@ from collections.abc import Callable, Sequence
 from mcp.server.mcpserver import MCPServer
 
 from xippios.core.errors import XippiosError
-from xippios.core.mcp.server import quiet_request_logging
+from xippios.core.mcp.server import is_write_server, quiet_request_logging
 
 __all__ = ["build_parser", "main"]
+
+_LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
+"""The ``--host`` values a write server may be served on over HTTP without ``--allow-remote``."""
+
+_ALLOW_REMOTE_HELP = (
+    "serve a write server beyond loopback; it carries no authentication, put it behind a gateway"
+)
 
 
 def build_parser(
@@ -33,6 +40,7 @@ def build_parser(
     )
     parser.add_argument("--host", default="127.0.0.1", help="bind address for --http")
     parser.add_argument("--port", type=int, default=8000, help="port for --http")
+    parser.add_argument("--allow-remote", action="store_true", help=_ALLOW_REMOTE_HELP)
     if add_options is not None:
         add_options(parser)
     return parser
@@ -50,7 +58,9 @@ def main(
     ``apply_options(namespace, server)`` returns the server to run; a ``XippiosError``
     it raises (an undeclared tenant is an ``InvalidRequestError``, a missing variable a
     ``ConfigError``) stops the process like an argparse error: the message on stderr,
-    exit status 2, no traceback.
+    exit status 2, no traceback. A write server (``is_write_server``) is served over
+    ``--http`` on a loopback ``--host`` only (``127.0.0.1``, ``localhost``, ``::1``),
+    unless ``--allow-remote`` is passed: it carries no authentication.
 
     The httpx and httpcore loggers are quieted again right before the server runs
     (``quiet_request_logging``), in case the server was built another way or a level was
@@ -71,6 +81,13 @@ def main(
             server = apply_options(args, server)
         except XippiosError as exc:
             parser.error(str(exc))
+    remote = args.http and args.host not in _LOOPBACK_HOSTS
+    if remote and is_write_server(server) and not args.allow_remote:
+        parser.error(
+            f"{server.name} is a write server and carries no authentication; serve it over "
+            f"--http on a loopback --host ({', '.join(_LOOPBACK_HOSTS)}), or pass "
+            "--allow-remote and put it behind a gateway"
+        )
     quiet_request_logging()
     if args.http:
         server.run(transport="streamable-http", host=args.host, port=args.port)

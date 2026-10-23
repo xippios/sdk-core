@@ -12,7 +12,12 @@ from xippios.core.mcp import TenantLock, build_parser, build_server, main
 
 def test_parser_defaults() -> None:
     args = build_parser("x").parse_args([])
-    assert (args.http, args.host, args.port) == (False, "127.0.0.1", 8000)
+    assert (args.http, args.host, args.port, args.allow_remote) == (
+        False,
+        "127.0.0.1",
+        8000,
+        False,
+    )
 
 
 def test_main_dispatches_to_transport(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -44,6 +49,11 @@ def test_main_quiets_request_loggers_before_running(monkeypatch: pytest.MonkeyPa
     logging.getLogger("httpcore").setLevel(logging.DEBUG)
     main(server, [])
     assert seen == {"httpx": logging.WARNING, "httpcore": logging.WARNING}
+
+
+def test_parser_has_allow_remote_off_by_default() -> None:
+    assert build_parser("x").parse_args([]).allow_remote is False
+    assert build_parser("x").parse_args(["--allow-remote"]).allow_remote is True
 
 
 def add_org(parser: argparse.ArgumentParser) -> None:
@@ -95,8 +105,10 @@ def test_help_lists_core_and_source_options(capsys: pytest.CaptureFixture[str]) 
         main(build_server("example", []), ["--help"], add_options=add_org)
     assert info.value.code == 0
     out = capsys.readouterr().out
-    for option in ("--http", "--host", "--port", "--org"):
+    for option in ("--http", "--host", "--port", "--allow-remote", "--org"):
         assert option in out
+    help_text = " ".join(out.split())  # argparse wraps the help lines
+    assert "serve a write server beyond loopback; it carries no authentication, put it" in help_text
 
 
 def test_unknown_options_still_fail(
@@ -164,3 +176,69 @@ def test_an_undeclared_tenant_from_tenants_require_stops_at_startup(
     assert served.instructions == (
         "This server is locked to org acme; every tool call must pass org=acme."
     )
+
+
+def create_thing(name: str, confirm: bool = False) -> dict[str, str]:
+    """Create a thing; without confirm, return a preview.
+
+    Args:
+        name: The thing's name, e.g. ``"Corn"``.
+        confirm: ``True`` writes, ``False`` previews.
+    """
+    return {"name": name}
+
+
+@pytest.mark.parametrize("host", ["0.0.0.0", "192.0.2.10", "::", "example.test"])
+def test_a_write_server_is_not_served_beyond_loopback(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], host: str
+) -> None:
+    runs = Runs(monkeypatch)
+    server = runs.attach(build_server("example", [create_thing], read_only=False))
+    with pytest.raises(SystemExit) as info:
+        main(server, ["--http", "--host", host])
+    assert info.value.code == 2
+    err = capsys.readouterr().err
+    assert "xippios-example is a write server and carries no authentication" in err
+    assert "--allow-remote" in err
+    assert runs.calls == []
+
+
+def test_allow_remote_serves_a_write_server_beyond_loopback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runs = Runs(monkeypatch)
+    server = runs.attach(build_server("example", [create_thing], read_only=False))
+    main(server, ["--http", "--host", "0.0.0.0", "--allow-remote"])
+    assert runs.calls == [(server, "streamable-http", {"host": "0.0.0.0", "port": 8000})]
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1", "localhost", "::1"])
+def test_a_write_server_is_served_on_loopback(monkeypatch: pytest.MonkeyPatch, host: str) -> None:
+    runs = Runs(monkeypatch)
+    server = runs.attach(build_server("example", [create_thing], read_only=False))
+    main(server, ["--http", "--host", host])
+    main(server, ["--host", "0.0.0.0"])  # stdio: --host is not used
+    assert runs.calls == [
+        (server, "streamable-http", {"host": host, "port": 8000}),
+        (server, "stdio", {}),
+    ]
+
+
+def test_a_read_only_server_is_served_anywhere(monkeypatch: pytest.MonkeyPatch) -> None:
+    runs = Runs(monkeypatch)
+    server = runs.attach(build_server("example", []))
+    main(server, ["--http", "--host", "0.0.0.0"])
+    assert runs.calls == [(server, "streamable-http", {"host": "0.0.0.0", "port": 8000})]
+
+
+def test_the_server_from_apply_options_is_the_one_checked(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    runs = Runs(monkeypatch)
+    server = runs.attach(build_server("example", []))
+    write = runs.attach(build_server("example", [create_thing], read_only=False))
+    with pytest.raises(SystemExit) as info:
+        main(server, ["--http", "--host", "0.0.0.0"], apply_options=lambda args, given: write)
+    assert info.value.code == 2
+    assert "is a write server" in capsys.readouterr().err
+    assert runs.calls == []
