@@ -59,6 +59,8 @@ class XippiosError(Exception):
         return (_rebuild, (type(self), self.args), self.__dict__)
 
 
+# Part of the pickle format: every pickled error names xippios.core.errors._rebuild, so
+# renaming or moving it breaks unpickling errors written by an earlier version.
 def _rebuild(cls: type[XippiosError], args: tuple[Any, ...]) -> XippiosError:
     """An instance of ``cls`` with ``args`` and no attributes yet; see ``__reduce__``."""
     return cls.__new__(cls, *args)
