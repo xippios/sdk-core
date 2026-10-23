@@ -13,6 +13,7 @@ from xippios.core.client import (
     MemoryCache,
     RateLimit,
     RetryPolicy,
+    TokenBucket,
     cache_key,
 )
 from xippios.core.client._core import _from_cache
@@ -177,6 +178,45 @@ async def test_rate_limiter_waits_between_calls(
     await client.get("/v1/x")
     assert len(sleeper.calls) == 1
     assert 0.9 <= sleeper.calls[0] <= 1.0
+
+
+class Clock:
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+@pytest.mark.anyio
+async def test_clients_share_one_limiter(respx_mock: respx.MockRouter, sleeper: Sleeper) -> None:
+    respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
+    bucket = TokenBucket(RateLimit(per_minute=60, burst=1), clock=Clock())
+    keyed = ClientConfig(source="example", version="1", base_url=BASE)
+    # A config of its own would pace at 6,000 a minute; the shared bucket wins.
+    keyless = ClientConfig(
+        source="example", version="1", base_url=BASE, rate_limit=RateLimit(per_minute=6000)
+    )
+    a = AsyncClient(keyed, sleep=sleeper, limiter=bucket)
+    b = AsyncClient(keyless, sleep=sleeper, limiter=bucket)
+    assert a.limiter is b.limiter
+    assert a.limiter is bucket
+    await a.get("/v1/x")
+    assert sleeper.calls == []
+    await b.get("/v1/x")  # the bucket's one token went to a
+    assert sleeper.calls == [pytest.approx(1.0)]
+
+
+def test_limiter_defaults_to_the_configured_rate_limit(config: ClientConfig) -> None:
+    assert AsyncClient(config).limiter is None
+    limited = ClientConfig(
+        source="example", version="1", base_url=BASE, rate_limit=RateLimit(per_minute=30)
+    )
+    own = AsyncClient(limited).limiter
+    assert own is not None
+    assert own.limit == RateLimit(per_minute=30)
+    shared = TokenBucket(RateLimit(per_minute=60))
+    assert Client(limited, limiter=shared).async_client.limiter is shared
 
 
 @pytest.mark.anyio

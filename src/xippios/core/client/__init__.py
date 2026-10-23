@@ -62,6 +62,8 @@ class Client:
         config: Base URL, timeouts, retry policy, rate limit, cache and headers.
         auth: An ``httpx.Auth`` adding credentials.
         transport: Replacement transport, for tests.
+        limiter: A shared ``TokenBucket`` used instead of ``config.rate_limit``; see
+            ``AsyncClient``.
     """
 
     def __init__(
@@ -70,8 +72,9 @@ class Client:
         *,
         auth: httpx.Auth | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
+        limiter: TokenBucket | None = None,
     ) -> None:
-        self.async_client = AsyncClient(config, auth=auth, transport=transport)
+        self.async_client = AsyncClient(config, auth=auth, transport=transport, limiter=limiter)
 
     @property
     def config(self) -> ClientConfig:

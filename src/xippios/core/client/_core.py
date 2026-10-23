@@ -26,13 +26,17 @@ class AsyncClient:
 
     One instance can be shared by sync facades and async servers alike: it keeps one
     ``httpx`` connection pool per event loop, while the rate limiter and the cache are
-    shared across all of them.
+    shared across all of them. Clients that must share one pace, say a keyed and a
+    keyless client of the same upstream, share one ``TokenBucket`` through ``limiter``.
 
     Args:
         config: Base URL, timeouts, retry policy, rate limit, cache and headers.
         auth: An ``httpx.Auth`` adding credentials, e.g. a query key or basic auth.
         transport: Replacement transport, for tests.
         sleep: Async sleep used by retries and the rate limiter, replaceable in tests.
+        limiter: A ``TokenBucket`` to use instead of one built from
+            ``config.rate_limit``, which is then ignored; pass another client's
+            ``limiter`` to share its pace.
     """
 
     def __init__(
@@ -42,12 +46,15 @@ class AsyncClient:
         auth: httpx.Auth | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        limiter: TokenBucket | None = None,
     ) -> None:
         self.config = config
         self._auth = auth
         self._transport = transport
         self._sleep = sleep
-        self._bucket = TokenBucket(config.rate_limit) if config.rate_limit is not None else None
+        if limiter is None and config.rate_limit is not None:
+            limiter = TokenBucket(config.rate_limit)
+        self._bucket = limiter
         self._pools: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, httpx.AsyncClient] = (
             weakref.WeakKeyDictionary()
         )
@@ -57,6 +64,11 @@ class AsyncClient:
     def source(self) -> str:
         """Source slug from the configuration."""
         return self.config.source
+
+    @property
+    def limiter(self) -> TokenBucket | None:
+        """The rate limiter every request waits on; ``None`` when there is none."""
+        return self._bucket
 
     def _pool(self) -> httpx.AsyncClient:
         loop = asyncio.get_running_loop()
