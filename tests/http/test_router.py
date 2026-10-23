@@ -59,6 +59,7 @@ def test_routes_return_the_envelope() -> None:
     assert payload["meta"]["source"] == "example"
     assert payload["meta"]["request"] == {"year": 2010}
     assert payload["meta"]["retrieved_at"].endswith("Z")
+    assert payload["meta"]["total"] is None
 
 
 def test_defaults_and_plain_functions() -> None:
@@ -205,3 +206,30 @@ def test_http_responses_carry_decimals_as_numbers() -> None:
     response = TestClient(app).get("/example/priced", params={"name": "corn"})
     assert response.status_code == 200
     assert response.json()["data"] == [{"name": "corn", "price": 4.61}]
+
+
+async def list_series_async(limit: int | None = None) -> Result[list[Series]]:
+    """List series, one page when ``limit`` is given.
+
+    Args:
+        limit: Page size, e.g. ``2``; omit for every series.
+    """
+    records = [{"id": f"S{i}", "value": i} for i in range(5)]
+    answer: dict[str, Any] = {"total": 5, "data": records if limit is None else records[:limit]}
+    rows = [Series.model_validate(record) for record in answer["data"]]
+    request = {} if limit is None else {"limit": limit}
+    meta = ResultMeta(source="example", endpoint="list", request=request, total=answer["total"])
+    return Result(data=rows, meta=meta)
+
+
+def test_http_responses_carry_the_upstream_total() -> None:
+    app = FastAPI()
+    app.include_router(router_from_tasks("example", [sync(list_series_async)]))
+    client = TestClient(app)
+    page = client.get("/example/list_series", params={"limit": 2})
+    assert page.status_code == 200
+    assert len(page.json()["data"]) == 2
+    assert page.json()["meta"]["total"] == 5
+    assert client.get("/example/list_series").json()["meta"]["total"] == 5
+    total = app.openapi()["components"]["schemas"]["ResultMeta"]["properties"]["total"]
+    assert total["anyOf"] == [{"type": "integer"}, {"type": "null"}]

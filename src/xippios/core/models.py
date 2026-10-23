@@ -151,6 +151,9 @@ class ResultMeta(BaseModel):
         vintage: Upstream release identifier when the source has one.
         request: The parameters used, for reproducibility. Credential-like keys are
             redacted at construction (ADR-0005); record the variable name, never the value.
+        total: Upstream's count of the records matching the request, when the source
+            reports one; ``None`` when it does not or the count is unknown. Set only from
+            what upstream reports, never computed from ``len(data)`` (ADR-0012).
     """
 
     source: str
@@ -159,6 +162,7 @@ class ResultMeta(BaseModel):
     published_at: datetime | None = None
     vintage: str | None = None
     request: dict[str, Any] = Field(default_factory=dict)
+    total: int | None = None
 
     @field_validator("retrieved_at", "published_at")
     @classmethod
@@ -171,6 +175,13 @@ class ResultMeta(BaseModel):
     @classmethod
     def _no_credentials(cls, value: dict[str, Any]) -> dict[str, Any]:
         return redact_credentials(value)
+
+    @field_validator("total")
+    @classmethod
+    def _not_negative(cls, value: int | None) -> int | None:
+        if value is not None and value < 0:
+            raise ValueError("total must not be negative")
+        return value
 
 
 class Result[T](BaseModel):
