@@ -1,5 +1,7 @@
 import json
 import logging
+from collections.abc import Callable
+from typing import Annotated, Any
 
 import httpx
 import pytest
@@ -113,16 +115,81 @@ async def test_async_and_plain_functions_work() -> None:
     assert json.loads(doubled.content[0].text) == {"x": 42}
 
 
+def create_thing(name: str, confirm: bool = False) -> dict[str, str]:
+    """Create a thing; without confirm, return a preview.
+
+    Args:
+        name: The thing's name, e.g. ``"Corn"``.
+        confirm: ``True`` writes, ``False`` previews.
+    """
+    return {"name": name, "written": str(confirm)}
+
+
+def delete_thing(thing_id: int, confirm: "Annotated[bool, 'write']" = False) -> None:
+    """Delete a thing; the annotation is a string, resolved to bool."""
+
+
+def no_confirm(name: str) -> None:
+    """No confirm at all."""
+
+
+def confirm_wrong_type(confirm: bool | None = False) -> None:
+    """Optional, not bool."""
+
+
+def confirm_true(confirm: bool = True) -> None:
+    """Writes unless told not to."""
+
+
+def confirm_required(confirm: bool) -> None:
+    """Must be told."""
+
+
+def confirm_zero(confirm: int = 0) -> None:
+    """An int."""
+
+
 @pytest.mark.anyio
 async def test_register_tasks_on_existing_server_and_write_flag() -> None:
     server = build_server("example", [], name="custom", instructions="Call list first.")
     assert server.name == "custom"
-    names = register_tasks(server, "example", [plain], read_only=False)
-    assert names == ["example_plain"]
+    names = register_tasks(server, "example", [create_thing, delete_thing], read_only=False)
+    assert names == ["example_create_thing", "example_delete_thing"]
     tool = (await server.list_tools())[0]
     assert tool.annotations is not None
     assert tool.annotations.read_only_hint is False
     assert tool.annotations.destructive_hint is True
+
+
+@pytest.mark.parametrize(
+    ("task", "problem"),
+    [
+        (no_confirm, "no parameter confirm"),
+        (confirm_wrong_type, r"confirm is annotated bool \| None, not bool"),
+        (confirm_zero, "confirm is annotated <class 'int'>, not bool"),
+        (confirm_true, "confirm defaults to True, not False"),
+        (confirm_required, "confirm has no default"),
+    ],
+)
+@pytest.mark.anyio
+async def test_a_write_server_refuses_a_task_without_confirm_false(
+    task: Callable[..., Any], problem: str
+) -> None:
+    rule = r"every task of a write server takes confirm: bool = False .*\(conventions §8\)"
+    with pytest.raises(ValueError, match=f"^example_{task.__name__}: {problem}; {rule}"):
+        build_server("example", [create_thing, task], read_only=False)
+    server = build_server("example", [])
+    with pytest.raises(ValueError, match=f"^example_{task.__name__}: "):
+        register_tasks(server, "example", iter([create_thing, task]), read_only=False)
+    assert await server.list_tools() == []  # checked before anything is registered
+
+
+@pytest.mark.anyio
+async def test_a_read_only_server_ignores_the_confirm_rule() -> None:
+    server = build_server("example", [no_confirm, confirm_true, confirm_zero, plain])
+    assert len(await server.list_tools()) == 4
+    names = register_tasks(server, "example", [confirm_required], read_only=True)
+    assert names == ["example_confirm_required"]
 
 
 REQUEST_LOGGERS = ("httpx", "httpcore")

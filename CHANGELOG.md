@@ -195,6 +195,14 @@ All notable changes to this project are documented here. The format follows
   rules (scrub in memory before the one write, a placeholder host for a multi-tenant
   source, no binary body unless flagged) and the plugin's offline guarantees with the
   markers `network` and `rate_limited`; ADR-0013 added.
+- **Breaking:** `register_tasks(..., read_only=False)`, and so
+  `build_server(..., read_only=False)`, refuses a task without a parameter `confirm`
+  annotated `bool` (resolved with `typing.get_type_hints`, so `Annotated[bool, ...]`
+  counts and `bool | None` does not) with the default `False`: it raises `ValueError`
+  naming the tool and the rule before any task is registered. A write server could
+  register a task that writes on its first call, which conventions §8 forbids and only
+  `assert_write_tools` caught, in a test (sdk-cashctrl). `assert_write_tools` uses the
+  same check. Read-only servers are unaffected.
 
 ### Fixed
 

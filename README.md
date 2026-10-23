@@ -187,6 +187,8 @@ Tool names are `<source>_<function>` (`example_get_series`), the docstring is th
 description, the signature is the input schema. Results are capped at 200 rows or
 64 KB with a note on how to narrow the query; errors come back as
 `error: <Class>: <message>`. `--http` serves streamable HTTP instead of stdio.
+A write server (`build_server(..., read_only=False)`) refuses, with `ValueError`, a task
+that does not take `confirm: bool = False`.
 Request URLs are not logged: `build_server` and `main` set the `httpx` and `httpcore`
 loggers to `WARNING` (`quiet_request_logging`), because a URL can carry an API key or a
 tenant host.

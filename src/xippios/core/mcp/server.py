@@ -63,6 +63,27 @@ def tool_name(source: str, fn: Callable[..., Any]) -> str:
     return name if name.startswith(f"{prefix}_") else f"{prefix}_{name}"
 
 
+def _confirm_problem(fn: Callable[..., Any]) -> str | None:
+    """Why ``fn`` does not take ``confirm: bool = False``, or ``None`` when it does.
+
+    The annotation is resolved with ``typing.get_type_hints``, so a string annotation
+    and ``Annotated[bool, ...]`` count as ``bool``; ``bool | None`` does not.
+    """
+    parameter = inspect.signature(fn).parameters.get("confirm")
+    if parameter is None:
+        return "no parameter confirm"
+    annotation = typing.get_type_hints(fn).get("confirm", parameter.annotation)
+    if annotation is inspect.Parameter.empty:
+        return "confirm is not annotated"
+    if annotation is not bool:
+        return f"confirm is annotated {annotation!r}, not bool"
+    if parameter.default is inspect.Parameter.empty:
+        return "confirm has no default"
+    if parameter.default is not False:
+        return f"confirm defaults to {parameter.default!r}, not False"
+    return None
+
+
 def _as_tool(fn: Callable[..., Any], cap: ResultCap) -> Callable[..., Awaitable[str]]:
     target = as_async(fn)
     hints = typing.get_type_hints(fn)
@@ -96,14 +117,31 @@ def register_tasks(
 ) -> list[str]:
     """Add each task function to ``server`` as a tool and return the tool names.
 
+    With ``read_only=False`` every task must take ``confirm: bool = False`` and return a
+    dry-run preview unless it is true (conventions §8); the tasks are checked before any
+    is registered, so a task without it registers nothing.
+
     Args:
         server: The server to register on.
         source: Source slug, e.g. ``"usda-nass"``; prefixes every tool name.
         tasks: Task functions (sync facades, async functions, or plain functions).
         cap: Result cap; defaults to 200 rows or 64 KB.
         read_only: Mark the tools read-only. Write tools belong in a separate server.
+
+    Raises:
+        ValueError: ``read_only`` is ``False`` and a task has no parameter ``confirm``
+            annotated ``bool`` with the default ``False``; the message names the tool.
     """
     cap = cap or ResultCap()
+    tasks = list(tasks)
+    if not read_only:
+        for fn in tasks:
+            problem = _confirm_problem(fn)
+            if problem is not None:
+                raise ValueError(
+                    f"{tool_name(source, fn)}: {problem}; every task of a write server takes "
+                    "confirm: bool = False and previews unless it is true (conventions §8)"
+                )
     annotations = ToolAnnotations(
         read_only_hint=read_only,
         destructive_hint=not read_only,
@@ -148,7 +186,12 @@ def build_server(
         version: Source package version, shown to clients.
         instructions: Server-level guidance for agents, e.g. which tool to call first.
         cap: Result cap for every tool.
-        read_only: Whether the tools are read-only; ``False`` for a write server.
+        read_only: Whether the tools are read-only; ``False`` for a write server, whose
+            every task takes ``confirm: bool = False`` (see ``register_tasks``).
+
+    Raises:
+        ValueError: ``read_only`` is ``False`` and a task does not take
+            ``confirm: bool = False``.
     """
     server = MCPServer(name or f"xippios-{source}", version=version, instructions=instructions)
     quiet_request_logging()

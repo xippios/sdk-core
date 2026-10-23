@@ -6,7 +6,7 @@ import pytest
 
 from xippios.core import NotFoundError, Result, ResultMeta, UpstreamModel, parse_decimal, sync
 from xippios.core.http import router_from_tasks
-from xippios.core.mcp import build_server
+from xippios.core.mcp import build_server, register_tasks
 from xippios.core.testing import assert_projection, assert_write_tools, mcp_call
 
 
@@ -112,7 +112,10 @@ async def test_assert_write_tools_works_in_an_async_test() -> None:
 
 
 def test_assert_write_tools_wants_exactly_the_write_tasks() -> None:
-    write = build_server("example", [*WRITE, list_things], read_only=False)
+    # build_server refuses a write task without confirm (conventions §8); a read-only
+    # registration on the write server is how a stray tool would get there.
+    write = build_server("example", WRITE, read_only=False)
+    register_tasks(write, "example", [list_things])
     with pytest.raises(AssertionError, match=r"not write tasks: \['example_list_things'\]"):
         assert_write_tools(write, WRITE, source="example")
     write = build_server("example", [create_thing], read_only=False)
@@ -156,7 +159,8 @@ def confirm_zero(confirm: int = 0) -> None:
     ],
 )
 def test_assert_write_tools_wants_confirm_false(task: Callable[..., Any], problem: str) -> None:
-    write = build_server("example", [create_thing, task], read_only=False)
+    write = build_server("example", [create_thing], read_only=False)
+    register_tasks(write, "example", [task])  # build_server(read_only=False) refuses it
     with pytest.raises(AssertionError, match=f"^example_{task.__name__}: {problem}; "):
         assert_write_tools(write, [create_thing, task], source="example")
 

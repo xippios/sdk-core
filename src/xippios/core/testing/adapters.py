@@ -1,8 +1,6 @@
 """Helpers for tests that go through the adapters or check projections."""
 
-import inspect
 import json
-import typing
 from collections.abc import Callable, Iterable
 from typing import Any
 
@@ -81,7 +79,7 @@ def assert_write_tools(
         read_server: The read-only ``MCPServer`` of ``xippios-<source>-mcp``, if any.
         router: The source's FastAPI router from ``router_from_tasks``, if any.
     """
-    from xippios.core.mcp.server import tool_name
+    from xippios.core.mcp.server import _confirm_problem, tool_name
 
     expected = {tool_name(source, fn): fn for fn in write_tasks}
     listed = _tool_names(write_server)
@@ -116,20 +114,3 @@ def _serves(route: Any, source: str, fn: Callable[..., Any]) -> bool:
     """
     named = getattr(route, "name", None) == f"{source}_{fn.__name__}"
     return named or str(getattr(route, "path", "")).endswith(f"/{fn.__name__}")
-
-
-def _confirm_problem(fn: Callable[..., Any]) -> str | None:
-    """Why ``fn`` does not take ``confirm: bool = False``, or ``None`` when it does."""
-    parameter = inspect.signature(fn).parameters.get("confirm")
-    if parameter is None:
-        return "no parameter confirm"
-    annotation = typing.get_type_hints(fn).get("confirm", parameter.annotation)
-    if annotation is inspect.Parameter.empty:
-        return "confirm is not annotated"
-    if annotation is not bool:
-        return f"confirm is annotated {annotation!r}, not bool"
-    if parameter.default is inspect.Parameter.empty:
-        return "confirm has no default"
-    if parameter.default is not False:
-        return f"confirm defaults to {parameter.default!r}, not False"
-    return None
