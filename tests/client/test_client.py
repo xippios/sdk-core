@@ -402,11 +402,12 @@ async def test_cache_filter_limits_caching_to_chosen_requests(
         seen.append(request)
         return request.url.path == "/v1/reference"
 
+    cache = MemoryCache()
     config = ClientConfig(
         source="example",
         version="1",
         base_url=BASE,
-        cache=MemoryCache(),
+        cache=cache,
         cache_filter=only_reference,
     )
     client = AsyncClient(config)
@@ -415,12 +416,15 @@ async def test_cache_filter_limits_caching_to_chosen_requests(
         await client.get("/v1/data", params={"year": 2024})
     assert reference.call_count == 1
     assert data.call_count == 2
+    assert len(cache) == 1  # the filtered-out GET was never stored
+    assert cache.get(cache_key("GET", httpx.URL(f"{BASE}/v1/data?year=2024"))) is None
     hit = await client.get("/v1/reference", params={"lang": "en"})
     assert hit.extensions["xippios_cache"] == "hit"
     assert seen[0].url.params["lang"] == "en"
     assert seen[1].url.params["year"] == "2024"
     await client.request("POST", "/v1/reference", json={})  # never cached, filter not asked
     assert all(request.method == "GET" for request in seen)
+    assert len(cache) == 1
 
 
 @pytest.mark.anyio
