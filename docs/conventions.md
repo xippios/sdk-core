@@ -1,6 +1,6 @@
 # xippios SDK family — conventions
 
-Version 1.5 · 2026-10-23 · applies to every `sdk-*` repository under github.com/xippios.
+Version 1.6 · 2026-10-23 · applies to every `sdk-*` repository under github.com/xippios.
 Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 
 ## 1. Naming
@@ -117,13 +117,17 @@ Source packages subclass only when upstream has a distinct, documented failure m
 a refusal the package makes itself, such as a query over a documented record limit or
 an unknown filter name, subclasses `InvalidRequestError`. Adapters convert these to
 structured text (MCP) or problem+json (HTTP; `InvalidRequestError` is 422); they never
-leak tracebacks.
+leak tracebacks. An error message names the request's method and path, never its host
+or query string: the host can name a tenant, the query can carry a key (ADR-0005).
 
 ## 6. HTTP client (`xippios.core.client`)
 
 - `httpx`, async core, sync facade (ADR-0002). Source packages expose sync functions;
   async variants are optional and suffixed `_async`.
-- Retries with exponential backoff and jitter on 429 and 5xx; never on 4xx otherwise.
+- Retries with exponential backoff and jitter: a 429 for every method; a 5xx and a
+  transport failure for idempotent methods only (GET, HEAD, OPTIONS), unless the source
+  sets `RetryPolicy.retry_non_idempotent` because upstream makes a repeated write safe,
+  or because the source only reads through POST (ADR-0011); never another 4xx.
 - A source maps its documented error shapes once, in `ClientConfig.classify`, which
   sees every response before the default status mapping (ADR-0008); endpoint
   wrappers then use `get_json` and never inspect status codes themselves.

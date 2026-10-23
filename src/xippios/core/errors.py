@@ -6,7 +6,9 @@ tracebacks.
 """
 
 import email.utils
+import re
 from datetime import UTC, datetime
+from typing import Any
 
 import httpx
 
@@ -48,6 +50,20 @@ class XippiosError(Exception):
 
     def __str__(self) -> str:
         return self.message
+
+    def __reduce__(self) -> tuple[Any, ...]:
+        # Exception's default rebuilds with cls(*args), which the keyword-only arguments
+        # of AuthError, ValidationError, UpstreamError and source subclasses refuse
+        # (TypeError). Rebuild without __init__, then restore every attribute, so copy,
+        # deepcopy and pickle work for the whole taxonomy.
+        return (_rebuild, (type(self), self.args), self.__dict__)
+
+
+# Part of the pickle format: every pickled error names xippios.core.errors._rebuild, so
+# renaming or moving it breaks unpickling errors written by an earlier version.
+def _rebuild(cls: type[XippiosError], args: tuple[Any, ...]) -> XippiosError:
+    """An instance of ``cls`` with ``args`` and no attributes yet; see ``__reduce__``."""
+    return cls.__new__(cls, *args)
 
 
 class ConfigError(XippiosError):
@@ -156,9 +172,9 @@ def _body_text(response: httpx.Response) -> str:
 
 
 def _where(response: httpx.Response) -> str:
-    # Host and path only: query strings may carry an API key.
+    # Method and path only: the host may name a tenant (ADR-0005), the query may carry a key.
     url = response.request.url
-    return f"{response.request.method} {url.host}{url.path}"
+    return f"{response.request.method} {url.path}"
 
 
 def error_from_response(
@@ -197,5 +213,21 @@ def raise_for_status(response: httpx.Response, *, source: str | None = None) -> 
 
 
 def error_from_exception(exc: httpx.RequestError, *, source: str | None = None) -> TransportError:
-    """Wrap an ``httpx`` request failure (timeout, connection, protocol) as TransportError."""
-    return TransportError(f"{type(exc).__name__}: {exc}", source=source)
+    """Wrap an ``httpx`` request failure (timeout, connection, protocol) as TransportError.
+
+    The request's host is replaced by ``<host>`` wherever the failure's text quotes it, as
+    a TLS hostname mismatch does: the host may name a tenant (ADR-0005).
+    """
+    text = str(exc)
+    for host in _hosts(exc):
+        text = re.sub(re.escape(host), "<host>", text, flags=re.IGNORECASE)
+    return TransportError(f"{type(exc).__name__}: {text}", source=source)
+
+
+def _hosts(exc: httpx.RequestError) -> set[str]:
+    """The request's host as written and in its ASCII (IDNA) form; empty without a request."""
+    try:
+        url = exc.request.url
+    except RuntimeError:  # httpx raises it when no request is attached
+        return set()
+    return {host for host in (url.host, url.raw_host.decode("ascii")) if host}
