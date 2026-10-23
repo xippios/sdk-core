@@ -61,3 +61,33 @@ def test_replay_fixture_helper(pytester: pytest.Pytester) -> None:
     )
     result = pytester.runpytest("-p", "xippios.core.testing.plugin")
     result.assert_outcomes(passed=1)
+
+
+def test_replay_fixture_helper_matches_params(pytester: pytest.Pytester) -> None:
+    fixtures = pytester.mkdir("tests") / "fixtures" / "get"
+    fixtures.mkdir(parents=True)
+    (fixtures / "count.json").write_text(
+        '{"recorded_at": "2026-10-23T00:00:00Z", "request": {"method": "GET",'
+        ' "url": "https://h.test/get?countOnly=true&r=1"}, "response": {"status": 200,'
+        ' "headers": [], "body": "{\\"count\\": 3}", "body_base64": false}}'
+    )
+    pytester.makepyfile(
+        """
+        import httpx
+        import pytest
+        from respx.models import AllMockedAssertionError
+
+        def test_matches_count_only(replay_fixture):
+            route = replay_fixture("get", "count", match_params=["countOnly"])
+            assert httpx.get("https://h.test/get?countOnly=true").json() == {"count": 3}
+            with pytest.raises(AllMockedAssertionError):
+                httpx.get("https://h.test/get?countOnly=false")
+            assert route.call_count == 1
+
+        def test_positional(replay_fixture):
+            replay_fixture("get", "count", ["countOnly"])
+            assert httpx.get("https://h.test/get?countOnly=true").json() == {"count": 3}
+        """
+    )
+    result = pytester.runpytest("-p", "xippios.core.testing.plugin")
+    result.assert_outcomes(passed=2)

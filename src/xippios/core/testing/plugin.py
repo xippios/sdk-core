@@ -4,7 +4,7 @@ Enable it from ``tests/conftest.py`` with ``pytest_plugins = ["xippios.core.test
 """
 
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 import pytest
@@ -46,12 +46,17 @@ def fixtures_dir(request: pytest.FixtureRequest) -> Path:
 
 
 @pytest.fixture
-def replay_fixture(
-    respx_mock: respx.MockRouter, fixtures_dir: Path
-) -> Callable[[str, str], respx.Route]:
-    """Mount ``tests/fixtures/<endpoint>/<case>.json`` and return the route."""
+def replay_fixture(respx_mock: respx.MockRouter, fixtures_dir: Path) -> Callable[..., respx.Route]:
+    """Mount ``tests/fixtures/<endpoint>/<case>.json`` and return the route.
 
-    def _replay(endpoint: str, case: str) -> respx.Route:
-        return replay(respx_mock, fixture_path(fixtures_dir, endpoint, case))
+    Called as ``replay_fixture(endpoint, case, match_params=None)``; ``match_params``
+    names recorded query parameters a request must carry too, e.g. ``["countOnly"]``
+    (see ``xippios.core.testing.mount_fixture``).
+    """
+
+    def _replay(endpoint: str, case: str, match_params: Iterable[str] | None = None) -> respx.Route:
+        return replay(
+            respx_mock, fixture_path(fixtures_dir, endpoint, case), match_params=match_params
+        )
 
     return _replay

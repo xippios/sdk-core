@@ -4,10 +4,22 @@ from pathlib import Path
 import httpx
 import pytest
 import respx
+from respx.models import AllMockedAssertionError
 
 from xippios.core.client import AsyncClient, Client, ClientConfig, RetryPolicy, Timeouts
 from xippios.core.errors import NotFoundError
-from xippios.core.testing import REDACTED, Scrub, load_fixture, record, record_sync, replay
+from xippios.core.testing import (
+    REDACTED,
+    Fixture,
+    Scrub,
+    load_fixture,
+    mount_fixture,
+    record,
+    record_sync,
+    replay,
+    write_fixture,
+)
+from xippios.core.testing.fixtures import fixture_from_response
 
 BASE = "https://api.example.test"
 
@@ -199,3 +211,90 @@ def test_record_sync_takes_the_new_keywords(
     )
     assert fixture.request.body == f"org={REDACTED}"
     assert fixture.response.body == f'{{"org":"{REDACTED}"}}'
+
+
+def _recorded(url: str, body: object, method: str = "GET") -> Fixture:
+    """A synthetic fixture, built here: this repository records from no upstream."""
+    request = httpx.Request(method, url)
+    return fixture_from_response(httpx.Response(200, json=body, request=request))
+
+
+@pytest.mark.anyio
+async def test_match_params_matches_the_recorded_value_and_misses_another(
+    respx_mock: respx.MockRouter,
+) -> None:
+    # sdk-comtrade: the count and the data call of data/v1/get share one path and differ
+    # in countOnly=true.
+    count = _recorded(f"{BASE}/data/v1/get?reporterCode=842&countOnly=true", {"count": 12})
+    route = mount_fixture(respx_mock, count, match_params=["countOnly"])
+    async with httpx.AsyncClient() as http:
+        answer = await http.get(f"{BASE}/data/v1/get", params={"countOnly": "true", "x": "1"})
+        assert answer.json() == {"count": 12}
+        assert route.call_count == 1
+        with pytest.raises(AllMockedAssertionError):
+            await http.get(f"{BASE}/data/v1/get", params={"countOnly": "false"})
+        with pytest.raises(AllMockedAssertionError):
+            await http.get(f"{BASE}/data/v1/get")
+
+        data = _recorded(f"{BASE}/data/v1/get?reporterCode=842", {"data": [1]})
+        fallback = mount_fixture(respx_mock, data)  # mounted second, so asked second
+        assert (await http.get(f"{BASE}/data/v1/get?countOnly=false")).json() == {"data": [1]}
+        assert (await http.get(f"{BASE}/data/v1/get?countOnly=true")).json() == {"count": 12}
+        assert (route.call_count, fallback.call_count) == (2, 1)
+
+
+@pytest.mark.anyio
+async def test_match_params_matches_every_recorded_value_of_a_name(
+    respx_mock: respx.MockRouter,
+) -> None:
+    chunk = _recorded(f"{BASE}/v1/x?period=2022&period=2023&flow=M", {"rows": 2})
+    route = mount_fixture(respx_mock, chunk, match_params=("period", "flow"))
+    async with httpx.AsyncClient() as http:
+        assert (await http.get(f"{BASE}/v1/x?flow=M&period=2022&period=2023")).status_code == 200
+        with pytest.raises(AllMockedAssertionError):
+            await http.get(f"{BASE}/v1/x?flow=M&period=2022")
+        with pytest.raises(AllMockedAssertionError):
+            await http.get(f"{BASE}/v1/x?flow=X&period=2022&period=2023")
+    assert route.call_count == 1
+
+
+def test_match_params_refuses_a_redacted_or_absent_name(
+    respx_mock: respx.MockRouter, tmp_path: Path
+) -> None:
+    request = httpx.Request("GET", f"{BASE}/v1/x?key=SECRET&year=2024")
+    path = tmp_path / "x.json"
+    write_fixture(httpx.Response(200, json={}, request=request), path)
+    with pytest.raises(ValueError, match=r"^match_params: 'key' was recorded as REDACTED") as info:
+        replay(respx_mock, path, match_params=["year", "key"])
+    assert "SECRET" not in str(info.value)
+    with pytest.raises(ValueError, match=r"^match_params: 'month' is not a query parameter"):
+        replay(respx_mock, path, match_params=["month"])
+    with pytest.raises(TypeError, match="collection of names"):
+        replay(respx_mock, path, match_params="year")
+    assert len(respx_mock.routes) == 0  # a refusal mounts nothing
+    replay(respx_mock, path, match_params=["year"])
+    replay(respx_mock, path, match_params=[])
+    assert len(respx_mock.routes) == 2
+
+
+@pytest.mark.anyio
+async def test_replay_ignores_the_body_and_the_test_asserts_it(
+    respx_mock: respx.MockRouter, config: ClientConfig, tmp_path: Path
+) -> None:
+    respx_mock.post(f"{BASE}/v1/create.json").respond(200, json={"success": True})
+    client = AsyncClient(config)
+    fixture_file = tmp_path / "create.json"
+    recorded = await record(
+        client, "/v1/create.json", fixture_file, method="POST", data={"name": "Corn", "n": 2}
+    )
+
+    respx_mock.routes.clear()
+    route = replay(respx_mock, fixture_file)
+    await client.request("POST", "/v1/create.json", data={"name": "Corn", "n": 2})
+    sent = route.calls.last.request
+    assert sent.content.decode() == recorded.request.body == "name=Corn&n=2"
+    assert sent.headers["content-type"] == recorded.request.content_type
+
+    await client.request("POST", "/v1/create.json", data={"name": "Rice"})
+    assert route.call_count == 2  # the body is not matched; the assertion is the test's
+    assert route.calls.last.request.content.decode() != recorded.request.body
