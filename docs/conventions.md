@@ -123,7 +123,10 @@ leak tracebacks.
 
 - `httpx`, async core, sync facade (ADR-0002). Source packages expose sync functions;
   async variants are optional and suffixed `_async`.
-- Retries with exponential backoff and jitter on 429 and 5xx; never on 4xx otherwise.
+- Retries with exponential backoff and jitter: a 429 for every method; a 5xx and a
+  transport failure for idempotent methods only (GET, HEAD, OPTIONS), unless the source
+  sets `RetryPolicy.retry_non_idempotent` because upstream makes a repeated write safe
+  (ADR-0011); never another 4xx.
 - A source maps its documented error shapes once, in `ClientConfig.classify`, which
   sees every response before the default status mapping (ADR-0008); endpoint
   wrappers then use `get_json` and never inspect status codes themselves.

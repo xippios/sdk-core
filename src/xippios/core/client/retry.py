@@ -1,4 +1,9 @@
-"""Retry loop: exponential backoff with jitter on 429 and 5xx, ``Retry-After`` honoured."""
+"""Retry loop: exponential backoff with jitter, ``Retry-After`` honoured (ADR-0011).
+
+A 429 is retried for every method: upstream refused it before acting. A 5xx and a
+transport failure are retried for idempotent methods only, unless the policy sets
+``retry_non_idempotent``: a write that met them may already have been applied.
+"""
 
 import asyncio
 import logging
@@ -17,7 +22,10 @@ IDEMPOTENT_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 
 def is_retryable_status(status: int) -> bool:
-    """True for 429 and every 5xx; never for another 4xx (conventions §6)."""
+    """True for 429 and every 5xx; never for another 4xx (conventions §6).
+
+    Whether a 5xx is retried also depends on the method; ``send_with_retries`` decides.
+    """
     return status == 429 or 500 <= status < 600
 
 
@@ -31,25 +39,31 @@ async def send_with_retries(
 ) -> httpx.Response:
     """Call ``send`` until it yields a non-retryable response or the policy gives up.
 
-    Returns the last response; classifying it is the caller's job. Transport failures
-    are retried for idempotent methods when the policy allows, and otherwise raised as
-    ``TransportError``.
+    Returns the last response; classifying it is the caller's job. A 429 is retried for
+    every method. A 5xx is retried, and a transport failure too when
+    ``policy.retry_transport_errors`` is set, for ``IDEMPOTENT_METHODS`` only, unless
+    ``policy.retry_non_idempotent`` lifts that restriction (ADR-0011). A transport
+    failure that is not retried is raised as ``TransportError``.
 
     Args:
         send: Performs one attempt and returns the response.
-        policy: Attempts, backoff and jitter.
-        method: HTTP method, used to decide whether transport failures are retried.
+        policy: Attempts, backoff, jitter and what is retried.
+        method: HTTP method, used to decide whether a 5xx or a transport failure is
+            retried.
         source: Source slug for errors.
         sleep: Async sleep, replaceable in tests.
     """
     method = method.upper()
+    # A write that met a 5xx or a transport failure may have been applied; repeating it
+    # can apply it twice (a duplicate booking, sdk-cashctrl). A 429 was refused unapplied.
+    may_repeat = method in IDEMPOTENT_METHODS or policy.retry_non_idempotent
     attempt = 0
     while True:
         attempt += 1
         try:
             response = await send()
         except httpx.RequestError as exc:
-            retryable = policy.retry_transport_errors and method in IDEMPOTENT_METHODS
+            retryable = policy.retry_transport_errors and may_repeat
             delay = policy.delay(attempt) if retryable else None
             if delay is None:
                 raise error_from_exception(exc, source=source) from exc
@@ -64,7 +78,8 @@ async def send_with_retries(
             )
             await sleep(delay)
             continue
-        if not is_retryable_status(response.status_code):
+        status = response.status_code
+        if not is_retryable_status(status) or (status != 429 and not may_repeat):
             return response
         retry_after = parse_retry_after(response.headers.get("Retry-After"))
         delay = policy.delay(attempt, retry_after=retry_after)

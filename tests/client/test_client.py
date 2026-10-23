@@ -160,6 +160,112 @@ async def test_transport_error_retried_for_get_only(
     with pytest.raises(TransportError, match="ConnectError"):
         await client.request("POST", "/v1/x", json={"a": 1})
     assert post.call_count == 1
+    assert sleeper.calls == [0.1]  # the GET's retry; none for the POST
+
+
+NON_IDEMPOTENT = ["POST", "PUT", "PATCH", "DELETE"]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("method", NON_IDEMPOTENT)
+async def test_5xx_to_a_write_is_returned_after_one_attempt(
+    respx_mock: respx.MockRouter, config: ClientConfig, sleeper: Sleeper, method: str
+) -> None:
+    # sdk-cashctrl, row 7: a booking answered 503 after it was applied must not be repeated.
+    route = respx_mock.route(method=method, url=f"{BASE}/v1/x").respond(503, text="busy")
+    client = AsyncClient(config, sleep=sleeper)
+    response = await client.request(method, "/v1/x", json={"a": 1}, raise_on_error=False)
+    assert response.status_code == 503
+    assert route.call_count == 1
+    with pytest.raises(UpstreamError):
+        await client.request(method, "/v1/x", json={"a": 1})
+    assert route.call_count == 2
+    assert sleeper.calls == []
+
+
+@pytest.mark.anyio
+async def test_5xx_to_a_write_is_retried_when_the_policy_allows(
+    respx_mock: respx.MockRouter, sleeper: Sleeper
+) -> None:
+    route = respx_mock.post(f"{BASE}/v1/x").mock(
+        side_effect=[httpx.Response(503), httpx.Response(200, json={"id": 7})]
+    )
+    config = ClientConfig(
+        source="example",
+        version="1",
+        base_url=BASE,
+        retry=RetryPolicy(backoff_base=0.1, jitter=False, retry_non_idempotent=True),
+    )
+    client = AsyncClient(config, sleep=sleeper)
+    response = await client.request("POST", "/v1/x", json={"a": 1})
+    assert response.json() == {"id": 7}
+    assert route.call_count == 2
+    assert sleeper.calls == [0.1]
+
+
+@pytest.mark.anyio
+async def test_429_to_a_write_is_retried(
+    respx_mock: respx.MockRouter, config: ClientConfig, sleeper: Sleeper
+) -> None:
+    route = respx_mock.post(f"{BASE}/v1/x").mock(
+        side_effect=[
+            httpx.Response(429, headers={"Retry-After": "1"}),
+            httpx.Response(200, json={"id": 7}),
+        ]
+    )
+    client = AsyncClient(config, sleep=sleeper)
+    response = await client.request("POST", "/v1/x", json={"a": 1})
+    assert response.json() == {"id": 7}
+    assert route.call_count == 2
+    assert sleeper.calls == [1.0]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("method", ["GET", "HEAD", "OPTIONS"])
+async def test_5xx_to_an_idempotent_method_is_still_retried(
+    respx_mock: respx.MockRouter, config: ClientConfig, sleeper: Sleeper, method: str
+) -> None:
+    route = respx_mock.route(method=method, url=f"{BASE}/v1/x").mock(
+        side_effect=[httpx.Response(503), httpx.Response(200)]
+    )
+    client = AsyncClient(config, sleep=sleeper)
+    response = await client.request(method, "/v1/x")
+    assert response.status_code == 200
+    assert route.call_count == 2
+    assert sleeper.calls == [0.1]
+
+
+@pytest.mark.anyio
+async def test_transport_error_to_a_write_is_retried_when_the_policy_allows(
+    respx_mock: respx.MockRouter, sleeper: Sleeper
+) -> None:
+    route = respx_mock.post(f"{BASE}/v1/x").mock(
+        side_effect=[httpx.ConnectError("nope"), httpx.Response(200, json={})]
+    )
+    config = ClientConfig(
+        source="example",
+        version="1",
+        base_url=BASE,
+        retry=RetryPolicy(backoff_base=0.1, jitter=False, retry_non_idempotent=True),
+    )
+    client = AsyncClient(config, sleep=sleeper)
+    await client.request("POST", "/v1/x", json={"a": 1})
+    assert route.call_count == 2
+    assert sleeper.calls == [0.1]
+
+
+@pytest.mark.anyio
+async def test_retry_transport_errors_off_wins_over_retry_non_idempotent(
+    respx_mock: respx.MockRouter, sleeper: Sleeper
+) -> None:
+    route = respx_mock.post(f"{BASE}/v1/x").mock(side_effect=httpx.ConnectError("nope"))
+    policy = RetryPolicy(retry_transport_errors=False, retry_non_idempotent=True)
+    config = ClientConfig(source="example", version="1", base_url=BASE, retry=policy)
+    client = AsyncClient(config, sleep=sleeper)
+    with pytest.raises(TransportError):
+        await client.request("POST", "/v1/x", json={"a": 1})
+    assert route.call_count == 1
+    assert sleeper.calls == []
 
 
 @pytest.mark.anyio

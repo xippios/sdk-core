@@ -37,6 +37,12 @@ def test_single_attempt_never_retries() -> None:
     assert RetryPolicy(max_attempts=1).delay(1) is None
 
 
+def test_retry_policy_defaults_spare_writes() -> None:
+    policy = RetryPolicy()
+    assert policy.retry_transport_errors is True
+    assert policy.retry_non_idempotent is False
+
+
 def test_validation() -> None:
     with pytest.raises(ValueError, match="max_attempts"):
         RetryPolicy(max_attempts=0)
