@@ -46,10 +46,11 @@ The plugin owns the offline guarantees.
    `httpx.AsyncHTTPTransport.handle_async_request`) and httpcore's connection pools
    (`httpcore.ConnectionPool.handle_request`,
    `httpcore.AsyncConnectionPool.handle_async_request`) once. They raise `RuntimeError`
-   naming the request's method and path, never its host or query (ADR-0005): at import,
-   in a fixture of any scope, in a test. `pytest_runtest_setup` lifts the refusal for a
-   test marked `network` or `live` before its fixtures are set up, and
-   `pytest_runtest_teardown` restores it after they are torn down. `respx` patches the
+   naming the request's method and path, never its host or query (ADR-0005), while test
+   modules are collected, in a fixture of any scope and in a test.
+   `pytest_runtest_setup` sets the refusal for each test before its fixtures are set up,
+   lifted for a test marked `network` or `live`, and `pytest_runtest_teardown` restores
+   it after they are torn down. `respx` patches the
    same pool methods on top when a router starts: a replayed or mocked request is
    answered by respx, and a route that passes through (`route.pass_through()`) reaches
    the refusal like any other request unless the test is marked `network`. A transport
@@ -105,10 +106,22 @@ done's grep of every fixture for key patterns before it is committed.
   are pinned by the class-level pin whichever organisation's auth object sends them.
 - A test that must reach the network through httpx's default transports, a `respx`
   route that passes through included, is marked `network`; a live test is marked
-  `live` and needs nothing else. Network access at import or in a fixture outside a
-  marked test moves into a marked test or a recorded fixture. A test that asserts a
+  `live` and needs nothing else. Network access during collection or in a fixture
+  outside a marked test moves into a marked test or a recorded fixture. A test that asserts a
   limiter's waits is marked `rate_limited`. A test module that checks how a key is
   resolved defines a `placeholder_api_key` fixture that pins nothing.
+- What the plugin guarantees is exactly the above, and these are its edges:
+  - The refusal's message names the method and path only. pytest's own failure report
+    may still print httpx's request repr, query included; offline, the key in it is the
+    placeholder.
+  - The guard is active from `pytest_configure` on. A request made while a
+    `conftest.py` is imported, before the plugin is configured, is not refused.
+  - A fixture of wider scope runs under the marking of the test that sets it up, and
+    its teardown under the marking of the last test that uses it. A live clean-up
+    fixture is therefore function-scoped, or runs in the separate nightly `-m live`
+    job.
+  - The logger levels are saved per test, after fixtures of wider scope are set up; one
+    of those that changes a level leaves it behind.
 - A subclass of `EnvKeyAuth` outside core that implements `apply(request, key)` breaks;
   none is known (0.x, conventions §12).
 - Conventions §10 states the guarantees and names the markers.

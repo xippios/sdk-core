@@ -2,9 +2,10 @@
 
 Enable it from ``tests/conftest.py`` with ``pytest_plugins = ["xippios.core.testing.plugin"]``.
 
-The whole session runs offline (ADR-0013): from configuration to the end, a request
-through httpx's default transports is refused, at import, in a fixture of any scope
-and in a test, unless a test marked ``network`` or ``live`` is running. Every test not
+The whole session runs offline (ADR-0013): from ``pytest_configure`` on, while test
+modules are collected, in a fixture of any scope and in a test, a request through
+httpx's default transports is refused unless a test marked ``network`` or ``live`` is
+being set up, run or torn down (``_NetworkGuard`` states the edges). Every test not
 marked ``live`` also gets a rate limiter that never waits unless it is marked
 ``rate_limited``, and every ``EnvKeyAuth`` sends ``PLACEHOLDER_KEY``
 (``placeholder_api_key``). A ``live`` test is skipped unless ``XIPPIOS_LIVE_TESTS=1``.
@@ -64,9 +65,9 @@ class _NetworkGuard:
     ``httpcore.AsyncConnectionPool.handle_async_request`` once, when pytest is
     configured; while ``refusing`` is set, each raises ``RuntimeError`` naming the
     request's method and path, never its host or query (ADR-0005). Otherwise each hands
-    the request to the method it replaced. ``pytest_runtest_setup`` clears ``refusing``
-    for a test marked ``network`` or ``live`` and ``pytest_runtest_teardown`` sets it
-    again, so a fixture of any scope is refused unless a marked test is being set up.
+    the request to the method it replaced. ``pytest_runtest_setup`` sets ``refusing``
+    for each test before its fixtures, cleared for a test marked ``network`` or
+    ``live``, and ``pytest_runtest_teardown`` sets it again after them.
 
     ``respx``'s default mocker patches the same httpcore pool methods when a router
     starts, on top of these: a mocked or replayed request is answered by respx and never
@@ -75,6 +76,18 @@ class _NetworkGuard:
     themselves only when nothing sits on top of the pool's; otherwise they hand the
     request down. A transport a test passes itself (``httpx.MockTransport``, FastAPI's
     ``TestClient``) never reaches any of them.
+
+    That is exactly what is guaranteed, with these edges:
+
+    - The refusal's message names the method and path only. pytest's own failure report
+      may still print httpx's request repr, query included; offline, the key in it is
+      the placeholder.
+    - The guard is active from ``pytest_configure`` on: a request made while a
+      ``conftest.py`` is imported, before the plugin is configured, is not refused.
+    - A fixture of wider scope runs under the marking of the test that sets it up, and
+      its teardown under the marking of the last test that uses it. A live clean-up
+      fixture is therefore function-scoped, or runs in the separate nightly
+      ``-m live`` job.
     """
 
     def __init__(self) -> None:
@@ -324,7 +337,9 @@ def _restore_request_logger_levels() -> Iterator[None]:
 
     Building an MCP server sets both to ``WARNING`` (``quiet_request_logging``), so a
     test that builds one left them there for the rest of the run (sdk-cashctrl). Live
-    tests included: restoring a level reaches nothing outside the process.
+    tests included: restoring a level reaches nothing outside the process. The levels
+    are saved per test, after fixtures of wider scope are set up, so one of those that
+    changes a level leaves it behind.
     """
     saved = {name: logging.getLogger(name).level for name in _REQUEST_LOGGERS}
     yield

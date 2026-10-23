@@ -38,24 +38,24 @@ All notable changes to this project are documented here. The format follows
   never holds the removed text, not even briefly. `host` replaces the request's host
   with a placeholder and every occurrence of the original host (any letter case, its
   IDNA form too, plain or percent-encoded) with it; `secrets` turns each value into
-  `REDACTED`, plain and percent-encoded, the longest first; `rewrite` is a text hook
-  for the request body, the response body and every response header value (`Location`
+  `REDACTED`, plain and percent-encoded, the longest first; `rewrite` is a text hook for
+  the request body, the response body and every response header value (`Location`
   included), for pre-authenticated URLs. `write_fixture`, `fixture_from_response` and
-  `record` take it as `scrub=`. The credential scrubbing of 0.1.0 still always
-  applies. Ports the recorder pattern sdk-cashctrl had to keep locally: `write_fixture`
-  kept the tenant host in `request.url`, and CashCtrl's `file/prepare.json` answers with
-  signed storage URLs that `file/get` redirects to. With `host` or `secrets` set, the
-  scrubbed exchange is verified before anything is kept: the URL, every header and both
-  bodies are searched raw and, for a JSON body, decoded, so a host or value behind a
-  `\uXXXX` escape is found; one still present raises `ValueError` naming the kind
-  ("request host" or "secret value") and the location, never the value, and nothing is
-  written; the checking frames are hidden from pytest's report, which would print the
-  refused text as their arguments. Modelled on sdk-cashctrl's final check. A placeholder that would write what
-  it hides is refused with `ValueError`, naming neither: a `host` that contains one of
-  the `secrets` (any letter case) when the `Scrub` is built, and a `host` that is the
-  request's own host (`url.host` or its IDNA form) when the exchange is scrubbed. A
-  placeholder that ends with the original host stays allowed. `Scrub`'s `repr` leaves
-  `secrets` out.
+  `record` take it as `scrub=`. The credential scrubbing of 0.1.0 still always applies.
+  Ports the recorder pattern sdk-cashctrl had to keep locally: `write_fixture` kept the
+  tenant host in `request.url`, and CashCtrl's `file/prepare.json` answers with signed
+  storage URLs that `file/get` redirects to. With `host` or `secrets` set, the scrubbed
+  exchange is verified before anything is kept: the URL, every header and both bodies
+  are searched raw and, for a JSON body, decoded, so a host or value behind a `\uXXXX`
+  escape is found; one still present raises `ValueError` naming the kind ("request host"
+  or "secret value") and the location, never the value, and nothing is written; the
+  checking frames are hidden from pytest's report, which would print the refused text as
+  their arguments. Modelled on sdk-cashctrl's final check. A placeholder that would
+  write what it hides is refused with `ValueError`, naming neither: a `host` that
+  contains one of the `secrets` (any letter case) when the `Scrub` is built, and a
+  `host` that is the request's own host (`url.host` or its IDNA form) when the exchange
+  is scrubbed. A placeholder that ends with the original host stays allowed. `Scrub`'s
+  `repr` leaves `secrets` out.
 - `FixtureRequest.body`, `body_base64` and `content_type`: the request body as scrubbed
   UTF-8 text (the form or JSON text sent; `None` without a body) and the request's
   `Content-Type`, so a write fixture can assert its payload (sdk-cashctrl). Fixtures
@@ -71,11 +71,11 @@ All notable changes to this project are documented here. The format follows
 - `match_params=` (keyword-only) for `mount_fixture`, `replay` and the plugin's
   `replay_fixture`: names of recorded query parameters whose recorded values a request
   must carry too; a name absent from the recorded URL, or whose recorded value holds
-  `REDACTED` in whole or in part, raises `ValueError` naming it. Replay matched on method, host and path only, so a count call
-  (`countOnly=true`) and the data call on the same path could not be told apart
-  (sdk-comtrade). Absence cannot be matched: the more specific fixture is mounted
-  first, since `respx` tries routes in order. The request body is never matched; a
-  test asserts it from the route's calls.
+  `REDACTED` in whole or in part, raises `ValueError` naming it. Replay matched on
+  method, host and path only, so a count call (`countOnly=true`) and the data call on
+  the same path could not be told apart (sdk-comtrade). Absence cannot be matched: the
+  more specific fixture is mounted first, since `respx` tries routes in order. The
+  request body is never matched; a test asserts it from the route's calls.
 - `xippios.core.testing.sent_urls(route)`: the URLs a `respx` route received, oldest
   first, as strings through `scrub_url`, so a key sent as a query parameter reads
   `REDACTED`. A test compares these instead of keeping a request from `route.calls` in
@@ -107,8 +107,9 @@ All notable changes to this project are documented here. The format follows
   their module with a fixture that pins nothing. A `live` test needs nothing.
   - Network: from configuration on, httpx's default transports and httpcore's
     connection pools raise `RuntimeError` naming the request's method and path, never
-    its host or query, at import, in a fixture of any scope and in a test. The refusal
-    is lifted while a test marked `network` or `live` is set up, run and torn down.
+    its host or query, during collection, in a fixture of any scope and in a test. The
+    refusal is lifted while a test marked `network` or `live` is set up, run and torn
+    down; ADR-0013 states the edges (a conftest's import, wider-scoped fixtures).
     Requests `respx` answers, replayed fixtures included, and transports a test passes
     itself (`httpx.MockTransport`, FastAPI's `TestClient`) are unaffected; a `respx`
     route that passes through is refused unless the test is marked `network`. Nothing

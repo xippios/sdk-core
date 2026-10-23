@@ -188,14 +188,15 @@ xippios_placeholder_key_envs = ["EXAMPLE_API_KEY"]
 ```
 
 - `@pytest.mark.live` tests are skipped unless `XIPPIOS_LIVE_TESTS=1`.
-- The whole run is offline (ADR-0013). A request through httpx's default transports
-  raises `RuntimeError` naming its method and path unless `respx` answers it, at import
-  and in fixtures too, a `respx` route that passes through included; mark a test
-  `network` to let it through. In every test not marked `live`, the rate limiter never
-  waits; mark a test `rate_limited` to keep it. Every `EnvKeyAuth` sends `PLACEHOLDER_KEY`, and the
-  variables named in `xippios_placeholder_key_envs` hold it (fixture
-  `placeholder_api_key`), whatever the shell or an earlier live test left behind. The
-  `httpx` and `httpcore` logger levels come back after every test.
+- The whole run is offline (ADR-0013). From `pytest_configure` on, during collection, in
+  fixtures and in tests, a request through httpx's default transports raises
+  `RuntimeError` naming its method and path unless `respx` answers it, a `respx` route
+  that passes through included; mark a test `network` to let it through. In every test
+  not marked `live`, the rate limiter never waits (mark a test `rate_limited` to keep
+  it), and every `EnvKeyAuth` sends `PLACEHOLDER_KEY` while the variables named in
+  `xippios_placeholder_key_envs` hold it (fixture `placeholder_api_key`), whatever the
+  shell or an earlier live test left behind. The `httpx` and `httpcore` logger levels
+  come back after every test. ADR-0013 states the edges of these guarantees.
 - `replay_fixture("api_GET", "corn_2024")` mounts `tests/fixtures/api_GET/corn_2024.json`
   on its method, host and path; `match_params=["countOnly"]` makes the route match those
   recorded query parameters too. A parameter's absence cannot be matched: where two
@@ -254,7 +255,7 @@ refused unless `Scrub(allow_binary=True)` stores it base64, flagged.
 | `xippios.core.pagination` | offset, page and cursor iterators | alpha |
 | `xippios.core.mcp` | tool registration, result caps, error text, CLI, quiet request log | alpha |
 | `xippios.core.http` | router factory, problem details | alpha |
-| `xippios.core.testing` | live gate, offline guarantees, record, replay, scrub, write-server check | alpha |
+| `xippios.core.testing` | live gate, offline run, record, replay, scrub, write checks | alpha |
 
 Alpha: the public surface may change in a minor version until the first source
 package, `sdk-usda-nass`, has exercised it.

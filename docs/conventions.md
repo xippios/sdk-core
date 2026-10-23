@@ -218,22 +218,29 @@ consumer, never served standalone from the package.
   and run in CI only on a nightly schedule with org secrets.
 - The pytest plugin (`pytest_plugins = ["xippios.core.testing.plugin"]`) keeps the
   default run offline and free of real keys (ADR-0013):
-  - No network, for the whole session: at import, in a fixture of any scope and in a
-    test, a request through httpx's default transports raises `RuntimeError` naming
-    its method and path. `respx` answers replayed and mocked requests as before, a
-    `respx` route that passes through is refused like any other request, and a
-    transport the test passes itself is untouched. A test that must reach the
-    network is marked `network` (or `live`), and is let through with its fixtures.
+  - No network, from `pytest_configure` on: while test modules are collected, in a
+    fixture of any scope and in a test, a request through httpx's default transports
+    raises `RuntimeError` naming its method and path. `respx` answers replayed and
+    mocked requests as before, a `respx` route that passes through is refused like any
+    other request, and a transport the test passes itself is untouched. A test that
+    must reach the network is marked `network` (or `live`), and is let through with
+    its fixtures. Exactly that and no more: pytest's own failure report may still
+    print httpx's request repr (offline the key in it is the placeholder); a request
+    made while a `conftest.py` is imported, before the plugin is configured, is not
+    refused; a fixture of wider scope runs under the marking of the test that sets it
+    up, and its teardown under the last test's, so a live clean-up fixture is
+    function-scoped or runs in the separate nightly `-m live` job.
   - No rate-limit wait, in every test not marked `live`: a client's limiter neither
     waits nor takes a token. A test that asserts the limiter's waits is marked
     `rate_limited`.
   - Placeholder key, in every test not marked `live`: every `EnvKeyAuth` sends
-    `PLACEHOLDER_KEY`, pinned on the class,
-    and the variables named in the ini option `xippios_placeholder_key_envs` hold it;
-    the fixture `placeholder_api_key` returns it, `None` in a live test. A source names
-    its key variable there and carries no placeholder fixture of its own.
+    `PLACEHOLDER_KEY`, pinned on the class, and the variables named in the ini option
+    `xippios_placeholder_key_envs` hold it; the fixture `placeholder_api_key` returns
+    it, `None` in a live test. A source names its key variable there and carries no
+    placeholder fixture of its own.
   - Logger levels: the `httpx` and `httpcore` logger levels are restored after every
-    test, live ones included.
+    test, live ones included. They are saved per test, after fixtures of wider scope
+    are set up, so one of those that changes a level leaves it behind.
 - Every task function has at least one fixture-backed test and one live smoke test.
 - Coverage is reported, not gated; mypy strict and ruff are gated.
 

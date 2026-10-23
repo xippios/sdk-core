@@ -175,7 +175,7 @@ def outcome(url):
     return "answered"
 
 
-AT_IMPORT = outcome("https://tenant.example.test/v1/at-import")
+AT_COLLECTION = outcome("https://tenant.example.test/v1/at-collection")
 
 
 @pytest.fixture(scope="module")
@@ -205,9 +205,11 @@ async def test_an_unmocked_async_request_is_refused():
             await client.post(URL, json={})
 
 
-def test_requests_at_import_and_in_wider_fixtures_are_refused(module_download, session_download):
+def test_requests_at_collection_and_in_wider_fixtures_are_refused(
+    module_download, session_download
+):
     refused = "network access in an offline test: GET /v1/"
-    assert AT_IMPORT.startswith(refused + "at-import; ")
+    assert AT_COLLECTION.startswith(refused + "at-collection; ")
     assert module_download.startswith(refused + "module; ")
     assert session_download.startswith(refused + "session; ")
 
