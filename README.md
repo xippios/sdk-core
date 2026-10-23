@@ -197,10 +197,48 @@ description, the signature is the input schema. Results are capped at 200 rows o
 64 KB with a note on how to narrow the query; errors come back as
 `error: <Class>: <message>`. `--http` serves streamable HTTP instead of stdio.
 A write server (`build_server(..., read_only=False)`) refuses, with `ValueError`, a task
-that does not take `confirm: bool = False`.
+that does not take `confirm: bool = False`, and `--http` serves it on a loopback
+`--host` only (`127.0.0.1`, `localhost`, `::1`): it carries no authentication.
+`--allow-remote` serves it beyond loopback, behind a gateway that adds it.
 Request URLs are not logged: `build_server` and `main` set the `httpx` and `httpcore`
 loggers to `WARNING` (`quiet_request_logging`), because a URL can carry an API key or a
 tenant host.
+
+A multi-tenant source locks a server to one tenant with an option of its own, added
+through `main`'s hooks so the command line is parsed once:
+
+```python
+import argparse
+
+from mcp.server.mcpserver import MCPServer
+from xippios.core.mcp import TenantLock, build_server, main
+from xippios.core.tenants import list_task
+from xippios.example import tasks
+from xippios.example._client import tenants
+
+TASKS = [tasks.get_account, list_task(tenants, name="list_tenants")]
+server = build_server("example", TASKS)
+
+
+def lock(args: argparse.Namespace, server: MCPServer) -> MCPServer:
+    if args.tenant is None:
+        return server
+    tenant = tenants.require(args.tenant)  # an undeclared name: exit status 2
+    return build_server("example", TASKS, tenant_lock=TenantLock("tenant", tenant))
+
+
+def run() -> None:  # xippios-example-mcp --tenant acme
+    main(
+        server,
+        add_options=lambda parser: parser.add_argument("--tenant", help="serve one tenant"),
+        apply_options=lock,
+    )
+```
+
+A locked server answers a call naming another tenant with
+`error: InvalidRequestError: this server is locked to tenant=acme; the call named
+another tenant` before the tool runs, names the tenant in its instructions, and its
+`example_list_tenants` tool lists that tenant alone.
 
 Client configuration, for Claude Desktop or any MCP client:
 
@@ -264,6 +302,11 @@ xippios_placeholder_key_envs = ["EXAMPLE_API_KEY"]
   with credentials scrubbed. Never hand-write a fixture. `json=` or `data=` (a form) send
   a body, recorded with its content type; `retry=` and `timeouts=` override the
   client's for the recording.
+
+`mcp_call(server, "example_get_series", {...})` calls a tool through an in-process MCP
+client, so the server's middleware, a tenant lock included, runs as for a real client;
+it returns the decoded JSON and fails the test on `error:` text. `mcp_call_text` returns
+the text, to assert a refusal.
 
 A source with a write server checks it against its write tasks: exactly those tools,
 each taking `confirm: bool = False`, none of them on the read server or the HTTP router.

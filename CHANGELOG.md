@@ -122,7 +122,28 @@ All notable changes to this project are documented here. The format follows
 - `xippios.core.tenants.list_task(tenants, *, name, doc=None)`: a synchronous task named
   `name` (`list_organisations`) that returns the declared tenants' names in the
   envelope, names only (ADR-0005), for a `<source>_list_<tenants>` reference tool. Its
-  default docstring is written for agents.
+  default docstring is written for agents. On a server locked to one tenant its tool
+  lists that tenant only.
+- `xippios.core.mcp.TenantLock(param, value)` and `tenant_lock=` for `build_server` and
+  `register_tasks` (ADR-0014): installs, once per server, a middleware that answers a
+  tool call naming another tenant with `error: InvalidRequestError: this server is
+  locked to <param>=<value>; the call named another tenant` without running the tool,
+  leaves a call without `param` to the tool's own validation and leaves listing tools
+  alone. `build_server` adds "This server is locked to <param> <value>; every tool call
+  must pass <param>=<value>." to the instructions. sdk-cashctrl wrote the same lock
+  itself, set the instructions through the SDK's private low-level server and parsed
+  the command line twice.
+- `main(server, argv=None, *, add_options=None, apply_options=None)` and
+  `build_parser(prog, *, add_options=None)`: `add_options` puts a source's arguments on
+  core's parser, so the command line is parsed once and `--help` lists every option;
+  `apply_options(namespace, server)` returns the server to run. A `XippiosError` it
+  raises, such as an undeclared tenant, exits with status 2 and the message on stderr,
+  like an argparse error.
+- `--allow-remote` for `main`, and `xippios.core.mcp.is_write_server(server)`: true once
+  tasks were registered on the server with `read_only=False`. See Changed for the rule.
+- `xippios.core.testing.mcp_call_text(server, name, arguments)`: the tool's text, through
+  the same in-process client as `mcp_call`, so a test can assert a refusal or any other
+  `error:` text.
 
 ### Changed
 
@@ -203,6 +224,26 @@ All notable changes to this project are documented here. The format follows
   register a task that writes on its first call, which conventions §8 forbids and only
   `assert_write_tools` caught, in a test (sdk-cashctrl). `assert_write_tools` uses the
   same check. Read-only servers are unaffected.
+- **Breaking:** `main` serves a write server over `--http` on a loopback `--host` only
+  (`127.0.0.1`, `localhost`, `::1`) and otherwise exits with status 2, unless
+  `--allow-remote` is passed. A write server carries no authentication; beyond loopback
+  a gateway in front of it has to provide it (ADR-0014). Read-only servers and stdio
+  are unaffected.
+- `xippios.core.testing.mcp_call` calls the tool through `mcp.Client(server)` connected
+  in-process instead of `MCPServer.call_tool`, so the server's middleware runs, a tenant
+  lock included; `MCPServer.call_tool` bypasses it (sdk-cashctrl drove `mcp.Client` by
+  hand). It returns the decoded JSON as before and fails on `error:` text as before. A
+  call the server answers with an MCP error, arguments the tool's schema refuses or an
+  unknown tool, now fails with `AssertionError` instead of raising the SDK's
+  `ToolError`, and the server must be one `mcp.Client` connects to (an `MCPServer` or
+  a low-level `Server`).
+- `main` quiets the httpx and httpcore loggers right before the server runs, after
+  `apply_options`, instead of first thing.
+- Conventions 1.9: §1 names the per-tenant variables, §4 lists `ResultMeta.tenant`, §7
+  states the tenant scheme and the error split, §8 the `confirm` check at
+  registration, the loopback rule, the tenant list tool, the tenant lock and the option
+  hooks; §10 states that a placeholder host that contains the original host is allowed
+  and written as such. ADR-0014 added.
 
 ### Fixed
 
