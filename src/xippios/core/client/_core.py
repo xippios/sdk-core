@@ -78,6 +78,14 @@ class AsyncClient:
             return None
         return cache_key(method, url)
 
+    def _cache_key_for(self, probe: httpx.Request) -> str | None:
+        """The cache key for ``probe``, or ``None`` when the cache or its filter skips it."""
+        key = self._cache_key(probe.method, probe.url)
+        cache_filter = self.config.cache_filter
+        if key is None or cache_filter is None or cache_filter(probe):
+            return key
+        return None
+
     async def request(
         self,
         method: str,
@@ -90,7 +98,8 @@ class AsyncClient:
     ) -> httpx.Response:
         """Send one request and return the response.
 
-        Retries, rate limiting and caching apply as configured. The source's
+        Retries, rate limiting and caching (GET only, narrowed by
+        ``ClientConfig.cache_filter``) apply as configured. The source's
         ``classify`` hook, if any, sees the response first; otherwise a 4xx/5xx that
         survives the retry policy is raised as the matching error from the taxonomy; a
         transport failure as ``TransportError``.
@@ -107,7 +116,7 @@ class AsyncClient:
         pool = self._pool()
         method = method.upper()
         probe = pool.build_request(method, path, params=params)
-        key = self._cache_key(method, probe.url)
+        key = self._cache_key_for(probe)
         if key is not None and self.config.cache is not None:
             cached = self.config.cache.get(key)
             if cached is not None:

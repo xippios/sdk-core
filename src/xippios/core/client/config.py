@@ -112,6 +112,11 @@ class ClientConfig:
         retry: Retry policy for 429, 5xx and transport failures.
         rate_limit: Client-side limit; ``None`` disables it.
         cache: Backend for GET responses; ``None`` disables caching.
+        cache_filter: Which GET requests the cache takes: called with the request as
+            built from the base URL, path and query parameters (``request.url.path``,
+            ``request.url.params``; credentials from ``auth`` are not on it yet); a GET
+            is looked up and stored only when it returns ``True``. ``None`` caches every
+            GET. Lets one client cache a reference endpoint and nothing else.
         headers: Extra headers sent with every request.
         classify: The source's own error mapping (ADR-0008): called with every response
             before the default status mapping; return a taxonomy error to raise it, or
@@ -126,6 +131,7 @@ class ClientConfig:
     retry: RetryPolicy = field(default_factory=RetryPolicy)
     rate_limit: RateLimit | None = None
     cache: CacheBackend | None = None
+    cache_filter: Callable[[httpx.Request], bool] | None = None
     headers: Mapping[str, str] = field(default_factory=dict)
     classify: Callable[[httpx.Response], XippiosError | None] | None = None
 
