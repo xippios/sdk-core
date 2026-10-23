@@ -3,10 +3,13 @@
 Each tool keeps the task's signature and docstring, so the SDK derives the input
 schema and the description from them. The body awaits the task's async twin, turns
 taxonomy errors into text and applies the result cap.
+
+Building a server also quiets httpx's request log (``quiet_request_logging``).
 """
 
 import functools
 import inspect
+import logging
 import typing
 from collections.abc import Awaitable, Callable, Iterable
 from typing import Any
@@ -19,7 +22,38 @@ from xippios.core.errors import XippiosError
 from xippios.core.mcp.errors import error_to_text
 from xippios.core.mcp.results import ResultCap, cap_result
 
-__all__ = ["build_server", "register_tasks", "tool_name"]
+__all__ = ["build_server", "quiet_request_logging", "register_tasks", "tool_name"]
+
+_REQUEST_LOGGERS = ("httpx", "httpcore")
+
+
+def quiet_request_logging() -> None:
+    """Keep httpx and httpcore from logging request URLs: set both loggers to ``WARNING``.
+
+    Constructing an ``MCPServer`` (``mcp`` SDK 2.x) calls the SDK's
+    ``configure_logging`` with the default level ``INFO``: ``logging.basicConfig`` sets
+    the root logger to ``INFO`` with a stderr handler, unless the process configured
+    root logging before. httpx logs every request at
+    ``INFO`` as ``HTTP Request: GET <full URL> "HTTP/1.1 200 OK"``, and MCP clients
+    capture a server's stderr into their own logs. The full URL carries the API key for
+    a source that sends it as a query parameter (``QueryKeyAuth``) and names the tenant
+    for a source with one host per tenant; neither belongs in a log (ADR-0005).
+    httpcore's ``DEBUG`` traces name the host as well, so httpcore is quieted with it.
+
+    ``build_server`` calls this right after constructing the server, and ``main`` calls
+    it again before running one. It only sets the two logger levels: no handler is added
+    and no other logger is touched, so calling it again changes nothing.
+
+    A consumer who wants the request log on purpose, knowing that it writes keys and
+    tenant hosts wherever the log goes, raises the level after building the server and
+    runs the server itself, since ``main`` quiets the loggers again::
+
+        server = build_server("usda-nass", tasks)
+        logging.getLogger("httpx").setLevel(logging.INFO)
+        server.run(transport="stdio")
+    """
+    for name in _REQUEST_LOGGERS:
+        logging.getLogger(name).setLevel(logging.WARNING)
 
 
 def tool_name(source: str, fn: Callable[..., Any]) -> str:
@@ -102,6 +136,11 @@ def build_server(
 ) -> MCPServer:
     """Create an ``MCPServer`` named ``xippios-<source>`` with the tasks registered.
 
+    The ``mcp`` SDK configures root logging at ``INFO`` while the server is constructed
+    (unless it was configured before); the httpx and httpcore loggers are set to
+    ``WARNING`` right after, so request URLs, which may carry a key or a tenant host,
+    stay out of the log. See ``quiet_request_logging``.
+
     Args:
         source: Source slug.
         tasks: Task functions to expose.
@@ -112,5 +151,6 @@ def build_server(
         read_only: Whether the tools are read-only; ``False`` for a write server.
     """
     server = MCPServer(name or f"xippios-{source}", version=version, instructions=instructions)
+    quiet_request_logging()
     register_tasks(server, source, tasks, cap=cap, read_only=read_only)
     return server
