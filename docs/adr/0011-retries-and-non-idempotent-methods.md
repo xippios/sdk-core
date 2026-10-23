@@ -9,12 +9,13 @@ and a transport failure (timeout, connection error) for GET, HEAD and OPTIONS on
 For a read that is harmless: a repeated GET returns the same data and costs at most one
 more call against a quota.
 
-sdk-cashctrl writes (queue row 7). CashCtrl's create, update and delete operations are
-POST requests (`docs/upstream/` in sdk-cashctrl). A 502, 503 or 504 says that something
-between the client and the application failed, not that the application did nothing: a
-gateway that gives up waiting answers 504 while the application completes the write
-behind it. Retrying such a POST can book the same journal entry twice. A read timeout
-on a POST is the same case: the request went out and may have been applied.
+sdk-cashctrl writes (found in the review of sdk-cashctrl's first endpoints,
+2026-10-23). CashCtrl's create, update and delete operations are POST requests
+(`docs/upstream/` in sdk-cashctrl). A 502, 503 or 504 says that something between the
+client and the application failed, not that the application did nothing: a gateway that
+gives up waiting answers 504 while the application completes the write behind it.
+Retrying such a POST can book the same journal entry twice. A read timeout on a POST is
+the same case: the request went out and may have been applied.
 
 A 429 is different. The upstream or its gateway refused the request before acting on
 it; that is what a rate limit means, and repeating the request after `Retry-After` is

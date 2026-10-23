@@ -171,7 +171,7 @@ NON_IDEMPOTENT = ["POST", "PUT", "PATCH", "DELETE"]
 async def test_5xx_to_a_write_is_returned_after_one_attempt(
     respx_mock: respx.MockRouter, config: ClientConfig, sleeper: Sleeper, method: str
 ) -> None:
-    # sdk-cashctrl, row 7: a booking answered 503 after it was applied must not be repeated.
+    # sdk-cashctrl: a booking answered 503 after it was applied must not be repeated.
     route = respx_mock.route(method=method, url=f"{BASE}/v1/x").respond(503, text="busy")
     client = AsyncClient(config, sleep=sleeper)
     response = await client.request(method, "/v1/x", json={"a": 1}, raise_on_error=False)

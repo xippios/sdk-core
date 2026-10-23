@@ -66,7 +66,7 @@ def test_message_never_contains_query_string() -> None:
     [(401, AuthError), (404, NotFoundError), (429, RateLimitError), (503, UpstreamError)],
 )
 def test_message_names_method_and_path_never_the_host(status: int, cls: type[XippiosError]) -> None:
-    # sdk-cashctrl, row 7: a multi-tenant source's host names the tenant.
+    # sdk-cashctrl: a multi-tenant source's host names the tenant.
     request = httpx.Request(
         "POST", "https://acme-holding.cashctrl.test/api/v1/journal/create.json?lang=de"
     )
