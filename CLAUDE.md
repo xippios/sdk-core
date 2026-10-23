@@ -33,6 +33,7 @@ src/xippios/core/
   config.py          SourceSettings base, resolve_api_key()
   pagination.py      offset / page-number / cursor iterators, collect()
   reference.py       loader for packaged reference data (CSV, JSON)
+  tenants.py         Tenants (tenants declared in the environment, one client each), list_task
   client/            httpx client: config, retry, ratelimit, cache, auth (env-key helpers), _core, Client
   mcp/               MCP server helpers: server, results (caps), errors (to text), cli   [extra: mcp]
   http/              FastAPI helpers: router (from tasks), problems (RFC 9457)          [extra: http]
@@ -54,8 +55,8 @@ Rules of the tree (ADR-0004):
 - A concern is a subpackage when it has an optional dependency or more than one
   internal module; otherwise it is a single module. Do not add empty directories.
 - Imports point downward only: `errors` and `models` at the bottom; `config`, `client`,
-  `pagination`, `reference` above; `mcp`, `http`, `testing` on top. Nothing below an
-  adapter imports an adapter.
+  `pagination`, `reference`, `tenants` above; `mcp`, `http`, `testing` on top. Nothing
+  below an adapter imports an adapter.
 - The MCP adapter targets the official `mcp` SDK 2.x (`mcp.server.mcpserver.MCPServer`).
   `FastMCP` no longer exists there; the standalone `fastmcp` package is not used.
 - Constructing an `MCPServer` configures root logging at `INFO`, and httpx logs every
