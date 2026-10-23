@@ -167,6 +167,31 @@ async def test_record_uses_the_given_retry_and_timeouts(
     assert route.calls.last.request.extensions["timeout"]["read"] == 60.0
 
 
+class ClosingTransport(httpx.AsyncBaseTransport):
+    """Answers every request and counts how often a pool closed it."""
+
+    def __init__(self) -> None:
+        self.closed = 0
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"n": 1})
+
+    async def aclose(self) -> None:
+        self.closed += 1
+
+
+@pytest.mark.anyio
+async def test_record_closes_the_derived_client(config: ClientConfig, tmp_path: Path) -> None:
+    transport = ClosingTransport()
+    client = AsyncClient(config, transport=transport)
+    await record(client, "/v1/x", tmp_path / "a.json", timeouts=Timeouts(read=300.0))
+    assert transport.closed == 1  # the derived client's pool, closed when record returned
+    await record(client, "/v1/x", tmp_path / "b.json")
+    assert transport.closed == 1  # the caller's own client stays open
+    await client.aclose()
+    assert transport.closed == 2
+
+
 @pytest.mark.anyio
 async def test_record_a_tenant_and_replay_on_the_placeholder_host(
     respx_mock: respx.MockRouter, tmp_path: Path

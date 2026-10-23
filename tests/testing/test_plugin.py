@@ -337,6 +337,16 @@ def test_the_sync_client_does_not_wait_either(replay_fixture):
 
 
 @pytest.mark.anyio
+async def test_the_bypass_takes_no_token():
+    bucket = TokenBucket(RateLimit(per_minute=60, burst=1), clock=lambda: 0.0)
+    for _ in range(3):
+        assert (await bucket.acquire()) == 0.0
+    assert bucket._tokens == 1.0  # untouched: the burst is still there
+    assert bucket.reserve() == 0.0
+    assert bucket.reserve() > 0.0
+
+
+@pytest.mark.anyio
 @pytest.mark.rate_limited
 async def test_a_rate_limited_test_waits(replay_fixture):
     replay_fixture("ep", "case")
@@ -363,7 +373,7 @@ def test_offline_tests_never_wait_on_the_rate_limiter(
     pytester.makeconftest(ANYIO_CONFTEST)
     pytester.makepyfile(LIMITER_TESTS)
     result = pytester.runpytest("-p", "xippios.core.testing.plugin", "--strict-markers")
-    result.assert_outcomes(passed=4)
+    result.assert_outcomes(passed=5)
     assert TokenBucket.acquire is ACQUIRE
 
 
