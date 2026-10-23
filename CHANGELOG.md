@@ -88,6 +88,14 @@ All notable changes to this project are documented here. The format follows
   `Scrub(allow_binary=True)` is passed; then it is stored base64 with
   `body_base64: true`, unscrubbed, as 0.1.0 stored every such body without asking. No
   scrub can read a binary body (sdk-cashctrl refused them locally).
+- **Breaking:** `EnvKeyAuth.apply(self, request)` reads the key itself through
+  `self.key()` and no longer takes it as an argument; `auth_flow` calls
+  `self.apply(request)`. `QueryKeyAuth`, `HeaderKeyAuth`, `BearerAuth` and
+  `BasicKeyAuth` keep the key in no argument and no local variable. As an argument the
+  key was part of every traceback frame through `apply`, and pytest's long tracebacks
+  print a frame's arguments, so a failing test could print the shell's key
+  (sdk-usda-nass). A subclass outside core that implements `apply(request, key)` drops
+  the parameter and calls `self.key()` where it attaches the key; none is known.
 - Conventions 1.8: §6 names form bodies next to JSON ones; §10 states the recorder's
   rules (scrub in memory before the one write, a placeholder host for a multi-tenant
   source, no binary body unless flagged).

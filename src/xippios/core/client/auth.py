@@ -22,7 +22,9 @@ __all__ = ["BasicKeyAuth", "BearerAuth", "EnvKeyAuth", "HeaderKeyAuth", "QueryKe
 class EnvKeyAuth(httpx.Auth):
     """Base class: resolve the key once, then let a subclass attach it to each request.
 
-    Subclass and implement ``apply`` for a shape not covered below.
+    Subclass and implement ``apply`` for a shape not covered below. ``apply`` reads the
+    key through ``self.key()`` where it attaches it, and keeps it in no local variable,
+    so no traceback frame holds the key as an argument or a local.
 
     Args:
         env_var: Variable that holds the key, named as the upstream documents it.
@@ -50,13 +52,13 @@ class EnvKeyAuth(httpx.Auth):
                     self._key = secret.get_secret_value()
         return self._key
 
-    def apply(self, request: httpx.Request, key: str) -> None:
-        """Attach ``key`` to ``request``. Implemented by subclasses."""
+    def apply(self, request: httpx.Request) -> None:
+        """Attach the key, read with ``self.key()``, to ``request``; implemented by subclasses."""
         raise NotImplementedError
 
     def auth_flow(self, request: httpx.Request) -> Generator[httpx.Request, httpx.Response, None]:
         """The httpx hook: one request, the key attached."""
-        self.apply(request, self.key())
+        self.apply(request)
         yield request
 
 
@@ -81,9 +83,9 @@ class QueryKeyAuth(EnvKeyAuth):
         super().__init__(env_var, key=key, source=source)
         self.param = param
 
-    def apply(self, request: httpx.Request, key: str) -> None:
+    def apply(self, request: httpx.Request) -> None:
         """Merge the key into the query string."""
-        request.url = request.url.copy_merge_params({self.param: key})
+        request.url = request.url.copy_merge_params({self.param: self.key()})
 
 
 class HeaderKeyAuth(EnvKeyAuth):
@@ -107,17 +109,17 @@ class HeaderKeyAuth(EnvKeyAuth):
         super().__init__(env_var, key=key, source=source)
         self.header = header
 
-    def apply(self, request: httpx.Request, key: str) -> None:
+    def apply(self, request: httpx.Request) -> None:
         """Set the header."""
-        request.headers[self.header] = key
+        request.headers[self.header] = self.key()
 
 
 class BearerAuth(EnvKeyAuth):
     """Send the key as ``Authorization: Bearer <key>``."""
 
-    def apply(self, request: httpx.Request, key: str) -> None:
+    def apply(self, request: httpx.Request) -> None:
         """Set the Authorization header."""
-        request.headers["Authorization"] = f"Bearer {key}"
+        request.headers["Authorization"] = f"Bearer {self.key()}"
 
 
 class BasicKeyAuth(EnvKeyAuth):
@@ -141,7 +143,8 @@ class BasicKeyAuth(EnvKeyAuth):
         super().__init__(env_var, key=key, source=source)
         self.password = password
 
-    def apply(self, request: httpx.Request, key: str) -> None:
+    def apply(self, request: httpx.Request) -> None:
         """Set the Authorization header."""
-        token = base64.b64encode(f"{key}:{self.password}".encode()).decode("ascii")
-        request.headers["Authorization"] = f"Basic {token}"
+        request.headers["Authorization"] = "Basic " + base64.b64encode(
+            f"{self.key()}:{self.password}".encode()
+        ).decode("ascii")
