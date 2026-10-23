@@ -107,10 +107,13 @@ from xippios.core import NotFoundError, RateLimitError
 try:
     get_series("NOPE")
 except NotFoundError as exc:
-    print(exc)  # 404 from GET api.example.org/v1/series: ...
+    print(exc)  # 404 from GET /v1/series: ...
 except RateLimitError as exc:
     print(exc.retry_after)
 ```
+
+A message names the method and path of the request, never its host or query string:
+the host can name a tenant and the query can carry a key.
 
 ## MCP server in five lines
 

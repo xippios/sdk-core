@@ -39,7 +39,7 @@ def test_classification_table(status: int, cls: type[XippiosError]) -> None:
     error = error_from_response(_response(status, "boom"), source="example")
     assert isinstance(error, cls)
     assert error.source == "example"
-    assert str(error).startswith(f"{status} from GET api.example.test/v1/thing")
+    assert str(error).startswith(f"{status} from GET /v1/thing: ")
 
 
 def test_success_is_none() -> None:
@@ -52,6 +52,25 @@ def test_message_never_contains_query_string() -> None:
     assert error is not None
     assert "key=" not in str(error)
     assert "server said no" in str(error)
+
+
+@pytest.mark.parametrize(
+    ("status", "cls"),
+    [(401, AuthError), (404, NotFoundError), (429, RateLimitError), (503, UpstreamError)],
+)
+def test_message_names_method_and_path_never_the_host(status: int, cls: type[XippiosError]) -> None:
+    # sdk-cashctrl, row 7: a multi-tenant source's host names the tenant.
+    request = httpx.Request(
+        "POST", "https://acme-holding.cashctrl.test/api/v1/journal/create.json?lang=de"
+    )
+    response = httpx.Response(status, text="refused", request=request)
+    error = error_from_response(response, source="example")
+    assert isinstance(error, cls)
+    message = str(error)
+    assert message == f"{status} from POST /api/v1/journal/create.json: refused"
+    assert "acme-holding" not in message
+    assert "cashctrl.test" not in message
+    assert "lang=" not in message
 
 
 def test_upstream_error_carries_status_and_body() -> None:

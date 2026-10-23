@@ -156,9 +156,9 @@ def _body_text(response: httpx.Response) -> str:
 
 
 def _where(response: httpx.Response) -> str:
-    # Host and path only: query strings may carry an API key.
+    # Method and path only: the host may name a tenant (ADR-0005), the query may carry a key.
     url = response.request.url
-    return f"{response.request.method} {url.host}{url.path}"
+    return f"{response.request.method} {url.path}"
 
 
 def error_from_response(

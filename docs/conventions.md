@@ -117,7 +117,8 @@ Source packages subclass only when upstream has a distinct, documented failure m
 a refusal the package makes itself, such as a query over a documented record limit or
 an unknown filter name, subclasses `InvalidRequestError`. Adapters convert these to
 structured text (MCP) or problem+json (HTTP; `InvalidRequestError` is 422); they never
-leak tracebacks.
+leak tracebacks. An error message names the request's method and path, never its host
+or query string: the host can name a tenant, the query can carry a key (ADR-0005).
 
 ## 6. HTTP client (`xippios.core.client`)
 
