@@ -26,8 +26,8 @@ APIs.
 - When one key serves several sources, the variable is named after the key's issuer.
   Every source reached through api.data.gov reads `DATA_GOV_API_KEY`: `usda-psd`,
   `usda-esr`, `usda-gats`, and any later one.
-- Otherwise `<SOURCE>_API_KEY` stays. `NASS_API_KEY`, already an issuer's name, does
-  not change.
+- Otherwise `<SOURCE>_API_KEY` stays (`COMTRADE_API_KEY`). usda-nass keeps its
+  historical `NASS_API_KEY`, an issuer's name that predates this ADR.
 - The variable is the template answer `api_key_env`, as for any source, and it still
   ends in `_API_KEY`, so the template's validator and the rule never to read or print
   such a variable apply unchanged.
@@ -37,11 +37,12 @@ APIs.
 
 ## Consequences
 
-- One key is one gateway quota. api.data.gov's default is 1,000 requests per rolling
-  hour per key, a service may set its own, and every response reports the quota in
+- One key is one gateway quota. api.data.gov documents a default of 1,000 requests per
+  rolling hour per key, which a service may change, reported on every response in
   `X-RateLimit-Limit` and `X-RateLimit-Remaining`. Every package and every process that
   uses the key draws on that one quota, while each package keeps its own per-minute
-  limiter; how a package spends the quota is ADR-0010.
+  limiter; how a package spends the quota is ADR-0010. A caller who wants a separate
+  quota passes its own key through the constructor override (§7).
 - One org secret, `DATA_GOV_API_KEY`, exposed to each repository that needs it; a
   further api.data.gov source extends the secret's repository access instead of adding
   a secret. Locally it is one line in `.envrc`.
