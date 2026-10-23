@@ -193,6 +193,16 @@ def test_placeholder_host_replaces_the_idna_form_too() -> None:
     assert fixture.response.body == " ".join([PLACEHOLDER] * 3)
 
 
+def test_placeholder_that_contains_the_original_host_is_set_once() -> None:
+    request = httpx.Request("GET", "https://example.test/v1/x?next=https://example.test/y")
+    response = httpx.Response(200, content=b"https://example.test/z", request=request)
+    fixture = fixture_from_response(response, scrub=Scrub(host=PLACEHOLDER))
+    url = httpx.URL(fixture.request.url)
+    assert url.host == PLACEHOLDER
+    assert url.params["next"] == f"https://{PLACEHOLDER}/y"
+    assert fixture.response.body == f"https://{PLACEHOLDER}/z"
+
+
 def test_no_placeholder_keeps_the_host() -> None:
     fixture = fixture_from_response(_response(content=b"api.example.test"), scrub=Scrub())
     assert fixture.request.url.startswith("https://api.example.test/")

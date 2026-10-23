@@ -160,11 +160,15 @@ class _Scrubber:
         return self._scrub.rewrite(text) if self._scrub.rewrite is not None else text
 
     def url(self, url: httpx.URL) -> str:
-        """The URL with credentials redacted, the placeholder host, secrets redacted."""
-        cleaned = httpx.URL(scrub_url(url))
-        if self._scrub.host is not None:
-            cleaned = cleaned.copy_with(host=self._scrub.host)
-        return self.text(str(cleaned))
+        """The URL with credentials redacted, the placeholder host, secrets redacted.
+
+        The text is scrubbed in one pass first and the placeholder set as the host
+        after it, so a placeholder that contains the original host is not replaced again.
+        """
+        text = self.text(scrub_url(url))
+        if self._scrub.host is None:
+            return text
+        return str(httpx.URL(text).copy_with(host=self._scrub.host))
 
     def headers(self, items: Iterable[tuple[str, str]]) -> list[tuple[str, str]]:
         """Headers with credentials redacted, names scrubbed, values scrubbed and rewritten."""
