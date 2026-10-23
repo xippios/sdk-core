@@ -75,35 +75,10 @@ All notable changes to this project are documented here. The format follows
   `REDACTED`. A test compares these instead of keeping a request from `route.calls` in
   its own frame, where a failing assertion or `pytest -l` prints it, key included
   (sdk-usda-nass).
-- The pytest plugin keeps the whole session offline (ADR-0013): from configuration on,
-  httpx's default transports and httpcore's connection pools raise `RuntimeError`
-  naming the request's method and path, never its host or query, at import, in a
-  fixture of any scope and in a test. The refusal is lifted while a test marked
-  `network` or `live` is set up, run and torn down. Requests `respx` answers, replayed
-  fixtures included, and transports a test passes itself (`httpx.MockTransport`,
-  FastAPI's `TestClient`) are unaffected; a `respx` route that passes through is
-  refused unless the test is marked `network`. Nothing enforced the definition of
-  done's "no network in the default test run" (sdk-cashctrl).
-- The pytest plugin lets no rate limiter wait in a test not marked `live`:
-  `TokenBucket.acquire` returns at once and takes no token, so a limiter a source
-  shares across its tests holds no debt from the replays when a live test in the same
-  run uses it. The marker `rate_limited` keeps the limiter for one test. A source paced
-  at one request a second waited a second per replayed request (sdk-comtrade,
-  sdk-usda-psd).
-- The pytest plugin's autouse fixture `placeholder_api_key` makes every test not marked
-  `live` send `PLACEHOLDER_KEY` (`"placeholder-for-fixture-replay"`, exported from
-  `xippios.core.testing` and the plugin): it sets the variables the new ini option
-  `xippios_placeholder_key_envs` names (type `args`, default empty) and pins
-  `EnvKeyAuth.key` on the class, so every auth object of every tenant sends the
-  placeholder even after a live test cached the real key on it. It returns the
-  placeholder, or `None` in a live test. A source's own fixture of the same name
-  overrides it; with this release a source deletes the one sdk-template 0.1.5 had it
-  carry by hand, which pinned one module-level `auth` and could not reach a source with
-  one auth object per tenant (sdk-comtrade, sdk-cashctrl).
-- The pytest plugin gives the `httpx` and `httpcore` loggers their levels back after
-  every test. Building an MCP server sets both to `WARNING`, and only core's own
-  `tests/conftest.py` restored them, so a source test that built a server left httpx
-  at `WARNING` for the rest of the run (sdk-cashctrl).
+- `xippios.core.testing.PLACEHOLDER_KEY` (`"placeholder-for-fixture-replay"`, also in
+  the plugin) and the plugin's ini option `xippios_placeholder_key_envs` (type `args`,
+  default empty): the key offline tests send and the variables that hold it; see the
+  placeholder pin under Changed.
 - `xippios.core.testing.assert_write_tools(write_server, write_tasks, *, source,
   read_server=None, router=None)`: fails the test, naming the offending tool, unless
   the write server's tools are exactly the write tasks by `tool_name`, every write task
@@ -119,6 +94,38 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- **Breaking:** the pytest plugin keeps the default run offline and free of real keys
+  on its own (ADR-0013). A source's tests that hit the network, assert a rate
+  limiter's waits or test how a key is resolved must mark or override accordingly:
+  mark them `network`, mark them `rate_limited`, or override `placeholder_api_key` in
+  their module with a fixture that pins nothing. A `live` test needs nothing.
+  - Network: from configuration on, httpx's default transports and httpcore's
+    connection pools raise `RuntimeError` naming the request's method and path, never
+    its host or query, at import, in a fixture of any scope and in a test. The refusal
+    is lifted while a test marked `network` or `live` is set up, run and torn down.
+    Requests `respx` answers, replayed fixtures included, and transports a test passes
+    itself (`httpx.MockTransport`, FastAPI's `TestClient`) are unaffected; a `respx`
+    route that passes through is refused unless the test is marked `network`. Nothing
+    enforced the definition of done's "no network in the default test run"
+    (sdk-cashctrl).
+  - Rate limiter: in a test not marked `live`, `TokenBucket.acquire` returns at once
+    and takes no token, so a limiter a source shares across its tests holds no debt
+    from the replays when a live test in the same run uses it; the marker
+    `rate_limited` keeps the limiter. A source paced at one request a second waited a
+    second per replayed request (sdk-comtrade, sdk-usda-psd).
+  - Placeholder pin: the autouse fixture `placeholder_api_key` makes every test not
+    marked `live` send `PLACEHOLDER_KEY`: it sets the variables
+    `xippios_placeholder_key_envs` names and pins `EnvKeyAuth.key` on the class, so
+    every auth object of every tenant sends the placeholder even after a live test
+    cached the real key on it. It returns the placeholder, or `None` in a live test. A
+    source's own fixture of the same name overrides it; with this release a source
+    deletes the one sdk-template 0.1.5 had it carry by hand, which pinned one
+    module-level `auth` and could not reach a source with one auth object per tenant
+    (sdk-comtrade, sdk-cashctrl).
+  - Logger levels: the `httpx` and `httpcore` loggers get their levels back after
+    every test, live ones included. Building an MCP server sets both to `WARNING`, and
+    only core's own `tests/conftest.py` restored them, so a source test that built a
+    server left httpx at `WARNING` for the rest of the run (sdk-cashctrl).
 - **Breaking:** a 5xx and a transport failure are retried for GET, HEAD and OPTIONS
   only. A POST, PUT, PATCH or DELETE answered with a 5xx is returned after one attempt
   and raised as `UpstreamError`; a 429 is still retried for every method. Before, every
@@ -156,6 +163,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- The live gate skipped every test under a directory named `live`, marked or not: it
+  matched the keyword `live`, which a directory's name adds. It follows the marker now.
 - A gzip answer replayed from the cache raised `httpx.DecodingError`: the client stored
   the decoded body together with `content-encoding`, so the replay decoded it again.
   Cache entries are stored without wire headers now, and entries a persistent backend
