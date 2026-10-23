@@ -173,6 +173,17 @@ ADR-0009 applies, overridable by constructor argument. No config files, no doten
 loading inside the package — the environment is the contract (direnv in development,
 secrets in CI).
 
+A multi-tenant source, whose upstream serves each tenant from a host or under a key of
+its own (CashCtrl's organisations), declares its tenants with `xippios.core.Tenants`
+(ADR-0014). One variable lists the tenant names, comma-separated, lower-case letters,
+digits and underscores (`CASHCTRL_ORGS=acme,acme_test`); each tenant's values sit in
+`<SOURCE>_<NAME>_<FIELD>`, source and name upper-cased (`CASHCTRL_ACME_SUBDOMAIN`,
+`CASHCTRL_ACME_API_KEY`). The reserved test tenant (`demo`) is declared by its own
+variables alone and never listed: it exists when all of them are set. Every tenant has
+one client of its own, with its own rate limiter and no cache shared with another
+tenant, built on first use and rebuilt when one of its values changes. Messages and
+results name tenants and variables, never a value.
+
 ## 8. MCP conventions
 
 - Register task functions, not endpoint wrappers. Tool name `<source>_<verb>_<noun>`.

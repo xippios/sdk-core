@@ -102,6 +102,27 @@ All notable changes to this project are documented here. The format follows
   A source carried the tenant only inside `request` (`request.org` in sdk-cashctrl),
   where nothing marked it as the tenant. Optional, so single-tenant sources are
   unaffected; conventions §4 lists it.
+- `xippios.core.Tenants(source, *, list_var, fields, reserved=(), validate=None)`: the
+  tenants a multi-tenant source declares in the environment, and one client per tenant
+  (conventions §7). `list_var` lists the names, comma-separated, `^[a-z0-9_]+$`; each
+  tenant's values sit in `<SOURCE>_<NAME>_<FIELD>` (`var(name, field)` gives the
+  variable's name). `names()` reads the list on every call, in declared order, and
+  appends each reserved name whose field variables are all set; a reserved name in the
+  list, a malformed name or a name listed twice is a `ConfigError`. `require(name)`
+  returns a declared name or raises `ConfigError` listing the declared names, or the
+  variables to set when there are none. `field(name, field)` returns a value stripped
+  and passed through `validate[field]`; a missing value, or one the check refuses, is a
+  `ConfigError` naming the variable, never the value. `client_for(name, build)` builds a
+  tenant's client with `build(name)` on first use and keeps it, thread-safe, under a
+  digest of the tenant's current values, so a changed value builds a new client;
+  `reset()` drops them. Generalises sdk-cashctrl's organisation registry (`orgs()`,
+  `require_org()`, `client_for()`), which every multi-tenant source would otherwise
+  write again. Unlike sdk-cashctrl's `require_org`, an undeclared name is a
+  `ConfigError`.
+- `xippios.core.tenants.list_task(tenants, *, name, doc=None)`: a synchronous task named
+  `name` (`list_organisations`) that returns the declared tenants' names in the
+  envelope, names only (ADR-0005), for a `<source>_list_<tenants>` reference tool. Its
+  default docstring is written for agents.
 
 ### Changed
 

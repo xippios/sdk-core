@@ -29,6 +29,8 @@ It gives a source package the things that should be identical across the family:
   of upstream models arrive as JSON numbers in both adapters; `UpstreamModel.project`
   builds a projection of a record under upstream names, `parse_decimal` reads a
   published figure.
+- **Tenants** for a source that serves several tenants from the environment: declared
+  names, per-tenant variables, one client per tenant (`Tenants`).
 - **Reference-data loader** for code lists shipped inside a package.
 - **Adapters** that turn task functions into MCP tools (`xippios.core.mcp`) and FastAPI
   routes (`xippios.core.http`) without any logic of their own.
@@ -125,6 +127,47 @@ except RateLimitError as exc:
 
 A message names the method and path of the request, never its host or query string:
 the host can name a tenant and the query can carry a key.
+
+## Multi-tenant sources
+
+An upstream that serves each tenant from a host or under a key of its own gets its
+tenants from the environment through `Tenants`: one variable lists the names, each
+tenant's values sit in `<SOURCE>_<NAME>_<FIELD>`, and a reserved test tenant exists when
+its own variables are set and is never listed. Every tenant gets one client, built on
+first use and rebuilt when one of its values changes. Errors name tenants and variables,
+never a value.
+
+```python
+from xippios.core import AsyncClient, BasicKeyAuth, ClientConfig, Tenants
+from xippios.core.tenants import list_task
+
+# EXAMPLE_TENANTS=acme,acme_test
+# EXAMPLE_ACME_SUBDOMAIN=acme-books   EXAMPLE_ACME_API_KEY=...
+# EXAMPLE_DEMO_SUBDOMAIN=demo         EXAMPLE_DEMO_API_KEY=...   (reserved, never listed)
+tenants = Tenants(
+    "example",
+    list_var="EXAMPLE_TENANTS",
+    fields=("SUBDOMAIN", "API_KEY"),
+    reserved=("demo",),
+    validate={"SUBDOMAIN": check_subdomain},  # returns the value, raises ValueError
+)
+
+
+def build(name: str) -> AsyncClient:
+    subdomain = tenants.field(name, "SUBDOMAIN")
+    config = ClientConfig(
+        source="example", version="0.1.0", base_url=f"https://{subdomain}.example.org/api"
+    )
+    return AsyncClient(config, auth=BasicKeyAuth(tenants.var(name, "API_KEY")))
+
+
+tenants.names()  # ("acme", "acme_test", "demo")
+client = tenants.client_for("acme", build)  # the same client until a value changes
+list_tenants = list_task(tenants, name="list_tenants")  # a reference tool: names only
+```
+
+A task takes the tenant's name and sets `ResultMeta(tenant=name, ...)`. The key is read
+on the first request, so a declared tenant without one fails then, with `ConfigError`.
 
 ## MCP server in five lines
 
@@ -254,6 +297,7 @@ refused unless `Scrub(allow_binary=True)` stores it base64, flagged.
 | `xippios.core.config` | `SourceSettings`, `resolve_api_key` | alpha |
 | `xippios.core.reference` | packaged CSV/JSON loaders | alpha |
 | `xippios.core.pagination` | offset, page and cursor iterators | alpha |
+| `xippios.core.tenants` | `Tenants`, `list_task`: tenants from the environment, one client each | alpha |
 | `xippios.core.mcp` | tool registration, result caps, error text, CLI, quiet request log | alpha |
 | `xippios.core.http` | router factory, problem details | alpha |
 | `xippios.core.testing` | live gate, offline run, record, replay, scrub, write checks | alpha |
