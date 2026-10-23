@@ -9,6 +9,7 @@ import pytest
 
 from xippios.core.testing import REDACTED, Scrub, fixture_path, load_fixture, write_fixture
 from xippios.core.testing.fixtures import fixture_from_response
+from xippios.core.testing.scrub import _Scrubber
 
 TENANT = "acme.example.test"
 PLACEHOLDER = "demo.example.test"
@@ -298,3 +299,67 @@ def test_host_then_secrets_then_rewrite(tmp_path: Path) -> None:
     assert fixture.request.url not in seen
     assert all("acme" not in text.lower() for text in seen)
     assert any(PLACEHOLDER in text for text in seen)
+
+
+HIDDEN_HOST = (
+    b'{"link": "https://\\u0061cme.example.test/x", "plain": "https://acme.example.test/y"}'
+)
+"""A JSON body naming the tenant host twice: plain, and behind a ``\\u`` escape."""
+
+
+def test_verify_finds_a_host_the_scrub_cannot_see(tmp_path: Path) -> None:
+    # sdk-cashctrl checked its fixtures after the scrub; core does it for every source.
+    request = httpx.Request("GET", f"https://{TENANT}/api/v1/x")
+    response = httpx.Response(200, content=HIDDEN_HOST, request=request)
+    scrubbed, _ = _Scrubber(Scrub(host=PLACEHOLDER), request.url).body(HIDDEN_HOST)
+    assert "\\u0061cme.example.test" in scrubbed  # the scrub misses the escaped form
+    assert "https://acme" not in scrubbed
+    path = tmp_path / "f.json"
+    with pytest.raises(ValueError, match=r"holds the request host in the response body;") as info:
+        write_fixture(response, path, scrub=Scrub(host=PLACEHOLDER))
+    assert "acme" not in str(info.value).lower()
+    assert not path.exists()
+
+
+def test_verify_finds_a_secret_in_a_json_request_body() -> None:
+    request = httpx.Request(
+        "POST",
+        "https://api.example.test/v1/x",
+        content=b'{"org": "\\u0041cme Corp"}',
+        headers={"Content-Type": "application/json"},
+    )
+    response = httpx.Response(200, content=b"{}", request=request)
+    with pytest.raises(ValueError, match=r"holds the secret value in the request body;") as info:
+        fixture_from_response(response, scrub=Scrub(secrets=["Acme"]))
+    assert "Acme" not in str(info.value)
+
+
+def test_verify_names_the_header_a_rewrite_put_a_secret_back_into() -> None:
+    request = httpx.Request("GET", "https://api.example.test/v1/x")
+    response = httpx.Response(200, headers={"Location": "/next"}, content=b"", request=request)
+    scrub = Scrub(secrets=["tenant-7"], rewrite=lambda text: text + " tenant-7")
+    with pytest.raises(ValueError, match=r"secret value in the response header 'location';"):
+        fixture_from_response(response, scrub=scrub)
+
+
+def test_verify_passes_a_clean_fixture() -> None:
+    request = httpx.Request("GET", f"https://{TENANT}/api/v1/x?next=https://{TENANT}/y")
+    response = httpx.Response(
+        200,
+        headers={"Location": f"https://{TENANT}/next"},
+        content=b'{"name": "Caf\\u00e9 ACT", "home": "https://acme.example.test/"}',
+        request=request,
+    )
+    fixture = fixture_from_response(response, scrub=Scrub(host=PLACEHOLDER, secrets=["ACT"]))
+    assert json.loads(fixture.response.body) == {
+        "name": f"Caf\u00e9 {REDACTED}",  # REDACTED itself holds "ACT" and does not count
+        "home": f"https://{PLACEHOLDER}/",
+    }
+    assert dict(fixture.response.headers)["location"] == f"https://{PLACEHOLDER}/next"
+
+
+def test_verify_leaves_a_flagged_binary_body_alone() -> None:
+    request = httpx.Request("GET", f"https://{TENANT}/api/v1/x")
+    response = httpx.Response(200, content=b"\xff" + TENANT.encode(), request=request)
+    fixture = fixture_from_response(response, scrub=Scrub(host=PLACEHOLDER, allow_binary=True))
+    assert fixture.response.body_base64

@@ -66,7 +66,9 @@ autouse fixtures:
 Every test, `live` or not, gets the `httpx` and `httpcore` logger levels back when it
 ends. The plugin registers `network` and `rate_limited` next to `live`, so a source
 running with `--strict-markers` needs no registration of its own. The recorder scrubs
-in memory and writes once (`Scrub`, conventions §10).
+in memory, verifies the result (the original host or a secret value still present, a
+JSON body decoded included, refuses the exchange) and writes once (`Scrub`, conventions
+§10).
 
 ## Consequences
 

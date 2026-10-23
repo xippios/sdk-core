@@ -8,9 +8,11 @@ pre-authenticated URLs.
 """
 
 import base64
+import json
 import re
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 import httpx
 
@@ -174,6 +176,69 @@ class _Scrubber:
         """Headers with credentials redacted, names scrubbed, values scrubbed and rewritten."""
         return [(self.text(name), self.rewritten(value)) for name, value in scrub_headers(items)]
 
+    def verify(
+        self,
+        url: str,
+        request_headers: Iterable[tuple[str, str]],
+        request_body: str | None,
+        response_headers: Iterable[tuple[str, str]],
+        response_body: str | None,
+    ) -> None:
+        r"""Refuse a scrubbed exchange that still holds the original host or a secret value.
+
+        Runs on what the scrub produced, before anything is kept or written, when the
+        ``Scrub`` sets ``host`` or ``secrets``. The URL, every header name and value and
+        both bodies are searched raw with the scrub's own patterns (the host in any letter
+        case, each value plain or percent-encoded); a body that is JSON is searched
+        decoded as well, every key and string in it, so a value the scrub could not see
+        behind a ``\uXXXX`` escape is found. The placeholder host and ``REDACTED`` are
+        masked first and never count. A body stored base64 (``allow_binary``) is not
+        searched: it is kept unscrubbed by design.
+
+        Args:
+            url: The scrubbed request URL.
+            request_headers: The request headers kept, e.g. ``[("content-type", ...)]``.
+            request_body: The scrubbed request body; ``None`` without one or when base64.
+            response_headers: The scrubbed response headers.
+            response_body: The scrubbed response body; ``None`` when base64.
+
+        Raises:
+            ValueError: The original host ("request host") or a secret value ("secret
+                value") is still present; the message names the kind and the location
+                (``url``, a header by name, ``request body``, ``response body``), never
+                the value.
+        """
+        if self._host is None and not self._secrets:
+            return
+        places: list[tuple[str, list[str]]] = [("url", [url])]
+        for side, headers in (("request", request_headers), ("response", response_headers)):
+            for name, value in headers:
+                # The name is checked before it appears in a location of its own.
+                places.append((f"name of a {side} header", [name]))
+                places.append((f"{side} header {name!r}", [value]))
+        for location, body in (("request body", request_body), ("response body", response_body)):
+            if body is not None:
+                places.append((location, [body, *_json_strings(body)]))
+        for location, texts in places:
+            kind = self._left_in(texts)
+            if kind is not None:
+                raise ValueError(
+                    f"the scrubbed fixture still holds the {kind} in the {location}; "
+                    "it is refused before anything is written"
+                )
+
+    def _left_in(self, texts: Iterable[str]) -> str | None:
+        """``"request host"`` or ``"secret value"`` when one survives in ``texts``."""
+        for text in texts:
+            masked = text.replace(REDACTED, "\0")
+            if self._scrub.host is not None:
+                masked = re.sub(re.escape(self._scrub.host), "\0", masked, flags=re.IGNORECASE)
+            if self._host is not None and self._host.search(masked):
+                return "request host"
+            if any(pattern.search(masked) for pattern in self._secrets):
+                return "secret value"
+        return None
+
     def body(self, content: bytes) -> tuple[str, bool]:
         """``(text, False)`` scrubbed and rewritten, or ``(base64, True)`` when allowed.
 
@@ -187,3 +252,24 @@ class _Scrubber:
                 raise ValueError(_BINARY_BODY) from None
             return base64.b64encode(content).decode("ascii"), True
         return self.rewritten(text), False
+
+
+def _json_strings(body: str) -> Iterator[str]:
+    """Every key and string of ``body`` decoded as JSON; nothing when it is not JSON."""
+    try:
+        decoded = json.loads(body)
+    except ValueError:
+        return iter(())
+    return _strings(decoded)
+
+
+def _strings(node: Any) -> Iterator[str]:
+    if isinstance(node, str):
+        yield node
+    elif isinstance(node, dict):
+        for name, value in node.items():
+            yield str(name)
+            yield from _strings(value)
+    elif isinstance(node, list):
+        for item in node:
+            yield from _strings(item)

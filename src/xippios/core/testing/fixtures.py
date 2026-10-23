@@ -91,12 +91,14 @@ def fixture_path(root: Path, endpoint: str, case: str) -> Path:
 
 
 def fixture_from_response(response: httpx.Response, *, scrub: Scrub | None = None) -> Fixture:
-    """Build a scrubbed ``Fixture`` in memory from a fully read ``httpx.Response``.
+    r"""Build a scrubbed ``Fixture`` in memory from a fully read ``httpx.Response``.
 
     Credentials are always scrubbed (``scrub_url``, ``scrub_headers``). ``scrub`` adds
     the placeholder host, the secret values and the rewrite hook, and decides about a
     binary body; ``None`` is ``Scrub()``: host kept, nothing else replaced, a binary
-    body refused.
+    body refused. With ``host`` or ``secrets`` set, the result is verified before it is
+    returned: the original host or a secret value still present anywhere, a JSON body
+    decoded included (e.g. behind a ``\u`` escape), refuses the exchange.
 
     Args:
         response: The response, with the request that produced it.
@@ -105,7 +107,8 @@ def fixture_from_response(response: httpx.Response, *, scrub: Scrub | None = Non
 
     Raises:
         ValueError: The request or response body is not UTF-8 text and ``scrub`` does
-            not set ``allow_binary``.
+            not set ``allow_binary``; or the original host or a secret value survived
+            the scrub (the message names which and where, never the value).
     """
     request = response.request
     scrubber = _Scrubber(scrub if scrub is not None else Scrub(), request.url)
@@ -115,7 +118,7 @@ def fixture_from_response(response: httpx.Response, *, scrub: Scrub | None = Non
         request_body, request_base64 = scrubber.body(request.content)
     content_type = request.headers.get("content-type")
     body, is_base64 = scrubber.body(response.content)
-    return Fixture(
+    fixture = Fixture(
         recorded_at=utcnow(),
         request=FixtureRequest(
             method=request.method,
@@ -131,6 +134,15 @@ def fixture_from_response(response: httpx.Response, *, scrub: Scrub | None = Non
             body_base64=is_base64,
         ),
     )
+    kept = fixture.request.content_type
+    scrubber.verify(
+        fixture.request.url,
+        [("content-type", kept)] if kept is not None else [],
+        None if fixture.request.body_base64 else fixture.request.body,
+        fixture.response.headers,
+        None if fixture.response.body_base64 else fixture.response.body,
+    )
+    return fixture
 
 
 def write_fixture(response: httpx.Response, path: Path, *, scrub: Scrub | None = None) -> Fixture:
@@ -144,7 +156,8 @@ def write_fixture(response: httpx.Response, path: Path, *, scrub: Scrub | None =
         scrub: What else to remove besides credentials; see ``fixture_from_response``.
 
     Raises:
-        ValueError: A binary body without ``Scrub(allow_binary=True)``.
+        ValueError: A binary body without ``Scrub(allow_binary=True)``, or the original
+            host or a secret value left after the scrub; see ``fixture_from_response``.
     """
     fixture = fixture_from_response(response, scrub=scrub)
     path.parent.mkdir(parents=True, exist_ok=True)

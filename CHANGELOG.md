@@ -44,7 +44,12 @@ All notable changes to this project are documented here. The format follows
   `record` take it as `scrub=`. The credential scrubbing of 0.1.0 still always
   applies. Ports the recorder pattern sdk-cashctrl had to keep locally: `write_fixture`
   kept the tenant host in `request.url`, and CashCtrl's `file/prepare.json` answers with
-  signed storage URLs that `file/get` redirects to.
+  signed storage URLs that `file/get` redirects to. With `host` or `secrets` set, the
+  scrubbed exchange is verified before anything is kept: the URL, every header and both
+  bodies are searched raw and, for a JSON body, decoded, so a host or value behind a
+  `\uXXXX` escape is found; one still present raises `ValueError` naming the kind
+  ("request host" or "secret value") and the location, never the value, and nothing is
+  written. Modelled on sdk-cashctrl's final check.
 - `FixtureRequest.body`, `body_base64` and `content_type`: the request body as scrubbed
   UTF-8 text (the form or JSON text sent; `None` without a body) and the request's
   `Content-Type`, so a write fixture can assert its payload (sdk-cashctrl). Fixtures

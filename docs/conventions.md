@@ -202,6 +202,8 @@ consumer, never served standalone from the package.
 - The recorder scrubs in memory and writes once, so nothing unscrubbed touches disk: a
   multi-tenant source records with a placeholder host that its offline tests replay
   against, and names the values that must never be written (`xippios.core.testing.Scrub`).
+  The scrubbed exchange is verified before the write, a JSON body also decoded; the
+  original host or a named value still present refuses it, the error naming where.
   A body that is not UTF-8 text cannot be scrubbed and is refused unless the recording
   flags it (`allow_binary=True`, stored base64 with `body_base64`).
 - Live tests are marked `@pytest.mark.live`, skipped unless `XIPPIOS_LIVE_TESTS=1`,
