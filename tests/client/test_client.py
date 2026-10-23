@@ -310,6 +310,7 @@ def test_sync_client_sends_form_data(respx_mock: respx.MockRouter, config: Clien
 
 
 @pytest.mark.anyio
+@pytest.mark.rate_limited
 async def test_rate_limiter_waits_between_calls(
     respx_mock: respx.MockRouter, config: ClientConfig, sleeper: Sleeper
 ) -> None:
@@ -336,6 +337,7 @@ class Clock:
 
 
 @pytest.mark.anyio
+@pytest.mark.rate_limited
 async def test_clients_share_one_limiter(respx_mock: respx.MockRouter, sleeper: Sleeper) -> None:
     respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
     bucket = TokenBucket(RateLimit(per_minute=60, burst=1), clock=Clock())
@@ -367,6 +369,7 @@ def test_limiter_defaults_to_the_configured_rate_limit(config: ClientConfig) -> 
 
 
 @pytest.mark.anyio
+@pytest.mark.rate_limited
 async def test_derive_shares_auth_limiter_and_cache_and_changes_only_the_policy(
     respx_mock: respx.MockRouter, sleeper: Sleeper
 ) -> None:

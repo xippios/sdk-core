@@ -74,6 +74,12 @@ All notable changes to this project are documented here. The format follows
   transports a test passes itself (`httpx.MockTransport`, FastAPI's `TestClient`) are
   unaffected; the marker `network` lifts the block for one test. Nothing enforced the
   definition of done's "no network in the default test run" (sdk-cashctrl).
+- The pytest plugin lets no rate limiter wait in a test not marked `live`:
+  `TokenBucket.acquire` returns at once and takes no token, so a limiter a source
+  shares across its tests holds no debt from the replays when a live test in the same
+  run uses it. The marker `rate_limited` keeps the limiter for one test. A source paced
+  at one request a second waited a second per replayed request (sdk-comtrade,
+  sdk-usda-psd).
 
 ### Changed
 

@@ -1,14 +1,18 @@
+from pathlib import Path
+
 import httpx
 import pytest
 
+from xippios.core.client import TokenBucket
 from xippios.core.testing import LIVE_ENV, live_enabled
 
 # The pytester runs below install the plugin's patches themselves; the outer layer must
 # not stack its own under them, or a marker in an inner run would prove nothing.
-pytestmark = [pytest.mark.network]
+pytestmark = [pytest.mark.network, pytest.mark.rate_limited]
 
 SEND = httpx.HTTPTransport.handle_request
 SEND_ASYNC = httpx.AsyncHTTPTransport.handle_async_request
+ACQUIRE = TokenBucket.acquire
 ANYIO_CONFTEST = """
 import pytest
 
@@ -56,14 +60,19 @@ def test_live_tests_run_when_gate_open(
     result.assert_outcomes(passed=2)
 
 
-def test_replay_fixture_helper(pytester: pytest.Pytester) -> None:
-    fixtures = pytester.mkdir("tests") / "fixtures" / "ep"
+def write_ep_case(pytester: pytest.Pytester) -> None:
+    """``tests/fixtures/ep/case.json``: ``GET https://h.test/p`` answered ``{"a": 1}``."""
+    fixtures: Path = pytester.mkdir("tests") / "fixtures" / "ep"
     fixtures.mkdir(parents=True)
     (fixtures / "case.json").write_text(
         '{"recorded_at": "2026-10-20T00:00:00Z", "request": {"method": "GET",'
         ' "url": "https://h.test/p"}, "response": {"status": 200, "headers": [],'
         ' "body": "{\\"a\\": 1}", "body_base64": false}}'
     )
+
+
+def test_replay_fixture_helper(pytester: pytest.Pytester) -> None:
+    write_ep_case(pytester)
     pytester.makepyfile(
         """
         import httpx
@@ -186,3 +195,80 @@ def test_offline_tests_cannot_reach_the_network(
     result.assert_outcomes(passed=7)
     assert httpx.HTTPTransport.handle_request is SEND
     assert httpx.AsyncHTTPTransport.handle_async_request is SEND_ASYNC
+
+
+LIMITER_TESTS = """
+import time
+
+import pytest
+
+from xippios.core.client import AsyncClient, Client, ClientConfig, RateLimit, TokenBucket
+
+ACQUIRE = TokenBucket.acquire
+CONFIG = ClientConfig(
+    source="example",
+    version="1",
+    base_url="https://h.test",
+    rate_limit=RateLimit(per_minute=60, burst=1),
+)
+
+
+class Sleeper:
+    def __init__(self):
+        self.calls = []
+
+    async def __call__(self, seconds):
+        self.calls.append(seconds)
+
+
+@pytest.mark.anyio
+async def test_replayed_requests_do_not_wait(replay_fixture):
+    route = replay_fixture("ep", "case")
+    sleeper = Sleeper()
+    client = AsyncClient(CONFIG, sleep=sleeper)
+    for _ in range(2):
+        assert (await client.get_json("/p")) == {"a": 1}
+    assert route.call_count == 2
+    assert sleeper.calls == []
+    assert TokenBucket.acquire is not ACQUIRE
+
+
+def test_the_sync_client_does_not_wait_either(replay_fixture):
+    route = replay_fixture("ep", "case")
+    started = time.monotonic()
+    with Client(CONFIG) as client:
+        client.get("/p")
+        client.get("/p")
+    assert route.call_count == 2
+    assert time.monotonic() - started < 0.5
+
+
+@pytest.mark.anyio
+@pytest.mark.rate_limited
+async def test_a_rate_limited_test_waits(replay_fixture):
+    replay_fixture("ep", "case")
+    sleeper = Sleeper()
+    client = AsyncClient(CONFIG, sleep=sleeper)
+    await client.get("/p")
+    await client.get("/p")
+    assert sleeper.calls == [pytest.approx(1.0, abs=0.1)]
+    assert TokenBucket.acquire is ACQUIRE
+
+
+@pytest.mark.live
+def test_a_live_test_keeps_the_limiter():
+    assert TokenBucket.acquire is ACQUIRE
+"""
+
+
+def test_offline_tests_never_wait_on_the_rate_limiter(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Rows 12 and 18 (sdk-comtrade, sdk-usda-psd): a burst=1 source waited 1 s per replay.
+    monkeypatch.setenv(LIVE_ENV, "1")
+    write_ep_case(pytester)
+    pytester.makeconftest(ANYIO_CONFTEST)
+    pytester.makepyfile(LIMITER_TESTS)
+    result = pytester.runpytest("-p", "xippios.core.testing.plugin", "--strict-markers")
+    result.assert_outcomes(passed=4)
+    assert TokenBucket.acquire is ACQUIRE

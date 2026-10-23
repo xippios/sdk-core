@@ -40,6 +40,7 @@ def test_capacity_is_not_exceeded_after_idle() -> None:
 
 
 @pytest.mark.anyio
+@pytest.mark.rate_limited
 async def test_acquire_sleeps_for_the_wait() -> None:
     clock = Clock()
     bucket = TokenBucket(RateLimit(per_minute=60, burst=1), clock=clock)

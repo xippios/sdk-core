@@ -3,12 +3,14 @@
 Enable it from ``tests/conftest.py`` with ``pytest_plugins = ["xippios.core.testing.plugin"]``.
 
 Every test not marked ``live`` runs offline (ADR-0013): a request through httpx's
-default transports is refused unless the test is marked ``network``. A ``live`` test
-is skipped unless ``XIPPIOS_LIVE_TESTS=1`` and is left as it is.
+default transports is refused unless the test is marked ``network``, and a rate
+limiter never waits unless the test is marked ``rate_limited``. A ``live`` test is
+skipped unless ``XIPPIOS_LIVE_TESTS=1`` and is left as it is.
 """
 
+import asyncio
 import os
-from collections.abc import Callable, Iterable
+from collections.abc import Awaitable, Callable, Iterable
 from pathlib import Path
 
 import httpcore
@@ -16,6 +18,7 @@ import httpx
 import pytest
 import respx
 
+from xippios.core.client import TokenBucket
 from xippios.core.testing.fixtures import fixture_path
 from xippios.core.testing.replay import replay
 
@@ -25,6 +28,7 @@ LIVE_ENV = "XIPPIOS_LIVE_TESTS"
 _MARKERS = (
     "live: hits the real upstream; skipped unless XIPPIOS_LIVE_TESTS=1",
     "network: may reach the network through httpx's default transports; not refused offline",
+    "rate_limited: the rate limiter waits as configured; offline tests skip its waits otherwise",
 )
 
 # The originals, taken when pytest loads the plugin and before any test patches them.
@@ -40,7 +44,7 @@ def live_enabled() -> bool:
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    """Register the ``live`` and ``network`` markers."""
+    """Register the ``live``, ``network`` and ``rate_limited`` markers."""
     for marker in _MARKERS:
         config.addinivalue_line("markers", marker)
 
@@ -102,6 +106,28 @@ def _refuse_the_network(request: pytest.FixtureRequest, monkeypatch: pytest.Monk
         return
     monkeypatch.setattr(httpx.HTTPTransport, "handle_request", _send_offline)
     monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", _send_offline_async)
+
+
+async def _acquire_without_waiting(
+    self: TokenBucket, sleep: Callable[[float], Awaitable[None]] = asyncio.sleep
+) -> float:
+    return 0.0
+
+
+@pytest.fixture(autouse=True)
+def _skip_rate_limit_waits(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Let a client's rate limiter never wait in a test not marked ``live``.
+
+    ``TokenBucket.acquire`` returns ``0.0`` at once, without taking a token: replayed
+    requests need no pace, and a source paced at one request a second waited a second
+    per replayed request (sdk-comtrade, sdk-usda-psd). No token is taken either, so a
+    limiter a source shares across its tests holds no debt from the replays when a
+    ``live`` test in the same run uses it. Marked ``rate_limited`` or ``live``, a test
+    keeps the limiter as configured.
+    """
+    if _marked(request, "live") or _marked(request, "rate_limited"):
+        return
+    monkeypatch.setattr(TokenBucket, "acquire", _acquire_without_waiting)
 
 
 @pytest.fixture
