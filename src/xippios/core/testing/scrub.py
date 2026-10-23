@@ -223,6 +223,7 @@ class _Scrubber:
                 (``url``, a header by name, ``request body``, ``response body``), never
                 the value.
         """
+        __tracebackhide__ = True  # pytest would print the arguments: the refused text
         if self._host is None and not self._secrets:
             return
         places: list[tuple[str, list[str]]] = [("url", [url])]
@@ -244,6 +245,7 @@ class _Scrubber:
 
     def _left_in(self, texts: Iterable[str]) -> str | None:
         """``"request host"`` or ``"secret value"`` when one survives in ``texts``."""
+        __tracebackhide__ = True
         for text in texts:
             masked = text.replace(REDACTED, "\0")
             if self._scrub.host is not None:

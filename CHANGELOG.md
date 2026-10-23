@@ -49,7 +49,8 @@ All notable changes to this project are documented here. The format follows
   bodies are searched raw and, for a JSON body, decoded, so a host or value behind a
   `\uXXXX` escape is found; one still present raises `ValueError` naming the kind
   ("request host" or "secret value") and the location, never the value, and nothing is
-  written. Modelled on sdk-cashctrl's final check. A placeholder that would write what
+  written; the checking frames are hidden from pytest's report, which would print the
+  refused text as their arguments. Modelled on sdk-cashctrl's final check. A placeholder that would write what
   it hides is refused with `ValueError`, naming neither: a `host` that contains one of
   the `secrets` (any letter case) when the `Scrub` is built, and a `host` that is the
   request's own host (`url.host` or its IDNA form) when the exchange is scrubbed. A

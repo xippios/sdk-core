@@ -377,3 +377,27 @@ def test_verify_leaves_a_flagged_binary_body_alone() -> None:
     response = httpx.Response(200, content=b"\xff" + TENANT.encode(), request=request)
     fixture = fixture_from_response(response, scrub=Scrub(host=PLACEHOLDER, allow_binary=True))
     assert fixture.response.body_base64
+
+
+LEAKY_TEST = """
+import httpx
+
+from xippios.core.testing import Scrub, fixture_from_response
+
+
+def test_refused():
+    body = '{"link": "https://' + chr(92) + 'u0061' + 'cme' + '.example' + '.test/x"}'
+    request = httpx.Request("GET", "https://" + "acme" + ".example.test/v1/x")
+    response = httpx.Response(200, content=body.encode(), request=request)
+    fixture_from_response(response, scrub=Scrub(host="demo.example.test"))
+"""
+
+
+def test_a_refusal_does_not_print_the_refused_text(pytester: pytest.Pytester) -> None:
+    # pytest prints the arguments of the frame that raised; verify's frame is hidden.
+    pytester.makepyfile(LEAKY_TEST)
+    result = pytester.runpytest("--tb=long")
+    result.assert_outcomes(failed=1)
+    output = result.stdout.str()
+    assert "holds the request host in the response body" in output
+    assert "cme.example.test" not in output
