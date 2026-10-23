@@ -117,9 +117,9 @@ def test_replay_fixture_helper_matches_params(pytester: pytest.Pytester) -> None
                 httpx.get("https://h.test/get?countOnly=false")
             assert route.call_count == 1
 
-        def test_positional(replay_fixture):
-            replay_fixture("get", "count", ["countOnly"])
-            assert httpx.get("https://h.test/get?countOnly=true").json() == {"count": 3}
+        def test_match_params_is_keyword_only(replay_fixture):
+            with pytest.raises(TypeError):
+                replay_fixture("get", "count", ["countOnly"])
         """
     )
     result = pytester.runpytest("-p", "xippios.core.testing.plugin")

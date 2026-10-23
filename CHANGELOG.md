@@ -62,8 +62,8 @@ All notable changes to this project are documented here. The format follows
 - `record` and `record_sync` take `headers=`, `scrub=`, `retry=` and `timeouts=`; an
   override goes through `client.derive`. A recording could not override the client's
   retry policy or timeouts (sdk-comtrade).
-- `match_params=` for `mount_fixture`, `replay` and the plugin's `replay_fixture`: names
-  of recorded query parameters whose recorded values a request must carry too; a name
+- `match_params=` (keyword-only) for `mount_fixture`, `replay` and the plugin's
+  `replay_fixture`: names of recorded query parameters whose recorded values a request must carry too; a name
   absent from the recorded URL or recorded as `REDACTED` raises `ValueError`. Replay
   matched on method, host and path only, so a count call (`countOnly=true`) and the data
   call on the same path could not be told apart (sdk-comtrade). The request body is
@@ -106,6 +106,11 @@ All notable changes to this project are documented here. The format follows
   and no route of the router serves a write task. Works in sync and async tests.
   Conventions §8's write-server rules had no check in `xippios.core.testing`
   (sdk-cashctrl).
+- `xippios.core.testing.ReplayFixture`: a `Protocol` for the plugin's `replay_fixture`
+  fixture, `(endpoint, case, *, match_params=None) -> respx.Route`, so a source's test
+  can annotate it; the fixture is annotated with it instead of `Callable[..., Route]`.
+- `fixture_from_response` is exported from `xippios.core.testing`; sdk-cashctrl's
+  recorder imported it from `xippios.core.testing.fixtures`.
 
 ### Changed
 

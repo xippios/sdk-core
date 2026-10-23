@@ -2,7 +2,7 @@
 
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import httpx
 import respx
@@ -10,7 +10,22 @@ import respx
 from xippios.core.testing.fixtures import Fixture, load_fixture
 from xippios.core.testing.scrub import REDACTED, scrub_url
 
-__all__ = ["mount_fixture", "replay", "sent_urls"]
+__all__ = ["ReplayFixture", "mount_fixture", "replay", "sent_urls"]
+
+
+class ReplayFixture(Protocol):
+    """The type of the plugin's ``replay_fixture`` fixture, for a test's annotation.
+
+    ``replay_fixture("api_GET", "corn_2024")`` mounts
+    ``tests/fixtures/api_GET/corn_2024.json`` on the ``respx_mock`` router and returns
+    the route; ``match_params`` is passed on to ``mount_fixture``.
+    """
+
+    def __call__(
+        self, endpoint: str, case: str, *, match_params: Iterable[str] | None = None
+    ) -> respx.Route:
+        """Mount the fixture ``<endpoint>/<case>.json`` and return its route."""
+        ...
 
 
 def mount_fixture(

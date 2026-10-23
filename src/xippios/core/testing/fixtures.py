@@ -21,6 +21,7 @@ __all__ = [
     "Fixture",
     "FixtureRequest",
     "FixtureResponse",
+    "fixture_from_response",
     "fixture_path",
     "load_fixture",
     "write_fixture",

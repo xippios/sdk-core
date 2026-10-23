@@ -23,7 +23,7 @@ import respx
 
 from xippios.core.client import EnvKeyAuth, TokenBucket
 from xippios.core.testing.fixtures import fixture_path
-from xippios.core.testing.replay import replay
+from xippios.core.testing.replay import ReplayFixture, replay
 
 __all__ = ["LIVE_ENV", "PLACEHOLDER_KEY", "live_enabled"]
 
@@ -207,15 +207,18 @@ def fixtures_dir(request: pytest.FixtureRequest) -> Path:
 
 
 @pytest.fixture
-def replay_fixture(respx_mock: respx.MockRouter, fixtures_dir: Path) -> Callable[..., respx.Route]:
+def replay_fixture(respx_mock: respx.MockRouter, fixtures_dir: Path) -> ReplayFixture:
     """Mount ``tests/fixtures/<endpoint>/<case>.json`` and return the route.
 
-    Called as ``replay_fixture(endpoint, case, match_params=None)``; ``match_params``
-    names recorded query parameters a request must carry too, e.g. ``["countOnly"]``
-    (see ``xippios.core.testing.mount_fixture``).
+    Called as ``replay_fixture(endpoint, case, match_params=None)``, ``match_params`` by
+    keyword; it names recorded query parameters a request must carry too, e.g.
+    ``["countOnly"]`` (see ``xippios.core.testing.mount_fixture``). A test annotates the
+    fixture as ``xippios.core.testing.ReplayFixture``.
     """
 
-    def _replay(endpoint: str, case: str, match_params: Iterable[str] | None = None) -> respx.Route:
+    def _replay(
+        endpoint: str, case: str, *, match_params: Iterable[str] | None = None
+    ) -> respx.Route:
         return replay(
             respx_mock, fixture_path(fixtures_dir, endpoint, case), match_params=match_params
         )

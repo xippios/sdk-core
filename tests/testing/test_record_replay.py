@@ -11,7 +11,9 @@ from xippios.core.errors import NotFoundError
 from xippios.core.testing import (
     REDACTED,
     Fixture,
+    ReplayFixture,
     Scrub,
+    fixture_from_response,
     load_fixture,
     mount_fixture,
     record,
@@ -20,7 +22,6 @@ from xippios.core.testing import (
     sent_urls,
     write_fixture,
 )
-from xippios.core.testing.fixtures import fixture_from_response
 
 BASE = "https://api.example.test"
 
@@ -313,3 +314,18 @@ async def test_sent_urls_are_scrubbed_strings_in_order(
     urls = sent_urls(route)
     assert urls == [f"{BASE}/v1/x?key={REDACTED}&year=2024", f"{BASE}/v1/x?year=2025"]
     assert all(isinstance(url, str) for url in urls)
+
+
+@pytest.fixture
+def fixtures_dir(tmp_path: Path) -> Path:
+    """The plugin's ``replay_fixture`` reads from here: one recorded ``GET /v1/x?year=2024``."""
+    request = httpx.Request("GET", f"{BASE}/v1/x", params={"year": 2024})
+    write_fixture(httpx.Response(200, json={"n": 1}, request=request), tmp_path / "x" / "y.json")
+    return tmp_path
+
+
+def test_replay_fixture_is_typed_as_replay_fixture(replay_fixture: ReplayFixture) -> None:
+    route = replay_fixture("x", "y", match_params=["year"])
+    with Client(ClientConfig(source="example", version="1", base_url=BASE)) as client:
+        assert client.get_json("/v1/x", params={"year": 2024}) == {"n": 1}
+    assert sent_urls(route) == [f"{BASE}/v1/x?year=2024"]

@@ -24,13 +24,14 @@ from xippios.core.testing.fixtures import (
     Fixture,
     FixtureRequest,
     FixtureResponse,
+    fixture_from_response,
     fixture_path,
     load_fixture,
     write_fixture,
 )
 from xippios.core.testing.plugin import LIVE_ENV, PLACEHOLDER_KEY, live_enabled
 from xippios.core.testing.record import record, record_sync
-from xippios.core.testing.replay import mount_fixture, replay, sent_urls
+from xippios.core.testing.replay import ReplayFixture, mount_fixture, replay, sent_urls
 from xippios.core.testing.scrub import REDACTED, Scrub, scrub_headers, scrub_params, scrub_url
 
 __all__ = [
@@ -40,9 +41,11 @@ __all__ = [
     "Fixture",
     "FixtureRequest",
     "FixtureResponse",
+    "ReplayFixture",
     "Scrub",
     "assert_projection",
     "assert_write_tools",
+    "fixture_from_response",
     "fixture_path",
     "live_enabled",
     "load_fixture",
