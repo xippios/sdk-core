@@ -63,6 +63,24 @@ def test_live_tests_skipped_by_default(
     result.assert_outcomes(passed=1, skipped=1)
 
 
+def test_the_gate_follows_the_marker_not_a_name(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv(LIVE_ENV, raising=False)
+    pytester.mkpydir("live")
+    (pytester.path / "live" / "test_named_live.py").write_text(
+        "import pytest\n\n"
+        "class TestLive:\n"
+        "    def test_offline(self):\n"
+        "        assert True\n\n"
+        "@pytest.mark.live\n"
+        "def test_marked():\n"
+        "    assert True\n"
+    )
+    result = pytester.runpytest("-p", "xippios.core.testing.plugin", "--strict-markers")
+    result.assert_outcomes(passed=1, skipped=1)
+
+
 def test_live_tests_run_when_gate_open(
     pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
 ) -> None:

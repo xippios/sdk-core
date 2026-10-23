@@ -229,12 +229,16 @@ def pytest_runtest_teardown(
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    """Skip ``live`` tests unless the gate is open."""
+    """Skip tests marked ``live`` unless the gate is open.
+
+    The marker decides, not a keyword: a directory or a class named ``live`` does not
+    make its tests live.
+    """
     if live_enabled():
         return
     skip = pytest.mark.skip(reason=f"live test; set {LIVE_ENV}=1 to run")
     for item in items:
-        if "live" in item.keywords:
+        if item.get_closest_marker("live") is not None:
             item.add_marker(skip)
 
 
