@@ -80,6 +80,16 @@ All notable changes to this project are documented here. The format follows
   run uses it. The marker `rate_limited` keeps the limiter for one test. A source paced
   at one request a second waited a second per replayed request (sdk-comtrade,
   sdk-usda-psd).
+- The pytest plugin's autouse fixture `placeholder_api_key` makes every test not marked
+  `live` send `PLACEHOLDER_KEY` (`"placeholder-for-fixture-replay"`, exported from
+  `xippios.core.testing` and the plugin): it sets the variables the new ini option
+  `xippios_placeholder_key_envs` names (type `args`, default empty) and pins
+  `EnvKeyAuth.key` on the class, so every auth object of every tenant sends the
+  placeholder even after a live test cached the real key on it. It returns the
+  placeholder, or `None` in a live test. A source's own fixture of the same name
+  overrides it; with this release a source deletes the one sdk-template 0.1.5 had it
+  carry by hand, which pinned one module-level `auth` and could not reach a source with
+  one auth object per tenant (sdk-comtrade, sdk-cashctrl).
 
 ### Changed
 

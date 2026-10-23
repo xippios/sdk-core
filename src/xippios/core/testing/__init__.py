@@ -26,13 +26,14 @@ from xippios.core.testing.fixtures import (
     load_fixture,
     write_fixture,
 )
-from xippios.core.testing.plugin import LIVE_ENV, live_enabled
+from xippios.core.testing.plugin import LIVE_ENV, PLACEHOLDER_KEY, live_enabled
 from xippios.core.testing.record import record, record_sync
 from xippios.core.testing.replay import mount_fixture, replay, sent_urls
 from xippios.core.testing.scrub import REDACTED, Scrub, scrub_headers, scrub_params, scrub_url
 
 __all__ = [
     "LIVE_ENV",
+    "PLACEHOLDER_KEY",
     "REDACTED",
     "Fixture",
     "FixtureRequest",

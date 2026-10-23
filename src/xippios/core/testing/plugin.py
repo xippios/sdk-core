@@ -3,9 +3,10 @@
 Enable it from ``tests/conftest.py`` with ``pytest_plugins = ["xippios.core.testing.plugin"]``.
 
 Every test not marked ``live`` runs offline (ADR-0013): a request through httpx's
-default transports is refused unless the test is marked ``network``, and a rate
-limiter never waits unless the test is marked ``rate_limited``. A ``live`` test is
-skipped unless ``XIPPIOS_LIVE_TESTS=1`` and is left as it is.
+default transports is refused unless the test is marked ``network``, a rate limiter
+never waits unless the test is marked ``rate_limited``, and every ``EnvKeyAuth`` sends
+``PLACEHOLDER_KEY`` (``placeholder_api_key``). A ``live`` test is skipped unless
+``XIPPIOS_LIVE_TESTS=1`` and is left as it is.
 """
 
 import asyncio
@@ -18,13 +19,16 @@ import httpx
 import pytest
 import respx
 
-from xippios.core.client import TokenBucket
+from xippios.core.client import EnvKeyAuth, TokenBucket
 from xippios.core.testing.fixtures import fixture_path
 from xippios.core.testing.replay import replay
 
-__all__ = ["LIVE_ENV", "live_enabled"]
+__all__ = ["LIVE_ENV", "PLACEHOLDER_KEY", "live_enabled"]
 
 LIVE_ENV = "XIPPIOS_LIVE_TESTS"
+PLACEHOLDER_KEY = "placeholder-for-fixture-replay"
+"""The key every ``EnvKeyAuth`` sends in a test not marked ``live``."""
+_KEY_ENVS = "xippios_placeholder_key_envs"
 _MARKERS = (
     "live: hits the real upstream; skipped unless XIPPIOS_LIVE_TESTS=1",
     "network: may reach the network through httpx's default transports; not refused offline",
@@ -41,6 +45,17 @@ _POOL_SEND_ASYNC = httpcore.AsyncConnectionPool.handle_async_request
 def live_enabled() -> bool:
     """True when live tests are switched on through the environment."""
     return os.environ.get(LIVE_ENV) == "1"
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    """Register the ini option ``xippios_placeholder_key_envs``."""
+    parser.addini(
+        _KEY_ENVS,
+        "environment variables set to the placeholder key in every test not marked live, "
+        "e.g. COMTRADE_API_KEY",
+        type="args",
+        default=[],
+    )
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -128,6 +143,44 @@ def _skip_rate_limit_waits(request: pytest.FixtureRequest, monkeypatch: pytest.M
     if _marked(request, "live") or _marked(request, "rate_limited"):
         return
     monkeypatch.setattr(TokenBucket, "acquire", _acquire_without_waiting)
+
+
+def _placeholder_key(self: EnvKeyAuth) -> str:
+    return PLACEHOLDER_KEY
+
+
+@pytest.fixture(autouse=True)
+def placeholder_api_key(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> str | None:
+    """Every test but a live one sends the placeholder key, whatever the shell holds.
+
+    The variables the ini option ``xippios_placeholder_key_envs`` names (e.g.
+    ``xippios_placeholder_key_envs = COMTRADE_API_KEY``) are set to ``PLACEHOLDER_KEY``,
+    and ``EnvKeyAuth.key``, through which every ``xippios.core`` auth class reads its
+    key, returns it; both come back after the test.
+
+    The key is pinned on the class, not on an auth object. A source may hold one auth
+    object per tenant (sdk-cashctrl builds a ``BasicKeyAuth`` per organisation) and no
+    module-level ``auth`` to patch, and an auth object resolves its key once and caches
+    it, so a live test earlier in the run may have cached the real key on any of them;
+    setting the variables alone would leave that key in place. A subclass that overrides
+    ``key`` itself is not pinned.
+
+    A ``placeholder_api_key`` fixture in a source's ``conftest.py`` or test module
+    overrides this one, as pytest overrides any fixture by name; a test module that
+    checks how keys are resolved overrides it with a fixture that pins nothing.
+
+    Returns:
+        ``PLACEHOLDER_KEY``, or ``None`` in a live test, which uses the key in the
+        environment.
+    """
+    if _marked(request, "live"):
+        return None
+    for name in request.config.getini(_KEY_ENVS):
+        monkeypatch.setenv(name, PLACEHOLDER_KEY)
+    monkeypatch.setattr(EnvKeyAuth, "key", _placeholder_key)
+    return PLACEHOLDER_KEY
 
 
 @pytest.fixture

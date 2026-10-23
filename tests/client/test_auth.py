@@ -24,6 +24,11 @@ KEY = "not-a-real-key"
 
 
 @pytest.fixture
+def placeholder_api_key() -> None:
+    """These tests check how a key is resolved: the plugin's placeholder pin stays off."""
+
+
+@pytest.fixture
 def config() -> ClientConfig:
     return ClientConfig(source="example", version="1", base_url=BASE)
 

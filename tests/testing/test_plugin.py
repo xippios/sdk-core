@@ -3,16 +3,24 @@ from pathlib import Path
 import httpx
 import pytest
 
-from xippios.core.client import TokenBucket
-from xippios.core.testing import LIVE_ENV, live_enabled
+from xippios.core.client import EnvKeyAuth, TokenBucket
+from xippios.core.testing import LIVE_ENV, PLACEHOLDER_KEY, live_enabled
 
-# The pytester runs below install the plugin's patches themselves; the outer layer must
-# not stack its own under them, or a marker in an inner run would prove nothing.
+# The pytester runs below install the plugin's patches themselves, in process. The outer
+# test lifts its own (the markers here, the placeholder pin by the override below), or
+# a marker in an inner run would prove nothing.
 pytestmark = [pytest.mark.network, pytest.mark.rate_limited]
+
+
+@pytest.fixture
+def placeholder_api_key() -> None:
+    """The outer test pins no key; an inner run pins it itself."""
+
 
 SEND = httpx.HTTPTransport.handle_request
 SEND_ASYNC = httpx.AsyncHTTPTransport.handle_async_request
 ACQUIRE = TokenBucket.acquire
+KEY = EnvKeyAuth.key
 ANYIO_CONFTEST = """
 import pytest
 
@@ -272,3 +280,137 @@ def test_offline_tests_never_wait_on_the_rate_limiter(
     result = pytester.runpytest("-p", "xippios.core.testing.plugin", "--strict-markers")
     result.assert_outcomes(passed=4)
     assert TokenBucket.acquire is ACQUIRE
+
+
+PLACEHOLDER_TESTS = """
+import os
+
+import pytest
+
+from xippios.core.client import Client, ClientConfig, EnvKeyAuth, HeaderKeyAuth, QueryKeyAuth
+from xippios.core.testing import PLACEHOLDER_KEY
+
+KEY = EnvKeyAuth.key
+SHELL = dict(os.environ)  # at collection, before any fixture: what direnv loaded
+CONFIG = ClientConfig(source="example", version="1", base_url="https://h.test")
+TENANTS = {name: HeaderKeyAuth("X-Key", f"TENANT_{name.upper()}_KEY") for name in ("a", "b")}
+
+
+@pytest.mark.live
+def test_a_live_test_reads_the_shell_and_caches_the_key(placeholder_api_key):
+    assert placeholder_api_key is None
+    assert EnvKeyAuth.key is KEY
+    assert os.environ["EXAMPLE_API_KEY"] == SHELL["EXAMPLE_API_KEY"] != PLACEHOLDER_KEY
+    assert TENANTS["a"].key() == SHELL["TENANT_A_KEY"]  # now cached on the object
+
+
+def test_the_named_variables_hold_the_placeholder(placeholder_api_key):
+    assert placeholder_api_key == PLACEHOLDER_KEY
+    assert os.environ["EXAMPLE_API_KEY"] == PLACEHOLDER_KEY
+    assert os.environ["OTHER_TOKEN"] == PLACEHOLDER_KEY
+    assert os.environ["TENANT_A_KEY"] == SHELL["TENANT_A_KEY"]  # not named in the ini option
+
+
+def test_every_auth_object_sends_the_placeholder(respx_mock):
+    header = respx_mock.get("https://h.test/h", headers={"X-Key": PLACEHOLDER_KEY}).respond(200)
+    for auth in TENANTS.values():  # "a" holds the live key, "b" has no variable at all
+        with Client(CONFIG, auth=auth) as client:
+            client.get("/h")
+    assert header.call_count == 2
+    query = respx_mock.get("https://h.test/q", params={"key": PLACEHOLDER_KEY}).respond(200)
+    with Client(CONFIG, auth=QueryKeyAuth("key", "EXAMPLE_API_KEY")) as client:
+        client.get("/q")
+    assert query.called
+
+
+@pytest.mark.live
+def test_a_later_live_test_gets_everything_back(placeholder_api_key):
+    assert placeholder_api_key is None
+    assert EnvKeyAuth.key is KEY
+    assert os.environ["EXAMPLE_API_KEY"] == SHELL["EXAMPLE_API_KEY"]
+    assert TENANTS["a"].key() == SHELL["TENANT_A_KEY"]
+"""
+
+
+@pytest.fixture
+def shell_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    """What direnv would have loaded: keys an offline test must never send."""
+    monkeypatch.setenv(LIVE_ENV, "1")
+    monkeypatch.setenv("EXAMPLE_API_KEY", "shell-key")
+    monkeypatch.setenv("OTHER_TOKEN", "shell-token")
+    monkeypatch.setenv("TENANT_A_KEY", "shell-tenant-a")
+    monkeypatch.delenv("TENANT_B_KEY", raising=False)
+
+
+@pytest.mark.usefixtures("shell_keys")
+def test_offline_tests_send_the_placeholder_key(pytester: pytest.Pytester) -> None:
+    # Row 12 (sdk-comtrade): every source carried this fixture by hand (sdk-template 0.1.5).
+    pytester.makeini("[pytest]\nxippios_placeholder_key_envs = EXAMPLE_API_KEY OTHER_TOKEN\n")
+    pytester.makeconftest('pytest_plugins = ["xippios.core.testing.plugin"]\n')
+    pytester.makepyfile(PLACEHOLDER_TESTS)
+    result = pytester.runpytest("--strict-markers", "--strict-config")
+    result.assert_outcomes(passed=4)
+    assert EnvKeyAuth.key is KEY
+
+
+SOURCE_CONFTEST = """
+import pytest
+
+from xippios.core.client import QueryKeyAuth
+
+pytest_plugins = ["xippios.core.testing.plugin"]
+
+VARIABLE = "EXAMPLE_API_KEY"
+auth = QueryKeyAuth("key", VARIABLE)
+PLACEHOLDER_KEY = "placeholder-for-fixture-replay"  # pragma: allowlist secret
+
+
+@pytest.fixture(autouse=True)
+def placeholder_api_key(request, monkeypatch):
+    if "live" in request.keywords:
+        return None
+    monkeypatch.setenv(VARIABLE, PLACEHOLDER_KEY)
+    monkeypatch.setattr(auth, "key", lambda: PLACEHOLDER_KEY)
+    return PLACEHOLDER_KEY
+
+
+@pytest.fixture
+def source_auth():
+    return auth
+"""
+
+SOURCE_TESTS = """
+import os
+
+from xippios.core.client import EnvKeyAuth
+from xippios.core.testing import PLACEHOLDER_KEY
+
+KEY = EnvKeyAuth.key
+SHELL = dict(os.environ)
+
+
+def test_the_source_fixture_overrides_the_plugin(placeholder_api_key, source_auth):
+    assert placeholder_api_key == PLACEHOLDER_KEY
+    assert source_auth.key() == placeholder_api_key
+    assert os.environ["EXAMPLE_API_KEY"] == placeholder_api_key
+    assert os.environ["OTHER_TOKEN"] == SHELL["OTHER_TOKEN"]  # the plugin's fixture did not run
+    assert EnvKeyAuth.key is KEY
+"""
+
+
+@pytest.mark.usefixtures("shell_keys")
+def test_a_source_fixture_of_the_same_name_overrides_the_plugin(
+    pytester: pytest.Pytester,
+) -> None:
+    # A source on core 0.2.0 may keep the fixture it carries from sdk-template 0.1.5.
+    pytester.makeini("[pytest]\nxippios_placeholder_key_envs = OTHER_TOKEN\n")
+    pytester.makeconftest(SOURCE_CONFTEST)
+    pytester.makepyfile(SOURCE_TESTS)
+    result = pytester.runpytest("--strict-markers", "--strict-config")
+    result.assert_outcomes(passed=1)
+
+
+def test_placeholder_key_is_exported() -> None:
+    from xippios.core.testing import plugin
+
+    assert PLACEHOLDER_KEY == plugin.PLACEHOLDER_KEY == "placeholder-for-fixture-replay"
