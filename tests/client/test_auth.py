@@ -1,4 +1,5 @@
 import base64
+import inspect
 
 import httpx
 import pytest
@@ -20,6 +21,11 @@ from xippios.core.errors import ConfigError
 BASE = "https://api.example.test"
 ENV = "EXAMPLE_TEST_API_KEY"
 KEY = "not-a-real-key"
+
+
+@pytest.fixture
+def placeholder_api_key() -> None:
+    """These tests check how a key is resolved: the plugin's placeholder pin stays off."""
 
 
 @pytest.fixture
@@ -100,3 +106,25 @@ def test_base_class_requires_apply() -> None:
     request = httpx.Request("GET", f"{BASE}/v1/x")
     with pytest.raises(NotImplementedError):
         next(auth.auth_flow(request))
+
+
+def test_apply_reads_the_key_itself() -> None:
+    # sdk-usda-nass: apply(request, key) made the key an argument of a traceback frame,
+    # which pytest's long tracebacks print.
+    for cls in (EnvKeyAuth, QueryKeyAuth, HeaderKeyAuth, BearerAuth, BasicKeyAuth):
+        assert list(inspect.signature(cls.apply).parameters) == ["self", "request"], cls
+
+    class Custom(EnvKeyAuth):
+        def apply(self, request: httpx.Request) -> None:
+            request.headers["X-Custom"] = self.key()
+
+    auth = Custom(ENV, key=KEY)
+    assert next(auth.auth_flow(httpx.Request("GET", f"{BASE}/v1/x"))).headers["x-custom"] == KEY
+
+
+def test_a_failing_apply_keeps_the_key_out_of_every_frame() -> None:
+    auth = EnvKeyAuth(ENV, key=KEY)
+    with pytest.raises(NotImplementedError) as info:
+        next(auth.auth_flow(httpx.Request("GET", f"{BASE}/v1/x")))
+    frames = [entry.locals for entry in info.traceback]
+    assert [name for local in frames for name, value in local.items() if value == KEY] == []

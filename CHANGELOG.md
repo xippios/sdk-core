@@ -32,9 +32,109 @@ All notable changes to this project are documented here. The format follows
   computed from `len(data)`, and a negative count is refused. `cap_result` keeps it next
   to the capped rows, and HTTP responses carry it, as `null` when unset. Optional, so
   sources on 0.1.0 are unaffected. Needed first by sdk-cashctrl.
+- `xippios.core.testing.Scrub(host, secrets, rewrite, allow_binary)`: what a recording
+  removes besides credentials, applied in memory to the request URL, request body,
+  response headers and response body before the fixture is written once, so the file
+  never holds the removed text, not even briefly. `host` replaces the request's host
+  with a placeholder and every occurrence of the original host (any letter case, its
+  IDNA form too, plain or percent-encoded) with it; `secrets` turns each value into
+  `REDACTED`, plain and percent-encoded, the longest first; `rewrite` is a text hook for
+  the request body, the response body and every response header value (`Location`
+  included), for pre-authenticated URLs. `write_fixture`, `fixture_from_response` and
+  `record` take it as `scrub=`. The credential scrubbing of 0.1.0 still always applies.
+  Ports the recorder pattern sdk-cashctrl had to keep locally: `write_fixture` kept the
+  tenant host in `request.url`, and CashCtrl's `file/prepare.json` answers with signed
+  storage URLs that `file/get` redirects to. With `host` or `secrets` set, the scrubbed
+  exchange is verified before anything is kept: the URL, every header and both bodies
+  are searched raw and, for a JSON body, decoded, so a host or value behind a `\uXXXX`
+  escape is found; one still present raises `ValueError` naming the kind ("request host"
+  or "secret value") and the location, never the value, and nothing is written; the
+  checking frames are hidden from pytest's report, which would print the refused text as
+  their arguments. Modelled on sdk-cashctrl's final check. A placeholder that would
+  write what it hides is refused with `ValueError`, naming neither: a `host` that
+  contains one of the `secrets` (any letter case) when the `Scrub` is built, and a
+  `host` that is the request's own host (`url.host` or its IDNA form) when the exchange
+  is scrubbed. A placeholder that ends with the original host stays allowed. `Scrub`'s
+  `repr` leaves `secrets` out.
+- `FixtureRequest.body`, `body_base64` and `content_type`: the request body as scrubbed
+  UTF-8 text (the form or JSON text sent; `None` without a body) and the request's
+  `Content-Type`, so a write fixture can assert its payload (sdk-cashctrl). Fixtures
+  written by 0.1.0 still load.
+- `data=` for `AsyncClient.request`, `Client.request`, `record` and `record_sync`: a body
+  sent form-encoded (`application/x-www-form-urlencoded`) next to `json=`; passing both
+  raises `ValueError`. CashCtrl's writes are form-encoded (sdk-cashctrl).
+- `AsyncClient.derive(retry=..., timeouts=...)`: a new client on the same configuration
+  with only those replaced, sharing auth, transport, sleep, rate limiter and cache.
+- `record` and `record_sync` take `headers=`, `scrub=`, `retry=` and `timeouts=`; an
+  override goes through `client.derive`. A recording could not override the client's
+  retry policy or timeouts (sdk-comtrade).
+- `match_params=` (keyword-only) for `mount_fixture`, `replay` and the plugin's
+  `replay_fixture`: names of recorded query parameters whose recorded values a request
+  must carry too; a name absent from the recorded URL, or whose recorded value holds
+  `REDACTED` in whole or in part, raises `ValueError` naming it. Replay matched on
+  method, host and path only, so a count call (`countOnly=true`) and the data call on
+  the same path could not be told apart (sdk-comtrade). Absence cannot be matched: the
+  more specific fixture is mounted first, since `respx` tries routes in order. The
+  request body is never matched; a test asserts it from the route's calls.
+- `xippios.core.testing.sent_urls(route)`: the URLs a `respx` route received, oldest
+  first, as strings through `scrub_url`, so a key sent as a query parameter reads
+  `REDACTED`. A test compares these instead of keeping a request from `route.calls` in
+  its own frame, where a failing assertion or `pytest -l` prints it, key included
+  (sdk-usda-nass).
+- `xippios.core.testing.PLACEHOLDER_KEY` (`"placeholder-for-fixture-replay"`, also in
+  the plugin) and the plugin's ini option `xippios_placeholder_key_envs` (type `args`,
+  default empty): the key offline tests send and the variables that hold it; see the
+  placeholder pin under Changed.
+- `xippios.core.testing.assert_write_tools(write_server, write_tasks, *, source,
+  read_server=None, router=None)`: fails the test, naming the offending tool, unless
+  the write server's tools are exactly the write tasks by `tool_name`, every write task
+  takes `confirm: bool = False`, and, when given, no write tool is on the read server
+  and no route of the router serves a write task. Works in sync and async tests.
+  Conventions §8's write-server rules had no check in `xippios.core.testing`
+  (sdk-cashctrl).
+- `xippios.core.testing.ReplayFixture`: a `Protocol` for the plugin's `replay_fixture`
+  fixture, `(endpoint, case, *, match_params=None) -> respx.Route`, so a source's test
+  can annotate it; the fixture is annotated with it instead of `Callable[..., Route]`.
+- `fixture_from_response` is exported from `xippios.core.testing`; sdk-cashctrl's
+  recorder imported it from `xippios.core.testing.fixtures`.
 
 ### Changed
 
+- **Breaking:** the pytest plugin keeps the default run offline and free of real keys
+  on its own (ADR-0013). A source's tests that hit the network, assert a rate
+  limiter's waits or test how a key is resolved must mark or override accordingly:
+  mark them `network`, mark them `rate_limited`, or override `placeholder_api_key` in
+  their module with a fixture that pins nothing. A `live` test needs nothing.
+  - Network: from configuration on, httpx's default transports and httpcore's
+    connection pools raise `RuntimeError` naming the request's method and path, never
+    its host or query, during collection, in a fixture of any scope and in a test. The
+    refusal is lifted while a test marked `network` or `live` is set up, run and torn
+    down; ADR-0013 states the edges (a conftest's import, wider-scoped fixtures).
+    Requests `respx` answers, replayed fixtures included, and transports a test passes
+    itself (`httpx.MockTransport`, FastAPI's `TestClient`) are unaffected; a `respx`
+    route that passes through is refused unless the test is marked `network`. Nothing
+    enforced the definition of done's "no network in the default test run"
+    (sdk-cashctrl).
+  - Rate limiter: in a test not marked `live`, `TokenBucket.acquire` returns at once
+    and takes no token, so a limiter a source shares across its tests holds no debt
+    from the replays when a live test in the same run uses it; the marker
+    `rate_limited` keeps the limiter. A source paced at one request a second waited a
+    second per replayed request (sdk-comtrade, sdk-usda-psd).
+  - Placeholder pin: the autouse fixture `placeholder_api_key` makes every test not
+    marked `live` send `PLACEHOLDER_KEY`: it sets the variables
+    `xippios_placeholder_key_envs` names and pins `EnvKeyAuth.key` on the class, so
+    every auth object of every tenant sends the placeholder even after a live test
+    cached the real key on it. It returns the placeholder, or `None` in a live test. A
+    source's own fixture of the same name overrides it; with this release a source
+    deletes the one sdk-template 0.1.5 had it carry by hand, which pinned one
+    module-level `auth` and could not reach a source with one auth object per tenant
+    (sdk-comtrade, sdk-cashctrl).
+  - Logger levels: the `httpx` and `httpcore` loggers get their levels back after
+    every test, live ones included. Building an MCP server sets both to `WARNING`, and
+    only core's own `tests/conftest.py` restored them, so a source test that built a
+    server left httpx at `WARNING` for the rest of the run (sdk-cashctrl).
+- The `testing` extra declares `httpcore>=1.0`: the plugin patches httpcore's
+  connection pools and imports it, which only httpx's own dependency provided before.
 - **Breaking:** a 5xx and a transport failure are retried for GET, HEAD and OPTIONS
   only. A POST, PUT, PATCH or DELETE answered with a 5xx is returned after one attempt
   and raised as `UpstreamError`; a 429 is still retried for every method. Before, every
@@ -52,9 +152,28 @@ All notable changes to this project are documented here. The format follows
 - Conventions 1.6: §5 and §6 as above; ADR-0011 added.
 - Conventions 1.7: §4 lists `ResultMeta.total` with its paginated-task semantics;
   ADR-0012 added.
+- **Breaking:** recording a request or response body that is not UTF-8 text raises
+  `ValueError` ("binary body cannot be scrubbed") and writes nothing, unless
+  `Scrub(allow_binary=True)` is passed; then it is stored base64 with
+  `body_base64: true`, unscrubbed, as 0.1.0 stored every such body without asking. No
+  scrub can read a binary body (sdk-cashctrl refused them locally).
+- **Breaking:** `EnvKeyAuth.apply(self, request)` reads the key itself through
+  `self.key()` and no longer takes it as an argument; `auth_flow` calls
+  `self.apply(request)`. `QueryKeyAuth`, `HeaderKeyAuth`, `BearerAuth` and
+  `BasicKeyAuth` keep the key in no argument and no local variable. As an argument the
+  key was part of every traceback frame through `apply`, and pytest's long tracebacks
+  print a frame's arguments, so a failing test could print the shell's key
+  (sdk-usda-nass). A subclass outside core that implements `apply(request, key)` drops
+  the parameter and calls `self.key()` where it attaches the key; none is known.
+- Conventions 1.8: §6 names form bodies next to JSON ones; §10 states the recorder's
+  rules (scrub in memory before the one write, a placeholder host for a multi-tenant
+  source, no binary body unless flagged) and the plugin's offline guarantees with the
+  markers `network` and `rate_limited`; ADR-0013 added.
 
 ### Fixed
 
+- The live gate skipped every test under a directory named `live`, marked or not: it
+  matched the keyword `live`, which a directory's name adds. It follows the marker now.
 - A gzip answer replayed from the cache raised `httpx.DecodingError`: the client stored
   the decoded body together with `content-encoding`, so the replay decoded it again.
   Cache entries are stored without wire headers now, and entries a persistent backend

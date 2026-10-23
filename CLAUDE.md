@@ -14,7 +14,8 @@ particular upstream API.
    0006 nested import paths, 0007 InvalidRequestError and POST routes,
    0008 hardening from the first source, 0009 one key variable per issuer,
    0010 rate-limit policy, 0011 retries and non-idempotent methods,
-   0012 upstream totals in the result envelope)
+   0012 upstream totals in the result envelope, 0013 offline tests guaranteed by the
+   plugin)
 3. `docs/definition-of-done.md` — what a PR must satisfy before it is opened
 
 The family file `../CLAUDE.md` applies as well.
@@ -35,7 +36,7 @@ src/xippios/core/
   client/            httpx client: config, retry, ratelimit, cache, auth (env-key helpers), _core, Client
   mcp/               MCP server helpers: server, results (caps), errors (to text), cli   [extra: mcp]
   http/              FastAPI helpers: router (from tasks), problems (RFC 9457)          [extra: http]
-  testing/           pytest plugin (live gate), fixtures, record, replay, scrub, adapters [extra: testing]
+  testing/           pytest plugin (live gate, offline guarantees), fixtures, record, replay, scrub, adapters [extra: testing]
 tests/               mirrors the tree: tests/client/, tests/mcp/, tests/http/, tests/testing/
 docs/
   conventions.md  adr/  definition-of-done.md  handover.md
@@ -60,7 +61,7 @@ Rules of the tree (ADR-0004):
 - Constructing an `MCPServer` configures root logging at `INFO`, and httpx logs every
   request URL at `INFO`; URLs can carry a key or a tenant host (ADR-0005). `build_server`
   and `main` therefore call `quiet_request_logging()`. Keep both calls; the tests in
-  `tests/mcp/` guard them, and `tests/conftest.py` restores the logger levels per test.
+  `tests/mcp/` guard them, and the testing plugin restores the logger levels per test.
 - The public surface is `__init__.py` and nothing else. `xippios.core.mcp`,
   `xippios.core.http` and `xippios.core.testing` are imported explicitly by their users.
 

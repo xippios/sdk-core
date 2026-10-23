@@ -1,4 +1,5 @@
 import asyncio
+import dataclasses
 import gzip
 
 import httpx
@@ -13,6 +14,7 @@ from xippios.core.client import (
     MemoryCache,
     RateLimit,
     RetryPolicy,
+    Timeouts,
     TokenBucket,
     cache_key,
 )
@@ -27,6 +29,7 @@ from xippios.core.errors import (
     ValidationError,
     XippiosError,
 )
+from xippios.core.testing import sent_urls
 
 BASE = "https://api.example.test"
 
@@ -60,10 +63,10 @@ async def test_headers_url_and_params(respx_mock: respx.MockRouter, config: Clie
     route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={"ok": True})
     async with AsyncClient(config) as client:
         assert await client.get_json("/v1/x", params={"a": 1}) == {"ok": True}
-    request = route.calls.last.request
-    assert request.headers["user-agent"] == "xippios-example/1.2.3 (+https://github.com/xippios)"
-    assert request.headers["x-family"] == "xippios"
-    assert str(request.url) == f"{BASE}/v1/x?a=1"
+    headers = route.calls.last.request.headers
+    assert headers["user-agent"] == "xippios-example/1.2.3 (+https://github.com/xippios)"
+    assert headers["x-family"] == "xippios"
+    assert sent_urls(route) == [f"{BASE}/v1/x?a=1"]
 
 
 @pytest.mark.anyio
@@ -269,6 +272,45 @@ async def test_retry_transport_errors_off_wins_over_retry_non_idempotent(
 
 
 @pytest.mark.anyio
+async def test_data_is_sent_form_encoded(
+    respx_mock: respx.MockRouter, config: ClientConfig
+) -> None:
+    # sdk-cashctrl: CashCtrl's writes take form fields, not JSON.
+    route = respx_mock.post(f"{BASE}/v1/x").respond(200, json={"success": True})
+    client = AsyncClient(config)
+    await client.request("POST", "/v1/x", data={"a": 1, "b": "x y/é"})
+    assert route.calls.last.request.headers["content-type"] == "application/x-www-form-urlencoded"
+    assert route.calls.last.request.content == b"a=1&b=x+y%2F%C3%A9"
+
+
+@pytest.mark.anyio
+async def test_json_is_sent_as_json(respx_mock: respx.MockRouter, config: ClientConfig) -> None:
+    route = respx_mock.post(f"{BASE}/v1/x").respond(200, json={})
+    await AsyncClient(config).request("POST", "/v1/x", json={"a": 1})
+    assert route.calls.last.request.headers["content-type"] == "application/json"
+    assert route.calls.last.request.content == b'{"a":1}'
+
+
+@pytest.mark.anyio
+async def test_json_and_data_together_are_refused_before_sending(
+    respx_mock: respx.MockRouter, config: ClientConfig
+) -> None:
+    route = respx_mock.post(f"{BASE}/v1/x").respond(200, json={})
+    client = AsyncClient(config)
+    with pytest.raises(ValueError, match="json= or data=, not both"):
+        await client.request("POST", "/v1/x", json={"a": 1}, data={"a": 1})
+    assert not route.called
+
+
+def test_sync_client_sends_form_data(respx_mock: respx.MockRouter, config: ClientConfig) -> None:
+    route = respx_mock.post(f"{BASE}/v1/x").respond(200, json={})
+    with Client(config) as client:
+        client.request("POST", "/v1/x", data={"a": "1", "b": "2"})
+    assert route.calls.last.request.content == b"a=1&b=2"
+
+
+@pytest.mark.anyio
+@pytest.mark.rate_limited
 async def test_rate_limiter_waits_between_calls(
     respx_mock: respx.MockRouter, config: ClientConfig, sleeper: Sleeper
 ) -> None:
@@ -295,6 +337,7 @@ class Clock:
 
 
 @pytest.mark.anyio
+@pytest.mark.rate_limited
 async def test_clients_share_one_limiter(respx_mock: respx.MockRouter, sleeper: Sleeper) -> None:
     respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
     bucket = TokenBucket(RateLimit(per_minute=60, burst=1), clock=Clock())
@@ -323,6 +366,70 @@ def test_limiter_defaults_to_the_configured_rate_limit(config: ClientConfig) -> 
     assert own.limit == RateLimit(per_minute=30)
     shared = TokenBucket(RateLimit(per_minute=60))
     assert Client(limited, limiter=shared).async_client.limiter is shared
+
+
+@pytest.mark.anyio
+@pytest.mark.rate_limited
+async def test_derive_shares_auth_limiter_and_cache_and_changes_only_the_policy(
+    respx_mock: respx.MockRouter, sleeper: Sleeper
+) -> None:
+    # sdk-comtrade: a recording needs longer timeouts than the source's client has.
+    route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={"n": 1})
+    cache = MemoryCache()
+    bucket = TokenBucket(RateLimit(per_minute=60, burst=1), clock=Clock())
+    config = ClientConfig(
+        source="example",
+        version="1",
+        base_url=BASE,
+        retry=RetryPolicy(max_attempts=1),
+        cache=cache,
+        headers={"X-Family": "xippios"},
+    )
+    client = AsyncClient(config, auth=httpx.BasicAuth("user", "pw"), sleep=sleeper, limiter=bucket)
+    retry = RetryPolicy(max_attempts=5, jitter=False)
+    timeouts = Timeouts(read=300.0)
+    derived = client.derive(retry=retry, timeouts=timeouts)
+
+    assert derived is not client
+    assert type(derived) is AsyncClient
+    assert derived.config == dataclasses.replace(config, retry=retry, timeouts=timeouts)
+    assert client.config is config
+    assert derived.config.cache is cache
+    assert derived.limiter is bucket
+    assert client.derive(timeouts=timeouts).config.retry is config.retry
+    assert client.derive(retry=retry).config.timeouts is config.timeouts
+    assert client.derive().config == config
+
+    await client.get("/v1/x", params={"a": 1})  # takes the bucket's one token, fills the cache
+    hit = await derived.get("/v1/x", params={"a": 1})
+    assert hit.extensions["xippios_cache"] == "hit"
+    assert route.call_count == 1
+    assert sleeper.calls == []
+    await derived.get("/v1/x", params={"a": 2})  # waits on the shared bucket, shared sleep
+    assert sleeper.calls == [pytest.approx(1.0)]
+    assert route.calls.last.request.headers["authorization"].startswith("Basic ")
+    assert route.calls.last.request.headers["x-family"] == "xippios"
+    assert route.calls.last.request.extensions["timeout"] == {
+        "connect": 10.0,
+        "read": 300.0,
+        "write": 10.0,
+        "pool": 10.0,
+    }
+    await derived.aclose()
+
+
+@pytest.mark.anyio
+async def test_derive_shares_the_transport(config: ClientConfig) -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={})
+
+    client = AsyncClient(config, transport=httpx.MockTransport(handler))
+    async with client.derive(retry=RetryPolicy(max_attempts=1)) as derived:
+        await derived.get("/v1/x")
+    assert [str(request.url) for request in seen] == [f"{BASE}/v1/x"]
 
 
 @pytest.mark.anyio

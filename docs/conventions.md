@@ -1,6 +1,6 @@
 # xippios SDK family — conventions
 
-Version 1.7 · 2026-10-23 · applies to every `sdk-*` repository under github.com/xippios.
+Version 1.8 · 2026-10-23 · applies to every `sdk-*` repository under github.com/xippios.
 Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 
 ## 1. Naming
@@ -158,6 +158,8 @@ or query string: the host can name a tenant, the query can carry a key (ADR-0005
 - Optional response cache (in-memory by default, pluggable) keyed on method+URL+params.
 - One `User-Agent`: `xippios-<source>/<version> (+https://github.com/xippios)`.
 - Timeouts explicit; defaults 10 s connect, 60 s read.
+- A request body is JSON (`json=`) or form-encoded (`data=`, for an upstream whose
+  writes take form fields), as upstream documents it; never both.
 
 ## 7. Configuration
 
@@ -197,8 +199,48 @@ consumer, never served standalone from the package.
 - Unit tests run offline against recorded fixtures (`respx`); fixtures live in
   `tests/fixtures/<endpoint>/<case>.json` and are recorded by the `record-fixture`
   command, never hand-written.
+- Replay matches a fixture on method, host and path, and on the recorded query
+  parameters a test names (`match_params`); a parameter whose recorded value holds
+  `REDACTED` cannot be matched and is refused by name. A parameter's absence cannot be
+  matched: where two fixtures share a path, the more specific one is mounted first,
+  since `respx` tries routes in the order they were added.
+- The recorder scrubs in memory and writes once, so nothing unscrubbed touches disk: a
+  multi-tenant source records with a placeholder host that its offline tests replay
+  against, and names the values that must never be written (`xippios.core.testing.Scrub`).
+  The scrubbed exchange is verified before the write, a JSON body also decoded; the
+  original host or a named value still present refuses it, the error naming where.
+  The verify is best effort, one JSON-aware pass over URL, headers and bodies; the
+  backstops are recording only against synthetic or demo tenants and the fixture grep
+  of the definition of done.
+  A body that is not UTF-8 text cannot be scrubbed and is refused unless the recording
+  flags it (`allow_binary=True`, stored base64 with `body_base64`).
 - Live tests are marked `@pytest.mark.live`, skipped unless `XIPPIOS_LIVE_TESTS=1`,
   and run in CI only on a nightly schedule with org secrets.
+- The pytest plugin (`pytest_plugins = ["xippios.core.testing.plugin"]`) keeps the
+  default run offline and free of real keys (ADR-0013):
+  - No network, from `pytest_configure` on: while test modules are collected, in a
+    fixture of any scope and in a test, a request through httpx's default transports
+    raises `RuntimeError` naming its method and path. `respx` answers replayed and
+    mocked requests as before, a `respx` route that passes through is refused like any
+    other request, and a transport the test passes itself is untouched. A test that
+    must reach the network is marked `network` (or `live`), and is let through with
+    its fixtures. Exactly that and no more: pytest's own failure report may still
+    print httpx's request repr (offline the key in it is the placeholder); a request
+    made while a `conftest.py` is imported, before the plugin is configured, is not
+    refused; a fixture of wider scope runs under the marking of the test that sets it
+    up, and its teardown under the last test's, so a live clean-up fixture is
+    function-scoped or runs in the separate nightly `-m live` job.
+  - No rate-limit wait, in every test not marked `live`: a client's limiter neither
+    waits nor takes a token. A test that asserts the limiter's waits is marked
+    `rate_limited`.
+  - Placeholder key, in every test not marked `live`: every `EnvKeyAuth` sends
+    `PLACEHOLDER_KEY`, pinned on the class, and the variables named in the ini option
+    `xippios_placeholder_key_envs` hold it; the fixture `placeholder_api_key` returns
+    it, `None` in a live test. A source names its key variable there and carries no
+    placeholder fixture of its own.
+  - Logger levels: the `httpx` and `httpcore` logger levels are restored after every
+    test, live ones included. They are saved per test, after fixtures of wider scope
+    are set up, so one of those that changes a level leaves it behind.
 - Every task function has at least one fixture-backed test and one live smoke test.
 - Coverage is reported, not gated; mypy strict and ruff are gated.
 
