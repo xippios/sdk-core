@@ -1,9 +1,8 @@
 """Test support shared by every source repo (conventions §10).
 
 Three things live here: the pytest plugin that gates live tests, fixture recording
-with secrets scrubbed in memory before the write (``Scrub``), and fixture replay through
-``respx``. Enable the plugin in a
-repo's ``tests/conftest.py``::
+with secrets scrubbed in memory before the write (``Scrub``), and fixture replay
+through ``respx``. Enable the plugin in a repo's ``tests/conftest.py``::
 
     pytest_plugins = ["xippios.core.testing.plugin"]
 
