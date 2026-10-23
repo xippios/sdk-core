@@ -88,16 +88,18 @@ class Client:
         *,
         params: Params = None,
         json: Any = None,
+        data: Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
         raise_on_error: bool = True,
     ) -> httpx.Response:
-        """See ``AsyncClient.request``."""
+        """See ``AsyncClient.request``; ``data`` is a form body, ``json`` a JSON one."""
         return run(
             self.async_client.request(
                 method,
                 path,
                 params=params,
                 json=json,
+                data=data,
                 headers=headers,
                 raise_on_error=raise_on_error,
             )

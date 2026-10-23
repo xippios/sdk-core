@@ -269,6 +269,46 @@ async def test_retry_transport_errors_off_wins_over_retry_non_idempotent(
 
 
 @pytest.mark.anyio
+async def test_data_is_sent_form_encoded(
+    respx_mock: respx.MockRouter, config: ClientConfig
+) -> None:
+    # sdk-cashctrl: CashCtrl's writes take form fields, not JSON.
+    route = respx_mock.post(f"{BASE}/v1/x").respond(200, json={"success": True})
+    client = AsyncClient(config)
+    await client.request("POST", "/v1/x", data={"a": 1, "b": "x y/é"})
+    request = route.calls.last.request
+    assert request.headers["content-type"] == "application/x-www-form-urlencoded"
+    assert request.content == b"a=1&b=x+y%2F%C3%A9"
+
+
+@pytest.mark.anyio
+async def test_json_is_sent_as_json(respx_mock: respx.MockRouter, config: ClientConfig) -> None:
+    route = respx_mock.post(f"{BASE}/v1/x").respond(200, json={})
+    await AsyncClient(config).request("POST", "/v1/x", json={"a": 1})
+    request = route.calls.last.request
+    assert request.headers["content-type"] == "application/json"
+    assert request.content == b'{"a":1}'
+
+
+@pytest.mark.anyio
+async def test_json_and_data_together_are_refused_before_sending(
+    respx_mock: respx.MockRouter, config: ClientConfig
+) -> None:
+    route = respx_mock.post(f"{BASE}/v1/x").respond(200, json={})
+    client = AsyncClient(config)
+    with pytest.raises(ValueError, match="json= or data=, not both"):
+        await client.request("POST", "/v1/x", json={"a": 1}, data={"a": 1})
+    assert not route.called
+
+
+def test_sync_client_sends_form_data(respx_mock: respx.MockRouter, config: ClientConfig) -> None:
+    route = respx_mock.post(f"{BASE}/v1/x").respond(200, json={})
+    with Client(config) as client:
+        client.request("POST", "/v1/x", data={"a": "1", "b": "2"})
+    assert route.calls.last.request.content == b"a=1&b=2"
+
+
+@pytest.mark.anyio
 async def test_rate_limiter_waits_between_calls(
     respx_mock: respx.MockRouter, config: ClientConfig, sleeper: Sleeper
 ) -> None:

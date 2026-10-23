@@ -105,6 +105,7 @@ class AsyncClient:
         *,
         params: Params = None,
         json: Any = None,
+        data: Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
         raise_on_error: bool = True,
     ) -> httpx.Response:
@@ -120,11 +121,19 @@ class AsyncClient:
             method: HTTP method.
             path: Path joined onto the base URL, e.g. ``"/api/api_GET"``.
             params: Query parameters.
-            json: JSON body for write methods.
+            json: JSON body for write methods, e.g. ``{"name": "Corn"}``.
+            data: Form body for write methods, sent form-encoded
+                (``application/x-www-form-urlencoded``), e.g. ``{"id": 4, "name": "Corn"}``.
+                For upstreams whose writes take form fields, not JSON.
             headers: Extra headers for this request only.
             raise_on_error: ``False`` returns 4xx/5xx responses instead of raising, for
                 callers that record fixtures or inspect error bodies.
+
+        Raises:
+            ValueError: Both ``json`` and ``data`` were given; a request has one body.
         """
+        if json is not None and data is not None:
+            raise ValueError("pass json= or data=, not both: a request has one body")
         pool = self._pool()
         method = method.upper()
         probe = pool.build_request(method, path, params=params)
@@ -137,7 +146,9 @@ class AsyncClient:
         async def send() -> httpx.Response:
             if self._bucket is not None:
                 await self._bucket.acquire(self._sleep)
-            request = pool.build_request(method, path, params=params, json=json, headers=headers)
+            request = pool.build_request(
+                method, path, params=params, json=json, data=data, headers=headers
+            )
             return await pool.send(request)
 
         response = await send_with_retries(
