@@ -82,7 +82,7 @@ class ResultMeta(BaseModel):
     published_at: datetime | None # upstream publication/release time if known
     vintage: str | None           # upstream release identifier if the source has one
     request: dict[str, Any]       # the parameters used, for reproducibility
-    total: int | None             # upstream's count of the matching records, if it reports one
+    total: int | None             # upstream's record count, if it reports one
 
 class Result(BaseModel, Generic[T]):
     data: T
@@ -106,7 +106,7 @@ the whole request, so the caller can page deliberately. It is provenance like th
 of `meta`: set only from what upstream reports, never computed from `len(data)`. When
 every page is collected, the count kept is the one upstream reported on the last page
 fetched, and a mismatch with `len(data)` is upstream's and is not corrected; a task that
-returns one page, or caps what it collects, has `total > len(data)` by design.
+returns one page, or caps what it collects, can have `total > len(data)` by design.
 
 ## 5. Errors (`xippios.core.errors`)
 
