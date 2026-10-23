@@ -133,7 +133,9 @@ leak tracebacks.
   its documented answer to a spent limit, as `RateLimitError` with `retry_after`
   (from `Retry-After`, the quota headers or a documented fallback); retries honour
   it up to `RetryPolicy.backoff_max`, a request into a quota known to be spent waits
-  it out first, and adapters state the pause, never silently.
+  it out when the wait is within `RetryPolicy.backoff_max` and otherwise raises
+  `RateLimitError` with `retry_after` without sending, and adapters state the pause,
+  never silently.
 - Optional response cache (in-memory by default, pluggable) keyed on method+URL+params.
 - One `User-Agent`: `xippios-<source>/<version> (+https://github.com/xippios)`.
 - Timeouts explicit; defaults 10 s connect, 60 s read.

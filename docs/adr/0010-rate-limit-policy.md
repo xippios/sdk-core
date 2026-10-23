@@ -44,7 +44,10 @@ Taken by Johannes Didaskalu on 2026-10-23, for every package in the family.
    `retry_after` up to `RetryPolicy.backoff_max`; beyond that the error reaches the
    caller carrying `retry_after`.
 4. **No firing into a spent quota.** When the snapshot says nothing remains, the next
-   request waits `retry_after` first instead of drawing another refusal.
+   request waits `retry_after` out first if the wait is within
+   `RetryPolicy.backoff_max` (30 s by default); if it is longer, the package raises
+   `RateLimitError` with the remaining `retry_after` before sending anything, so a
+   sync call or an MCP tool call never blocks for an hour.
 5. **Never silent.** Adapters state the pause in their error text: MCP
    `error: RateLimitError: <message> (retry after N s)`, HTTP a 429 problem with
    `retry_after` and a `Retry-After` header. Core's adapters write both already.
@@ -60,6 +63,10 @@ Taken by Johannes Didaskalu on 2026-10-23, for every package in the family.
   `classify` runs, so a `retry_after` that `classify` derives from quota headers or a
   fallback reaches the caller but does not set the retry delay, and a 429 without
   `Retry-After` is retried on the exponential backoff. The follow-up closes that gap.
+- The quota snapshot is per process, so processes and packages that share one key do
+  not see each other's spending (api.data.gov counts the quota across every
+  api.data.gov API the key is used for, ADR-0009); whether the core helper keys the
+  snapshot per key rather than per source is decided when that helper is built.
 - Existing sources (usda-nass, comtrade, cashctrl) adopt the policy in their next PR:
   a pace stated as documented or self-imposed, and their rate-limit answers read in
   `classify`.
