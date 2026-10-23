@@ -11,7 +11,7 @@ import base64
 import json
 import re
 from collections.abc import Callable, Iterable, Iterator, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
@@ -75,13 +75,17 @@ class Scrub:
             upstream that serves each tenant from a host of its own. The request URL
             gets it, and every occurrence of the original host in URL, headers and
             bodies becomes it: in any letter case, in its IDNA form too where that
-            differs, plain or percent-encoded. ``None`` keeps the host, for a public
-            upstream.
+            differs, plain or percent-encoded. A placeholder that is the request's own
+            host is refused with ``ValueError`` when the exchange is scrubbed; one that
+            ends with it (``demo.example.test`` for ``example.test``) is allowed.
+            ``None`` keeps the host, for a public upstream.
         secrets: Values that must never be written, e.g. a key or a tenant name. Each
             becomes ``REDACTED`` wherever it appears in URL, headers and bodies, plain
             or percent-encoded (either hex case, ``+`` for a space; ``/`` also as JSON's
             ``\/``), the longest value first, in the letter case given. An empty
-            value is refused with ``ValueError``.
+            value is refused with ``ValueError``, and so is a ``host`` that contains
+            one of them in any letter case: the placeholder would write it into every
+            URL. Left out of the ``repr``.
         rewrite: A text hook applied after ``host`` and ``secrets`` to the request body,
             the response body and every response header value (``Location`` and
             ``Content-Location`` included), for pre-authenticated URLs the source knows
@@ -92,7 +96,7 @@ class Scrub:
     """
 
     host: str | None = None
-    secrets: Sequence[str] = ()
+    secrets: Sequence[str] = field(default=(), repr=False)
     rewrite: Callable[[str], str] | None = None
     allow_binary: bool = False
 
@@ -104,6 +108,12 @@ class Scrub:
         secrets = tuple(self.secrets)
         if any(not value for value in secrets):
             raise ValueError("secrets must not contain an empty string")
+        if self.host is not None and any(value.lower() in self.host.lower() for value in secrets):
+            # Neither the value nor the host is named: the host holds the value.
+            raise ValueError(
+                "host contains one of the secrets, and the placeholder would write it into "
+                "every recorded URL; choose a placeholder without it"
+            )
         object.__setattr__(self, "secrets", secrets)
 
 
@@ -137,6 +147,11 @@ class _Scrubber:
         self._host: re.Pattern[str] | None = None
         if scrub.host is not None:
             forms = {form for form in (url.host, url.raw_host.decode("ascii")) if form}
+            if scrub.host.lower() in {form.lower() for form in forms}:
+                raise ValueError(
+                    "Scrub.host is the request's own host, which would be written as it is; "
+                    "give a placeholder that differs from it"
+                )
             if forms:
                 longest_first = sorted(forms, key=len, reverse=True)
                 self._host = re.compile(

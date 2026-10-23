@@ -230,7 +230,7 @@ record_sync(
     "/account/list.json",
     fixture_path(FIXTURES, "account_list", "one"),
     scrub=Scrub(
-        host="demo.example.test",  # the tenant's host, everywhere; tests replay against it
+        host="demo.example.test",  # placeholder for the tenant's host, used everywhere it appeared
         secrets=[tenant_name],  # REDACTED wherever it appears, plain or percent-encoded
         rewrite=strip_signatures,  # text hook for bodies and header values (Location)
     ),

@@ -204,6 +204,20 @@ def test_placeholder_that_contains_the_original_host_is_set_once() -> None:
     assert fixture.response.body == f"https://{PLACEHOLDER}/z"
 
 
+@pytest.mark.parametrize(
+    "url", [f"https://{TENANT}/v1/x", "https://Demo.Example.Test/v1/x", "https://bücher.test/"]
+)
+def test_a_placeholder_that_is_the_request_host_is_refused(url: str) -> None:
+    request = httpx.Request("GET", url)
+    response = httpx.Response(200, content=b"{}", request=request)
+    host = httpx.URL(url).host
+    for placeholder in {host, httpx.URL(url).raw_host.decode("ascii"), host.upper()}:
+        if placeholder.isascii():  # Scrub takes a plain ASCII host name
+            with pytest.raises(ValueError, match=r"^Scrub\.host is the request's own host") as info:
+                fixture_from_response(response, scrub=Scrub(host=placeholder))
+            assert host not in str(info.value)
+
+
 def test_no_placeholder_keeps_the_host() -> None:
     fixture = fixture_from_response(_response(content=b"api.example.test"), scrub=Scrub())
     assert fixture.request.url.startswith("https://api.example.test/")
