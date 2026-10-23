@@ -10,6 +10,17 @@ A source's ``mcp.py`` is a handful of lines::
     def run() -> None:
         main(server)
 
+A multi-tenant source adds ``--org`` and locks the server to one tenant (ADR-0014)::
+
+    def run() -> None:
+        main(
+            server,
+            add_options=lambda parser: parser.add_argument("--org"),
+            apply_options=lambda args, server: server if args.org is None else build_server(
+                "cashctrl", TASKS, tenant_lock=TenantLock("org", tenants.require(args.org))
+            ),
+        )
+
 Requires the ``mcp`` extra: ``uv add "xippios-core[mcp]"``.
 """
 
