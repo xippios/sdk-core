@@ -6,12 +6,14 @@ Every test not marked ``live`` runs offline (ADR-0013): a request through httpx'
 default transports is refused unless the test is marked ``network``, a rate limiter
 never waits unless the test is marked ``rate_limited``, and every ``EnvKeyAuth`` sends
 ``PLACEHOLDER_KEY`` (``placeholder_api_key``). A ``live`` test is skipped unless
-``XIPPIOS_LIVE_TESTS=1`` and is left as it is.
+``XIPPIOS_LIVE_TESTS=1`` and is left as it is. Every test, ``live`` or not, gets the
+``httpx`` and ``httpcore`` logger levels back when it ends.
 """
 
 import asyncio
+import logging
 import os
-from collections.abc import Awaitable, Callable, Iterable
+from collections.abc import Awaitable, Callable, Iterable, Iterator
 from pathlib import Path
 
 import httpcore
@@ -29,6 +31,7 @@ LIVE_ENV = "XIPPIOS_LIVE_TESTS"
 PLACEHOLDER_KEY = "placeholder-for-fixture-replay"
 """The key every ``EnvKeyAuth`` sends in a test not marked ``live``."""
 _KEY_ENVS = "xippios_placeholder_key_envs"
+_REQUEST_LOGGERS = ("httpx", "httpcore")
 _MARKERS = (
     "live: hits the real upstream; skipped unless XIPPIOS_LIVE_TESTS=1",
     "network: may reach the network through httpx's default transports; not refused offline",
@@ -181,6 +184,20 @@ def placeholder_api_key(
         monkeypatch.setenv(name, PLACEHOLDER_KEY)
     monkeypatch.setattr(EnvKeyAuth, "key", _placeholder_key)
     return PLACEHOLDER_KEY
+
+
+@pytest.fixture(autouse=True)
+def _restore_request_logger_levels() -> Iterator[None]:
+    """Give the ``httpx`` and ``httpcore`` loggers their levels back after every test.
+
+    Building an MCP server sets both to ``WARNING`` (``quiet_request_logging``), so a
+    test that builds one left them there for the rest of the run (sdk-cashctrl). Live
+    tests included: restoring a level reaches nothing outside the process.
+    """
+    saved = {name: logging.getLogger(name).level for name in _REQUEST_LOGGERS}
+    yield
+    for name, level in saved.items():
+        logging.getLogger(name).setLevel(level)
 
 
 @pytest.fixture

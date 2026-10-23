@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 import httpx
@@ -414,3 +415,46 @@ def test_placeholder_key_is_exported() -> None:
     from xippios.core.testing import plugin
 
     assert PLACEHOLDER_KEY == plugin.PLACEHOLDER_KEY == "placeholder-for-fixture-replay"
+
+
+LOGGER_TESTS = """
+import logging
+
+import pytest
+
+from xippios.core.mcp import build_server
+
+NAMES = ("httpx", "httpcore")
+BEFORE = [logging.getLogger(name).level for name in NAMES]
+
+
+def test_building_a_server_quiets_the_request_loggers():
+    build_server("example", [])
+    assert [logging.getLogger(name).level for name in NAMES] == [logging.WARNING] * 2
+
+
+def test_the_next_test_gets_the_levels_back():
+    assert [logging.getLogger(name).level for name in NAMES] == BEFORE
+
+
+@pytest.mark.live
+def test_a_live_test_quiets_them_too():
+    build_server("example", [])
+
+
+def test_and_the_next_test_gets_them_back_again():
+    assert [logging.getLogger(name).level for name in NAMES] == BEFORE
+"""
+
+
+def test_request_logger_levels_are_restored_after_every_test(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Row 8 (sdk-cashctrl): core restored the levels in its own conftest only.
+    monkeypatch.setenv(LIVE_ENV, "1")
+    for name in ("httpx", "httpcore"):
+        logging.getLogger(name).setLevel(logging.NOTSET)
+    pytester.makepyfile(LOGGER_TESTS)
+    result = pytester.runpytest("-p", "xippios.core.testing.plugin", "--strict-markers")
+    result.assert_outcomes(passed=4)
+    assert [logging.getLogger(name).level for name in ("httpx", "httpcore")] == [0, 0]

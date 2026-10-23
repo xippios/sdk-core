@@ -90,6 +90,10 @@ All notable changes to this project are documented here. The format follows
   overrides it; with this release a source deletes the one sdk-template 0.1.5 had it
   carry by hand, which pinned one module-level `auth` and could not reach a source with
   one auth object per tenant (sdk-comtrade, sdk-cashctrl).
+- The pytest plugin gives the `httpx` and `httpcore` loggers their levels back after
+  every test. Building an MCP server sets both to `WARNING`, and only core's own
+  `tests/conftest.py` restored them, so a source test that built a server left httpx
+  at `WARNING` for the rest of the run (sdk-cashctrl).
 
 ### Changed
 
