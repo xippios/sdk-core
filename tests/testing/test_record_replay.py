@@ -279,6 +279,23 @@ def test_match_params_refuses_a_redacted_or_absent_name(
     assert len(respx_mock.routes) == 2
 
 
+def test_match_params_refuses_a_partly_redacted_value(
+    respx_mock: respx.MockRouter, tmp_path: Path
+) -> None:
+    request = httpx.Request("GET", f"{BASE}/v1/x?org=acme-1&year=2024")
+    path = tmp_path / "x.json"
+    write_fixture(
+        httpx.Response(200, json={}, request=request), path, scrub=Scrub(secrets=["acme"])
+    )
+    assert httpx.URL(load_fixture(path).request.url).params["org"] == f"{REDACTED}-1"
+    with pytest.raises(
+        ValueError, match=r"^match_params: 'org' was recorded as REDACTED, in"
+    ) as info:
+        replay(respx_mock, path, match_params=["org"])
+    assert "acme" not in str(info.value)
+    assert len(respx_mock.routes) == 0
+
+
 @pytest.mark.anyio
 async def test_replay_ignores_the_body_and_the_test_asserts_it(
     respx_mock: respx.MockRouter, config: ClientConfig, tmp_path: Path

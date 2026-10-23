@@ -53,7 +53,8 @@ def mount_fixture(
 
     Raises:
         ValueError: A name in ``match_params`` is not a query parameter of the recorded
-            URL, or was recorded as ``REDACTED``; the message names the parameter.
+            URL, or its recorded value holds ``REDACTED`` (whole, or a scrubbed secret
+            inside it); the message names the parameter.
         TypeError: ``match_params`` is one string instead of a collection of names.
     """
     url = httpx.URL(fixture.request.url)
@@ -68,9 +69,10 @@ def mount_fixture(
                 raise ValueError(
                     f"match_params: {name!r} is not a query parameter of the recorded request"
                 )
-            if REDACTED in values:
+            if any(REDACTED in value for value in values):
                 raise ValueError(
-                    f"match_params: {name!r} was recorded as {REDACTED}; it cannot be matched"
+                    f"match_params: {name!r} was recorded as {REDACTED}, in whole or in part; "
+                    "it cannot be matched"
                 )
             recorded.extend((name, value) for value in values)
         if recorded:
