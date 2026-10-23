@@ -1,6 +1,7 @@
 import logging
 from pathlib import Path
 
+import httpcore
 import httpx
 import pytest
 
@@ -20,6 +21,8 @@ def placeholder_api_key() -> None:
 
 SEND = httpx.HTTPTransport.handle_request
 SEND_ASYNC = httpx.AsyncHTTPTransport.handle_async_request
+POOL_SEND = httpcore.ConnectionPool.handle_request
+POOL_SEND_ASYNC = httpcore.AsyncConnectionPool.handle_async_request
 ACQUIRE = TokenBucket.acquire
 KEY = EnvKeyAuth.key
 ANYIO_CONFTEST = """
@@ -132,9 +135,39 @@ import socket
 import httpx
 import pytest
 
-SEND = httpx.HTTPTransport.handle_request
-SEND_ASYNC = httpx.AsyncHTTPTransport.handle_async_request
 URL = "https://tenant.example.test/v1/series?key=SECRET"
+
+
+def closed_port():
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+CLOSED = f"http://127.0.0.1:{closed_port()}/v1/closed"
+
+
+def outcome(url):
+    try:
+        httpx.get(url, timeout=2.0)
+    except RuntimeError as exc:
+        return str(exc)
+    except httpx.TransportError as exc:
+        return type(exc).__name__
+    return "answered"
+
+
+AT_IMPORT = outcome("https://tenant.example.test/v1/at-import")
+
+
+@pytest.fixture(scope="module")
+def module_download():
+    return outcome("https://tenant.example.test/v1/module")
+
+
+@pytest.fixture(scope="session")
+def session_download():
+    return outcome("https://tenant.example.test/v1/session")
 
 
 def test_an_unmocked_request_is_refused():
@@ -152,6 +185,13 @@ async def test_an_unmocked_async_request_is_refused():
     async with httpx.AsyncClient() as client:
         with pytest.raises(RuntimeError, match=refused):
             await client.post(URL, json={})
+
+
+def test_requests_at_import_and_in_wider_fixtures_are_refused(module_download, session_download):
+    refused = "network access in an offline test: GET /v1/"
+    assert AT_IMPORT.startswith(refused + "at-import; ")
+    assert module_download.startswith(refused + "module; ")
+    assert session_download.startswith(refused + "session; ")
 
 
 def test_a_mocked_request_is_answered(respx_mock):
@@ -172,24 +212,47 @@ def test_a_transport_of_the_test_is_untouched():
         assert client.get(URL).status_code == 204
 
 
-def closed_port():
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        return sock.getsockname()[1]
+def test_a_pass_through_route_is_refused(respx_mock):
+    route = respx_mock.get(CLOSED).pass_through()
+    assert outcome(CLOSED).startswith("network access in an offline test: GET /v1/closed; ")
+    assert route.called
+
+
+@pytest.mark.anyio
+async def test_an_async_pass_through_route_is_refused(respx_mock):
+    respx_mock.get(CLOSED).pass_through()
+    async with httpx.AsyncClient() as client:
+        with pytest.raises(RuntimeError, match="^network access in an offline test: GET "):
+            await client.get(CLOSED, timeout=2.0)
+
+
+@pytest.mark.network
+def test_a_pass_through_route_reaches_the_network_when_marked(respx_mock):
+    route = respx_mock.get(CLOSED).pass_through()
+    assert outcome(CLOSED) == "ConnectError"
+    assert route.called
 
 
 @pytest.mark.network
 def test_a_network_test_reaches_the_real_transport():
-    assert httpx.HTTPTransport.handle_request is SEND
-    assert httpx.AsyncHTTPTransport.handle_async_request is SEND_ASYNC
-    with pytest.raises(httpx.ConnectError):
-        httpx.get(f"http://127.0.0.1:{closed_port()}/v1/series", timeout=2.0)
+    assert outcome(CLOSED) == "ConnectError"
+
+
+@pytest.mark.network
+@pytest.mark.anyio
+async def test_an_async_network_test_reaches_the_real_transport():
+    async with httpx.AsyncClient() as client:
+        with pytest.raises(httpx.ConnectError):
+            await client.get(CLOSED, timeout=2.0)
 
 
 @pytest.mark.live
-def test_a_live_test_keeps_the_real_transports():
-    assert httpx.HTTPTransport.handle_request is SEND
-    assert httpx.AsyncHTTPTransport.handle_async_request is SEND_ASYNC
+def test_a_live_test_reaches_the_real_transport():
+    assert outcome(CLOSED) == "ConnectError"
+
+
+def test_the_refusal_is_back_after_marked_tests():
+    assert outcome(CLOSED).startswith("network access in an offline test: GET /v1/closed; ")
 """
 
 
@@ -201,9 +264,12 @@ def test_offline_tests_cannot_reach_the_network(
     pytester.makeconftest(ANYIO_CONFTEST)
     pytester.makepyfile(OFFLINE_TESTS)
     result = pytester.runpytest("-p", "xippios.core.testing.plugin", "--strict-markers")
-    result.assert_outcomes(passed=7)
+    result.assert_outcomes(passed=13)
+    # The inner session gave back what it patched: the outer session's own guard.
     assert httpx.HTTPTransport.handle_request is SEND
     assert httpx.AsyncHTTPTransport.handle_async_request is SEND_ASYNC
+    assert httpcore.ConnectionPool.handle_request is POOL_SEND
+    assert httpcore.AsyncConnectionPool.handle_async_request is POOL_SEND_ASYNC
 
 
 LIMITER_TESTS = """

@@ -75,12 +75,15 @@ All notable changes to this project are documented here. The format follows
   `REDACTED`. A test compares these instead of keeping a request from `route.calls` in
   its own frame, where a failing assertion or `pytest -l` prints it, key included
   (sdk-usda-nass).
-- The pytest plugin keeps every test not marked `live` offline (ADR-0013): a request
-  through httpx's default transports raises `RuntimeError` naming its method and path,
-  never its host or query. Requests `respx` answers, replayed fixtures included, and
-  transports a test passes itself (`httpx.MockTransport`, FastAPI's `TestClient`) are
-  unaffected; the marker `network` lifts the block for one test. Nothing enforced the
-  definition of done's "no network in the default test run" (sdk-cashctrl).
+- The pytest plugin keeps the whole session offline (ADR-0013): from configuration on,
+  httpx's default transports and httpcore's connection pools raise `RuntimeError`
+  naming the request's method and path, never its host or query, at import, in a
+  fixture of any scope and in a test. The refusal is lifted while a test marked
+  `network` or `live` is set up, run and torn down. Requests `respx` answers, replayed
+  fixtures included, and transports a test passes itself (`httpx.MockTransport`,
+  FastAPI's `TestClient`) are unaffected; a `respx` route that passes through is
+  refused unless the test is marked `network`. Nothing enforced the definition of
+  done's "no network in the default test run" (sdk-cashctrl).
 - The pytest plugin lets no rate limiter wait in a test not marked `live`:
   `TokenBucket.acquire` returns at once and takes no token, so a limiter a source
   shares across its tests holds no debt from the replays when a live test in the same

@@ -188,10 +188,11 @@ xippios_placeholder_key_envs = ["EXAMPLE_API_KEY"]
 ```
 
 - `@pytest.mark.live` tests are skipped unless `XIPPIOS_LIVE_TESTS=1`.
-- Every other test runs offline (ADR-0013). A request through httpx's default
-  transports raises `RuntimeError` naming its method and path unless `respx` answers
-  it; mark a test `network` to let it through. The rate limiter never waits; mark a
-  test `rate_limited` to keep it. Every `EnvKeyAuth` sends `PLACEHOLDER_KEY`, and the
+- The whole run is offline (ADR-0013). A request through httpx's default transports
+  raises `RuntimeError` naming its method and path unless `respx` answers it, at import
+  and in fixtures too, a `respx` route that passes through included; mark a test
+  `network` to let it through. In every test not marked `live`, the rate limiter never
+  waits; mark a test `rate_limited` to keep it. Every `EnvKeyAuth` sends `PLACEHOLDER_KEY`, and the
   variables named in `xippios_placeholder_key_envs` hold it (fixture
   `placeholder_api_key`), whatever the shell or an earlier live test left behind. The
   `httpx` and `httpcore` logger levels come back after every test.

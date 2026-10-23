@@ -212,15 +212,19 @@ consumer, never served standalone from the package.
   flags it (`allow_binary=True`, stored base64 with `body_base64`).
 - Live tests are marked `@pytest.mark.live`, skipped unless `XIPPIOS_LIVE_TESTS=1`,
   and run in CI only on a nightly schedule with org secrets.
-- The pytest plugin (`pytest_plugins = ["xippios.core.testing.plugin"]`) guarantees
-  every test not marked `live` an offline run without real keys (ADR-0013):
-  - No network: a request through httpx's default transports raises `RuntimeError`
-    naming its method and path; `respx` answers replayed and mocked requests as
-    before, and a transport the test passes itself is untouched. A test that must
-    reach the network is marked `network`.
-  - No rate-limit wait: a client's limiter neither waits nor takes a token. A test
-    that asserts the limiter's waits is marked `rate_limited`.
-  - Placeholder key: every `EnvKeyAuth` sends `PLACEHOLDER_KEY`, pinned on the class,
+- The pytest plugin (`pytest_plugins = ["xippios.core.testing.plugin"]`) keeps the
+  default run offline and free of real keys (ADR-0013):
+  - No network, for the whole session: at import, in a fixture of any scope and in a
+    test, a request through httpx's default transports raises `RuntimeError` naming
+    its method and path. `respx` answers replayed and mocked requests as before, a
+    `respx` route that passes through is refused like any other request, and a
+    transport the test passes itself is untouched. A test that must reach the
+    network is marked `network` (or `live`), and is let through with its fixtures.
+  - No rate-limit wait, in every test not marked `live`: a client's limiter neither
+    waits nor takes a token. A test that asserts the limiter's waits is marked
+    `rate_limited`.
+  - Placeholder key, in every test not marked `live`: every `EnvKeyAuth` sends
+    `PLACEHOLDER_KEY`, pinned on the class,
     and the variables named in the ini option `xippios_placeholder_key_envs` hold it;
     the fixture `placeholder_api_key` returns it, `None` in a live test. A source names
     its key variable there and carries no placeholder fixture of its own.

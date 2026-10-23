@@ -39,29 +39,36 @@ and free of real keys, it wrote into its own `tests/conftest.py`:
 
 ## Decision
 
-The plugin owns the offline guarantees. For every test not marked `live` it applies, by
-autouse fixtures:
+The plugin owns the offline guarantees.
 
-1. **No network.** `httpx.HTTPTransport.handle_request` and
-   `httpx.AsyncHTTPTransport.handle_async_request` raise `RuntimeError` naming the
-   request's method and path, never its host or query (ADR-0005). `respx`'s default
-   mocker answers below them, at httpcore's connection pool, so a request is passed down
-   while a `respx` router is active: replayed and mocked requests are answered as
-   before. A transport a test passes itself never reaches the default ones. The marker
-   `network` lifts the block for one test.
-2. **No rate-limit wait.** `TokenBucket.acquire` returns at once and takes no token, so
-   a limiter a source shares across its tests holds no debt from the replays when a
-   live test in the same run uses it. The marker `rate_limited` keeps the limiter for
-   one test.
-3. **The placeholder key.** `PLACEHOLDER_KEY = "placeholder-for-fixture-replay"`. The
-   autouse fixture `placeholder_api_key` sets the variables the ini option
-   `xippios_placeholder_key_envs` names to the placeholder and pins `EnvKeyAuth.key` on
-   the class, which every auth object of every tenant reads through, cached key or
-   not. It returns the placeholder, or `None` in a live test. It has the template's
-   name, so a source's own fixture of that name overrides it. `EnvKeyAuth.apply`
-   takes the request only and reads `self.key()` itself, and `sent_urls(route)` gives a
-   test the URLs a route received as scrubbed strings, so neither the key nor a request
-   carrying it has to sit in a test's frame.
+1. **No network, for the whole session.** When pytest is configured, the plugin patches
+   httpx's default transports (`httpx.HTTPTransport.handle_request`,
+   `httpx.AsyncHTTPTransport.handle_async_request`) and httpcore's connection pools
+   (`httpcore.ConnectionPool.handle_request`,
+   `httpcore.AsyncConnectionPool.handle_async_request`) once. They raise `RuntimeError`
+   naming the request's method and path, never its host or query (ADR-0005): at import,
+   in a fixture of any scope, in a test. `pytest_runtest_setup` lifts the refusal for a
+   test marked `network` or `live` before its fixtures are set up, and
+   `pytest_runtest_teardown` restores it after they are torn down. `respx` patches the
+   same pool methods on top when a router starts: a replayed or mocked request is
+   answered by respx, and a route that passes through (`route.pass_through()`) reaches
+   the refusal like any other request unless the test is marked `network`. A transport
+   a test passes itself never reaches the default ones.
+2. **No rate-limit wait.** For every test not marked `live`, by an autouse fixture,
+   `TokenBucket.acquire` returns at once and takes no token, so a limiter a source
+   shares across its tests holds no debt from the replays when a live test in the same
+   run uses it. The marker `rate_limited` keeps the limiter for one test.
+3. **The placeholder key.** `PLACEHOLDER_KEY = "placeholder-for-fixture-replay"`. For
+   every test not marked `live`, the autouse fixture `placeholder_api_key` sets the
+   variables the ini option `xippios_placeholder_key_envs` names to the placeholder and
+   pins `EnvKeyAuth.key` on the class, which every auth object of every tenant reads
+   through, cached key or not; an auth subclass that overrides `key` reads its own way.
+   It returns the placeholder, or `None` in a live test. It has the template's name, so
+   a source's own fixture of that name overrides it, and a test module that needs real
+   key resolution overrides it with one that pins nothing. `EnvKeyAuth.apply` takes the
+   request only and reads `self.key()` itself, and `sent_urls(route)` gives a test the
+   URLs a route received as scrubbed strings, so neither the key nor a request carrying
+   it has to sit in a test's frame.
 
 Every test, `live` or not, gets the `httpx` and `httpcore` logger levels back when it
 ends. The plugin registers `network` and `rate_limited` next to `live`, so a source
@@ -83,13 +90,12 @@ JSON body decoded included, refuses the exchange) and writes once (`Scrub`, conv
 - sdk-cashctrl keeps its demo-only handling (which organisations exist in a test, the
   placeholder subdomain, the cached clients); none of it is about keys alone. Its keys
   are pinned by the class-level pin whichever organisation's auth object sends them.
-- A test that must reach the network through httpx's default transports is marked
-  `network`; a live test is marked `live` and needs nothing else. A test that asserts a
+- A test that must reach the network through httpx's default transports, a `respx`
+  route that passes through included, is marked `network`; a live test is marked
+  `live` and needs nothing else. Network access at import or in a fixture outside a
+  marked test moves into a marked test or a recorded fixture. A test that asserts a
   limiter's waits is marked `rate_limited`. A test module that checks how a key is
   resolved defines a `placeholder_api_key` fixture that pins nothing.
-- A `respx` route that passes through (`route.pass_through()`) is respx's own explicit
-  way to the network and is not refused. An auth subclass that overrides `key` is not
-  pinned.
 - A subclass of `EnvKeyAuth` outside core that implements `apply(request, key)` breaks;
   none is known (0.x, conventions §12).
 - Conventions §10 states the guarantees and names the markers.
