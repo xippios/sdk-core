@@ -298,16 +298,18 @@ All notable changes to this project are documented here. The format follows
   registration, the loopback rule, the tenant list tool, the tenant lock and the option
   hooks; §10 states that a placeholder host that contains the original host is allowed
   and written as such. ADR-0014 added.
-- A 429 or 5xx that `ClientConfig.classify` maps to an error is no longer retried
-  blindly (ADR-0015). Before each retry the loop asks `classify`, at most once per
-  attempt and also with `raise_on_error=False`: a `RateLimitError` sets the wait from
-  its `retry_after` (else the `Retry-After` header's), so a wait beyond
-  `RetryPolicy.backoff_max` is raised after one attempt; any other error it returns
-  stops the retries; `None` keeps the status rule. `send_with_retries` takes the
-  mapping as `classify=`. A 429 without `Retry-After`, api.data.gov's answer to a spent
-  hourly quota, was retried three more times into the spent quota before `classify`
-  could say "one hour" (sdk-usda-psd). A source whose `classify` maps a 5xx or 429 to
-  an error it still wants retried returns `None` for it, or a `RateLimitError`.
+- A 429 or 5xx that `ClientConfig.classify` maps to an error other than an
+  `UpstreamError` for a 5xx is no longer retried blindly (ADR-0015). Before each retry
+  the loop asks `classify`, at most once per attempt and also with
+  `raise_on_error=False`: a `RateLimitError` sets the wait from its `retry_after` (else
+  the `Retry-After` header's), so a wait beyond `RetryPolicy.backoff_max` is raised
+  after one attempt; an `UpstreamError` for a 5xx and `None` keep the status rule, so a
+  5xx is retried when the method allows; any other error, an `AuthError` or an
+  `InvalidRequestError` say, stops the retries. `send_with_retries` takes the mapping as
+  `classify=`. A 429 without `Retry-After`, api.data.gov's answer to a spent hourly
+  quota, was retried three more times into the spent quota before `classify` could say
+  "one hour" (sdk-usda-psd). sdk-cashctrl, which maps every 5xx to `UpstreamError` to
+  keep its tenant host out of the message, keeps its retries.
 - Conventions 1.10: §4 names `xippios_cache_stored_at` as the `retrieved_at` of a cache
   hit; §6 states the `before_request` and `observe` hooks, `QuotaPolicy` as the
   implementation of ADR-0010's quota rules, `classify`'s part in retries, and `auth=`

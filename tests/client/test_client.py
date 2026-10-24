@@ -785,18 +785,57 @@ async def test_a_rate_limit_error_without_retry_after_keeps_the_header(
 
 
 @pytest.mark.anyio
-async def test_a_5xx_that_classify_maps_to_another_error_is_not_retried(
+async def test_a_5xx_that_classify_maps_to_an_upstream_error_is_still_retried(
     respx_mock: respx.MockRouter, sleeper: Sleeper
 ) -> None:
-    route = respx_mock.get(f"{BASE}/v1/x").respond(503, text="down for maintenance")
-    maintenance = UpstreamError("maintenance", status=503, body="", source="example")
-    classify = CountingClassify({503: maintenance})
-    client = AsyncClient(_classified(classify), sleep=sleeper)
-    with pytest.raises(UpstreamError, match="maintenance"):
+    # sdk-cashctrl maps every 5xx to UpstreamError, to scrub the host from its message.
+    route = respx_mock.get(f"{BASE}/v1/x").respond(503, text="busy")
+    busy = UpstreamError("busy", status=503, body="", source="example")
+    classify = CountingClassify({503: busy})
+    client = AsyncClient(_classified(classify, max_attempts=3), sleep=sleeper)
+    with pytest.raises(UpstreamError, match="busy") as info:
         await client.get("/v1/x")
+    assert info.value is busy
+    assert route.call_count == 3
+    assert sleeper.calls == [0.1, 0.2]
+    assert classify.calls == [503, 503, 503]
+
+
+@pytest.mark.anyio
+async def test_a_5xx_upstream_error_to_a_write_is_still_not_retried(
+    respx_mock: respx.MockRouter, sleeper: Sleeper
+) -> None:
+    route = respx_mock.post(f"{BASE}/v1/x").respond(503)
+    classify = CountingClassify({503: UpstreamError("busy", status=503, body="")})
+    client = AsyncClient(_classified(classify), sleep=sleeper)
+    with pytest.raises(UpstreamError, match="busy"):
+        await client.request("POST", "/v1/x", json={})
     assert route.call_count == 1
     assert sleeper.calls == []
-    assert classify.calls == [503]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("status", "error"),
+    [
+        (503, AuthError("key disabled", status=503)),
+        (503, InvalidRequestError("query too large")),
+        (502, NotFoundError("no such series")),
+        (429, UpstreamError("not a rate limit", status=429, body="")),
+    ],
+)
+async def test_another_error_from_classify_stops_the_retries(
+    respx_mock: respx.MockRouter, sleeper: Sleeper, status: int, error: XippiosError
+) -> None:
+    route = respx_mock.get(f"{BASE}/v1/x").respond(status)
+    classify = CountingClassify({status: error})
+    client = AsyncClient(_classified(classify), sleep=sleeper)
+    with pytest.raises(type(error)) as info:
+        await client.get("/v1/x")
+    assert info.value is error
+    assert route.call_count == 1
+    assert sleeper.calls == []
+    assert classify.calls == [status]
 
 
 @pytest.mark.anyio

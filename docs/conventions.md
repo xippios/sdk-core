@@ -171,8 +171,8 @@ or query string: the host can name a tenant, the query can carry a key (ADR-0005
   cache hit never, before `classify`. `QuotaPolicy(...).install(config)` sets both and
   is the family's implementation of the quota rules above (ADR-0010); a source does
   not subclass `AsyncClient` for them. Before a 429 or 5xx is retried, the client asks
-  `classify`: a `RateLimitError` sets the wait from its `retry_after`, any other error
-  ends the retries.
+  `classify`: a `RateLimitError` sets the wait from its `retry_after`; an
+  `UpstreamError` for a 5xx changes nothing; any other error ends the retries.
 - Optional response cache (in-memory by default, pluggable) keyed on method+URL+params.
 - Credentials come from the client's `auth`. A call to a keyless endpoint on the same
   host passes `auth=None` and is sent without them; another `httpx.Auth` replaces them

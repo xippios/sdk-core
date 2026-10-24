@@ -164,10 +164,10 @@ class AsyncClient:
         otherwise ``ClientConfig.before_request`` runs once, before the rate limiter, and
         ``ClientConfig.observe`` sees every response from the wire, retried attempts
         included. The source's ``classify`` hook, if any, is asked before a 429 or 5xx
-        is retried (its ``RateLimitError`` sets the wait, another error stops the
-        retries, ADR-0015) and sees the final response first; otherwise a 4xx/5xx that
-        survives the retry policy is raised as the matching error from the taxonomy; a
-        transport failure as ``TransportError``.
+        is retried (its ``RateLimitError`` sets the wait, an error other than an
+        ``UpstreamError`` for a 5xx stops the retries, ADR-0015) and sees the final
+        response first; otherwise a 4xx/5xx that survives the retry policy is raised as
+        the matching error from the taxonomy; a transport failure as ``TransportError``.
 
         Args:
             method: HTTP method.

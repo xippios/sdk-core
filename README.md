@@ -167,7 +167,8 @@ that has to see each call or each response.
 
 `ClientConfig.classify` is asked before a 429 or 5xx is retried: a `RateLimitError`
 with a `retry_after` beyond `backoff_max` is raised after one attempt instead of being
-retried into a spent quota, and any other error it returns ends the retries.
+retried into a spent quota; an `UpstreamError` for a 5xx leaves the retries as they are;
+any other error it returns, an `AuthError` say, ends them.
 
 `auth=` on `request`, `get`, `get_json` and `record` overrides the client's credentials
 for one call: `None` sends none, for a keyless endpoint on the same host, and another

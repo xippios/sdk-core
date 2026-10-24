@@ -79,10 +79,12 @@ client.
    `AsyncClient.request` passes `ClientConfig.classify`. Before a 429 or 5xx is retried
    the loop calls it, at most once per attempt: a `RateLimitError` it returns sets the
    wait from its `retry_after`, else the `Retry-After` header's, so a wait beyond
-   `backoff_max` ends the retries; any other error it returns ends them at once; `None`
-   keeps the status rule of ADR-0011. The final response is classified as before; the
-   loop's answer is reused, not asked for twice. With `raise_on_error=False` the loop
-   stops the same way and the response is returned.
+   `backoff_max` ends the retries; an `UpstreamError` for a 5xx, which restates the
+   default mapping, and `None` keep the status rule of ADR-0011, so a 5xx is retried
+   when the method allows; any other error it returns, an `AuthError` or an
+   `InvalidRequestError` for instance, ends them at once. The final response is
+   classified as before; the loop's answer is reused, not asked for twice. With
+   `raise_on_error=False` the loop stops the same way and the response is returned.
 4. **`auth=` per request.** `AsyncClient.request`, `get` and `get_json`, the same on
    `Client`, and `record`/`record_sync` take `auth: httpx.Auth | UseClientDefault | None
    = httpx.USE_CLIENT_DEFAULT`, typed as httpx types it and passed to httpx's `send`:
@@ -115,11 +117,13 @@ client.
   alone through `cache_filter`.
 - Sources set `retrieved_at` from `xippios_cache_stored_at` on a cache hit.
 - **Behaviour change**, pre-1.0 (conventions §12): a 429 or 5xx that a source's
-  `classify` maps to an error is no longer retried blindly. A source whose `classify`
-  maps a 5xx to an `UpstreamError` for its message, and wants it retried, returns `None`
-  for that answer or a `RateLimitError`. Only a 429 or 5xx is retried at all: an answer
-  of another status that `classify` maps to `RateLimitError`, UN Comtrade's 403 for a
-  spent daily quota, is still raised after one attempt, as ADR-0010 noted.
+  `classify` maps to an error other than an `UpstreamError` for a 5xx is no longer
+  retried blindly. sdk-cashctrl, whose `classify` maps every 4xx and 5xx through the
+  default mapping on a copy of the response with the organisation's host scrubbed,
+  keeps its 5xx retries for reads and its host scrub; its 429 becomes a
+  `RateLimitError` with `Retry-After` as before. Only a 429 or 5xx is retried at all: an
+  answer of another status that `classify` maps to `RateLimitError`, UN Comtrade's 403
+  for a spent daily quota, is still raised after one attempt, as ADR-0010 noted.
 - A GET cached with one auth answers the same GET with another, since the cache key
   leaves `auth` out. A source whose keyed and keyless answers differ for one URL keeps
   them apart with `cache_filter`.
