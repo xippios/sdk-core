@@ -298,6 +298,23 @@ def test_a_refused_value_names_the_variable_and_not_the_value(
     assert info.value.__context__ is None  # the check's error, which quotes it, is not kept
 
 
+def test_a_check_failing_with_any_exception_refuses_the_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def broken(value: str) -> str:
+        raise TypeError(f"cannot check {value}")  # quotes the value on purpose
+
+    monkeypatch.setenv(LIST_VAR, "xa")
+    monkeypatch.setenv("FICTIVE_SRC_XA_SUBDOMAIN", HIDDEN_SUBDOMAIN)
+    with pytest.raises(ConfigError) as info:
+        make(validate={"SUBDOMAIN": broken}).field("xa", "SUBDOMAIN")
+    assert str(info.value) == (
+        "FICTIVE_SRC_XA_SUBDOMAIN does not hold a valid SUBDOMAIN for tenant 'xa'"
+    )
+    assert info.value.__cause__ is None
+    assert info.value.__context__ is None
+
+
 def test_field_of_an_undeclared_tenant_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
     declare(monkeypatch, "xa")  # its variables are set, but it is not listed
     with pytest.raises(InvalidRequestError, match="unknown tenant 'xa'"):

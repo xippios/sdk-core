@@ -70,7 +70,8 @@ class Tenants:
             listed, e.g. ``("demo",)``; they follow the listed names, in this order.
         validate: Per field, a check applied to the value ``field`` returns, e.g.
             ``{"SUBDOMAIN": check_subdomain}``. It returns the value to use, possibly
-            normalised, and raises ``ValueError`` for a value it refuses.
+            normalised, and raises ``ValueError`` for a value it refuses; any exception
+            it raises refuses the value the same way.
 
     Attributes:
         source: The source slug.
@@ -246,7 +247,7 @@ class Tenants:
             return os.environ[variable].strip()
         try:
             return check(os.environ[variable].strip())
-        except ValueError:
+        except Exception:  # any failure refuses the value; none passes it on
             pass
         # Raised outside the handler: the check's error may quote the value, so it is
         # neither the cause nor the context of this one.
