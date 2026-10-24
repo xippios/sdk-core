@@ -71,10 +71,11 @@ not check that a task takes `confirm: bool = False`, which conventions §8 requi
    data came from, by name, set by every task of a multi-tenant source; never a
    credential, a host or another of the tenant's values. `None` for a single-tenant
    source and for the list of tenants.
-6. **A list tool.** `xippios.core.tenants.list_task(tenants, *, name)` is a task with no
-   argument that returns the declared names, names only (ADR-0005), registered as
-   `<source>_list_<tenants>` (`cashctrl_list_organisations`), so an agent can form valid
-   calls (conventions §8).
+6. **A list tool.** `xippios.core.tenants.list_task(tenants, *, name, doc=None)` is a
+   task with no argument that returns the declared names, names only (ADR-0005),
+   registered as `<source>_list_<tenants>` (`cashctrl_list_organisations`), so an agent
+   can form valid calls (conventions §8). It stays on the read server: a write server
+   exposes write tools only.
 7. **The lock is a server option, implemented once.** `TenantLock(param, value)` in
    `xippios.core.mcp`. `build_server(..., tenant_lock=...)` and
    `register_tasks(..., tenant_lock=...)` install, once per server, a middleware that runs
@@ -87,11 +88,11 @@ not check that a task takes `confirm: bool = False`, which conventions §8 requi
    `param` has a default on a locked server, and the lock on a server that already has
    such a task, since the default would name a tenant the caller never chose. A tool
    that does not take `param`, the tenant list for one, listing tools and every other
-   request are untouched. `build_server` passes the instructions one more
-   sentence, "This server is locked to <param> <value>; every tool call that takes
-   <param> must pass <param>=<value>.", through the constructor. The list tool of a locked server lists the
-   locked tenant only. The HTTP router has no lock: a deployment that needs one declares
-   only that tenant.
+   request are untouched. `build_server` passes the instructions one more sentence,
+   "This server is locked to <param> <value>; every tool call that takes <param> must
+   pass <param>=<value>.", through the constructor. The list tool of a locked server
+   lists the locked tenant only. The HTTP router has no lock: a deployment that needs
+   one declares only that tenant.
 8. **A source's options go through hooks.** `main(server, argv=None, *, add_options=None,
    apply_options=None)` and `build_parser(prog, *, add_options=None)`: `add_options` puts
    the source's arguments on core's parser, the line is parsed once, and
@@ -123,9 +124,13 @@ not check that a task takes `confirm: bool = False`, which conventions §8 requi
   replaces them; `client_for(org)` becomes `tenants.client_for(org, build)`, the
   subdomain pattern of `_subdomain` becomes the `validate` check, and its conftest's
   `demo_only` calls `tenants.reset()`. `_org_lock.py` goes: `--org` reaches core's
-  `main` through `add_options`, and `apply_options` returns
-  `build_server(..., tenant_lock=TenantLock("org", tenants.require(org)))`, so neither
-  the private instructions nor the second parse remain. Its tests use `mcp_call_text`
+  `main` through `add_options`, and `apply_options` checks the organisation as
+  `parse_org` did, `tenants.require(org)` and `tenants.field(org, "SUBDOMAIN")`, so an
+  undeclared name or a missing or malformed subdomain still stops the server at startup,
+  then returns `build_server(..., tenant_lock=TenantLock("org", org))`; neither the
+  private instructions nor the second parse remain. Its `validate` check lower-cases the
+  subdomain, as `_subdomain` did, because CashCtrl's hosts are lower-case: a source's
+  check normalises a value the way its upstream does. Its tests use `mcp_call_text`
   instead of driving `mcp.Client` by hand. Its tasks set `ResultMeta(tenant=org)`, it
   registers `cashctrl_list_organisations`, and the messages for an unknown organisation
   read "unknown tenant" now, which its tests assert.
@@ -144,5 +149,7 @@ not check that a task takes `confirm: bool = False`, which conventions §8 requi
   for it; the in-process client tests in `tests/mcp/test_lock.py` are the guard.
 - Core adds no authentication to MCP servers. A write server beyond loopback is the
   deployment's to protect.
-- Conventions 1.9: §1 names the per-tenant variables, §7 the scheme and the error split,
-  §8 the lock, the list tool, the `confirm` check and the loopback rule.
+- Conventions 1.9: §1 names the per-tenant variables, §4 lists `ResultMeta.tenant`, §7
+  the scheme and the error split, §8 the lock, the list tool, the `confirm` check, the
+  loopback rule and `main`'s option hooks; §10 states that a placeholder host that
+  contains the original host is allowed and written as such.

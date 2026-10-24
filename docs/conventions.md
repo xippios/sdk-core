@@ -100,7 +100,7 @@ credential's provenance records the variable name, never the value.
 
 `tenant` is the name of the tenant a multi-tenant source served the data for (§7),
 never a credential, a host or another of the tenant's values; `None` for a
-single-tenant source.
+single-tenant source and for the list of tenants.
 
 `total` is upstream's count of the records matching the request, or `None` when the
 source reports none or the count is unknown (ADR-0012). A paginated task called without
@@ -177,14 +177,14 @@ A multi-tenant source, whose upstream serves each tenant from a host or under a 
 its own (CashCtrl's organisations), declares its tenants with `xippios.core.Tenants`
 (ADR-0014). One variable lists the tenant names, comma-separated, lower-case letters,
 digits and underscores (`CASHCTRL_ORGS=acme,acme_test`); each tenant's values sit in
-`<SOURCE>_<NAME>_<FIELD>`, source and name upper-cased (`CASHCTRL_ACME_SUBDOMAIN`,
-`CASHCTRL_ACME_API_KEY`). The reserved test tenant (`demo`) is declared by its own
-variables alone and never listed: it exists when all of them are set. Every tenant has
-one client of its own, with its own rate limiter and no cache shared with another
-tenant, built on first use and rebuilt when one of its values changes. A name that is
-not declared is the caller's mistake, `InvalidRequestError`; a missing or malformed
-variable of a declared tenant is the operator's, `ConfigError`. Messages and results
-name tenants and variables, never a value.
+`<SOURCE>_<NAME>_<FIELD>`, source and name upper-cased and `-` made `_`
+(`CASHCTRL_ACME_SUBDOMAIN`, `CASHCTRL_ACME_API_KEY`). The reserved test tenant (`demo`)
+is declared by its own variables alone and never listed: it exists when all of them
+are set. Every tenant has one client of its own, with its own rate limiter and no cache
+shared with another tenant, built on first use and rebuilt when one of its values
+changes. A name that is not declared is the caller's mistake, `InvalidRequestError`; a
+missing or malformed variable of a declared tenant is the operator's, `ConfigError`.
+Messages and results name tenants and variables, never a value.
 
 ## 8. MCP conventions
 

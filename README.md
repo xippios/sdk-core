@@ -224,6 +224,7 @@ def lock(args: argparse.Namespace, server: MCPServer) -> MCPServer:
     if args.tenant is None:
         return server
     tenant = tenants.require(args.tenant)  # an undeclared name: exit status 2
+    tenants.field(tenant, "SUBDOMAIN")  # a missing or malformed subdomain: exit status 2
     return build_server("example", TASKS, tenant_lock=TenantLock("tenant", tenant))
 
 

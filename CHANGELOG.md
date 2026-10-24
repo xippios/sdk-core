@@ -102,8 +102,8 @@ All notable changes to this project are documented here. The format follows
 - `ResultMeta.tenant` (default `None`): the tenant the data came from, by name, for a
   multi-tenant source; never a credential, a host or another of the tenant's values.
   A source carried the tenant only inside `request` (`request.org` in sdk-cashctrl),
-  where nothing marked it as the tenant. Optional, so single-tenant sources are
-  unaffected; conventions §4 lists it.
+  where nothing marked it as the tenant. Single-tenant sources leave it `None` (every
+  envelope's JSON now carries `"tenant": null`); conventions §4 lists it.
 - `xippios.core.Tenants(source, *, list_var, fields, reserved=(), validate=None)`: the
   tenants a multi-tenant source declares in the environment, and one client per tenant
   (conventions §7). `list_var` lists the names, comma-separated, `^[a-z0-9_]+$`; each
