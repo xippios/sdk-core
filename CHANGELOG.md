@@ -185,6 +185,12 @@ All notable changes to this project are documented here. The format follows
   there. `snapshot()`, `reset()`; `QuotaSnapshot.describe()` names numbers and times
   only. Generalises sdk-usda-psd's `Quota`, `observe_quota`, `quota_pause` and
   `QuotaAwareClient`, which sdk-usda-esr and sdk-usda-gats would otherwise copy.
+- `Tenants(..., hints=None)`: per field, static text appended to the `ConfigError` that
+  `field()` raises when `validate` refuses a value ("...; <hint>"), so the operator
+  learns what the variable should hold; the check's own message, which may quote the
+  value, is still never used, and the value never appears. A hint for a field not in
+  `fields` is a `ValueError` at construction. Carried over from the `Tenants` work of
+  ADR-0014.
 
 ### Changed
 
