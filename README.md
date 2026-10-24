@@ -34,7 +34,8 @@ It gives a source package the things that should be identical across the family:
   published figure.
 - **Tenants** for a source that serves several tenants from the environment: declared
   names, per-tenant variables, one client per tenant (`Tenants`).
-- **Reference-data loader** for code lists shipped inside a package.
+- **Reference data**: loaders for code lists shipped inside a package, and the
+  renderers that generate their `StrEnum` and `IntEnum` modules.
 - **Adapters** that turn task functions into MCP tools (`xippios.core.mcp`) and FastAPI
   routes (`xippios.core.http`) without any logic of their own.
 - **Test support**: a live-test gate, offline guarantees for every other test (no
@@ -236,6 +237,66 @@ list_tenants = list_task(tenants, name="list_tenants")  # a reference tool: name
 A task takes the tenant's name and sets `ResultMeta(tenant=name, ...)`. The key is read
 on the first request, so a declared tenant without one fails then, with `ConfigError`.
 
+## Reference data and generated enums
+
+A source ships its code lists under `reference/` and reads them with `load_csv`,
+`load_json` or `load_table`. Its refresh script generates `enums.py` from them with
+`xippios.core.reference`, and the module is committed as rendered:
+
+```python
+from xippios.core.reference import id_name_pairs, render_int_enums, render_str_enums
+
+# Value lists: one StrEnum each, member names derived from the values.
+enums = render_str_enums(
+    {"state_alpha": ["AK", "AL"], "sector_desc": ["ANIMALS & PRODUCTS", "CROPS"]},
+    class_names={"sector_desc": "Sector"},
+    fetched="2026-10-24",
+    generator="scripts/refresh_reference.py",
+)
+
+# Integer ids with names: one IntEnum each, values the ids, in upstream order.
+records = [
+    {"attributeId": 4, "attributeName": "Area Harvested"},
+    {"attributeId": 126, "attributeName": "Total Disappearance"},
+    {"attributeId": 173, "attributeName": "Total Disappearance"},
+]
+pairs = id_name_pairs(records, id_field="attributeId", name_field="attributeName")
+ids = render_int_enums(
+    {"attributeId": pairs},
+    class_names={"attributeId": "AttributeId"},
+    fetched="2026-10-24",
+    generator="scripts/refresh_reference.py",
+)
+```
+
+```python
+class AttributeId(IntEnum):
+    """Values of ``attributeId`` (fetched 2026-10-24)."""
+
+    AREA_HARVESTED = 4
+    TOTAL_DISAPPEARANCE_126 = 126
+    TOTAL_DISAPPEARANCE_173 = 173
+```
+
+An upstream whose ids are integers gets `IntEnum` (conventions §3), so a member compares
+equal to the id in upstream's data; a name several ids share gets `_<id>`. Values are
+written as `ascii()` writes them, every character outside ASCII as an escape
+(`"C\xf4te d\u2019Ivoire"`), a member too long for its line is wrapped as ruff wraps it,
+and `__all__` is sorted as ruff sorts it, one name per line. The whole module is
+ASCII-only, so no ruff version can find an ambiguous character in it, and it passes
+`ruff check` and `ruff format --check` unchanged; a key, class name, fetch date or
+generator text that is not printable ASCII is refused. A member name too long for any
+line (over 92 columns), or a value with nothing to derive one from (an empty or a
+non-Latin label), is refused with `ValueError`; the refresh script names that member by
+hand, once:
+
+```python
+enums = render_str_enums(
+    {"short_desc": values},
+    member_names={"short_desc": {long_value: "CORN_GRAIN_IRRIGATED_ALL"}},
+)
+```
+
 ## MCP server in five lines
 
 ```python
@@ -418,7 +479,7 @@ refused unless `Scrub(allow_binary=True)` stores it base64, flagged.
 | `xippios.core.errors` | taxonomy and response classification | alpha |
 | `xippios.core.models` | `UpstreamModel`, `Result`, `ResultMeta`, `parse` | alpha |
 | `xippios.core.config` | `SourceSettings`, `resolve_api_key` | alpha |
-| `xippios.core.reference` | packaged CSV/JSON loaders | alpha |
+| `xippios.core.reference` | packaged CSV/JSON loaders, generated `StrEnum`/`IntEnum` modules | alpha |
 | `xippios.core.pagination` | offset, page and cursor iterators | alpha |
 | `xippios.core.tenants` | `Tenants`, `list_task`: tenants from the environment, one client each | alpha |
 | `xippios.core.mcp` | tool registration, result caps, error text, CLI, quiet request log | alpha |

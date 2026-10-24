@@ -227,6 +227,25 @@ All notable changes to this project are documented here. The format follows
   cap, e.g. `"filter by period or by reporter to see the rest"` for a tool with those
   filters. `None`, the default, keeps the default text; a blank note is refused with
   `ValueError`.
+- `xippios.core.reference.render_int_enums(lists, *, class_names=None,
+  member_names=None, fetched=None, generator="the reference refresh script")`: Python
+  source for one `IntEnum` per list of `(id, name)` pairs, for an upstream whose ids are
+  integers (conventions §3, ADR-0008 as amended): values are the ids in upstream order,
+  so a member compares equal to the id in upstream's data; member names come from the
+  names through `enum_member_name`, and a name several ids share gets `_<id>` appended
+  (`TOTAL_DISAPPEARANCE_126`, `TOTAL_DISAPPEARANCE_173`). An id listed twice, which
+  would silently become an alias, raises `ValueError` naming the key and the id, as does
+  a name still shared or a suffix that makes no identifier (a negative id).
+  `member_names` (key to `{id: member name}`) names a member by hand; the suffix rule
+  still counts upstream's names, so no other member is renamed. The module docstring
+  states the rule; layout, `__all__`, the class docstring, `member_names` and the
+  refusals as in `render_str_enums`. `id_name_pairs(records, *, id_field, name_field)`
+  builds the pairs from upstream's records in upstream order: an id is an `int` or a
+  string of ASCII digits without leading zeros (`"007"` would lose them), a name a
+  string; a record lacking a field, or with a value of another kind, raises `ValueError`
+  naming the field and the record's position, never the record. Generalises
+  sdk-usda-psd's `render_id_enums`, which rendered PSD's `AttributeId` and `UnitId`
+  locally.
 
 ### Changed
 
@@ -366,6 +385,45 @@ All notable changes to this project are documented here. The format follows
   override of `before_request` is not called through the hook `install` sets, and a
   wait or refusal of its own is not neutralised. ADR-0013 and ADR-0015 are marked as
   amended by ADR-0016.
+- `render_str_enums` writes an ASCII-only module that ruff leaves as it is: each value
+  as `ascii()` writes it, so a `"`, a `\` or a control character no longer breaks the
+  file and every character outside ASCII is an escape (`"C\xf4te d\u2019Ivoire"`), in
+  double quotes unless single quotes need fewer escapes, the value unchanged at runtime;
+  readable accents are traded for stability across ruff versions, since no version finds
+  an ambiguous character (RUF001) in ASCII. A member too long for 100 columns is laid
+  out as ruff formats it, the value in parentheses on a line of its own and, too long
+  even there, split into implicitly concatenated parts; `__all__` is sorted in ruff's
+  order (RUF022, natural order with zero-padded digit runs as ruff compares them:
+  `Code05` before `Code1`), one name per line, the classes still in the order given. The
+  module docstring wraps at 100 columns, so a long `generator` no longer overflows, and
+  reads "conventions, section 3"; a class docstring whose fetch date would pass 100
+  columns puts the date in a paragraph of its own. The collision error names only the
+  colliding members, with their positions, and a member name an enum refuses is named
+  with its value and position. The result passes `ruff format --check` and `ruff check`
+  under the family's configuration. sdk-comtrade formatted the file after every refresh
+  and sorted its lists itself. A source that diffs its generated `enums.py` sees a
+  one-time change on its next refresh: the module docstring's first line, `__all__`
+  sorted, one name per line, long members wrapped, non-ASCII characters escaped
+  (sdk-usda-nass's file changes in its first line only).
+- **Breaking:** `render_str_enums` refuses with `ValueError` what it rendered into a
+  file ruff rejects: a member name longer than 92 columns, which fits no line of 100
+  (`NAME = (` alone, indented, is too long), naming the key, the position, the name's
+  length and the limit; a key longer than the 75 characters its class docstring has room
+  for; and caller text the module could not hold as printable ASCII: a `generator`,
+  `fetched` text or key that is not printable ASCII or holds a backslash or three double
+  quotes, which made a non-ASCII module that fails RUF002 (an en dash in `fetched`), and
+  a class name that is no ASCII identifier, is a keyword or is longer than 84
+  characters, each error naming the argument and the key's position, never the text. A
+  value with nothing to derive a member name from (an empty string, a Greek, Cyrillic or
+  CJK label) still raises `ValueError`, now naming the key and the position. The new
+  keyword `member_names` (key to `{value: member name}`) names such a member by hand,
+  once, in the source's refresh script, and is taken before any name is derived; it also
+  resolves a collision. A name set there must be an ASCII identifier an enum takes as a
+  member (no keyword, not `mro`, no `__` anywhere, no `_sunder_` name), unique in its
+  list, and for a key and a value the lists hold, else `ValueError`.
+- Conventions 1.12: §3 states that an upstream enum of integer ids becomes an `IntEnum`
+  and that the generated enums module is ASCII-only and passes `ruff check` and
+  `ruff format --check` as rendered. ADR-0008 gains an amendment.
 
 ### Fixed
 

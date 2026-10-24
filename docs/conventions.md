@@ -1,6 +1,6 @@
 # xippios SDK family — conventions
 
-Version 1.11 · 2026-10-24 · applies to every `sdk-*` repository under github.com/xippios.
+Version 1.12 · 2026-10-24 · applies to every `sdk-*` repository under github.com/xippios.
 Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 
 ## 1. Naming
@@ -58,9 +58,10 @@ plus a loader), `_client.py` (the configured `xippios.core.client` instance).
   reference for the agent; refresh it deliberately, by PR, and diff it.
 - Within-source hygiene is required: dates → `datetime.date`/`datetime`, numbers →
   `int`/`Decimal`/`float` as appropriate, upstream enums → `StrEnum`, pagination
-  resolved, errors typed. Field names are upstream names in snake_case. A `Decimal`
-  field of an `UpstreamModel` serialises as a JSON number in every adapter
-  (ADR-0008); Python keeps the `Decimal`.
+  resolved, errors typed. An upstream enum of integer ids becomes an `IntEnum` instead,
+  so a member compares equal to the id in upstream's data (ADR-0008). Field names are
+  upstream names in snake_case. A `Decimal` field of an `UpstreamModel` serialises as a
+  JSON number in every adapter (ADR-0008); Python keeps the `Decimal`.
 - Task-shaped functions may return a *projection* of an upstream record: a subset of
   its columns under their upstream names, typed, built with `UpstreamModel.project`.
   Nothing is renamed or computed; parsing a value is the only permitted override.
@@ -68,7 +69,10 @@ plus a loader), `_client.py` (the configured `xippios.core.client` instance).
   Mapping between sources is business logic and lives outside this family.
 - Reference data (commodity codes, country codes, report calendars) ships inside the
   package under `reference/` as CSV or JSON, loaded via `xippios.core.reference`, and
-  is versioned with the package.
+  is versioned with the package. Enums are generated from it with
+  `xippios.core.reference` (`render_str_enums`, `render_int_enums`), and the whole
+  generated module, docstrings included, is ASCII-only and passes `ruff check` and
+  `ruff format --check` as rendered (ADR-0008).
 
 ## 4. Result envelope and metadata
 
