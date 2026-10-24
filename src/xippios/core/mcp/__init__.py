@@ -12,14 +12,15 @@ A source's ``mcp.py`` is a handful of lines::
 
 A multi-tenant source adds ``--org`` and locks the server to one tenant (ADR-0014)::
 
+    def lock(args: argparse.Namespace, server: MCPServer) -> MCPServer:
+        if args.org is None:
+            return server
+        org = tenants.require(args.org)  # undeclared: exit status 2
+        tenants.field(org, "SUBDOMAIN")  # missing or malformed: exit status 2
+        return build_server("cashctrl", TASKS, tenant_lock=TenantLock("org", org))
+
     def run() -> None:
-        main(
-            server,
-            add_options=lambda parser: parser.add_argument("--org"),
-            apply_options=lambda args, server: server if args.org is None else build_server(
-                "cashctrl", TASKS, tenant_lock=TenantLock("org", tenants.require(args.org))
-            ),
-        )
+        main(server, add_options=lambda parser: parser.add_argument("--org"), apply_options=lock)
 
 Requires the ``mcp`` extra: ``uv add "xippios-core[mcp]"``.
 """
