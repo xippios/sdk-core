@@ -1,7 +1,9 @@
 # Definition of done
 
 Copy this list into every PR description and tick honestly. An unticked item needs a
-one-line reason. CI enforces the first block; the rest is reviewed by a human.
+one-line reason. CI enforces the first block; the rest is reviewed by a human. An
+adoption PR (conventions §15) copies the blocks Enforced by CI, Adoption PR and Process
+instead.
 
 ## Enforced by CI
 - [ ] `ruff check` and `ruff format --check` pass
@@ -26,6 +28,19 @@ one-line reason. CI enforces the first block; the rest is reviewed by a human.
 - [ ] `CHANGELOG.md` has an entry under Unreleased
 - [ ] README updated if install, usage, or endpoint coverage changed
 - [ ] if `docs/upstream/` was refreshed: `FETCHED.md` updated and the diff summarised in the PR
+
+## Adoption PR (conventions §15)
+The reviewer judges an adoption PR against this list and nothing else: no new endpoints,
+tasks or fixtures ride along.
+- [ ] core floor raised: `xippios-core~=<minor>` and its extras likewise, from PyPI, no git pin, `uv.lock` updated
+- [ ] `copier update` to the template release, conflicts resolved
+- [ ] every local workaround a core change replaced is deleted, the core change named for each in the PR description
+- [ ] logic duplicated across sources moved into core or dropped; what core lacks is proposed to sdk-core, not copied
+- [ ] every test that asserted a limiter wait or key resolution is marked `rate_limited` or overrides `placeholder_api_key` (ADR-0013)
+- [ ] generated enum files re-rendered once and committed as rendered
+- [ ] `mypy --strict` covers `scripts/` too
+- [ ] the current conventions version applied
+- [ ] `CHANGELOG.md` line under Unreleased naming the core, template and conventions versions adopted
 
 ## Process
 - [ ] branch named `feature/`, `fix/`, `chore/`, or `docs/`; Conventional Commits
