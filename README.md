@@ -488,8 +488,9 @@ refused unless `Scrub(allow_binary=True)` stores it base64, flagged.
 | `xippios.core.http` | router factory, problem details | alpha |
 | `xippios.core.testing` | live gate, offline run, record, replay, scrub, write checks | alpha |
 
-Alpha: the public surface may change in a minor version until the first source
-package, `sdk-usda-nass`, has exercised it.
+Alpha: a new minor version may change the public surface, with no backward
+compatibility across minors; patch releases stay compatible. A source depends on one
+minor (`xippios-core~=0.2.0`) and adopts the next through conventions §15.
 
 ## Conventions
 
