@@ -279,11 +279,19 @@ class AttributeId(IntEnum):
 ```
 
 An upstream whose ids are integers gets `IntEnum` (conventions §3), so a member compares
-equal to the id in upstream's data. Values are written through `repr()`, a member too
-long for its line is wrapped as ruff wraps it, and `__all__` is sorted, one name per
-line: the module passes `ruff check` and `ruff format --check` unchanged. Two edges
-remain, a member name too long for a line of its own (E501) and a value with a character
-ruff calls ambiguous, such as an en dash (RUF001).
+equal to the id in upstream's data. Values are written through `repr()`, a character
+ruff calls confusable (a typographic apostrophe, an en dash, a no-break space) as a `\u`
+escape while `Côte` stays `Côte`, a member too long for its line is wrapped as ruff wraps
+it, and `__all__` is sorted, one name per line: the module passes `ruff check` and
+`ruff format --check` unchanged. A member name too long for any line (over 92 columns)
+is refused with `ValueError`; the refresh script names that member by hand, once:
+
+```python
+enums = render_str_enums(
+    {"short_desc": values},
+    member_names={"short_desc": {long_value: "CORN_GRAIN_IRRIGATED_ALL"}},
+)
+```
 
 ## MCP server in five lines
 
