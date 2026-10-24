@@ -62,11 +62,13 @@ commodity classification), and a tool that needs more rows need not be named `li
    is a deliberate choice for one tool, a reference list an agent needs whole, made in
    that tool's entry; every tool without one keeps the family default, 200 rows or
    64 KB. No tool goes uncapped: every result stays bounded, and every cut carries the
-   note. `max_bytes` is a soft bound: it bounds the rows and the preview, and the
-   envelope and the note can add to it. A list keeps the most rows whose whole text
-   fits; when not even zero rows fit, a tiny bound with a long note, it returns zero
-   rows plus the note. A non-list result over the bound returns a preview of
-   `max_bytes` bytes, which JSON escaping lengthens, plus the note. Results stay
+   note. Bytes are those of the compact JSON text encoded as UTF-8, which the convention
+   always said; until this ADR core counted characters, so a non-ASCII result now keeps
+   fewer rows than before. `max_bytes` is a soft bound: it bounds the rows and the
+   preview, and the envelope and the note can add to it. A list keeps the most rows
+   whose whole text fits; when not even zero rows fit, a tiny bound with a long note, it
+   returns zero rows plus the note. A non-list result over the bound returns a preview
+   of `max_bytes` bytes, which JSON escaping lengthens, plus the note. Results stay
    bounded and are never truncated silently (§8).
 5. **Caps live with the tasks.** A source keeps its per-tool caps in an
    `MCP_CAPS: Mapping[str, ResultCap]` mapping in its `tasks.py`, next to `__all__`: a
@@ -95,7 +97,8 @@ commodity classification), and a tool that needs more rows need not be named `li
   tool.
 - **Behaviour change**, pre-1.0 (conventions §12): the default note's wording changes.
   A test that asserts the old text ("more filters or a shorter date range") fails; none
-  is known in the family.
+  is known in the family. A result with non-ASCII text keeps fewer rows under the same
+  `max_bytes`, since each such character now counts its two to four UTF-8 bytes.
 - Conventions 1.11: §8 states the default cap, the per-tool cap, rows and bytes, for a
   reference tool whose whole list an agent needs, where a source keeps its caps
   (`MCP_CAPS` in `tasks.py`), and that the note never promises a filter the tool lacks.

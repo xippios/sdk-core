@@ -219,18 +219,18 @@ Messages and results name tenants and variables, never a value.
   it on a loopback host only (`127.0.0.1`, `localhost`, `::1`) unless `--allow-remote`
   is passed, with a gateway in front. A write server exposes write tools only;
   reference tools, the tenant list among them, stay on the read server.
-- Result cap: default 200 rows or 64 KB, whichever first. Over the cap, return the
-  first page plus a note on how to narrow the query. Never truncate silently. A
-  reference tool whose whole list an agent needs gets a cap of its own, keyed by the
-  task function's name, with the rows and bytes the source judges it needs
-  (`register_tasks(..., caps={"list_partners": ResultCap(max_rows=400,
-  max_bytes=100_000)})`); a byte bound above the default is a deliberate choice for that
-  tool, and every other tool keeps the default (ADR-0016). The note never promises a
-  filter the tool lacks: the default says "narrow the query to see the rest", and a
-  tool with filters names them in its cap's `note`. Since that note names a task's
-  filters, a source keeps its caps with its tasks, as `MCP_CAPS: Mapping[str,
-  ResultCap]` in `tasks.py` next to `__all__`, and its `mcp.py` passes them through as
-  `caps=getattr(tasks, "MCP_CAPS", None)`.
+- Result cap: default 200 rows or 64 KB, whichever first, bytes counted in the UTF-8
+  encoding of the compact JSON text. Over the cap, return the first page plus a note on
+  how to narrow the query. Never truncate silently. A reference tool whose whole list an
+  agent needs gets a cap of its own, keyed by the task function's name, with the rows
+  and bytes the source judges it needs (`register_tasks(..., caps={"list_partners":
+  ResultCap(max_rows=400, max_bytes=100_000)})`); a byte bound above the default is a
+  deliberate choice for that tool, and every other tool keeps the default (ADR-0016).
+  The note never promises a filter the tool lacks: the default says "narrow the query to
+  see the rest", and a tool with filters names them in its cap's `note`. Since that note
+  names a task's filters, a source keeps its caps with its tasks, as `MCP_CAPS:
+  Mapping[str, ResultCap]` in `tasks.py` next to `__all__`, and its `mcp.py` passes them
+  through as `caps=getattr(tasks, "MCP_CAPS", None)`.
 - Reference lookups are tools too: `<source>_list_<thing>` (commodities, countries,
   attributes). Agents need them to form valid calls. A multi-tenant source lists its
   tenants the same way, names only (`list_task`, `cashctrl_list_organisations`).
