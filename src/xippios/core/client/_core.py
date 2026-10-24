@@ -12,13 +12,18 @@ from typing import Any, Self
 
 import httpx
 
+# httpx exports the sentinel USE_CLIENT_DEFAULT but not its class, which the annotation
+# of ``auth=`` needs; the class lives in httpx's private ``_client`` module (httpx 0.28).
+# Aliased here once; the rest of core imports it from this module.
+from httpx._client import UseClientDefault
+
 from xippios.core.client.cache import CachedResponse, cache_key, strip_wire_headers
 from xippios.core.client.config import ClientConfig, RetryPolicy, Timeouts
 from xippios.core.client.ratelimit import TokenBucket
 from xippios.core.client.retry import send_with_retries
 from xippios.core.errors import BODY_LIMIT, ValidationError, XippiosError, raise_for_status
 
-__all__ = ["AsyncClient", "Params"]
+__all__ = ["AsyncClient", "Params", "UseClientDefault"]
 
 Params = Mapping[str, Any] | None
 
@@ -150,6 +155,7 @@ class AsyncClient:
         data: Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
         raise_on_error: bool = True,
+        auth: httpx.Auth | UseClientDefault | None = httpx.USE_CLIENT_DEFAULT,
     ) -> httpx.Response:
         """Send one request and return the response.
 
@@ -175,6 +181,12 @@ class AsyncClient:
             raise_on_error: ``False`` returns 4xx/5xx responses instead of raising, for
                 callers that record fixtures or inspect error bodies; ``classify``
                 still decides whether a 429 or 5xx is retried.
+            auth: Credentials for this request only, every retry included:
+                ``httpx.USE_CLIENT_DEFAULT`` (the default) sends the client's ``auth``,
+                ``None`` sends none, for a keyless endpoint on the same host, and an
+                ``httpx.Auth`` replaces the client's, e.g.
+                ``QueryKeyAuth("key", "OTHER_API_KEY")``. The cache key leaves it out:
+                a GET cached with one auth answers the same GET with another.
 
         Raises:
             ValueError: Both ``json`` and ``data`` were given; a request has one body.
@@ -206,7 +218,7 @@ class AsyncClient:
             request = pool.build_request(
                 method, path, params=params, json=json, data=data, headers=headers
             )
-            response = await pool.send(request)
+            response = await pool.send(request, auth=auth)
             if observe is not None:
                 observe(response)
             return response
@@ -241,16 +253,29 @@ class AsyncClient:
         return response
 
     async def get(
-        self, path: str, *, params: Params = None, headers: Mapping[str, str] | None = None
+        self,
+        path: str,
+        *,
+        params: Params = None,
+        headers: Mapping[str, str] | None = None,
+        auth: httpx.Auth | UseClientDefault | None = httpx.USE_CLIENT_DEFAULT,
     ) -> httpx.Response:
-        """``request("GET", ...)``."""
-        return await self.request("GET", path, params=params, headers=headers)
+        """``request("GET", ...)``; ``auth=None`` sends no credentials."""
+        return await self.request("GET", path, params=params, headers=headers, auth=auth)
 
     async def get_json(
-        self, path: str, *, params: Params = None, headers: Mapping[str, str] | None = None
+        self,
+        path: str,
+        *,
+        params: Params = None,
+        headers: Mapping[str, str] | None = None,
+        auth: httpx.Auth | UseClientDefault | None = httpx.USE_CLIENT_DEFAULT,
     ) -> Any:
-        """GET and decode a JSON body, raising ``ValidationError`` when it is not JSON."""
-        response = await self.get(path, params=params, headers=headers)
+        """GET and decode a JSON body, raising ``ValidationError`` when it is not JSON.
+
+        ``auth`` as for ``request``: ``None`` sends no credentials.
+        """
+        response = await self.get(path, params=params, headers=headers, auth=auth)
         try:
             return response.json()
         except ValueError as exc:

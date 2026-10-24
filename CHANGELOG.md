@@ -159,6 +159,13 @@ All notable changes to this project are documented here. The format follows
   the retry decision, also with `raise_on_error=False`; an exception from it propagates.
   sdk-usda-psd had to subclass `AsyncClient` and override `request` to pause before a
   request, and called its quota observer from `classify`, which a raw response skips.
+- `auth=` per request for `AsyncClient.request`, `get` and `get_json`, `Client.request`,
+  `get` and `get_json`, and `record`/`record_sync`, typed as httpx types it
+  (`httpx.Auth | UseClientDefault | None`, default `httpx.USE_CLIENT_DEFAULT`): `None`
+  sends the request, every retry included, without the client's credentials, an
+  `httpx.Auth` replaces them for that call, the default sends the client's. The cache
+  key leaves `auth` out. sdk-comtrade fetches its public reference files from the same
+  host as its keyed data API and needed a second client to keep the key off them.
 
 ### Changed
 

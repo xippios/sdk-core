@@ -11,7 +11,9 @@ from xippios.core.client import (
     CachedResponse,
     Client,
     ClientConfig,
+    HeaderKeyAuth,
     MemoryCache,
+    QueryKeyAuth,
     RateLimit,
     RetryPolicy,
     Timeouts,
@@ -29,7 +31,7 @@ from xippios.core.errors import (
     ValidationError,
     XippiosError,
 )
-from xippios.core.testing import sent_urls
+from xippios.core.testing import REDACTED, sent_urls
 
 BASE = "https://api.example.test"
 
@@ -798,3 +800,79 @@ async def test_classify_is_not_asked_before_a_retry_that_cannot_happen(
     assert response.status_code == 503
     assert route.call_count == 1
     assert classify.calls == []  # not retryable for a POST: the loop never asks
+
+
+# -- auth per request (ADR-0015) ----------------------------------------------------------
+
+KEY_ENV = "EXAMPLE_API_KEY"  # pragma: allowlist secret (a variable name)
+
+
+@pytest.mark.anyio
+async def test_auth_none_sends_a_keyed_client_s_request_without_the_key(
+    respx_mock: respx.MockRouter, config: ClientConfig
+) -> None:
+    # sdk-comtrade: the public reference files on the same host needed a second client.
+    route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
+    client = AsyncClient(config, auth=QueryKeyAuth("key", KEY_ENV))
+    await client.get("/v1/x", params={"a": 1})
+    await client.get("/v1/x", params={"a": 1}, auth=None)
+    await client.get_json("/v1/x", params={"a": 1}, auth=None)
+    await client.request("GET", "/v1/x", params={"a": 1}, auth=None)
+    await client.get("/v1/x", params={"a": 1})
+    assert sent_urls(route) == [
+        f"{BASE}/v1/x?a=1&key={REDACTED}",
+        f"{BASE}/v1/x?a=1",
+        f"{BASE}/v1/x?a=1",
+        f"{BASE}/v1/x?a=1",
+        f"{BASE}/v1/x?a=1&key={REDACTED}",
+    ]
+
+
+@pytest.mark.anyio
+async def test_another_auth_replaces_the_client_s_for_one_request(
+    respx_mock: respx.MockRouter, config: ClientConfig
+) -> None:
+    route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
+    client = AsyncClient(config, auth=HeaderKeyAuth("X-Api-Key", KEY_ENV))
+    await client.get("/v1/x", auth=httpx.BasicAuth("user", "pw"))
+    other = route.calls.last.request.headers
+    assert other["authorization"].startswith("Basic ")
+    assert "x-api-key" not in other
+    await client.get("/v1/x")
+    default = route.calls.last.request.headers
+    assert "x-api-key" in default
+    assert "authorization" not in default
+
+
+@pytest.mark.anyio
+async def test_auth_none_holds_for_every_retry(
+    respx_mock: respx.MockRouter, config: ClientConfig, sleeper: Sleeper
+) -> None:
+    route = respx_mock.get(f"{BASE}/v1/x").mock(
+        side_effect=[httpx.Response(503), httpx.Response(200, json={})]
+    )
+    client = AsyncClient(config, auth=HeaderKeyAuth("X-Api-Key", KEY_ENV), sleep=sleeper)
+    await client.get("/v1/x", auth=None)
+    assert route.call_count == 2
+    assert not any("x-api-key" in call.request.headers for call in route.calls)
+
+
+@pytest.mark.anyio
+async def test_the_cache_key_leaves_auth_out(respx_mock: respx.MockRouter) -> None:
+    route = respx_mock.get(f"{BASE}/v1/reference").respond(200, json={"codes": [1]})
+    config = ClientConfig(source="example", version="1", base_url=BASE, cache=MemoryCache())
+    client = AsyncClient(config, auth=QueryKeyAuth("key", KEY_ENV))
+    await client.get("/v1/reference", auth=None)
+    hit = await client.get("/v1/reference")
+    assert hit.extensions["xippios_cache"] == "hit"
+    assert sent_urls(route) == [f"{BASE}/v1/reference"]
+
+
+def test_the_sync_facade_takes_auth(respx_mock: respx.MockRouter, config: ClientConfig) -> None:
+    route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
+    with Client(config, auth=QueryKeyAuth("key", KEY_ENV)) as client:
+        client.get("/v1/x", auth=None)
+        client.get_json("/v1/x", auth=None)
+        client.request("GET", "/v1/x", auth=None)
+        client.get("/v1/x")
+    assert sent_urls(route) == [f"{BASE}/v1/x"] * 3 + [f"{BASE}/v1/x?key={REDACTED}"]

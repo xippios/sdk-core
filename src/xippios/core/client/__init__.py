@@ -7,7 +7,7 @@ from typing import Any, Self
 import httpx
 
 from xippios.core._loop import run
-from xippios.core.client._core import AsyncClient, Params
+from xippios.core.client._core import AsyncClient, Params, UseClientDefault
 from xippios.core.client.auth import (
     BasicKeyAuth,
     BearerAuth,
@@ -91,8 +91,12 @@ class Client:
         data: Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
         raise_on_error: bool = True,
+        auth: httpx.Auth | UseClientDefault | None = httpx.USE_CLIENT_DEFAULT,
     ) -> httpx.Response:
-        """See ``AsyncClient.request``; ``data`` is a form body, ``json`` a JSON one."""
+        """See ``AsyncClient.request``; ``data`` is a form body, ``json`` a JSON one.
+
+        ``auth=None`` sends this request without the client's credentials.
+        """
         return run(
             self.async_client.request(
                 method,
@@ -102,20 +106,31 @@ class Client:
                 data=data,
                 headers=headers,
                 raise_on_error=raise_on_error,
+                auth=auth,
             )
         )
 
     def get(
-        self, path: str, *, params: Params = None, headers: Mapping[str, str] | None = None
+        self,
+        path: str,
+        *,
+        params: Params = None,
+        headers: Mapping[str, str] | None = None,
+        auth: httpx.Auth | UseClientDefault | None = httpx.USE_CLIENT_DEFAULT,
     ) -> httpx.Response:
         """See ``AsyncClient.get``."""
-        return run(self.async_client.get(path, params=params, headers=headers))
+        return run(self.async_client.get(path, params=params, headers=headers, auth=auth))
 
     def get_json(
-        self, path: str, *, params: Params = None, headers: Mapping[str, str] | None = None
+        self,
+        path: str,
+        *,
+        params: Params = None,
+        headers: Mapping[str, str] | None = None,
+        auth: httpx.Auth | UseClientDefault | None = httpx.USE_CLIENT_DEFAULT,
     ) -> Any:
         """See ``AsyncClient.get_json``."""
-        return run(self.async_client.get_json(path, params=params, headers=headers))
+        return run(self.async_client.get_json(path, params=params, headers=headers, auth=auth))
 
     def close(self) -> None:
         """Close the background loop's connection pool."""
