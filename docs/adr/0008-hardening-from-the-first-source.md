@@ -60,11 +60,13 @@ the value in parentheses on a line of its own and, too long even there, split in
 implicitly concatenated parts; and writes `__all__` sorted in ruff's order (RUF022), one
 name per line, so a source's own lines do not conflict on `copier update`. The module
 passes `ruff format --check` and `ruff check` under the family's configuration with no
-exemption, where sdk-comtrade had to format it after every refresh. The output is
-ASCII-only, trading readable accents (`C\xf4te`) for stability across ruff versions: no
-version can find an ambiguous character (RUF001) in it, and the values are the same at
-runtime. A member name that fits no line of 100 columns, or a value with nothing to
-derive one from, is refused with `ValueError`, and the source's refresh script names
+exemption, where sdk-comtrade had to format it after every refresh. The whole module is
+ASCII-only, trading readable accents (`C\xf4te`) for stability across ruff versions:
+values are escaped, and a key, a class name, a fetch date or a generator text that is
+not printable ASCII, or holds a backslash or three double quotes, is refused, so no ruff
+version can find an ambiguous character in it (RUF001, RUF002), and the values are the
+same at runtime. A member name that fits no line of 100 columns, or a value with nothing
+to derive one from, is refused with `ValueError`, and the source's refresh script names
 that member once in the renderers' `member_names`. An upstream whose ids are integers
 renders `IntEnum`, not the `StrEnum` default: `render_int_enums` takes `(id, name)`
 pairs, which `id_name_pairs` builds from upstream's records, takes member names from the
