@@ -62,7 +62,12 @@ commodity classification), and a tool that needs more rows need not be named `li
    is a deliberate choice for one tool, a reference list an agent needs whole, made in
    that tool's entry; every tool without one keeps the family default, 200 rows or
    64 KB. No tool goes uncapped: every result stays bounded, and every cut carries the
-   note.
+   note. `max_bytes` is a soft bound: it bounds the rows and the preview, and the
+   envelope and the note can add to it. A list keeps the most rows whose whole text
+   fits; when not even zero rows fit, a tiny bound with a long note, it returns zero
+   rows plus the note. A non-list result over the bound returns a preview of
+   `max_bytes` bytes, which JSON escaping lengthens, plus the note. Results stay
+   bounded and are never truncated silently (§8).
 5. **Caps live with the tasks.** A source keeps its per-tool caps in an
    `MCP_CAPS: Mapping[str, ResultCap]` mapping in its `tasks.py`, next to `__all__`: a
    cap's note names the task's filters, so the mapping belongs with the tasks it

@@ -24,7 +24,9 @@ class ResultCap:
 
     Attributes:
         max_rows: Most items of a list result that are returned.
-        max_bytes: Most bytes of JSON text, encoded as UTF-8, that are returned.
+        max_bytes: Bytes of JSON text, encoded as UTF-8, a soft bound: it bounds the
+            rows and the preview, and the envelope and the note can add to it (see
+            ``cap_result``).
         note: The text after the counts when the cap cuts a result, used verbatim, e.g.
             ``"filter by period or by reporter to see the rest"`` for a tool that has
             those filters. ``None`` says ``"narrow the query to see the rest"``, which
@@ -92,6 +94,13 @@ def cap_result(value: Any, cap: ResultCap | None = None) -> str:
     Any other value that exceeds the byte cap is replaced by a note, ``"result is <n>
     bytes, over the cap of <max_bytes>; "`` and the same text, and a preview of its first
     ``max_bytes`` bytes. Bytes are those of the JSON text encoded as UTF-8.
+
+    ``max_bytes`` is a soft bound. A list keeps the most rows whose text, envelope and
+    note included, fits it; when not even zero rows fit, a tiny bound or a long note,
+    the result is zero rows plus the note, over the bound. A preview is ``max_bytes``
+    bytes of the text, and the note and the preview's JSON escaping come on top. Either
+    way the result stays bounded and says what it left out; nothing is cut silently
+    (conventions §8).
 
     Args:
         value: What the task function returned; pydantic models are dumped in JSON mode.
