@@ -282,11 +282,13 @@ An upstream whose ids are integers gets `IntEnum` (conventions §3), so a member
 equal to the id in upstream's data; a name several ids share gets `_<id>`. Values are
 written as `ascii()` writes them, every character outside ASCII as an escape
 (`"C\xf4te d\u2019Ivoire"`), a member too long for its line is wrapped as ruff wraps it,
-and `__all__` is sorted as ruff sorts it, one name per line: the module is ASCII-only and
-passes `ruff check` and `ruff format --check` unchanged, under any ruff version. A member
-name too long for any line (over 92 columns), or a value with nothing to derive one from
-(an empty or a non-Latin label), is refused with `ValueError`; the refresh script names
-that member by hand, once:
+and `__all__` is sorted as ruff sorts it, one name per line. The whole module is
+ASCII-only, so no ruff version can find an ambiguous character in it, and it passes
+`ruff check` and `ruff format --check` unchanged; a key, class name, fetch date or
+generator text that is not printable ASCII is refused. A member name too long for any
+line (over 92 columns), or a value with nothing to derive one from (an empty or a
+non-Latin label), is refused with `ValueError`; the refresh script names that member by
+hand, once:
 
 ```python
 enums = render_str_enums(
