@@ -164,8 +164,10 @@ async def test_observe_sees_every_attempt_before_classify(respx_mock: respx.Mock
         await client.get("/v1/x")
     assert events.seen == [
         "observe 503",
+        "classify 503",
         "sleep 0",
         "observe 502",
+        "classify 502",
         "sleep 0",
         "observe 404",
         "classify 404",

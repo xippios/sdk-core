@@ -16,7 +16,7 @@ from xippios.core.client.cache import CachedResponse, cache_key, strip_wire_head
 from xippios.core.client.config import ClientConfig, RetryPolicy, Timeouts
 from xippios.core.client.ratelimit import TokenBucket
 from xippios.core.client.retry import send_with_retries
-from xippios.core.errors import BODY_LIMIT, ValidationError, raise_for_status
+from xippios.core.errors import BODY_LIMIT, ValidationError, XippiosError, raise_for_status
 
 __all__ = ["AsyncClient", "Params"]
 
@@ -157,9 +157,11 @@ class AsyncClient:
         ``ClientConfig.cache_filter``) apply as configured. A cache hit returns at once;
         otherwise ``ClientConfig.before_request`` runs once, before the rate limiter, and
         ``ClientConfig.observe`` sees every response from the wire, retried attempts
-        included. The source's ``classify`` hook, if any, sees the response first;
-        otherwise a 4xx/5xx that survives the retry policy is raised as the matching
-        error from the taxonomy; a transport failure as ``TransportError``.
+        included. The source's ``classify`` hook, if any, is asked before a 429 or 5xx
+        is retried (its ``RateLimitError`` sets the wait, another error stops the
+        retries, ADR-0015) and sees the final response first; otherwise a 4xx/5xx that
+        survives the retry policy is raised as the matching error from the taxonomy; a
+        transport failure as ``TransportError``.
 
         Args:
             method: HTTP method.
@@ -171,7 +173,8 @@ class AsyncClient:
                 For upstreams whose writes take form fields, not JSON.
             headers: Extra headers for this request only.
             raise_on_error: ``False`` returns 4xx/5xx responses instead of raising, for
-                callers that record fixtures or inspect error bodies.
+                callers that record fixtures or inspect error bodies; ``classify``
+                still decides whether a 429 or 5xx is retried.
 
         Raises:
             ValueError: Both ``json`` and ``data`` were given; a request has one body.
@@ -208,12 +211,18 @@ class AsyncClient:
                 observe(response)
             return response
 
+        classify = None if self.config.classify is None else _ClassifyOnce(self.config.classify)
         response = await send_with_retries(
-            send, policy=self.config.retry, method=method, source=self.source, sleep=self._sleep
+            send,
+            policy=self.config.retry,
+            method=method,
+            source=self.source,
+            sleep=self._sleep,
+            classify=classify,
         )
         if raise_on_error:
-            if self.config.classify is not None:
-                classified = self.config.classify(response)
+            if classify is not None:
+                classified = classify(response)
                 if classified is not None:
                     raise classified
             raise_for_status(response, source=self.source)
@@ -287,6 +296,25 @@ class _BorrowedTransport(httpx.AsyncBaseTransport):
 
     async def aclose(self) -> None:
         """Do nothing: the owner closes its transport with its own ``aclose``."""
+
+
+class _ClassifyOnce:
+    """``classify`` called at most once per response.
+
+    The retry loop asks it before a retry and ``request`` asks it for the final
+    response, which may be the one the loop asked about last.
+    """
+
+    def __init__(self, classify: Callable[[httpx.Response], XippiosError | None]) -> None:
+        self._classify = classify
+        self._last: tuple[httpx.Response, XippiosError | None] | None = None
+
+    def __call__(self, response: httpx.Response) -> XippiosError | None:
+        if self._last is not None and self._last[0] is response:
+            return self._last[1]
+        classified = self._classify(response)
+        self._last = (response, classified)
+        return classified
 
 
 def _from_cache(cached: CachedResponse, request: httpx.Request) -> httpx.Response:

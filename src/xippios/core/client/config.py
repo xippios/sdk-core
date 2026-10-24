@@ -131,7 +131,11 @@ class ClientConfig:
         classify: The source's own error mapping (ADR-0008): called with every response
             before the default status mapping; return a taxonomy error to raise it, or
             ``None`` to fall through. Where a source states its documented error shapes,
-            including errors upstream sends with a 200.
+            including errors upstream sends with a 200. It is also asked before a 429 or
+            5xx is retried, ``raise_on_error=False`` or not (ADR-0015): a
+            ``RateLimitError`` sets the wait from its ``retry_after``, so one beyond
+            ``retry.backoff_max`` is not retried; any other error stops the retries;
+            ``None`` leaves the decision to the retry policy. At most once per response.
         before_request: Called once per ``request()`` call, not per retry, after the
             cache lookup (a cache hit returns before it) and before the rate limiter,
             with the request as built from base URL, path, query parameters, body and

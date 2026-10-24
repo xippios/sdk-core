@@ -259,6 +259,16 @@ All notable changes to this project are documented here. The format follows
   registration, the loopback rule, the tenant list tool, the tenant lock and the option
   hooks; §10 states that a placeholder host that contains the original host is allowed
   and written as such. ADR-0014 added.
+- A 429 or 5xx that `ClientConfig.classify` maps to an error is no longer retried
+  blindly (ADR-0015). Before each retry the loop asks `classify`, at most once per
+  attempt and also with `raise_on_error=False`: a `RateLimitError` sets the wait from
+  its `retry_after` (else the `Retry-After` header's), so a wait beyond
+  `RetryPolicy.backoff_max` is raised after one attempt; any other error it returns
+  stops the retries; `None` keeps the status rule. `send_with_retries` takes the
+  mapping as `classify=`. A 429 without `Retry-After`, api.data.gov's answer to a spent
+  hourly quota, was retried three more times into the spent quota before `classify`
+  could say "one hour" (sdk-usda-psd). A source whose `classify` maps a 5xx or 429 to
+  an error it still wants retried returns `None` for it, or a `RateLimitError`.
 
 ### Fixed
 

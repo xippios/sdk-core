@@ -660,3 +660,141 @@ async def test_classify_sees_every_response_first(respx_mock: respx.MockRouter) 
     assert (await client.get_json("/v1/ok")) == {"rows": 1}
     raw = await client.request("GET", "/v1/empty", raise_on_error=False)
     assert raw.status_code == 200
+
+
+# -- classify shapes retries (ADR-0015) ---------------------------------------------------
+
+
+class CountingClassify:
+    """A source's classify that maps by status and counts its calls per status."""
+
+    def __init__(self, mapping: dict[int, XippiosError]) -> None:
+        self.mapping = mapping
+        self.calls: list[int] = []
+
+    def __call__(self, response: httpx.Response) -> XippiosError | None:
+        self.calls.append(response.status_code)
+        return self.mapping.get(response.status_code)
+
+
+def _classified(classify: CountingClassify, *, max_attempts: int = 4) -> ClientConfig:
+    policy = RetryPolicy(max_attempts=max_attempts, backoff_base=0.1, jitter=False)
+    return ClientConfig(
+        source="example", version="1", base_url=BASE, retry=policy, classify=classify
+    )
+
+
+@pytest.mark.anyio
+async def test_a_429_that_classify_gives_a_long_wait_is_raised_after_one_attempt(
+    respx_mock: respx.MockRouter, sleeper: Sleeper
+) -> None:
+    # sdk-usda-psd: api.data.gov's spent quota is a 429 without Retry-After; the core loop
+    # fired three more requests into it before classify's one-hour wait was ever read.
+    route = respx_mock.get(f"{BASE}/v1/x").respond(429, json={"error": "OVER_RATE_LIMIT"})
+    spent = RateLimitError("quota spent", retry_after=3600.0, source="example")
+    classify = CountingClassify({429: spent})
+    client = AsyncClient(_classified(classify), sleep=sleeper)
+    with pytest.raises(RateLimitError) as info:
+        await client.get("/v1/x")
+    assert info.value is spent
+    assert info.value.retry_after == 3600.0
+    assert route.call_count == 1
+    assert sleeper.calls == []
+    assert classify.calls == [429]
+
+
+@pytest.mark.anyio
+async def test_the_retry_after_from_classify_sets_the_wait(
+    respx_mock: respx.MockRouter, sleeper: Sleeper
+) -> None:
+    route = respx_mock.get(f"{BASE}/v1/x").mock(
+        side_effect=[httpx.Response(429), httpx.Response(200, json={"n": 1})]
+    )
+    classify = CountingClassify({429: RateLimitError("slow down", retry_after=2.0)})
+    client = AsyncClient(_classified(classify), sleep=sleeper)
+    assert await client.get_json("/v1/x") == {"n": 1}
+    assert route.call_count == 2
+    assert sleeper.calls == [2.0]
+
+
+@pytest.mark.anyio
+async def test_a_rate_limit_error_without_retry_after_keeps_the_header(
+    respx_mock: respx.MockRouter, sleeper: Sleeper
+) -> None:
+    route = respx_mock.get(f"{BASE}/v1/x").respond(429, headers={"Retry-After": "3"})
+    classify = CountingClassify({429: RateLimitError("slow down")})
+    client = AsyncClient(_classified(classify, max_attempts=3), sleep=sleeper)
+    with pytest.raises(RateLimitError, match="slow down"):
+        await client.get("/v1/x")
+    assert route.call_count == 3
+    assert sleeper.calls == [3.0, 3.0]
+
+
+@pytest.mark.anyio
+async def test_a_5xx_that_classify_maps_to_another_error_is_not_retried(
+    respx_mock: respx.MockRouter, sleeper: Sleeper
+) -> None:
+    route = respx_mock.get(f"{BASE}/v1/x").respond(503, text="down for maintenance")
+    maintenance = UpstreamError("maintenance", status=503, body="", source="example")
+    classify = CountingClassify({503: maintenance})
+    client = AsyncClient(_classified(classify), sleep=sleeper)
+    with pytest.raises(UpstreamError, match="maintenance"):
+        await client.get("/v1/x")
+    assert route.call_count == 1
+    assert sleeper.calls == []
+    assert classify.calls == [503]
+
+
+@pytest.mark.anyio
+async def test_classify_returning_none_keeps_the_retry(
+    respx_mock: respx.MockRouter, sleeper: Sleeper
+) -> None:
+    route = respx_mock.get(f"{BASE}/v1/x").mock(
+        side_effect=[httpx.Response(503), httpx.Response(429), httpx.Response(200, json={})]
+    )
+    classify = CountingClassify({})
+    client = AsyncClient(_classified(classify), sleep=sleeper)
+    await client.get("/v1/x")
+    assert route.call_count == 3
+    assert sleeper.calls == [0.1, 0.2]
+    assert classify.calls == [503, 429, 200]  # once per attempt, the final one included
+
+
+@pytest.mark.anyio
+async def test_classify_is_called_at_most_once_per_attempt(
+    respx_mock: respx.MockRouter, sleeper: Sleeper
+) -> None:
+    route = respx_mock.get(f"{BASE}/v1/x").respond(503)
+    classify = CountingClassify({})
+    client = AsyncClient(_classified(classify, max_attempts=3), sleep=sleeper)
+    with pytest.raises(UpstreamError):
+        await client.get("/v1/x")
+    assert route.call_count == 3
+    assert classify.calls == [503, 503, 503]  # the last attempt's answer is not asked twice
+
+
+@pytest.mark.anyio
+async def test_a_raw_request_stops_retrying_and_returns_the_response(
+    respx_mock: respx.MockRouter, sleeper: Sleeper
+) -> None:
+    route = respx_mock.get(f"{BASE}/v1/x").respond(429)
+    classify = CountingClassify({429: RateLimitError("quota spent", retry_after=3600.0)})
+    client = AsyncClient(_classified(classify), sleep=sleeper)
+    response = await client.request("GET", "/v1/x", raise_on_error=False)
+    assert response.status_code == 429
+    assert route.call_count == 1
+    assert sleeper.calls == []
+    assert classify.calls == [429]
+
+
+@pytest.mark.anyio
+async def test_classify_is_not_asked_before_a_retry_that_cannot_happen(
+    respx_mock: respx.MockRouter, sleeper: Sleeper
+) -> None:
+    route = respx_mock.post(f"{BASE}/v1/x").respond(503)
+    classify = CountingClassify({})
+    client = AsyncClient(_classified(classify), sleep=sleeper)
+    response = await client.request("POST", "/v1/x", json={}, raise_on_error=False)
+    assert response.status_code == 503
+    assert route.call_count == 1
+    assert classify.calls == []  # not retryable for a POST: the loop never asks
