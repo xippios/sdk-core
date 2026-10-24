@@ -45,3 +45,7 @@ are generic, and one behaviour was a surprise:
   the one place a reviewer checks against `docs/upstream/`.
 - A `Decimal` that needs exact transport would need a string field by design; none of
   the family's sources has one.
+
+Followed up by ADR-0015 (2026-10-24): before a 429 or 5xx is retried, the client also
+asks `classify`, for a raw response (`raise_on_error=False`) too, and its answer can
+set the wait or end the retries.

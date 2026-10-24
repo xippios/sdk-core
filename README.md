@@ -145,8 +145,13 @@ config = quota.install(
     ClientConfig(source="example", version="0.1.0", base_url="https://api.example.org")
 )
 client = AsyncClient(config, auth=HeaderKeyAuth("X-Api-Key", "EXAMPLE_API_KEY"))
+quota.snapshot()  # None: no response observed yet
 
-quota.snapshot()  # QuotaSnapshot(limit=1000, remaining=994, observed_at=..., resumes_at=None)
+
+async def get_series_async(series_id: str) -> object:
+    rows = await client.get_json("/v1/series", params={"id": series_id})
+    quota.snapshot()  # QuotaSnapshot(limit=1000, remaining=999, observed_at=..., resumes_at=None)
+    return rows
 
 
 async def list_countries_async() -> object:
@@ -158,11 +163,18 @@ The policy reads the quota headers of every response from the wire through
 spent, `ClientConfig.before_request` makes the next request wait until it is back if
 that is within `RetryPolicy.backoff_max` (30 s by default), with one warning in the log,
 and otherwise raises `RateLimitError` with `retry_after`, saying that nothing was sent.
+An upstream that answers a spent limit with something other than a 429 gets
+`QuotaPolicy(spent=...)`, a function that returns the seconds to wait for such an
+answer, or `None`. A wait from upstream is never longer than `window`, and the reset
+header may hold delay-seconds, epoch seconds or an HTTP-date. `install` refuses a config
+that has hooks of its own, rather than replacing them.
+
 A request the cache answers never waits: `before_request` runs after the cache lookup,
 and a cache hit carries the time its entry was stored in
-`response.extensions["xippios_cache_stored_at"]`, the hit's `retrieved_at`. The hooks
-are plain callables on `ClientConfig` (`before_request` may be async) for anything else
-that has to see each call or each response.
+`response.extensions["xippios_cache_stored_at"]`, the hit's `retrieved_at`; a wrapper
+that needs it calls `get()` and then `decode_json(response, source=...)` instead of
+`get_json()`. The hooks are plain callables on `ClientConfig` (`before_request` may be
+async) for anything else that has to see each call or each response.
 
 `ClientConfig.classify` is asked before a 429 or 5xx is retried: a `RateLimitError`
 with a `retry_after` beyond `backoff_max` is raised after one attempt instead of being

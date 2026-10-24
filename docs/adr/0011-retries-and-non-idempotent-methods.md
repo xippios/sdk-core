@@ -60,3 +60,7 @@ This ADR changes them.
   A caller that relied on a POST's 5xx being retried sees the error instead, a breaking
   change for 0.x (conventions §12).
 - Conventions §6 states the retry rule this way (conventions 1.6).
+
+Followed up by ADR-0015 (2026-10-24): `send_with_retries` gains the keyword `classify=`,
+default `None`, so a call written to decision 4 is unchanged; the method rule of
+decision 2 still decides first.
