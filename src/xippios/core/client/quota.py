@@ -33,6 +33,8 @@ logger = logging.getLogger("xippios.core.client")
 
 _DEFAULT_PAUSE_CAP = RetryPolicy().backoff_max
 """The cap of a policy that was given none and is not installed: 30 s, as ``backoff_max``."""
+_TEN_YEARS = 315_360_000.0
+"""Seconds in ten years: the longest ``window``, so a ``resumes_at`` can always be computed."""
 
 
 def _utc_now() -> datetime:
@@ -44,10 +46,17 @@ def _utc(moment: datetime) -> str:
 
 
 def _count(value: str | None) -> int | None:
-    """A header's non-negative integer, or ``None`` when absent or not one."""
-    if value is None or not value.strip().isdigit():
+    """A header's non-negative integer in ASCII digits, or ``None`` when absent or not one.
+
+    ``str.isdigit`` alone accepts ``"²"``, which ``int`` refuses; more than 18 digits is
+    no count, and ``int`` refuses more than 4,300.
+    """
+    if value is None:
         return None
-    return int(value)
+    text = value.strip()
+    if not (text.isascii() and text.isdigit()) or len(text) > 18:
+        return None
+    return int(text)
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,7 +71,8 @@ class QuotaSnapshot:
         observed_at: When the response that reported it was observed, UTC.
         resumes_at: While ``remaining`` is ``0``, when the quota is expected back: from a
             429's ``Retry-After``, else the policy's reset header, else its ``window``
-            counted from ``observed_at``; ``None`` while requests remain.
+            counted from ``observed_at``, never later than one ``window`` after it;
+            ``None`` while requests remain.
     """
 
     limit: int | None
@@ -107,7 +117,9 @@ class QuotaPolicy:
             ``Retry-After``: seconds to wait, or an HTTP-date; ``None`` when upstream
             sends none, as api.data.gov does.
         window: Seconds a spent quota stays spent when neither ``Retry-After`` (on a
-            429) nor ``reset_header`` names a time, e.g. ``3600.0`` for a rolling hour.
+            429) nor ``reset_header`` names a time, e.g. ``3600.0`` for a rolling hour;
+            also the longest wait a header can set: a longer one is cut to ``window``,
+            so no refusal outlives one window. At most ten years.
         pause_cap: The longest wait inside a call, in seconds, e.g. ``30.0``. ``None``
             takes ``config.retry.backoff_max`` at the first ``install``, the bound the
             retry loop uses for a ``Retry-After``; uninstalled, it is 30 s.
@@ -125,7 +137,8 @@ class QuotaPolicy:
         source: As given.
 
     Raises:
-        ValueError: A negative ``window`` or ``pause_cap``.
+        ValueError: A ``window`` that is negative or longer than ten years, or a
+            negative ``pause_cap``.
     """
 
     def __init__(
@@ -140,8 +153,8 @@ class QuotaPolicy:
         clock: Callable[[], datetime] = _utc_now,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
-        if window < 0:
-            raise ValueError("window must be non-negative")
+        if not 0 <= window <= _TEN_YEARS:
+            raise ValueError("window must be between 0 and ten years (315360000 s)")
         if pause_cap is not None and pause_cap < 0:
             raise ValueError("pause_cap must be non-negative")
         self.limit_header = limit_header
@@ -252,13 +265,17 @@ class QuotaPolicy:
         return dataclasses.replace(config, before_request=self.before_request, observe=self.observe)
 
     def _wait(self, response: httpx.Response, now: datetime) -> float:
-        """Seconds until a spent quota is back: ``Retry-After``, the reset header, ``window``."""
+        """Seconds until a spent quota is back: ``Retry-After``, the reset header, ``window``.
+
+        A wait read from a header is cut to ``window``: a value no upstream means (a
+        ``Retry-After`` of 10**12 s) neither refuses for decades nor overflows a date.
+        """
         if response.status_code == 429:
             retry_after = parse_retry_after(response.headers.get("Retry-After"), now=now)
             if retry_after is not None:
-                return retry_after
+                return min(retry_after, self.window)
         if self.reset_header is not None:
             reset = parse_retry_after(response.headers.get(self.reset_header), now=now)
             if reset is not None:
-                return reset
+                return min(reset, self.window)
         return self.window

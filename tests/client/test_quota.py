@@ -67,8 +67,10 @@ class Upstream(httpx.AsyncBaseTransport):
 
 
 def answer(status: int = 200, headers: dict[str, str] | None = None) -> httpx.Response:
+    """An answer as it arrives: header values as UTF-8 bytes, which httpx decodes."""
     request = httpx.Request("GET", f"{BASE}/v1/x?key={HIDDEN_KEY}")
-    return httpx.Response(status, headers=headers or {}, json=[], request=request)
+    raw = [(name.encode(), value.encode()) for name, value in (headers or {}).items()]
+    return httpx.Response(status, headers=raw, json=[], request=request)
 
 
 def make_config(**changes: object) -> ClientConfig:
@@ -133,11 +135,46 @@ def test_the_header_names_are_the_policy_s() -> None:
     assert (snapshot.limit, snapshot.remaining) == (500, 12)
 
 
-@pytest.mark.parametrize("value", ["", "many", "-1", "1.5"])
+@pytest.mark.parametrize("value", ["", "many", "-1", "1.5", "²", "٣", "1²", "9" * 19, "9" * 5000])
 def test_a_header_that_is_no_count_is_ignored(value: str) -> None:
+    # "²" and "٣" pass str.isdigit(), and int("²") raised; int() refuses 5,000 digits.
     policy = QuotaPolicy(clock=Clock())
     policy.observe(answer(headers={"x-ratelimit-limit": value, "x-ratelimit-remaining": value}))
     assert policy.snapshot() is None
+
+
+def test_a_count_that_is_no_number_leaves_the_snapshot() -> None:
+    policy = QuotaPolicy(clock=Clock())
+    policy.observe(answer(headers=QUOTA))
+    before = policy.snapshot()
+    policy.observe(answer(headers={"x-ratelimit-limit": "²", "x-ratelimit-remaining": "²"}))
+    assert policy.snapshot() is before
+
+
+@pytest.mark.parametrize("value", ["²", "9" * 400])
+def test_a_retry_after_that_is_no_number_falls_back_to_the_window(value: str) -> None:
+    policy = QuotaPolicy(window=600.0, clock=Clock())
+    policy.observe(answer(429, {"Retry-After": value}))
+    snapshot = policy.snapshot()
+    assert snapshot is not None
+    assert snapshot.resumes_at == NOW + timedelta(minutes=10)
+
+
+def test_a_huge_retry_after_is_cut_to_the_window() -> None:
+    policy = QuotaPolicy(window=3600.0, clock=Clock())
+    policy.observe(answer(429, {"Retry-After": str(10**12)}))
+    snapshot = policy.snapshot()
+    assert snapshot is not None
+    assert snapshot.resumes_at == NOW + timedelta(hours=1)
+
+
+@pytest.mark.parametrize("value", [str(10**12), "9" * 400, "²", "Fri, 31 Dec 9999 23:59:59 GMT"])
+def test_a_huge_or_unreadable_reset_is_cut_to_the_window(value: str) -> None:
+    policy = QuotaPolicy(reset_header="x-ratelimit-reset", window=3600.0, clock=Clock())
+    policy.observe(answer(headers={**SPENT, "x-ratelimit-reset": value}))
+    snapshot = policy.snapshot()
+    assert snapshot is not None
+    assert snapshot.resumes_at == NOW + timedelta(hours=1)
 
 
 def test_a_429_marks_the_quota_spent_with_its_retry_after() -> None:
@@ -236,9 +273,17 @@ def test_describe_names_numbers_and_times_only() -> None:
     assert "api.example.test" not in text
 
 
-@pytest.mark.parametrize("arguments", [{"window": -1.0}, {"pause_cap": -1.0}])
-def test_negative_waits_are_refused(arguments: dict[str, float]) -> None:
-    with pytest.raises(ValueError, match="must be non-negative"):
+@pytest.mark.parametrize(
+    ("arguments", "match"),
+    [
+        ({"window": -1.0}, "window must be between 0 and ten years"),
+        ({"window": 315_360_001.0}, "window must be between 0 and ten years"),
+        ({"window": float("nan")}, "window must be between 0 and ten years"),
+        ({"pause_cap": -1.0}, "pause_cap must be non-negative"),
+    ],
+)
+def test_impossible_waits_are_refused(arguments: dict[str, float], match: str) -> None:
+    with pytest.raises(ValueError, match=match):
         QuotaPolicy(**arguments)  # type: ignore[arg-type]
 
 

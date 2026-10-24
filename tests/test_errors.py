@@ -115,9 +115,14 @@ def test_parse_retry_after_past_date_is_zero() -> None:
     assert parse_retry_after("Tue, 20 Oct 2026 11:00:00 GMT", now=now) == 0.0
 
 
-@pytest.mark.parametrize("value", [None, "", "soon", "-5"])
+@pytest.mark.parametrize("value", [None, "", "soon", "-5", "²", "٣", "1²", "9" * 400])
 def test_parse_retry_after_unparseable(value: str | None) -> None:
+    # "²" and "٣" pass str.isdigit(); int("²") raised, and "9" * 400 is float("inf").
     assert parse_retry_after(value) is None
+
+
+def test_parse_retry_after_keeps_a_large_finite_delay() -> None:
+    assert parse_retry_after(str(10**12)) == 1e12
 
 
 def test_transport_error_from_httpx() -> None:

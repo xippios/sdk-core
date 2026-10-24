@@ -177,13 +177,15 @@ All notable changes to this project are documented here. The format follows
   keeps a thread-safe `QuotaSnapshot(limit, remaining, observed_at, resumes_at)` from
   the quota headers of every response from the wire, never from a cache hit; a 429, or
   a response that leaves nothing, marks the quota spent until `Retry-After` (on a 429),
-  else the reset header, else `window` from now. `before_request(request)` waits a spent
-  quota out when it is back within `pause_cap`, logging one warning with the method and
-  path, and otherwise raises `RateLimitError` with `retry_after`, saying that nothing
-  was sent and when the quota is expected back. `install(config)` returns the config
-  with both hooks set; a policy given no `pause_cap` takes `config.retry.backoff_max`
-  there. `snapshot()`, `reset()`; `QuotaSnapshot.describe()` names numbers and times
-  only. Generalises sdk-usda-psd's `Quota`, `observe_quota`, `quota_pause` and
+  else the reset header, else `window` from now; a wait read from a header is cut to
+  `window`, and a count that is not ASCII digits is ignored. `before_request(request)`
+  waits a spent quota out when it is back within `pause_cap`, logging one warning with
+  the method and path, and otherwise raises `RateLimitError` with `retry_after`, saying
+  that nothing was sent and when the quota is expected back. `install(config)` returns
+  the config with both hooks set; a policy given no `pause_cap` takes
+  `config.retry.backoff_max` there. `snapshot()`, `reset()`; `QuotaSnapshot.describe()`
+  names numbers and times only. Generalises sdk-usda-psd's `Quota`, `observe_quota`,
+  `quota_pause` and
   `QuotaAwareClient`, which sdk-usda-esr and sdk-usda-gats would otherwise copy.
 - `Tenants(..., hints=None)`: per field, static text appended to the `ConfigError` that
   `field()` raises when `validate` refuses a value ("...; <hint>"), so the operator
@@ -308,6 +310,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- `parse_retry_after` raised `ValueError` for a `Retry-After` of non-ASCII digits such
+  as `"²"`, which `str.isdigit` accepts and `float` refuses, so the retry loop raised it
+  out of a request; it reads ASCII digits only now and returns `None` for anything
+  else, and for a value too long to be a finite float, which made `retry_after`
+  infinite (the HTTP adapter's `int(retry_after)` then raised `OverflowError`).
 - The live gate skipped every test under a directory named `live`, marked or not: it
   matched the keyword `live`, which a directory's name adds. It follows the marker now.
 - A gzip answer replayed from the cache raised `httpx.DecodingError`: the client stored
