@@ -5,7 +5,7 @@ contents are cached per process; callers get fresh objects on every call.
 
 The renderers write a source's generated ``enums.py``: ``StrEnum`` for value lists,
 ``IntEnum`` for lists of integer ids and names (conventions §3, ADR-0008). Their output is
-what ``ruff format`` would write and passes ``ruff check`` under the family's
+ASCII, what ``ruff format`` would write, and passes ``ruff check`` under the family's
 configuration; a member name too long for any line is refused, not rendered.
 """
 
@@ -16,15 +16,12 @@ import json
 import keyword
 import re
 import textwrap
-import unicodedata
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from importlib import resources
 from typing import Any, cast
 
 from pydantic import TypeAdapter
-
-from xippios.core._confusables import CONFUSABLES
 
 __all__ = [
     "enum_member_name",
@@ -136,29 +133,14 @@ def _class_name(key: str) -> str:
     return "".join(part.capitalize() for part in re.split(r"[^A-Za-z0-9]+", key) if part)
 
 
-def _width(text: str) -> int:
-    """Columns ``text`` takes as ruff counts them: wide characters two, combining marks none."""
-    return sum(
-        0
-        if unicodedata.category(char) in ("Mn", "Me")
-        else 2
-        if unicodedata.east_asian_width(char) in ("W", "F")
-        else 1
-        for char in text
-    )
-
-
 def _escaped(char: str, quote: str) -> str:
-    """``char`` inside a literal delimited by ``quote``, escaped where it has to be.
+    r"""``char`` inside a literal delimited by ``quote``, as ``ascii()`` writes it.
 
-    A character ruff calls confusable (RUF001) becomes a Unicode escape, the quote is
-    escaped, and every other character is as ``repr()`` writes it: printable ones as they
-    are, ``Côte`` stays ``Côte``.
+    Every character outside ASCII becomes an escape (``\xf4``, ``\u2019``,
+    ``\U0001d400``), the quote and a backslash are escaped, and the rest stays as it is:
+    the literal is ASCII, which no version of ruff flags as ambiguous.
     """
-    code = ord(char)
-    if code in CONFUSABLES:
-        return f"\\u{code:04x}" if code <= 0xFFFF else f"\\U{code:08x}"
-    return "\\" + char if char == quote else repr(char)[1:-1]
+    return "\\" + char if char == quote else ascii(char)[1:-1]
 
 
 def _literal(value: str) -> str:
@@ -174,7 +156,7 @@ def _parts(value: str) -> list[str]:
     though every quote needed its escape, since each part picks its own quotes.
     """
     budget = _LINE_LENGTH - 10
-    widths = [_width(_escaped(char, '"')) + (char == "'") for char in value]
+    widths = [len(_escaped(char, '"')) + (char == "'") for char in value]
     parts: list[str] = []
     start, used, space = 0, 0, -1
     for index, width in enumerate(widths):
@@ -199,9 +181,9 @@ def _member(name: str, literal: str, value: str | None = None) -> list[str]:
     ``name`` is at most ``_NAME_LIMIT`` columns wide, so ``name = (`` fits.
     """
     line = f"    {name} = {literal}"
-    if _width(line) <= _LINE_LENGTH:
+    if len(line) <= _LINE_LENGTH:
         return [line]
-    if _width(f"        {literal}") <= _LINE_LENGTH:
+    if len(f"        {literal}") <= _LINE_LENGTH:
         return [f"    {name} = (", f"        {literal}", "    )"]
     if value is None:
         return [line]
@@ -230,9 +212,9 @@ def _member_names[T](
     if len(set(members)) != len(members):
         raise ValueError(f"{key}: member names collide: {sorted(members)}")
     for item, member in zip(items, members, strict=True):
-        if _width(member) > _NAME_LIMIT:
+        if len(member) > _NAME_LIMIT:
             raise ValueError(
-                f"{key}: the member name for {item!r} is {_width(member)} characters long; at "
+                f"{key}: the member name for {item!r} is {len(member)} characters long; at "
                 f"most {_NAME_LIMIT} fit a line of {_LINE_LENGTH} columns. Name it by hand in "
                 f"member_names={{{key!r}: {{...}}}}"
             )
@@ -283,19 +265,19 @@ def render_str_enums(
     fetched: str | None = None,
     generator: str = "the reference refresh script",
 ) -> str:
-    """Python source for one ``StrEnum`` per value list, formatted as ruff formats it.
+    r"""Python source for one ``StrEnum`` per value list, formatted as ruff formats it.
 
     Member names come from ``enum_member_name``, or from ``member_names`` where a source
-    names a member by hand. Values are the upstream strings, verbatim, each written
-    through ``repr()``, so a quote, a backslash or a control character is escaped, in
-    double quotes unless single quotes need fewer escapes. A character ruff calls
-    confusable (RUF001: a typographic apostrophe U+2019, an en dash U+2013, a no-break
-    space U+00A0, a Greek omicron) is written as a Unicode escape; every other character
-    stays readable, ``Côte`` stays ``Côte``, and the value is the same at runtime. A
-    member too long for a line of 100 columns is laid out as ruff lays it out: the value
-    in parentheses on a line of its own, and a value too long for that line split into
-    implicitly concatenated parts. ``__all__`` names the classes sorted as ruff sorts it
-    (RUF022), one per line; the classes keep the order of ``lists``.
+    names a member by hand. Values are the upstream strings, verbatim, each written as
+    ``ascii()`` writes it: a quote, a backslash or a control character is escaped, and so is
+    every character outside ASCII (``"Côte"`` as ``"C\xf4te"``, a typographic apostrophe as
+    ``\u2019``), in double quotes unless single quotes need fewer escapes. The generated
+    module is ASCII, so no version of ruff finds an ambiguous character in it (RUF001), and
+    the value is the same at runtime; accents are traded for that stability. A member too
+    long for a line of 100 columns is laid out as ruff lays it out: the value in parentheses
+    on a line of its own, and a value too long for that line split into implicitly
+    concatenated parts. ``__all__`` names the classes sorted as ruff sorts it (RUF022), one
+    per line; the classes keep the order of ``lists``.
 
     The result passes ``ruff format --check`` and ``ruff check`` unchanged. A member name
     longer than 92 columns fits no line, so it is refused: the source's refresh script
@@ -331,7 +313,7 @@ def render_str_enums(
         classes.append((names[key], body))
     return _module(
         "StrEnum",
-        "StrEnums for packaged value lists (conventions §3).",
+        "StrEnums for packaged value lists (conventions, section 3).",
         [
             f"Generated by {generator}; do not edit by hand. Member names are derived from the "
             "values, values are upstream's."
@@ -396,14 +378,14 @@ def render_int_enums(
         classes.append((names[key], body))
     return _module(
         "IntEnum",
-        "IntEnums for packaged id lists (conventions §3).",
+        "IntEnums for packaged id lists (conventions, section 3).",
         [
             f"Generated by {generator}; do not edit by hand. Values are upstream's integer ids; "
             "member names are derived from upstream's names, with ``_<id>`` appended where "
             "several ids share a name.",
             "Upstream's ids are integers, so these are ``IntEnum``, not ``StrEnum``: a member "
             "compares equal to the id in upstream's data, where a string of its digits would "
-            "not (conventions §3).",
+            "not (conventions, section 3).",
         ],
         classes,
     )

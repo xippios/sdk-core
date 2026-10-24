@@ -8,11 +8,8 @@ from typing import Any
 
 import pytest
 
-from xippios.core._confusables import CONFUSABLES
 from xippios.core.models import UpstreamModel
 from xippios.core.reference import (
-    _escaped,
-    _literal,
     _read_text,
     enum_member_name,
     id_name_pairs,
@@ -157,39 +154,23 @@ def test_render_str_enums_escapes_quotes_and_backslashes(tmp_path: Path) -> None
     assert '    SLASH = "slash \\\\"\n' in source
 
 
-def test_render_str_enums_escapes_what_ruff_calls_confusable(tmp_path: Path) -> None:
-    # A right single quotation mark, an en dash and a no-break space, written as escapes here
-    # too: this file is checked by the same rule.
-    values = ["Côte d\u2019Ivoire", "1990\u20132000", "Total\xa0area", "Zürich, Genève, São Paulo"]
+def test_render_str_enums_writes_ascii_only(tmp_path: Path) -> None:
+    # A right single quotation mark, an en dash, a no-break space, accents, Chinese and a
+    # mathematical letter outside the BMP.
+    values = [
+        "Côte d\u2019Ivoire", "1990\u20132000", "Total\xa0area", "Zürich, Genève",
+        "Beijing 北京", "BOLD \U0001d400",
+    ]  # fmt: skip
     source = render_str_enums({"label": values}, generator="tests")
+    assert source.isascii()
     namespace = assert_ruff_clean(tmp_path, source)
-    path = written(tmp_path, source)
-    selected = ruff(path, "check", "--select", "RUF001,RUF002,RUF003")
-    assert selected.returncode == 0, selected.stdout + selected.stderr
-    label = namespace["Label"]
-    assert [m.value for m in label] == values  # unchanged at runtime
-    assert label.C_TE_D_IVOIRE.value == "Côte d\N{RIGHT SINGLE QUOTATION MARK}Ivoire"
-    assert '    C_TE_D_IVOIRE = "Côte d\\u2019Ivoire"\n' in source  # the apostrophe, not the ô
+    assert [m.value for m in namespace["Label"]] == values  # unchanged at runtime
+    assert '    C_TE_D_IVOIRE = "C\\xf4te d\\u2019Ivoire"\n' in source
     assert '    _1990_2000 = "1990\\u20132000"\n' in source
-    assert '    TOTAL_AREA = "Total\\u00a0area"\n' in source
-    assert '    Z_RICH_GEN_VE_S_O_PAULO = "Zürich, Genève, São Paulo"\n' in source
-
-
-def test_no_character_ruff_calls_confusable_is_written_raw(tmp_path: Path) -> None:
-    printable = [
-        chr(code) for code in range(0x80, 0x110000) if chr(code).isprintable()
-    ]  # what repr() leaves as it is, in this Python's Unicode
-    assert {char for char in printable if _escaped(char, '"') == char} == {
-        char for char in printable if ord(char) not in CONFUSABLES
-    }
-    # In a word with an ASCII letter, ruff flags every confusable character it knows.
-    lines = [
-        f"X = {_literal(' '.join('a' + char for char in printable[start : start + 500]))}"
-        for start in range(0, len(printable), 500)
-    ]
-    path = written(tmp_path, "\n".join(lines) + "\n")
-    check = ruff(path, "check", "--select", "RUF001")
-    assert check.returncode == 0, check.stdout[:2000]
+    assert '    TOTAL_AREA = "Total\\xa0area"\n' in source
+    assert '    Z_RICH_GEN_VE = "Z\\xfcrich, Gen\\xe8ve"\n' in source
+    assert '    BEIJING = "Beijing \\u5317\\u4eac"\n' in source
+    assert '    BOLD = "BOLD \\U0001d400"\n' in source
 
 
 @pytest.mark.parametrize(
@@ -364,6 +345,7 @@ def test_render_int_enums_suffixes_repeated_names_and_keeps_order(tmp_path: Path
         fetched="2026-10-23",
         generator="tests",
     )
+    assert source.isascii()
     namespace = assert_ruff_clean(tmp_path, source)
     attribute_id = namespace["AttributeId"]
     assert [(m.name, m.value) for m in attribute_id] == [
