@@ -167,10 +167,11 @@ or query string: the host can name a tenant, the query can carry a key (ADR-0005
 - Two hooks on `ClientConfig` see what passes through the client (ADR-0015):
   `before_request`, called once per call after the cache lookup and before the rate
   limiter, may wait or raise a taxonomy error, and then nothing is sent; `observe` sees
-  every response from the wire, retried attempts and raw responses included and a
-  cache hit never, before `classify`. `QuotaPolicy(...).install(config)` sets both and
-  is the family's implementation of the quota rules above (ADR-0010); a source does
-  not subclass `AsyncClient` for them. Before a 429 or 5xx is retried, the client asks
+  every response from the wire, retried attempts and raw responses included and a cache
+  hit never, before `classify`. `QuotaPolicy(...).install(config)` sets both and is the
+  family's implementation of the quota rules above (ADR-0010); a source whose answer to
+  a spent limit is not a 429 passes `spent=`, which reads that answer. No source
+  subclasses `AsyncClient` for them. Before a 429 or 5xx is retried, the client asks
   `classify`: a `RateLimitError` sets the wait from its `retry_after`; an
   `UpstreamError` for a 5xx changes nothing; any other error ends the retries.
 - Optional response cache (in-memory by default, pluggable) keyed on method+URL+params.
