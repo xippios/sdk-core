@@ -218,9 +218,10 @@ All notable changes to this project are documented here. The format follows
   that names none of the tasks is refused with `ValueError`, naming it, before anything
   is registered. For a reference tool whose whole list an agent needs: a per-tool cap
   sets `max_rows` and `max_bytes` as the source judges, a byte bound above the default
-  64 KB being a deliberate choice for that tool. The one cap of a server cut
-  `comtrade_list_reporters` (255 rows, about 69 KB) and `comtrade_list_partners` (310,
-  about 83 KB) at 200 (sdk-comtrade).
+  64 KB (65,536 bytes) being a deliberate choice for that tool. The one cap of a server
+  cut `comtrade_list_reporters` (255 rows, 69,011 bytes) and `comtrade_list_partners`
+  (310, 83,270 bytes) at 200 (sdk-comtrade), and `usda_psd_list_countries` (251) before
+  the United States (sdk-usda-psd).
 - `ResultCap(note=...)`: the text after the counts when the cap cuts a result, used
   verbatim, in the note of a cut list and in that of a non-list result over the byte
   cap, e.g. `"filter by period or by reporter to see the rest"` for a tool with those

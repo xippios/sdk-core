@@ -4,9 +4,10 @@ Status: Accepted · Date: 2026-10-24
 
 ## Context
 
-Conventions §8 caps every MCP tool result at 200 rows or 64 KB, whichever comes first,
-and over the cap returns the first page plus a note on how to narrow the query.
-`register_tasks` and `build_server` took one `cap` for every tool of a server.
+Conventions §8 caps every MCP tool result at 200 rows or 64 KB (65,536 bytes),
+whichever comes first, and over the cap returns the first page plus a note on how to
+narrow the query. `register_tasks` and `build_server` took one `cap` for every tool of
+a server.
 
 The same section makes reference lookups tools, `<source>_list_<thing>`, because agents
 need them to form valid calls. sdk-comtrade's are larger than the cap:
@@ -15,11 +16,13 @@ need them to form valid calls. sdk-comtrade's are larger than the cap:
 for `HS`. The cap cut the first two at 200 rows in upstream's alphabetical order, before
 Switzerland and the USA, and showed only the top of a classification tree. sdk-comtrade
 worked around it in its own package: its three list tasks took a `search` filter, and
-their docstrings told agents to search.
+their docstrings told agents to search. sdk-usda-psd's `usda_psd_list_countries` stops
+at 200 of its 251 countries, before the United States, and its README tells agents to
+filter by region or search.
 
-More rows alone would not have made the two lists whole. Computed from sdk-comtrade's
-packaged tables (fetched 2026-10-23), the compact JSON of the 255 reporters is about
-69 KB and of the 310 partners about 83 KB, both over the 64 KB byte cap: with their row
+More rows alone would not have made comtrade's two lists whole. From its packaged
+tables (fetched 2026-10-23), the result of the 255 reporters is 69,011 bytes of compact
+JSON and that of the 310 partners 83,270 bytes, both over the byte cap: with their row
 caps raised and the byte cap at the default, the tools would show about 242 and 244
 rows.
 
@@ -70,12 +73,16 @@ commodity classification), and a tool that needs more rows need not be named `li
 
 ## Consequences
 
-- sdk-comtrade sets caps for `list_reporters` and `list_partners` with `max_rows` at
-  least the list's length and `max_bytes` about 100 KB, e.g.
-  `ResultCap(max_rows=400, max_bytes=100_000)`, so both lists, about 69 KB and 83 KB,
-  reach an agent whole; it may drop their `search` filters or keep them as a
-  convenience. The HS commodity list, about 2 MB, is not served whole:
-  `list_commodities` keeps `search` and a cap of its own whose note names it.
+- The known adopters:
+  - sdk-comtrade caps `list_reporters` and `list_partners` at
+    `ResultCap(max_rows=400, max_bytes=100_000)`, so both lists, 69,011 and 83,270
+    bytes, reach an agent whole; it may drop their `search` filters or keep them as a
+    convenience.
+  - sdk-usda-psd caps `list_countries` at `ResultCap(max_rows=300)`, so its 251
+    countries reach an agent whole, the United States included; the packaged file is
+    31,883 bytes, under the default byte cap.
+  - The HS commodity list, about 2 MB, is not served whole: comtrade's
+    `list_commodities` keeps `search` and a cap of its own whose note names it.
 - A tool that has filters sets a note naming them; one without keeps the default.
 - sdk-template's `mcp.py` renders `caps=getattr(tasks, "MCP_CAPS", None)` in its
   `build_server` call, in a template PR after the core release that carries this ADR; a
