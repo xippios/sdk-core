@@ -85,6 +85,62 @@ async def test_call_returns_capped_json_text() -> None:
     assert payload["meta"]["source"] == "example"
 
 
+async def list_areas_async() -> Result[list[str]]:
+    """List the 310 areas, a reference list an agent needs whole."""
+    areas = [f"A{i:03d}" for i in range(310)]
+    return Result[list[str]](data=areas, meta=ResultMeta(source="example", endpoint="areas"))
+
+
+list_areas = sync(list_areas_async)
+
+
+@pytest.mark.anyio
+async def test_a_tool_with_a_cap_of_its_own_returns_the_whole_list() -> None:
+    caps = {"list_areas": ResultCap(max_rows=400)}  # the sync facade's __name__
+    server = build_server("example", [get_series, list_areas], caps=caps)
+    areas = await mcp_call(server, "example_list_areas", {})
+    assert len(areas["data"]) == 310
+    assert "note" not in areas
+    series = await mcp_call(server, "example_get_series", {"series_id": "CORN", "year": 2500})
+    assert len(series["data"]) == 200  # the default cap
+    assert series["note"] == (
+        "showing 200 of 500 rows (cap: 200 rows or 65536 bytes); narrow the query to see the rest"
+    )
+
+
+@pytest.mark.anyio
+async def test_a_cap_of_its_own_replaces_the_server_cap_for_that_tool_only() -> None:
+    server = build_server("example", [])
+    caps = {"list_areas": ResultCap(max_rows=300, note="ask for one area by code instead")}
+    names = register_tasks(
+        server, "example", [get_series, list_areas], cap=ResultCap(max_rows=3), caps=caps
+    )
+    assert names == ["example_get_series", "example_list_areas"]
+    areas = await mcp_call(server, "example_list_areas", {})
+    assert len(areas["data"]) == 300
+    assert areas["note"] == (
+        "showing 300 of 310 rows (cap: 300 rows or 65536 bytes); ask for one area by code instead"
+    )
+    series = await mcp_call(server, "example_get_series", {"series_id": "CORN", "year": 2010})
+    assert len(series["data"]) == 3
+    assert series["note"].startswith("showing 3 of 10 rows (cap: 3 rows or 65536 bytes); ")
+
+
+@pytest.mark.anyio
+async def test_a_cap_for_a_name_that_is_no_task_is_refused() -> None:
+    caps = {"example_list_areas": ResultCap(max_rows=400), "list_nothing": ResultCap()}
+    rule = (
+        "^caps names no task among the tasks: example_list_areas, list_nothing; a key is the "
+        "task function's __name__, not the tool name with the source prefix$"
+    )
+    with pytest.raises(ValueError, match=rule):
+        build_server("example", [get_series, list_areas], caps=caps)
+    server = build_server("example", [])
+    with pytest.raises(ValueError, match=r"^caps names no task among the tasks: list_nothing;"):
+        register_tasks(server, "example", iter([list_areas]), caps={"list_nothing": ResultCap()})
+    assert await server.list_tools() == []  # checked before anything is registered
+
+
 @pytest.mark.anyio
 async def test_taxonomy_errors_become_text_not_errors() -> None:
     server = build_server("example", [get_series])
