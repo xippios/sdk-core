@@ -53,24 +53,24 @@ set the wait or end the retries.
 ## Amendment 2026-10-24
 
 The enum renderers guarantee a generated `enums.py` that is committed as rendered.
-`render_str_enums` writes each value through `repr()`, so a quote, a backslash or a
-control character in upstream's value is escaped where it broke the file; lays out a
-member too long for 100 columns as ruff formats it, the value in parentheses on a line
-of its own and, too long even there, split into implicitly concatenated parts; and
-writes `__all__` sorted in ruff's order (RUF022), one name per line, so a source's own
-lines do not conflict on `copier update`. The module passes `ruff format --check` and
-`ruff check` under the family's configuration with no exemption, where sdk-comtrade had
-to format it after every refresh. A character ruff calls confusable (RUF001: a
-typographic apostrophe, an en dash, a no-break space and the rest of ruff's table, which
-`scripts/refresh_confusables.py` reads from the installed ruff) is written as a `\u`
-escape, so the value is the same at runtime, and every other character stays readable. A
-member name too long for any line of 100 columns is refused with `ValueError`, and the
-source's refresh script names that member once in the renderers' `member_names`. An
-upstream whose ids are integers renders `IntEnum`, not the `StrEnum` default:
-`render_int_enums` takes `(id, name)` pairs, which `id_name_pairs` builds from
-upstream's records, takes member names from the names and appends `_<id>` to a name
-several ids share. Fidelity wins over the default, because upstream's data carries the
-ids as integers, which a `StrEnum` of their digits never equals, and its names are not
-unique (PSD's "Total Disappearance" is both attribute 126 and 173). sdk-usda-psd ruled
-this on 2026-10-23 and rendered its `AttributeId` and `UnitId` in its own refresh
-script; conventions §3 states the rule from 1.12 on.
+`render_str_enums` writes each value as `ascii()` writes it, so a quote, a backslash, a
+control character and every character outside ASCII is escaped, where a quote or a
+backslash broke the file; lays out a member too long for 100 columns as ruff formats it,
+the value in parentheses on a line of its own and, too long even there, split into
+implicitly concatenated parts; and writes `__all__` sorted in ruff's order (RUF022), one
+name per line, so a source's own lines do not conflict on `copier update`. The module
+passes `ruff format --check` and `ruff check` under the family's configuration with no
+exemption, where sdk-comtrade had to format it after every refresh. The output is
+ASCII-only, trading readable accents (`C\xf4te`) for stability across ruff versions: no
+version can find an ambiguous character (RUF001) in it, and the values are the same at
+runtime. A member name that fits no line of 100 columns, or a value with nothing to
+derive one from, is refused with `ValueError`, and the source's refresh script names
+that member once in the renderers' `member_names`. An upstream whose ids are integers
+renders `IntEnum`, not the `StrEnum` default: `render_int_enums` takes `(id, name)`
+pairs, which `id_name_pairs` builds from upstream's records, takes member names from the
+names and appends `_<id>` to a name several ids share. Fidelity wins over the default,
+because upstream's data carries the ids as integers, which a `StrEnum` of their digits
+never equals, and its names are not unique (PSD's "Total Disappearance" is both
+attribute 126 and 173). sdk-usda-psd ruled this on 2026-10-23 and rendered its
+`AttributeId` and `UnitId` in its own refresh script; conventions §3 states the rule
+from 1.12 on.
