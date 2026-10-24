@@ -150,6 +150,68 @@ All notable changes to this project are documented here. The format follows
 - `xippios.core.testing.mcp_call_text(server, name, arguments)`: the tool's text, through
   the same in-process client as `mcp_call`, so a test can assert a refusal or any other
   `error:` text.
+- `ClientConfig.before_request` and `ClientConfig.observe` (ADR-0015). `before_request`
+  is called once per `request()` call, not per retry, after the cache lookup (a cache
+  hit returns before it) and before the rate limiter, with the request as built and no
+  credentials on it yet; it may be sync or async, may wait, and may raise a taxonomy
+  error, in which case nothing is sent. `observe` is called with every response from
+  the wire, each retried attempt included and a cache hit never, before `classify` and
+  the retry decision, also with `raise_on_error=False`; an exception from it propagates.
+  sdk-usda-psd had to subclass `AsyncClient` and override `request` to pause before a
+  request, and called its quota observer from `classify`, which a raw response skips.
+- `auth=` per request for `AsyncClient.request`, `get` and `get_json`, `Client.request`,
+  `get` and `get_json`, and `record`/`record_sync`, typed as httpx types it:
+  `httpx.Auth | UseClientDefault | None`, default `httpx.USE_CLIENT_DEFAULT`
+  (`UseClientDefault`, private in httpx, is re-exported from `xippios.core.client`).
+  `None` sends the request, every retry included, without the client's credentials, an
+  `httpx.Auth` replaces them for that call, the default sends the client's. `None` and
+  the default share the cache; a call with an `httpx.Auth` of its own bypasses it,
+  neither looked up nor stored, since another identity may get another answer.
+  sdk-comtrade fetches its public reference files from the same host as its keyed data
+  API and needed a second client to keep the key off them.
+- `response.extensions["xippios_cache_stored_at"]` on a cache hit, next to
+  `"xippios_cache": "hit"`: the entry's `stored_at`, in epoch seconds. On a hit a task
+  sets `retrieved_at` from it, since the data was fetched then, not now (conventions
+  §4). sdk-usda-psd's tasks could only stamp a hit with the current time.
+- `xippios.core.client.decode_json(response, *, source=None, path=None)`: the JSON
+  decoding of `get_json`, with its `ValidationError` for a body that is not JSON, for a
+  wrapper that calls `get` because it needs the response too, e.g. a cache hit's
+  `xippios_cache_stored_at` (conventions §6). `get_json` calls it.
+- `QuotaPolicy` and `QuotaSnapshot`, exported from `xippios.core` and
+  `xippios.core.client`: ADR-0010's quota rules on the two hooks (ADR-0015).
+  `QuotaPolicy(*, limit_header="x-ratelimit-limit",
+  remaining_header="x-ratelimit-remaining", reset_header=None, window=3600.0,
+  spent=None, pause_cap=None, source=None, clock=..., sleep=asyncio.sleep)`, either
+  header name `None` to turn its reading off: `observe(response)` keeps a thread-safe
+  `QuotaSnapshot(limit, remaining, observed_at, resumes_at)` from the quota headers of
+  every response from the wire, never from a cache hit; a 429, or a response that leaves
+  nothing, marks the quota spent until `Retry-After` (on a 429), else the reset header
+  (delay-seconds, epoch seconds as GitHub sends them, or an HTTP-date), else `window`
+  from now; a wait from upstream, through a header or `spent=`, is cut to `window`, the
+  one setting for the fallback and that ceiling (a daily quota sets `window=86400`), and
+  a count that is not ASCII digits is ignored. `spent=`, a callable asked about every
+  observed response, marks the quota spent for the seconds it returns, for an upstream
+  whose spent limit is not a 429 (sdk-comtrade's 403 "replenished in HH:MM:SS");
+  `mark_spent(retry_after)` does it from code. `before_request(request)` waits a spent
+  quota out when it is back within `pause_cap`, logging one warning with the method and
+  path, and otherwise raises `RateLimitError` with `retry_after`, saying that nothing
+  was sent and when the quota is expected back. `install(config)` returns the config
+  with both hooks set, the pause bound to that config's cap (`pause_cap`, else its
+  `retry.backoff_max`), and refuses with `ValueError` a config that has a hook of its
+  own. `snapshot()`, `reset()`; `QuotaSnapshot.describe()` names numbers and times only.
+  Generalises sdk-usda-psd's `Quota`, `observe_quota`, `quota_pause` and
+  `QuotaAwareClient`, which sdk-usda-esr and sdk-usda-gats would otherwise copy.
+- The pytest plugin keeps quota policies out of offline tests (ADR-0013 decision 4,
+  added by ADR-0015): in every test not marked `live`, every `QuotaPolicy`'s snapshot
+  is forgotten before and after the test, so a replayed 429 cannot leave a source's
+  module-level policy spent for the tests after it, and unless the test is marked
+  `rate_limited` a policy neither waits nor refuses.
+- `Tenants(..., hints=None)`: per field, static text appended to the `ConfigError` that
+  `field()` raises when `validate` refuses a value ("...; <hint>"), so the operator
+  learns what the variable should hold; the check's own message, which may quote the
+  value, is still never used, and the value never appears. A hint for a field not in
+  `fields`, or for one without a `validate` check, where it could never be shown, is a
+  `ValueError` at construction. Carried over from the `Tenants` work of ADR-0014.
 
 ### Changed
 
@@ -250,9 +312,33 @@ All notable changes to this project are documented here. The format follows
   registration, the loopback rule, the tenant list tool, the tenant lock and the option
   hooks; §10 states that a placeholder host that contains the original host is allowed
   and written as such. ADR-0014 added.
+- A 429 or 5xx that `ClientConfig.classify` maps to an error other than an
+  `UpstreamError` for a 5xx is no longer retried blindly (ADR-0015). Before each retry
+  the loop asks `classify`, at most once per attempt and also with
+  `raise_on_error=False`: a `RateLimitError` sets the wait from its `retry_after` (else
+  the `Retry-After` header's), so a wait beyond `RetryPolicy.backoff_max` is raised
+  after one attempt; an `UpstreamError` for a 5xx and `None` keep the status rule, so a
+  5xx is retried when the method allows; any other error, an `AuthError` or an
+  `InvalidRequestError` say, stops the retries. `send_with_retries` takes the mapping as
+  `classify=`. A 429 without `Retry-After`, api.data.gov's answer to a spent hourly
+  quota, was retried three more times into the spent quota before `classify` could say
+  "one hour" (sdk-usda-psd). sdk-cashctrl, which maps every 5xx to `UpstreamError` to
+  keep its tenant host out of the message, keeps its retries.
+- Conventions 1.10: §4 names `xippios_cache_stored_at` as the `retrieved_at` of a cache
+  hit; §6 states the `before_request` and `observe` hooks, `QuotaPolicy` as the
+  implementation of ADR-0010's quota rules, `classify`'s part in retries, and `auth=`
+  per request; §10 the plugin's quota guarantee. ADR-0015 added; ADR-0013 gains its
+  decision 4.
 
 ### Fixed
 
+- `parse_retry_after` raised `ValueError` for a `Retry-After` of non-ASCII digits such
+  as `"²"`, which `str.isdigit` accepts and `float` refuses, so the retry loop raised it
+  out of a request; it reads ASCII digits only now and returns `None` for anything
+  else, and for a value too long to be a finite float, which made `retry_after`
+  infinite (the HTTP adapter's `int(retry_after)` then raised `OverflowError`). An
+  HTTP-date whose zone offset is a huge number made `parsedate_to_datetime` raise
+  `OverflowError` out of the retry loop; it is unparseable now, `None` like any other.
 - The live gate skipped every test under a directory named `live`, marked or not: it
   matched the keyword `live`, which a directory's name adds. It follows the marker now.
 - A gzip answer replayed from the cache raised `httpx.DecodingError`: the client stored

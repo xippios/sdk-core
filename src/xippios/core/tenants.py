@@ -72,6 +72,11 @@ class Tenants:
             ``{"SUBDOMAIN": check_subdomain}``. It returns the value to use, possibly
             normalised, and raises ``ValueError`` for a value it refuses; any exception
             it raises refuses the value the same way.
+        hints: Per field, static text appended to the ``ConfigError`` when ``validate``
+            refuses a value, e.g. ``{"SUBDOMAIN": "set the subdomain alone, e.g. acme
+            for acme.example.org"}``, read as "...; <hint>". It tells the operator what
+            the variable should hold; the check's own message, which may quote the
+            value, is never used. A field with a hint has a ``validate`` check.
 
     Attributes:
         source: The source slug.
@@ -84,7 +89,8 @@ class Tenants:
         ValueError: An empty ``source`` or ``list_var``; no field, a field that is not
             upper-case letters, digits and underscores, or a field given twice; a
             reserved name that is not a valid tenant name or is given twice; a
-            ``validate`` entry for a field not in ``fields``.
+            ``validate`` or ``hints`` entry for a field not in ``fields``; a ``hints``
+            entry for a field without a ``validate`` check, which could never be shown.
     """
 
     def __init__(
@@ -95,6 +101,7 @@ class Tenants:
         fields: Sequence[str],
         reserved: Sequence[str] = (),
         validate: Mapping[str, Callable[[str], str]] | None = None,
+        hints: Mapping[str, str] | None = None,
     ) -> None:
         if not source:
             raise ValueError("source must not be empty")
@@ -125,12 +132,21 @@ class Tenants:
         unknown = sorted(set(checks) - set(fields))
         if unknown:
             raise ValueError(f"validate names fields not in fields: {', '.join(unknown)}")
+        texts = dict(hints or {})
+        unknown = sorted(set(texts) - set(fields))
+        if unknown:
+            raise ValueError(f"hints names fields not in fields: {', '.join(unknown)}")
+        unchecked = sorted(set(texts) - set(checks))
+        if unchecked:
+            # Shown only when the check refuses a value: without a check it never would be.
+            raise ValueError(f"hints names fields without a validate check: {', '.join(unchecked)}")
         self.source = source
         self.list_var = list_var
         self.fields = fields
         self.reserved = reserved
         self._prefix = source.upper().replace("-", "_")
         self._validate = checks
+        self._hints = texts
         self._clients: dict[str, tuple[str, AsyncClient]] = {}
         self._lock = threading.Lock()
 
@@ -235,7 +251,8 @@ class Tenants:
             InvalidRequestError: ``name`` is not declared (see ``require``).
             ConfigError: The variable of a declared tenant is unset or blank, or the
                 check refused its value: the operator's environment. The message names
-                the variable, never the value.
+                the variable, never the value; for a refused value it ends with the
+                field's hint, when the source gave one.
             ValueError: ``field`` is not one of ``fields``.
         """
         self._known_field(field)
@@ -255,9 +272,11 @@ class Tenants:
             pass
         # Raised outside the handler: the check's error may quote the value, so it is
         # neither the cause nor the context of this one.
-        raise ConfigError(
-            f"{variable} does not hold a valid {field} for tenant {name!r}", source=self.source
-        )
+        message = f"{variable} does not hold a valid {field} for tenant {name!r}"
+        hint = self._hints.get(field)
+        if hint:
+            message += f"; {hint}"
+        raise ConfigError(message, source=self.source)
 
     def client_for(self, name: str, build: Callable[[str], AsyncClient]) -> AsyncClient:
         """Tenant ``name``'s client: ``build(name)`` on first use, the same client after.

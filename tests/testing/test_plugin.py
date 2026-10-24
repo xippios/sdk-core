@@ -5,7 +5,7 @@ import httpcore
 import httpx
 import pytest
 
-from xippios.core.client import EnvKeyAuth, TokenBucket
+from xippios.core.client import EnvKeyAuth, QuotaPolicy, TokenBucket
 from xippios.core.testing import LIVE_ENV, PLACEHOLDER_KEY, live_enabled
 
 # The pytester runs below install the plugin's patches themselves, in process. The outer
@@ -24,6 +24,7 @@ SEND_ASYNC = httpx.AsyncHTTPTransport.handle_async_request
 POOL_SEND = httpcore.ConnectionPool.handle_request
 POOL_SEND_ASYNC = httpcore.AsyncConnectionPool.handle_async_request
 ACQUIRE = TokenBucket.acquire
+PAUSE = QuotaPolicy._pause
 KEY = EnvKeyAuth.key
 ANYIO_CONFTEST = """
 import pytest
@@ -377,6 +378,96 @@ def test_offline_tests_never_wait_on_the_rate_limiter(
     result = pytester.runpytest("-p", "xippios.core.testing.plugin", "--strict-markers")
     result.assert_outcomes(passed=5)
     assert TokenBucket.acquire is ACQUIRE
+
+
+QUOTA_TESTS = """
+import httpx
+import pytest
+
+from xippios.core import AsyncClient, ClientConfig, QuotaPolicy, RateLimitError, RetryPolicy
+
+PAUSE = QuotaPolicy._pause
+SLEPT = []
+
+
+async def sleep(seconds):
+    SLEPT.append(seconds)
+
+
+POLICY = QuotaPolicy(window=3600.0, sleep=sleep)
+CLIENT = AsyncClient(
+    POLICY.install(
+        ClientConfig(
+            source="example",
+            version="1",
+            base_url="https://h.test",
+            retry=RetryPolicy(max_attempts=1),
+        )
+    )
+)
+
+
+@pytest.mark.anyio
+async def test_a_replayed_429_spends_the_quota(respx_mock):
+    respx_mock.get("https://h.test/p").respond(429, headers={"Retry-After": "3151"})
+    with pytest.raises(RateLimitError):
+        await CLIENT.get("/p")
+    assert POLICY.snapshot().remaining == 0
+
+
+@pytest.mark.anyio
+async def test_the_next_test_is_neither_refused_nor_paused(respx_mock):
+    assert POLICY.snapshot() is None
+    route = respx_mock.get("https://h.test/p").respond(200, json={"a": 1})
+    assert (await CLIENT.get_json("/p")) == {"a": 1}
+    assert route.call_count == 1
+    assert SLEPT == []
+
+
+@pytest.mark.anyio
+async def test_a_quota_spent_in_the_test_neither_refuses_nor_pauses(respx_mock):
+    route = respx_mock.get("https://h.test/p").mock(
+        side_effect=[httpx.Response(429, headers={"Retry-After": "20"}), httpx.Response(200)]
+    )
+    with pytest.raises(RateLimitError):
+        await CLIENT.get("/p")
+    assert POLICY.snapshot().remaining == 0  # observed all the same
+    await CLIENT.get("/p")
+    assert route.call_count == 2
+    assert SLEPT == []
+    assert QuotaPolicy._pause is not PAUSE
+
+
+@pytest.mark.anyio
+@pytest.mark.rate_limited
+async def test_a_rate_limited_test_keeps_the_pause(respx_mock):
+    assert POLICY.snapshot() is None
+    route = respx_mock.get("https://h.test/p").respond(429, headers={"Retry-After": "3151"})
+    with pytest.raises(RateLimitError):
+        await CLIENT.get("/p")
+    with pytest.raises(RateLimitError, match="nothing was sent"):
+        await CLIENT.get("/p")
+    assert route.call_count == 1
+    assert QuotaPolicy._pause is PAUSE
+
+
+@pytest.mark.live
+def test_a_live_test_keeps_the_policy():
+    assert QuotaPolicy._pause is PAUSE
+    assert POLICY.snapshot() is None  # the rate_limited test's spent quota was reset after it
+"""
+
+
+def test_a_replayed_429_leaves_no_quota_spent_for_later_tests(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A source's module-level QuotaPolicy would refuse every test after a replayed 429.
+    monkeypatch.setenv(LIVE_ENV, "1")
+    pytester.makeconftest(ANYIO_CONFTEST)
+    pytester.makepyfile(QUOTA_TESTS)
+    result = pytester.runpytest("-p", "xippios.core.testing.plugin", "--strict-markers")
+    result.assert_outcomes(passed=5)
+    assert QuotaPolicy._pause is PAUSE
 
 
 PLACEHOLDER_TESTS = """

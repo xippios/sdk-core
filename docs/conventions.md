@@ -1,6 +1,6 @@
 # xippios SDK family — conventions
 
-Version 1.9 · 2026-10-23 · applies to every `sdk-*` repository under github.com/xippios.
+Version 1.10 · 2026-10-24 · applies to every `sdk-*` repository under github.com/xippios.
 Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 
 ## 1. Naming
@@ -91,6 +91,9 @@ class Result(BaseModel, Generic[T]):
 ```
 
 `meta` is never optional. It is what makes a later as-of/vintage store possible.
+On a cache hit, `retrieved_at` is the time the entry was stored, which the client puts
+on the response as `extensions["xippios_cache_stored_at"]` (ADR-0015); a wrapper reads
+it with `get()` and `decode_json()` (§6).
 
 `request` never carries credentials (ADR-0005). `ResultMeta` redacts the value of any
 key that looks like one (`key`, `api_key`, `token`, `secret`, `password`, `auth`,
@@ -147,20 +150,36 @@ or query string: the host can name a tenant, the query can carry a key (ADR-0005
   or because the source only reads through POST (ADR-0011); never another 4xx.
 - A source maps its documented error shapes once, in `ClientConfig.classify`, which
   sees every response before the default status mapping (ADR-0008); endpoint
-  wrappers then use `get_json` and never inspect status codes themselves.
+  wrappers then use `get_json` and never inspect status codes themselves. A wrapper
+  that needs provenance from the response, a cache hit's `xippios_cache_stored_at`,
+  calls `get()`, then `decode_json()`, and reads `response.extensions`.
 - A per-source rate limiter sets a fast pace within the source's documented per-second
   or per-minute limit or, where none is documented, a self-imposed pace that the
   package's CLAUDE.md names as such; longer-window quotas (hourly, daily) may be
   exhausted, not rationed (ADR-0010). `classify` interprets the upstream's 429, or its
   documented answer to a spent limit, as `RateLimitError` with `retry_after` (from
   `Retry-After`, the quota headers or a documented fallback), the client keeps a
-  per-source quota snapshot from the quota headers, and retries honour `retry_after`
-  up to `backoff_max` (core today: the `Retry-After` header on a 429; follow-up in
-  ADR-0010). A request into a quota the snapshot shows spent waits it out inside the
-  call, logged, when the wait is within `backoff_max`, and otherwise raises
-  `RateLimitError` with `retry_after` without sending; a pause handed back to the
-  caller is stated in the error text.
+  quota snapshot from the quota headers (`QuotaPolicy`, ADR-0015), and retries honour
+  `retry_after` up to `backoff_max`. A request into a quota the snapshot shows spent
+  waits it out inside the call, logged, when the wait is within `backoff_max`, and
+  otherwise raises `RateLimitError` with `retry_after` without sending; a pause handed
+  back to the caller is stated in the error text.
+- Two hooks on `ClientConfig` see what passes through the client (ADR-0015):
+  `before_request`, called once per call after the cache lookup and before the rate
+  limiter, may wait or raise a taxonomy error, and then nothing is sent; `observe` sees
+  every response from the wire, retried attempts and raw responses included and a cache
+  hit never, before `classify`. `QuotaPolicy(...).install(config)` sets both and is the
+  family's implementation of the quota rules above (ADR-0010); a source whose answer to
+  a spent limit is not a 429 passes `spent=`, which reads that answer. No source
+  subclasses `AsyncClient` for them. Before a 429 or 5xx is retried, the client asks
+  `classify`: a `RateLimitError` sets the wait from its `retry_after`; an
+  `UpstreamError` for a 5xx changes nothing; any other error ends the retries.
 - Optional response cache (in-memory by default, pluggable) keyed on method+URL+params.
+- Credentials come from the client's `auth`. A call to a keyless endpoint on the same
+  host passes `auth=None` and is sent without them; another `httpx.Auth` replaces them
+  for one call; no second client is needed to leave the key off (ADR-0015). `auth=None`
+  and the client's own share the cache; a call with an `httpx.Auth` of its own bypasses
+  it, neither looked up nor stored.
 - One `User-Agent`: `xippios-<source>/<version> (+https://github.com/xippios)`.
 - Timeouts explicit; defaults 10 s connect, 60 s read.
 - A request body is JSON (`json=`) or form-encoded (`data=`, for an upstream whose
@@ -268,6 +287,10 @@ consumer, never served standalone from the package.
   - No rate-limit wait, in every test not marked `live`: a client's limiter neither
     waits nor takes a token. A test that asserts the limiter's waits is marked
     `rate_limited`.
+  - No quota pause and no quota left spent, in every test not marked `live`: every
+    `QuotaPolicy`'s snapshot is forgotten before and after the test, so a replayed 429
+    cannot refuse the tests after it, and a policy neither waits nor refuses. A test
+    that asserts the pause or the refusal is marked `rate_limited` (ADR-0015).
   - Placeholder key, in every test not marked `live`: every `EnvKeyAuth` sends
     `PLACEHOLDER_KEY`, pinned on the class, and the variables named in the ini option
     `xippios_placeholder_key_envs` hold it; the fixture `placeholder_api_key` returns

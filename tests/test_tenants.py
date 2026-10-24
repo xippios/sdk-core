@@ -128,6 +128,12 @@ def test_attributes_and_repr_name_the_scheme_only(monkeypatch: pytest.MonkeyPatc
         ({"reserved": ("Demo",)}, ValueError, "reserved name 'Demo' is not lower-case"),
         ({"reserved": ("demo", "demo")}, ValueError, "reserved name given twice: demo"),
         ({"validate": {"HOST": check_subdomain}}, ValueError, "fields not in fields: HOST"),
+        ({"hints": {"HOST": "a host"}}, ValueError, "hints names fields not in fields: HOST"),
+        (
+            {"validate": {}, "hints": {"SUBDOMAIN": "the subdomain alone"}},
+            ValueError,
+            "hints names fields without a validate check: SUBDOMAIN",
+        ),
     ],
 )
 def test_construction_refuses_a_malformed_scheme(
@@ -312,6 +318,38 @@ def test_a_refused_value_names_the_variable_and_not_the_value(
     assert value not in message
     assert info.value.__cause__ is None
     assert info.value.__context__ is None  # the check's error, which quotes it, is not kept
+
+
+HINT = "set the subdomain alone, e.g. acme for acme.example.org"
+
+
+@pytest.mark.parametrize("value", ["evil.com/x?", f"{HIDDEN_SUBDOMAIN}.x"])
+def test_a_refused_value_ends_with_the_field_s_hint_and_not_the_value(
+    monkeypatch: pytest.MonkeyPatch, value: str
+) -> None:
+    monkeypatch.setenv(LIST_VAR, "xa")
+    monkeypatch.setenv("FICTIVE_SRC_XA_SUBDOMAIN", value)
+    with pytest.raises(ConfigError) as info:
+        make(hints={"SUBDOMAIN": HINT}).field("xa", "SUBDOMAIN")
+    message = str(info.value)
+    assert message == (
+        "FICTIVE_SRC_XA_SUBDOMAIN does not hold a valid SUBDOMAIN for tenant 'xa'; " + HINT
+    )
+    assert value not in message
+    assert "not a subdomain" not in message  # the check's own text quotes the value
+    assert info.value.__context__ is None
+
+
+def test_a_hint_is_for_a_refused_value_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(LIST_VAR, "xa")
+    tenants = make(hints={"SUBDOMAIN": HINT})
+    with pytest.raises(ConfigError) as info:
+        tenants.field("xa", "SUBDOMAIN")
+    assert str(info.value) == (
+        "FICTIVE_SRC_XA_SUBDOMAIN is not set; export the SUBDOMAIN of tenant 'xa'"
+    )
+    monkeypatch.setenv("FICTIVE_SRC_XA_SUBDOMAIN", "Acme")
+    assert tenants.field("xa", "SUBDOMAIN") == "acme"
 
 
 def test_a_check_failing_with_any_exception_refuses_the_value(

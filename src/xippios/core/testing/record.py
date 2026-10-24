@@ -10,8 +10,10 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+import httpx
+
 from xippios.core._loop import sync
-from xippios.core.client import AsyncClient, Params, RetryPolicy, Timeouts
+from xippios.core.client import AsyncClient, Params, RetryPolicy, Timeouts, UseClientDefault
 from xippios.core.testing.fixtures import Fixture, write_fixture
 from xippios.core.testing.scrub import Scrub
 
@@ -31,6 +33,7 @@ async def record(
     scrub: Scrub | None = None,
     retry: RetryPolicy | None = None,
     timeouts: Timeouts | None = None,
+    auth: httpx.Auth | UseClientDefault | None = httpx.USE_CLIENT_DEFAULT,
 ) -> Fixture:
     """Perform one live request and write the scrubbed exchange to ``fixture``.
 
@@ -61,6 +64,9 @@ async def record(
             ``None`` keeps the client's.
         timeouts: Timeouts for this recording, e.g. ``Timeouts(read=300.0)``; ``None``
             keeps the client's.
+        auth: Credentials for this recording only, as for ``AsyncClient.request``:
+            ``None`` records a keyless endpoint without the client's key, an
+            ``httpx.Auth`` replaces it; the default sends the client's.
 
     Raises:
         ValueError: Both ``json`` and ``data``, before anything is sent. After the
@@ -78,6 +84,7 @@ async def record(
             data=data,
             headers=headers,
             raise_on_error=False,
+            auth=auth,
         )
     else:
         async with client.derive(retry=retry, timeouts=timeouts) as derived:
@@ -89,6 +96,7 @@ async def record(
                 data=data,
                 headers=headers,
                 raise_on_error=False,
+                auth=auth,
             )
     return write_fixture(response, fixture, scrub=scrub)
 

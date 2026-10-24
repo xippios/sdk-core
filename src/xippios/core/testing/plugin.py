@@ -6,9 +6,10 @@ The whole session runs offline (ADR-0013): from ``pytest_configure`` on, while t
 modules are collected, in a fixture of any scope and in a test, a request through
 httpx's default transports is refused unless a test marked ``network`` or ``live`` is
 being set up, run or torn down (``_NetworkGuard`` states the edges). Every test not
-marked ``live`` also gets a rate limiter that never waits unless it is marked
-``rate_limited``, and every ``EnvKeyAuth`` sends ``PLACEHOLDER_KEY``
-(``placeholder_api_key``). A ``live`` test is skipped unless ``XIPPIOS_LIVE_TESTS=1``.
+marked ``live`` also gets a rate limiter and quota policies that never wait or refuse
+unless it is marked ``rate_limited``, quota snapshots reset before and after it, and
+every ``EnvKeyAuth`` sending ``PLACEHOLDER_KEY`` (``placeholder_api_key``). A ``live``
+test is skipped unless ``XIPPIOS_LIVE_TESTS=1``.
 Every test, ``live`` or not, gets the ``httpx`` and ``httpcore`` logger levels back
 when it ends.
 """
@@ -25,7 +26,8 @@ import httpx
 import pytest
 import respx
 
-from xippios.core.client import EnvKeyAuth, TokenBucket
+from xippios.core.client import EnvKeyAuth, QuotaPolicy, TokenBucket
+from xippios.core.client.quota import _reset_every_policy
 from xippios.core.testing.fixtures import fixture_path
 from xippios.core.testing.replay import ReplayFixture, replay
 
@@ -283,6 +285,35 @@ def _skip_rate_limit_waits(request: pytest.FixtureRequest, monkeypatch: pytest.M
     if _marked(request, "live") or _marked(request, "rate_limited"):
         return
     monkeypatch.setattr(TokenBucket, "acquire", _acquire_without_waiting)
+
+
+async def _pause_without_waiting(self: QuotaPolicy, request: httpx.Request, cap: float) -> None:
+    return None
+
+
+@pytest.fixture(autouse=True)
+def _skip_quota_pauses(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[None]:
+    """Let no quota policy pause or refuse, and none stay spent, in a test not marked ``live``.
+
+    Every ``QuotaPolicy``'s snapshot is forgotten before and after the test, so a
+    replayed 429 cannot leave a source's module-level policy spent for the tests after
+    it, a live one included. Unless the test is marked ``rate_limited``, the policy's
+    pause does nothing either: ``before_request``, and the hook ``install`` sets, return
+    at once without waiting or raising ``RateLimitError``, so a test that replays a
+    spent quota and then calls again gets its fixture, not a refusal. ``observe`` still
+    keeps the snapshot during the test, for a test that asserts it. A ``live`` test
+    keeps every policy as it is.
+    """
+    if _marked(request, "live"):
+        yield
+        return
+    _reset_every_policy()
+    if not _marked(request, "rate_limited"):
+        monkeypatch.setattr(QuotaPolicy, "_pause", _pause_without_waiting)
+    yield
+    _reset_every_policy()
 
 
 def _placeholder_key(self: EnvKeyAuth) -> str:

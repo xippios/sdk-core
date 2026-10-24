@@ -70,6 +70,15 @@ The plugin owns the offline guarantees.
    request only and reads `self.key()` itself, and `sent_urls(route)` gives a test the
    URLs a route received as scrubbed strings, so neither the key nor a request carrying
    it has to sit in a test's frame.
+4. **No quota pause, no quota left spent** (added by ADR-0015, 2026-10-24). For every
+   test not marked `live`, by an autouse fixture, every `QuotaPolicy`'s snapshot is
+   forgotten before and after the test, so a replayed 429 cannot leave a source's
+   module-level policy spent for the tests after it, a live one included; and, unless
+   the test is marked `rate_limited`, the policy's pause does nothing: `before_request`
+   and the hook `install` sets return at once, neither waiting nor raising
+   `RateLimitError`. `observe` keeps the snapshot during the test, for a test that
+   asserts it. The marker `rate_limited` keeps the pause for one test, as it keeps the
+   limiter.
 
 Every test, `live` or not, gets the `httpx` and `httpcore` logger levels back when it
 ends. The plugin registers `network` and `rate_limited` next to `live`, so a source
@@ -122,6 +131,11 @@ done's grep of every fixture for key patterns before it is committed.
     job.
   - The logger levels are saved per test, after fixtures of wider scope are set up; one
     of those that changes a level leaves it behind.
+  - The quota snapshots are forgotten for every policy alive when a test not marked
+    `live` starts and ends; a live test keeps them, and a live test after another live
+    test sees what the first one left.
 - A subclass of `EnvKeyAuth` outside core that implements `apply(request, key)` breaks;
   none is known (0.x, conventions §12).
 - Conventions §10 states the guarantees and names the markers.
+
+Amended by ADR-0015 (2026-10-24): decision 4, no quota pause and no quota left spent.

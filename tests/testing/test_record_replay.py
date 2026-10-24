@@ -6,7 +6,14 @@ import pytest
 import respx
 from respx.models import AllMockedAssertionError
 
-from xippios.core.client import AsyncClient, Client, ClientConfig, RetryPolicy, Timeouts
+from xippios.core.client import (
+    AsyncClient,
+    Client,
+    ClientConfig,
+    HeaderKeyAuth,
+    RetryPolicy,
+    Timeouts,
+)
 from xippios.core.errors import NotFoundError
 from xippios.core.testing import (
     REDACTED,
@@ -250,6 +257,30 @@ def test_record_sync_takes_the_new_keywords(
     )
     assert fixture.request.body == f"org={REDACTED}"
     assert fixture.response.body == f'{{"org":"{REDACTED}"}}'
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("override", [False, True], ids=["client", "derived"])
+async def test_record_without_the_client_s_auth(
+    respx_mock: respx.MockRouter, config: ClientConfig, tmp_path: Path, override: bool
+) -> None:
+    # sdk-comtrade: a keyless reference file is recorded without sending the key.
+    route = respx_mock.get(f"{BASE}/files/ref.json").respond(200, json={"codes": []})
+    client = AsyncClient(config, auth=HeaderKeyAuth("X-Api-Key", "EXAMPLE_API_KEY"))
+    timeouts = Timeouts(read=300.0) if override else None
+    await record(client, "/files/ref.json", tmp_path / "ref.json", auth=None, timeouts=timeouts)
+    assert "x-api-key" not in route.calls.last.request.headers
+    await record(client, "/files/ref.json", tmp_path / "ref.json", timeouts=timeouts)
+    assert "x-api-key" in route.calls.last.request.headers
+
+
+def test_record_sync_takes_auth(
+    respx_mock: respx.MockRouter, config: ClientConfig, tmp_path: Path
+) -> None:
+    route = respx_mock.get(f"{BASE}/files/ref.json").respond(200, json={})
+    client = Client(config, auth=HeaderKeyAuth("X-Api-Key", "EXAMPLE_API_KEY"))
+    record_sync(client.async_client, "/files/ref.json", tmp_path / "ref.json", auth=None)
+    assert "x-api-key" not in route.calls.last.request.headers
 
 
 def _recorded(url: str, body: object, method: str = "GET") -> Fixture:

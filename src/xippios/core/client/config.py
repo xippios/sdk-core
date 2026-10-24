@@ -1,7 +1,7 @@
 """Value objects configuring a client: timeouts, retry policy, rate limit, cache."""
 
 import random
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 
 import httpx
@@ -131,7 +131,25 @@ class ClientConfig:
         classify: The source's own error mapping (ADR-0008): called with every response
             before the default status mapping; return a taxonomy error to raise it, or
             ``None`` to fall through. Where a source states its documented error shapes,
-            including errors upstream sends with a 200.
+            including errors upstream sends with a 200. It is also asked before a 429 or
+            5xx is retried, ``raise_on_error=False`` or not (ADR-0015): a
+            ``RateLimitError`` sets the wait from its ``retry_after``, so one beyond
+            ``retry.backoff_max`` is not retried; an ``UpstreamError`` for a 5xx and
+            ``None`` leave the decision to the retry policy; any other error stops the
+            retries. At most once per response.
+        before_request: Called once per ``request()`` call, not per retry, after the
+            cache lookup (a cache hit returns before it) and before the rate limiter,
+            with the request as built from base URL, path, query parameters, body and
+            headers; credentials from ``auth`` are not on it yet, and changes to it are
+            not sent. It may be sync or async (an awaitable result is awaited), may wait,
+            e.g. for a spent quota (ADR-0010), and may raise a taxonomy error, in which
+            case nothing is sent. ``QuotaPolicy.install`` sets it (ADR-0015).
+        observe: Called with every response that came from the wire, each retried
+            attempt included and a cache hit never, before ``classify`` and before the
+            retry decision, also when the caller asked for the raw response
+            (``raise_on_error=False``). For reading, e.g. quota headers; it returns
+            nothing, and an exception it raises propagates as the programming error it
+            is. ``QuotaPolicy.install`` sets it (ADR-0015).
     """
 
     source: str
@@ -144,6 +162,8 @@ class ClientConfig:
     cache_filter: Callable[[httpx.Request], bool] | None = None
     headers: Mapping[str, str] = field(default_factory=dict)
     classify: Callable[[httpx.Response], XippiosError | None] | None = None
+    before_request: Callable[[httpx.Request], Awaitable[None] | None] | None = None
+    observe: Callable[[httpx.Response], None] | None = None
 
     @property
     def user_agent(self) -> str:

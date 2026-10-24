@@ -6,6 +6,7 @@ tracebacks.
 """
 
 import email.utils
+import math
 import re
 from datetime import UTC, datetime
 from typing import Any
@@ -147,16 +148,19 @@ def parse_retry_after(value: str | None, *, now: datetime | None = None) -> floa
         now: Reference time for HTTP-date values; defaults to the current UTC time.
 
     Returns:
-        Non-negative seconds, or ``None`` when the header is absent or unparseable.
+        Non-negative, finite seconds, or ``None`` when the header is absent or
+        unparseable: delay-seconds are ASCII digits only (``"²"`` is not a number of
+        seconds), and one too long to be a float is ignored.
     """
     if value is None:
         return None
     text = value.strip()
-    if text.isdigit():
-        return float(text)
+    if text.isascii() and text.isdigit():
+        seconds = float(text)
+        return seconds if math.isfinite(seconds) else None
     try:
         when = email.utils.parsedate_to_datetime(text)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):  # a huge zone offset overflows
         return None
     if when.tzinfo is None:
         when = when.replace(tzinfo=UTC)
