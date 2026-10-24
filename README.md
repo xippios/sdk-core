@@ -274,17 +274,19 @@ class AttributeId(IntEnum):
     """Values of ``attributeId`` (fetched 2026-10-24)."""
 
     AREA_HARVESTED = 4
-    TOTAL_DISAPPEARANCE_126 = 126  # a name several ids share gets _<id>
+    TOTAL_DISAPPEARANCE_126 = 126
     TOTAL_DISAPPEARANCE_173 = 173
 ```
 
 An upstream whose ids are integers gets `IntEnum` (conventions §3), so a member compares
-equal to the id in upstream's data. Values are written through `repr()`, a character
-ruff calls confusable (a typographic apostrophe, an en dash, a no-break space) as a `\u`
-escape while `Côte` stays `Côte`, a member too long for its line is wrapped as ruff wraps
-it, and `__all__` is sorted, one name per line: the module passes `ruff check` and
-`ruff format --check` unchanged. A member name too long for any line (over 92 columns)
-is refused with `ValueError`; the refresh script names that member by hand, once:
+equal to the id in upstream's data; a name several ids share gets `_<id>`. Values are
+written as `ascii()` writes them, every character outside ASCII as an escape
+(`"C\xf4te d\u2019Ivoire"`), a member too long for its line is wrapped as ruff wraps it,
+and `__all__` is sorted as ruff sorts it, one name per line: the module is ASCII-only and
+passes `ruff check` and `ruff format --check` unchanged, under any ruff version. A member
+name too long for any line (over 92 columns), or a value with nothing to derive one from
+(an empty or a non-Latin label), is refused with `ValueError`; the refresh script names
+that member by hand, once:
 
 ```python
 enums = render_str_enums(
