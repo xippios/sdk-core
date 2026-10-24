@@ -227,7 +227,10 @@ Messages and results name tenants and variables, never a value.
   max_bytes=100_000)})`); a byte bound above the default is a deliberate choice for that
   tool, and every other tool keeps the default (ADR-0016). The note never promises a
   filter the tool lacks: the default says "narrow the query to see the rest", and a
-  tool with filters names them in its cap's `note`.
+  tool with filters names them in its cap's `note`. Since that note names a task's
+  filters, a source keeps its caps with its tasks, as `MCP_CAPS: Mapping[str,
+  ResultCap]` in `tasks.py` next to `__all__`, and its `mcp.py` passes them through as
+  `caps=getattr(tasks, "MCP_CAPS", None)`.
 - Reference lookups are tools too: `<source>_list_<thing>` (commodities, countries,
   attributes). Agents need them to form valid calls. A multi-tenant source lists its
   tenants the same way, names only (`list_task`, `cashctrl_list_organisations`).

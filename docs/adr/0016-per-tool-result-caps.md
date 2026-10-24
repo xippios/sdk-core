@@ -60,6 +60,13 @@ commodity classification), and a tool that needs more rows need not be named `li
    that tool's entry; every tool without one keeps the family default, 200 rows or
    64 KB. No tool goes uncapped: every result stays bounded, and every cut carries the
    note.
+5. **Caps live with the tasks.** A source keeps its per-tool caps in an
+   `MCP_CAPS: Mapping[str, ResultCap]` mapping in its `tasks.py`, next to `__all__`: a
+   cap's note names the task's filters, so the mapping belongs with the tasks it
+   describes. Its `mcp.py` passes it through,
+   `build_server(..., caps=getattr(tasks, "MCP_CAPS", None))`, and holds no cap of its
+   own. Core's API is unchanged by this: `register_tasks` and `build_server` take any
+   mapping.
 
 ## Consequences
 
@@ -70,11 +77,13 @@ commodity classification), and a tool that needs more rows need not be named `li
   convenience. The HS commodity list, about 2 MB, is not served whole:
   `list_commodities` keeps `search` and a cap of its own whose note names it.
 - A tool that has filters sets a note naming them; one without keeps the default.
-- sdk-template's `mcp.py` passes `caps=` to `build_server` where a source has large
-  reference lists, in a template PR after the core release that carries this ADR.
+- sdk-template's `mcp.py` renders `caps=getattr(tasks, "MCP_CAPS", None)` in its
+  `build_server` call, in a template PR after the core release that carries this ADR; a
+  source without a large list defines no `MCP_CAPS` and keeps the default for every
+  tool.
 - **Behaviour change**, pre-1.0 (conventions §12): the default note's wording changes.
   A test that asserts the old text ("more filters or a shorter date range") fails; none
   is known in the family.
 - Conventions 1.11: §8 states the default cap, the per-tool cap, rows and bytes, for a
-  reference tool whose whole list an agent needs, and that the note never promises a
-  filter the tool lacks.
+  reference tool whose whole list an agent needs, where a source keeps its caps
+  (`MCP_CAPS` in `tasks.py`), and that the note never promises a filter the tool lacks.
