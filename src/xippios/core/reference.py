@@ -270,11 +270,47 @@ def _unknown_keys(member_names: Mapping[str, object], lists: Mapping[str, object
         raise ValueError(f"member_names names lists that are not rendered: {unknown}")
 
 
-def _all_order(name: str) -> tuple[int, list[str | int]]:
-    """Ruff's order for ``__all__`` (RUF022): constants, classes, the rest; each natural."""
-    kind = 0 if len(name) > 1 and name.isupper() else 1 if name[:1].isupper() else 2
-    pieces = re.split("([0-9]+)", name)
-    return kind, [int(piece) if index % 2 else piece for index, piece in enumerate(pieces)]
+def _natural(left: str, right: str) -> int:
+    """Ruff's natural order of two names (the ``natord`` crate), as -1, 0 or 1.
+
+    Characters compare as they are. Where both names reach an ASCII digit, the two digit
+    runs compare as numbers, the longer run being the greater; a run that starts with
+    ``0`` on either side compares digit by digit from the left instead, so ``Code05``
+    comes before ``Code1``, ``Code001`` before ``Code1`` and ``B0`` before ``B00``.
+    """
+    digits = "0123456789"
+    i = j = 0
+    while i < len(left) and j < len(right):
+        if left[i] in digits and right[j] in digits:
+            leading_zero = "0" in (left[i], right[j])
+            bias = 0
+            while i < len(left) and j < len(right) and left[i] in digits and right[j] in digits:
+                if left[i] != right[j]:
+                    if leading_zero:
+                        return -1 if left[i] < right[j] else 1
+                    bias = bias or (-1 if left[i] < right[j] else 1)
+                i, j = i + 1, j + 1
+            more_left = i < len(left) and left[i] in digits
+            more_right = j < len(right) and right[j] in digits
+            if more_left != more_right:
+                return 1 if more_left else -1
+            if bias:
+                return bias
+        elif left[i] != right[j]:
+            return -1 if left[i] < right[j] else 1
+        else:
+            i, j = i + 1, j + 1
+    return (i < len(left)) - (j < len(right))
+
+
+def _kind(name: str) -> int:
+    """Ruff's groups for ``__all__``: constants (``HS``), classes (``Hs``), the rest."""
+    return 0 if len(name) > 1 and name.isupper() else 1 if name[:1].isupper() else 2
+
+
+def _all_order(left: str, right: str) -> int:
+    """Ruff's order for ``__all__`` (RUF022): by group, then natural, as -1, 0 or 1."""
+    return (_kind(left) > _kind(right)) - (_kind(left) < _kind(right)) or _natural(left, right)
 
 
 def _module(
@@ -290,7 +326,7 @@ def _module(
     lines += ['"""', ""]
     if classes:
         lines += [f"from enum import {kind}", ""]
-    names = sorted((name for name, _ in classes), key=_all_order)
+    names = sorted((name for name, _ in classes), key=functools.cmp_to_key(_all_order))
     if names:
         lines += ["__all__ = [", *(f'    "{name}",' for name in names), "]"]
     else:

@@ -217,6 +217,22 @@ def test_render_str_enums_sorts_all_as_ruff_does(tmp_path: Path) -> None:
     assert classes == ["Zeta", "Code10", "HS", "Code2", "Alpha"]  # upstream order
 
 
+@pytest.mark.parametrize(
+    "expected",
+    [["Code05", "Code1"], ["Code001", "Code1"], ["B0", "B00"], ["Code1", "Code2", "Code10"]],
+)
+def test_render_str_enums_sorts_digit_runs_as_ruff_does(
+    tmp_path: Path, expected: list[str]
+) -> None:
+    keys = [name.lower() for name in reversed(expected)]
+    source = render_str_enums(
+        {key: ["A"] for key in keys},
+        class_names={name.lower(): name for name in expected},
+        generator="tests",
+    )
+    assert assert_ruff_clean(tmp_path, source)["__all__"] == expected  # RUF022 agrees
+
+
 LONG_VALUE = (
     "CORN, GRAIN, IRRIGATED, ENTIRE CROP - ACRES HARVESTED, MEASURED IN ACRES / PLANTED, "
     "NET OF ABANDONMENT, EXCL SILAGE AND SEED, ALL PRACTICES, ALL TYPES"
