@@ -331,7 +331,8 @@ def register_tasks(
             It sets ``max_rows`` and ``max_bytes`` as the source judges; a byte bound
             above the default 64 KB is a deliberate choice for that tool, so that an
             agent gets the list whole. Its ``note`` says how to see the rest when the
-            cap still cuts.
+            cap still cuts. A field the per-tool cap leaves unset takes the family
+            default (200 rows, 65,536 bytes, the default note), not ``cap``'s.
         read_only: Mark the tools read-only. Write tools belong in a separate server.
         tenant_lock: Lock the whole server to one tenant, e.g.
             ``TenantLock("org", "acme")``; installed once per server, the same lock
@@ -417,7 +418,8 @@ def build_server(
         cap: Result cap of every tool without an entry in ``caps``.
         caps: A tool's own result cap, keyed by the task function's ``__name__``, e.g.
             ``{"list_partners": ResultCap(max_rows=400, max_bytes=100_000)}`` for a
-            reference list an agent needs whole (see ``register_tasks``).
+            reference list an agent needs whole; a field it leaves unset takes the
+            family default, not ``cap``'s (see ``register_tasks``).
         read_only: Whether the tools are read-only; ``False`` for a write server, whose
             every task takes ``confirm: bool = False`` (see ``register_tasks``).
         tenant_lock: Lock the server to one tenant, e.g. ``TenantLock("org", "acme")``

@@ -9,7 +9,9 @@ from xippios.core import sync
 from xippios.core.errors import NotFoundError
 from xippios.core.mcp import (
     ResultCap,
+    TenantLock,
     build_server,
+    is_write_server,
     quiet_request_logging,
     register_tasks,
     tool_name,
@@ -157,9 +159,38 @@ async def test_a_cap_for_a_name_that_is_no_task_is_refused() -> None:
     with pytest.raises(ValueError, match=rule):
         build_server("example", [get_series, list_areas], caps=caps)
     server = build_server("example", [])
+    middleware = list(server.middleware)  # the SDK's own
     with pytest.raises(ValueError, match=r"^caps names no task among the tasks: list_nothing;"):
         register_tasks(server, "example", iter([list_areas]), caps={"list_nothing": ResultCap()})
+    with pytest.raises(ValueError, match=r"^caps names no task among the tasks: list_nothing;"):
+        register_tasks(
+            server,
+            "example",
+            [create_thing],
+            caps={"list_nothing": ResultCap()},
+            read_only=False,
+            tenant_lock=TenantLock("org", "acme"),
+        )
     assert await server.list_tools() == []  # checked before anything is registered
+    assert not is_write_server(server)  # nor marked a write server
+    assert server.middleware == middleware  # nor locked: another lock is still accepted
+    register_tasks(server, "example", [plain], tenant_lock=TenantLock("org", "other"))
+    assert len(server.middleware) == len(middleware) + 1
+
+
+@pytest.mark.anyio
+async def test_a_cap_of_its_own_falls_back_to_the_family_default_not_to_the_server_cap() -> None:
+    caps = {"list_areas": ResultCap(max_rows=300)}  # max_bytes unset
+    server = build_server(
+        "example", [get_series, list_areas], cap=ResultCap(max_bytes=1000), caps=caps
+    )
+    areas = await mcp_call(server, "example_list_areas", {})
+    assert len(areas["data"]) == 300  # over 2,000 bytes, more than the server cap allows
+    assert areas["note"].startswith("showing 300 of 310 rows (cap: 300 rows or 65536 bytes); ")
+    series = await mcp_call(server, "example_get_series", {"series_id": "CORN", "year": 2100})
+    assert series["note"].endswith(
+        "rows (cap: 200 rows or 1000 bytes); narrow the query to see the rest"
+    )
 
 
 @pytest.mark.anyio
