@@ -300,7 +300,10 @@ consumer, never served standalone from the package.
   - No quota pause and no quota left spent, in every test not marked `live`: every
     `QuotaPolicy`'s snapshot is forgotten before and after the test, so a replayed 429
     cannot refuse the tests after it, and a policy neither waits nor refuses. A test
-    that asserts the pause or the refusal is marked `rate_limited` (ADR-0015).
+    that asserts the pause or the refusal is marked `rate_limited` (ADR-0015); the
+    edges, snapshots shared by consecutive live tests, a quota spent by a fixture of
+    wider scope, a subclass's override of `before_request`, are listed in ADR-0013 and
+    ADR-0015.
   - Placeholder key, in every test not marked `live`: every `EnvKeyAuth` sends
     `PLACEHOLDER_KEY`, pinned on the class, and the variables named in the ini option
     `xippios_placeholder_key_envs` hold it; the fixture `placeholder_api_key` returns
