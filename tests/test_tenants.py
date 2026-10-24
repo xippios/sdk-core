@@ -252,6 +252,22 @@ def test_require_without_any_declaration_names_the_variables() -> None:
     )
 
 
+def test_require_names_the_variables_of_an_absent_reserved_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(LIST_VAR, "xa")
+    monkeypatch.setenv("FICTIVE_SRC_DEMO_SUBDOMAIN", HIDDEN_SUBDOMAIN)  # the key is missing
+    with pytest.raises(InvalidRequestError) as info:
+        make().require("demo")
+    assert str(info.value) == (
+        "unknown tenant 'demo'; declared tenants: xa; 'demo' is declared by "
+        "FICTIVE_SRC_DEMO_SUBDOMAIN and FICTIVE_SRC_DEMO_API_KEY alone"
+    )
+    with pytest.raises(InvalidRequestError) as info:
+        make().require("nope")
+    assert str(info.value) == "unknown tenant 'nope'; declared tenants: xa"
+
+
 def test_require_refuses_a_malformed_list(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(LIST_VAR, "xa,xa")
     with pytest.raises(ConfigError, match="twice"):

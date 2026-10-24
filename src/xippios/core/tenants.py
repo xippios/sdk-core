@@ -200,7 +200,8 @@ class Tenants:
         Raises:
             InvalidRequestError: ``name`` is not declared, the caller's bad argument
                 (ADR-0007); the message lists the declared tenants or, when there are
-                none, the variables to set, and never a value.
+                none, the variables to set, and for an absent reserved tenant the
+                variables that declare it; never a value.
             ConfigError: ``list_var`` is malformed (see ``names``).
         """
         declared = self.names()
@@ -208,6 +209,9 @@ class Tenants:
             return name
         if declared:
             hint = "declared tenants: " + ", ".join(declared)
+            if name in self.reserved:
+                variables = " and ".join(self.var(name, field) for field in self.fields)
+                hint += f"; {name!r} is declared by {variables} alone"
         else:
             per_name = " and ".join(f"{self._prefix}_<NAME>_{field}" for field in self.fields)
             hint = f"no tenant is declared; set {self.list_var} and, per name, {per_name}"
