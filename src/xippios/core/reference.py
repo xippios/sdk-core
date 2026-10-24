@@ -2,6 +2,11 @@
 
 Files live in ``<package>/reference/`` as CSV or JSON and ship inside the wheel. File
 contents are cached per process; callers get fresh objects on every call.
+
+The renderer writes a source's generated ``enums.py``, a ``StrEnum`` per value list
+(conventions §3, ADR-0008). Its output is what ``ruff format`` would write and passes
+``ruff check`` under the family's configuration, but for the two edges
+``render_str_enums`` names.
 """
 
 import csv
@@ -9,13 +14,24 @@ import functools
 import io
 import json
 import re
+import textwrap
+import unicodedata
 from collections.abc import Mapping, Sequence
 from importlib import resources
 from typing import Any, cast
 
 from pydantic import TypeAdapter
 
-__all__ = ["enum_member_name", "load_csv", "load_json", "load_table", "render_str_enums"]
+__all__ = [
+    "enum_member_name",
+    "load_csv",
+    "load_json",
+    "load_table",
+    "render_str_enums",
+]
+
+_LINE_LENGTH = 100
+"""The family's ``line-length``, which every line of a generated module keeps where it can."""
 
 
 @functools.cache
@@ -63,7 +79,7 @@ def load_table[T](package: str, name: str, model: type[T]) -> list[T]:
 
 
 def enum_member_name(value: str) -> str:
-    """An identifier for a ``StrEnum`` member: ``"ANIMALS & PRODUCTS"`` → ``ANIMALS_AND_PRODUCTS``.
+    """An identifier for an enum member: ``"ANIMALS & PRODUCTS"`` → ``ANIMALS_AND_PRODUCTS``.
 
     Upper case, ``&`` read as ``AND``, every other run of non-alphanumerics folded to one
     underscore, a leading digit prefixed with an underscore.
@@ -78,6 +94,100 @@ def _class_name(key: str) -> str:
     return "".join(part.capitalize() for part in re.split(r"[^A-Za-z0-9]+", key) if part)
 
 
+def _width(text: str) -> int:
+    """Columns ``text`` takes as ruff counts them: wide characters two, combining marks none."""
+    return sum(
+        0
+        if unicodedata.category(char) in ("Mn", "Me")
+        else 2
+        if unicodedata.east_asian_width(char) in ("W", "F")
+        else 1
+        for char in text
+    )
+
+
+def _escaped(char: str, quote: str) -> str:
+    """``char`` inside a literal delimited by ``quote``: ``repr()``'s escape, the quote escaped."""
+    return "\\" + char if char == quote else repr(char)[1:-1]
+
+
+def _literal(value: str) -> str:
+    """``value`` as ruff writes a string: double quotes, single where they need fewer escapes."""
+    quote = "'" if value.count('"') > value.count("'") else '"'
+    return quote + "".join(_escaped(char, quote) for char in value) + quote
+
+
+def _parts(value: str) -> list[str]:
+    """``value`` as literals of at most 90 columns each, cut after a space where one is near.
+
+    90 columns leave room for the indent of eight and the quotes. Widths are counted as
+    though every quote needed its escape, since each part picks its own quotes.
+    """
+    budget = _LINE_LENGTH - 10
+    widths = [_width(repr(char)[1:-1]) + (char in "'\"") for char in value]
+    parts: list[str] = []
+    start, used, space = 0, 0, -1
+    for index, width in enumerate(widths):
+        if used + width > budget:
+            head = sum(widths[start : space + 1]) if space >= start else 0
+            cut = space + 1 if head >= budget // 2 else index
+            parts.append(value[start:cut])
+            start, space = cut, -1
+            used = sum(widths[start:index])
+        used += width
+        if value[index] == " ":
+            space = index
+    parts.append(value[start:])
+    return [_literal(part) for part in parts]
+
+
+def _member(name: str, literal: str, value: str | None = None) -> list[str]:
+    """``name = literal`` in a class body, laid out as ruff formats it.
+
+    A literal too long for the line moves into parentheses on a line of its own; a string
+    too long even there (``value`` given) is split into implicitly concatenated parts.
+    Where ``name = (`` itself is too long, nothing can shorten the line and it stays one.
+    """
+    line = f"    {name} = {literal}"
+    if _width(line) <= _LINE_LENGTH or _width(f"    {name} = (") > _LINE_LENGTH:
+        return [line]
+    if _width(f"        {literal}") <= _LINE_LENGTH:
+        return [f"    {name} = (", f"        {literal}", "    )"]
+    if value is None:
+        return [line]
+    return [f"    {name} = (", *(f"        {part}" for part in _parts(value)), "    )"]
+
+
+def _all_order(name: str) -> tuple[int, list[str | int]]:
+    """Ruff's order for ``__all__`` (RUF022): constants, classes, the rest; each natural."""
+    kind = 0 if len(name) > 1 and name.isupper() else 1 if name[:1].isupper() else 2
+    pieces = re.split("([0-9]+)", name)
+    return kind, [int(piece) if index % 2 else piece for index, piece in enumerate(pieces)]
+
+
+def _module(
+    kind: str, summary: str, paragraphs: Sequence[str], classes: Sequence[tuple[str, list[str]]]
+) -> str:
+    """A generated module: docstring, import, sorted ``__all__`` one per line, the classes."""
+    lines = [f'"""{summary}']
+    for paragraph in paragraphs:
+        lines += [
+            "",
+            *textwrap.wrap(paragraph, _LINE_LENGTH, break_long_words=False, break_on_hyphens=False),
+        ]
+    lines += ['"""', ""]
+    if classes:
+        lines += [f"from enum import {kind}", ""]
+    names = sorted((name for name, _ in classes), key=_all_order)
+    if names:
+        lines += ["__all__ = [", *(f'    "{name}",' for name in names), "]"]
+    else:
+        lines.append("__all__ = []")
+    for _, body in classes:
+        lines += ["", "", *body]
+    return "\n".join(lines) + "\n"
+
+
 def render_str_enums(
     lists: Mapping[str, Sequence[str]],
     *,
@@ -88,8 +198,19 @@ def render_str_enums(
     """Python source for one ``StrEnum`` per value list, formatted as ruff formats it.
 
     Member names come from ``enum_member_name``; values are the upstream strings,
-    verbatim. Generated code is the only way enums enter a source package, so this
-    function is the one place the rendering lives.
+    verbatim, each written through ``repr()``, so a quote, a backslash or a control
+    character is escaped, in double quotes unless single quotes need fewer escapes. A
+    member too long for a line of 100 columns is laid out as ruff lays it out: the value
+    in parentheses on a line of its own, and a value too long for that line split into
+    implicitly concatenated parts. ``__all__`` names the classes sorted as ruff sorts it
+    (RUF022), one per line; the classes keep the order of ``lists``.
+
+    The result passes ``ruff format --check`` and ``ruff check`` unchanged, with two
+    edges: a member name too long for a line of its own cannot be shortened (E501), and a
+    value holding a character ruff calls ambiguous, such as a typographic apostrophe
+    (U+2019) or an en dash (U+2013), trips RUF001.
+    Generated code is the only way enums enter a source package, so this module is the
+    one place the rendering lives.
 
     Args:
         lists: Enum key (``"state_alpha"``) to its values, in upstream order.
@@ -102,29 +223,21 @@ def render_str_enums(
     """
     names = {key: (class_names or {}).get(key, _class_name(key)) for key in lists}
     when = f" (fetched {fetched})" if fetched else ""
-    lines = [
-        '"""StrEnums for packaged value lists (conventions §3).',
-        "",
-        f"Generated by {generator}; do not edit by hand. Member names are derived from the",
-        "values, values are upstream's.",
-        '"""',
-        "",
-    ]
-    if lists:
-        lines += ["from enum import StrEnum", ""]
-    lines.append("__all__ = [" + ", ".join(f'"{names[key]}"' for key in lists) + "]")
+    classes: list[tuple[str, list[str]]] = []
     for key, values in lists.items():
         members = [enum_member_name(value) for value in values]
         if len(set(members)) != len(members):
             raise ValueError(f"{key}: member names collide: {sorted(members)}")
-        lines += [
-            "",
-            "",
-            f"class {names[key]}(StrEnum):",
-            f'    """Values of ``{key}``{when}."""',
-            "",
-        ]
-        lines += [
-            f'    {member} = "{value}"' for member, value in zip(members, values, strict=True)
-        ]
-    return "\n".join(lines) + "\n"
+        body = [f"class {names[key]}(StrEnum):", f'    """Values of ``{key}``{when}."""', ""]
+        for member, value in zip(members, values, strict=True):
+            body += _member(member, _literal(value), value)
+        classes.append((names[key], body))
+    return _module(
+        "StrEnum",
+        "StrEnums for packaged value lists (conventions §3).",
+        [
+            f"Generated by {generator}; do not edit by hand. Member names are derived from the "
+            "values, values are upstream's."
+        ],
+        classes,
+    )
