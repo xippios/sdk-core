@@ -131,7 +131,7 @@ def is_write_server(server: MCPServer) -> bool:
 def _lock_sentence(lock: TenantLock) -> str:
     return (
         f"This server is locked to {lock.param} {lock.value}; "
-        f"every tool call must pass {lock.param}={lock.value}."
+        f"every tool call that takes {lock.param} must pass {lock.param}={lock.value}."
     )
 
 
@@ -382,7 +382,7 @@ def build_server(
             every task takes ``confirm: bool = False`` (see ``register_tasks``).
         tenant_lock: Lock the server to one tenant, e.g. ``TenantLock("org", "acme")``
             (see ``TenantLock``). The instructions gain one sentence: "This server is
-            locked to org acme; every tool call must pass org=acme."
+            locked to org acme; every tool call that takes org must pass org=acme."
 
     Raises:
         ValueError: ``read_only`` is ``False`` and a task does not take

@@ -158,7 +158,9 @@ async def test_listing_tools_is_unaffected() -> None:
 
 
 async def test_a_locked_server_names_the_tenant_in_its_instructions() -> None:
-    sentence = "This server is locked to org acme; every tool call must pass org=acme."
+    sentence = (
+        "This server is locked to org acme; every tool call that takes org must pass org=acme."
+    )
     server = locked_server([], instructions="Example via xippios.")
     assert server.instructions == f"Example via xippios. {sentence}"
     async with Client(server) as client:

@@ -132,10 +132,10 @@ All notable changes to this project are documented here. The format follows
   call did not name the tenant`; it leaves tools without `param` and listing tools
   alone. On a locked server, `register_tasks` refuses with `ValueError` a task whose
   `param` has a default, and the lock on a server that has one: a tool that takes the
-  tenant parameter must receive it. `build_server` adds "This server is locked to <param> <value>; every tool call
-  must pass <param>=<value>." to the instructions. sdk-cashctrl wrote the same lock
-  itself, set the instructions through the SDK's private low-level server and parsed
-  the command line twice.
+  tenant parameter must receive it. `build_server` adds "This server is locked to
+  <param> <value>; every tool call that takes <param> must pass <param>=<value>." to the
+  instructions. sdk-cashctrl wrote the same lock itself, set the instructions through
+  the SDK's private low-level server and parsed the command line twice.
 - `main(server, argv=None, *, add_options=None, apply_options=None)` and
   `build_parser(prog, *, add_options=None)`: `add_options` puts a source's arguments on
   core's parser, so the command line is parsed once and `--help` lists every option;

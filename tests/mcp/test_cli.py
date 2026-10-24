@@ -174,7 +174,7 @@ def test_an_undeclared_tenant_from_tenants_require_stops_at_startup(
     assert served is not server
     assert transport == "stdio"
     assert served.instructions == (
-        "This server is locked to org acme; every tool call must pass org=acme."
+        "This server is locked to org acme; every tool call that takes org must pass org=acme."
     )
 
 

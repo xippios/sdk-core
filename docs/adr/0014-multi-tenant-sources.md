@@ -88,8 +88,8 @@ not check that a task takes `confirm: bool = False`, which conventions §8 requi
    such a task, since the default would name a tenant the caller never chose. A tool
    that does not take `param`, the tenant list for one, listing tools and every other
    request are untouched. `build_server` passes the instructions one more
-   sentence, "This server is locked to <param> <value>; every tool call must pass
-   <param>=<value>.", through the constructor. The list tool of a locked server lists the
+   sentence, "This server is locked to <param> <value>; every tool call that takes
+   <param> must pass <param>=<value>.", through the constructor. The list tool of a locked server lists the
    locked tenant only. The HTTP router has no lock: a deployment that needs one declares
    only that tenant.
 8. **A source's options go through hooks.** `main(server, argv=None, *, add_options=None,
