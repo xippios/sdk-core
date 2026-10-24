@@ -71,7 +71,8 @@ plus a loader), `_client.py` (the configured `xippios.core.client` instance).
   package under `reference/` as CSV or JSON, loaded via `xippios.core.reference`, and
   is versioned with the package. Enums are generated from it with
   `xippios.core.reference` (`render_str_enums`, `render_int_enums`), and the generated
-  module passes `ruff check` and `ruff format --check` as rendered (ADR-0008).
+  module is ASCII-only and passes `ruff check` and `ruff format --check` as rendered
+  (ADR-0008).
 
 ## 4. Result envelope and metadata
 
