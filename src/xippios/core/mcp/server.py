@@ -170,8 +170,15 @@ def _lock_middleware(server: MCPServer, lock: TenantLock) -> ServerMiddleware[An
                 if lock.param in arguments:
                     if arguments[lock.param] != lock.value:
                         return other
-                elif await _declares(server, params.get("name"), lock.param):
-                    return missing
+                else:
+                    try:
+                        declared = await _declares(server, params.get("name"), lock.param)
+                    except Exception:
+                        # Fail closed, as text: a lookup that fails must neither let the
+                        # call through nor raise through the MCP boundary.
+                        return missing
+                    if declared:
+                        return missing
         return await call_next(ctx)
 
     return tenant_lock

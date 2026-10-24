@@ -98,6 +98,27 @@ async def test_a_call_that_leaves_out_the_declared_parameter_is_refused() -> Non
     assert calls == []
 
 
+async def test_a_failing_schema_lookup_refuses_as_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+    server = locked_server(calls)
+    list_tools = server.list_tools
+    failures = [RuntimeError("tool listing failed")]
+
+    async def failing_once() -> list[Any]:
+        # The lock's lookup comes first and fails; the client's own tools/list after
+        # the call, which validates the result, gets the real listing.
+        if failures:
+            raise failures.pop()
+        return await list_tools()
+
+    monkeypatch.setattr(server, "list_tools", failing_once)
+    assert await mcp_call_text(server, TOOL, {}) == MISSING  # text, not an MCP error
+    assert failures == []  # the lookup ran and failed
+    assert calls == []
+    assert await mcp_call(server, TOOL, {"org": "acme"}) == {"org": "acme"}  # no lookup
+    assert calls == ["acme"]
+
+
 async def ping() -> dict[str, bool]:
     """Answer without a tenant."""
     return {"pong": True}
