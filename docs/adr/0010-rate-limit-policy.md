@@ -88,3 +88,6 @@ Decided 2026-10-23 for every package.
 
 Amended by ADR-0011 (2026-10-23): a 5xx and a transport failure are retried for
 idempotent methods only.
+
+Followed up by ADR-0015 (2026-10-24): the core helper is `QuotaPolicy`, on the client's
+`before_request` and `observe` hooks, and `classify` shapes retries.
