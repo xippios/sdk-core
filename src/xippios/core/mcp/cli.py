@@ -16,6 +16,11 @@ from xippios.core.mcp.server import is_write_server, quiet_request_logging
 
 __all__ = ["build_parser", "main"]
 
+# Exactly the mcp SDK's own list (mcp 2.3.0, mcp/server/lowlevel/server.py and
+# mcp/server/mcpserver/server.py): for these hosts, without transport_security, the SDK
+# turns on its DNS-rebinding protection (Host and Origin checks). Every host a write
+# server is served on without --allow-remote therefore gets those checks too, which is
+# why the match is exact: another loopback address such as 127.0.0.2 would not get them.
 _LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
 """The ``--host`` values a write server may be served on over HTTP without ``--allow-remote``."""
 
