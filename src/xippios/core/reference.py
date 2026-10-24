@@ -105,13 +105,13 @@ def id_name_pairs(
         records: Upstream's records under upstream's field names, e.g. PSD's
             ``commodityAttributes``.
         id_field: The field holding the integer id, e.g. ``"attributeId"``; an ``int`` or
-            a string of ASCII digits (``"28"``).
+            a string of ASCII digits without leading zeros (``"28"``, not ``"007"``).
         name_field: The field holding the name, a string, e.g. ``"attributeName"``.
 
     Raises:
-        ValueError: When a record lacks a field, its id is not an integer, or its name
-            is not a string. The message names the field and the record's position,
-            never the record.
+        ValueError: When a record lacks a field, its id is not an integer or has leading
+            zeros that ``int`` would drop, or its name is not a string. The message names
+            the field and the record's position, never the record.
     """
     pairs: list[tuple[int, str]] = []
     for index, record in enumerate(records):
@@ -120,6 +120,10 @@ def id_name_pairs(
                 raise ValueError(f"record {index} has no field {field!r}")
         ident, name = record[id_field], record[name_field]
         if isinstance(ident, str) and ident.isascii() and ident.isdigit():
+            if len(ident) > 1 and ident.startswith("0"):
+                raise ValueError(
+                    f"record {index}: field {id_field!r} has leading zeros an integer id would lose"
+                )
             ident = int(ident)
         if not isinstance(ident, int) or isinstance(ident, bool):
             raise ValueError(f"record {index}: field {id_field!r} is not an integer id")

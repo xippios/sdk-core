@@ -395,6 +395,23 @@ def test_id_name_pairs_refuses_an_id_that_is_not_an_integer(ident: object) -> No
     assert "Area" not in str(error.value)
 
 
+@pytest.mark.parametrize("ident", ["007", "00", "0123"])
+def test_id_name_pairs_refuses_leading_zeros(ident: str) -> None:
+    with pytest.raises(
+        ValueError, match=r"^record 1: field 'attributeId' has leading zeros an integer id"
+    ) as error:
+        id_name_pairs(
+            [
+                {"attributeId": "0", "attributeName": "Zero"},
+                {"attributeId": ident, "attributeName": "Bond"},
+            ],
+            id_field="attributeId",
+            name_field="attributeName",
+        )
+    assert ident not in str(error.value)
+    assert "Bond" not in str(error.value)
+
+
 def test_id_name_pairs_refuses_a_name_that_is_not_a_string() -> None:
     with pytest.raises(ValueError, match="'attributeName' is not a string"):
         id_name_pairs(
