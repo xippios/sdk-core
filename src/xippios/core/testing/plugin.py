@@ -305,6 +305,22 @@ def _skip_quota_pauses(
     spent quota and then calls again gets its fixture, not a refusal. ``observe`` still
     keeps the snapshot during the test, for a test that asserts it. A ``live`` test
     keeps every policy as it is.
+
+    That is exactly what is guaranteed, with these edges (ADR-0013, ADR-0015):
+
+    - Consecutive live tests share every policy's snapshot: a quota one live test spends
+      makes the next one wait within the cap, or raise ``RateLimitError`` without
+      sending.
+    - This fixture is function-scoped, so the reset runs after the fixtures of wider
+      scope are set up: a policy one of those spends while it is set up is forgotten in
+      the setup of the first test not marked ``live`` from then on, the one that set it
+      up included, and never reaches that test's body. A fixture that hands an offline
+      test a spent quota is function-scoped.
+    - The pause is turned off by replacing ``QuotaPolicy._pause``, which
+      ``before_request`` and the hook ``install`` sets both call. A subclass that
+      overrides ``before_request`` opts out for any wait or refusal of its own, wherever
+      its override runs, called directly or set as the hook by hand; the hook
+      ``install`` sets calls the pause, never the override.
     """
     if _marked(request, "live"):
         yield

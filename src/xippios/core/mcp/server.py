@@ -2,7 +2,8 @@
 
 Each tool keeps the task's signature and docstring, so the SDK derives the input
 schema and the description from them. The body awaits the task's async twin, turns
-taxonomy errors into text and applies the result cap.
+taxonomy errors into text and applies the result cap: the tool's own from ``caps``,
+else the server's (ADR-0016).
 
 A server can be locked to one tenant (``TenantLock``): a middleware refuses every tool
 call naming another before the tool runs. A server whose tasks were registered with
@@ -258,6 +259,20 @@ def _confirm_problem(fn: Callable[..., Any]) -> str | None:
     return None
 
 
+def _check_caps(tasks: list[Callable[..., Any]], caps: Mapping[str, ResultCap]) -> None:
+    """Refuse a key of ``caps`` that is not the ``__name__`` of one of ``tasks``.
+
+    Raises:
+        ValueError: Naming every such key, sorted.
+    """
+    unknown = sorted(set(caps) - {fn.__name__ for fn in tasks})
+    if unknown:
+        raise ValueError(
+            f"caps names no task among the tasks: {', '.join(unknown)}; a key is the task "
+            "function's __name__, not the tool name with the source prefix"
+        )
+
+
 def _as_tool(
     fn: Callable[..., Any], cap: ResultCap, narrow: Callable[[Any], Any] | None = None
 ) -> Callable[..., Awaitable[str]]:
@@ -291,6 +306,7 @@ def register_tasks(
     tasks: Iterable[Callable[..., Any]],
     *,
     cap: ResultCap | None = None,
+    caps: Mapping[str, ResultCap] | None = None,
     read_only: bool = True,
     tenant_lock: TenantLock | None = None,
 ) -> list[str]:
@@ -306,7 +322,17 @@ def register_tasks(
         server: The server to register on.
         source: Source slug, e.g. ``"usda-nass"``; prefixes every tool name.
         tasks: Task functions (sync facades, async functions, or plain functions).
-        cap: Result cap; defaults to 200 rows or 64 KB.
+        cap: Result cap of every tool without an entry in ``caps``; defaults to 200 rows
+            or 64 KB.
+        caps: A tool's own result cap, replacing ``cap`` for it, keyed by the task
+            function's ``__name__``, e.g. ``{"list_partners": ResultCap(max_rows=400,
+            max_bytes=100_000)}`` for the tool ``comtrade_list_partners``: for a
+            reference tool whose whole list an agent needs (conventions §8, ADR-0016).
+            It sets ``max_rows`` and ``max_bytes`` as the source judges; a byte bound
+            above the default 64 KB is a deliberate choice for that tool, so that an
+            agent gets the list whole. Its ``note`` says how to see the rest when the
+            cap still cuts. A field the per-tool cap leaves unset takes the family
+            default (200 rows, 65,536 bytes, the default note), not ``cap``'s.
         read_only: Mark the tools read-only. Write tools belong in a separate server.
         tenant_lock: Lock the whole server to one tenant, e.g.
             ``TenantLock("org", "acme")``; installed once per server, the same lock
@@ -316,13 +342,16 @@ def register_tasks(
     Raises:
         ValueError: ``read_only`` is ``False`` and a task has no parameter ``confirm``
             annotated ``bool`` with the default ``False``; the message names the tool.
-            Or ``tenant_lock`` differs from the lock the server already has. Or the
-            server is locked, by ``tenant_lock`` or before, and a task, registered now
-            or earlier, gives the tenant parameter a default. Nothing is registered or
-            installed then.
+            Or a key of ``caps`` is not the ``__name__`` of one of ``tasks``; the message
+            names it. Or ``tenant_lock`` differs from the lock the server already has.
+            Or the server is locked, by ``tenant_lock`` or before, and a task,
+            registered now or earlier, gives the tenant parameter a default. Nothing is
+            registered or installed then.
     """
     cap = cap or ResultCap()
+    caps = caps or {}
     tasks = list(tasks)
+    _check_caps(tasks, caps)
     if not read_only:
         for fn in tasks:
             problem = _confirm_problem(fn)
@@ -350,7 +379,7 @@ def register_tasks(
         lists_tenants = getattr(fn, _LISTS_TENANTS, False) is True
         narrow = functools.partial(_only_the_locked_tenant, server) if lists_tenants else None
         server.add_tool(
-            _as_tool(fn, cap, narrow),
+            _as_tool(fn, caps.get(fn.__name__, cap), narrow),
             name=name,
             description=inspect.getdoc(fn) or "",
             annotations=annotations,
@@ -369,6 +398,7 @@ def build_server(
     version: str = "",
     instructions: str | None = None,
     cap: ResultCap | None = None,
+    caps: Mapping[str, ResultCap] | None = None,
     read_only: bool = True,
     tenant_lock: TenantLock | None = None,
 ) -> MCPServer:
@@ -385,7 +415,11 @@ def build_server(
         name: Server name; defaults to ``xippios-<source>``.
         version: Source package version, shown to clients.
         instructions: Server-level guidance for agents, e.g. which tool to call first.
-        cap: Result cap for every tool.
+        cap: Result cap of every tool without an entry in ``caps``.
+        caps: A tool's own result cap, keyed by the task function's ``__name__``, e.g.
+            ``{"list_partners": ResultCap(max_rows=400, max_bytes=100_000)}`` for a
+            reference list an agent needs whole; a field it leaves unset takes the
+            family default, not ``cap``'s (see ``register_tasks``).
         read_only: Whether the tools are read-only; ``False`` for a write server, whose
             every task takes ``confirm: bool = False`` (see ``register_tasks``).
         tenant_lock: Lock the server to one tenant, e.g. ``TenantLock("org", "acme")``
@@ -394,11 +428,20 @@ def build_server(
 
     Raises:
         ValueError: ``read_only`` is ``False`` and a task does not take
-            ``confirm: bool = False``.
+            ``confirm: bool = False``; or a key of ``caps`` names no task; or, on a
+            locked server, a task gives the tenant parameter a default.
     """
     if tenant_lock is not None:
         instructions = " ".join(filter(None, [instructions, _lock_sentence(tenant_lock)]))
     server = MCPServer(name or f"xippios-{source}", version=version, instructions=instructions)
     quiet_request_logging()
-    register_tasks(server, source, tasks, cap=cap, read_only=read_only, tenant_lock=tenant_lock)
+    register_tasks(
+        server,
+        source,
+        tasks,
+        cap=cap,
+        caps=caps,
+        read_only=read_only,
+        tenant_lock=tenant_lock,
+    )
     return server

@@ -79,3 +79,124 @@ def test_non_list_payload_passes_or_previews() -> None:
 def test_cap_validation() -> None:
     with pytest.raises(ValueError, match="max_rows"):
         ResultCap(max_rows=0)
+
+
+def test_the_default_note_promises_no_filter() -> None:
+    payload = json.loads(cap_result(envelope(500), ResultCap(max_rows=10)))
+    assert payload["note"] == (
+        "showing 10 of 500 rows (cap: 10 rows or 65536 bytes); narrow the query to see the rest"
+    )
+    assert "filter" not in payload["note"]
+    assert "date range" not in payload["note"]
+
+
+def test_a_cap_note_is_used_verbatim_after_the_counts() -> None:
+    cap = ResultCap(max_rows=10, note="filter by period or by reporter to see the rest")
+    payload = json.loads(cap_result(envelope(500), cap))
+    assert len(payload["data"]) == 10
+    assert payload["note"] == (
+        "showing 10 of 500 rows (cap: 10 rows or 65536 bytes); "
+        "filter by period or by reporter to see the rest"
+    )
+
+
+def test_a_cap_note_counts_against_the_byte_cap() -> None:
+    cap = ResultCap(max_rows=1000, max_bytes=2000, note="filter by period to see the rest")
+    text = cap_result(envelope(500), cap)
+    assert len(text) <= 2000
+    payload = json.loads(text)
+    shown = len(payload["data"])
+    assert 0 < shown < 500
+    assert payload["note"] == (
+        f"showing {shown} of 500 rows (cap: 1000 rows or 2000 bytes); "
+        "filter by period to see the rest"
+    )
+
+
+def test_the_byte_cap_note_promises_no_filter_or_uses_the_cap_note() -> None:
+    blob = {"blob": "x" * 500}
+    size = len(json.dumps(blob, separators=(",", ":")))
+    payload = json.loads(cap_result(blob, ResultCap(max_bytes=100)))
+    assert payload["note"] == (
+        f"result is {size} bytes, over the cap of 100; narrow the query to see the rest"
+    )
+    noted = json.loads(cap_result(blob, ResultCap(max_bytes=100, note="ask for one blob")))
+    assert noted["note"] == f"result is {size} bytes, over the cap of 100; ask for one blob"
+    assert noted["preview"] == payload["preview"]
+
+
+def test_a_cap_note_is_not_shown_when_nothing_is_cut() -> None:
+    cap = ResultCap(note="filter by period to see the rest")
+    assert "note" not in json.loads(cap_result(envelope(3), cap))
+    assert json.loads(cap_result({"a": 1}, cap)) == {"a": 1}
+
+
+@pytest.mark.parametrize("note", ["", "   "])
+def test_a_blank_note_is_refused(note: str) -> None:
+    with pytest.raises(ValueError, match="note must say how to see the rest"):
+        ResultCap(note=note)
+
+
+def _utf8(text: str) -> int:
+    return len(text.encode("utf-8"))
+
+
+def _compact(payload: object) -> str:
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+
+
+def _cut_with(rows: list[str], shown: int, cap: ResultCap) -> str:
+    """What cap_result returns for ``shown`` of ``rows``, by the documented note format."""
+    note = (
+        f"showing {shown} of {len(rows)} rows (cap: {cap.max_rows} rows or {cap.max_bytes} "
+        "bytes); narrow the query to see the rest"
+    )
+    return _compact({"data": rows[:shown], "note": note})
+
+
+def test_the_byte_cap_counts_utf8_bytes_not_characters() -> None:
+    rows = ["é" * 50] * 20  # 2 bytes a character
+    cap = ResultCap(max_bytes=1500)
+    whole = _compact({"data": rows})
+    assert len(whole) < 1500 < _utf8(whole)  # fits by characters, not by bytes
+    text = cap_result(rows, cap)
+    assert _utf8(text) <= 1500
+    shown = len(json.loads(text)["data"])
+    assert 0 < shown < 20
+    assert text == _cut_with(rows, shown, cap)
+    assert _utf8(_cut_with(rows, shown + 1, cap)) > 1500  # no row more would have fitted
+
+
+def test_a_list_at_the_byte_bound_is_whole_and_one_byte_less_cuts_it() -> None:
+    names = ["Zürich", "Genève", "Curaçao", "Réunion", "Côte d'Ivoire", "東京"]
+    rows = [f"{name} {i}" for i in range(40) for name in names]
+    size = _utf8(_compact({"data": rows}))
+    assert len(_compact({"data": rows})) < size
+    assert cap_result(rows, ResultCap(max_rows=1000, max_bytes=size)) == _compact({"data": rows})
+    cap = ResultCap(max_rows=1000, max_bytes=size - 1)
+    cut = cap_result(rows, cap)
+    assert _utf8(cut) <= size - 1
+    shown = len(json.loads(cut)["data"])
+    assert 0 < shown < len(rows)
+    assert cut == _cut_with(rows, shown, cap)
+    assert _utf8(_cut_with(rows, shown + 1, cap)) > size - 1
+
+
+def test_the_byte_note_counts_utf8_bytes_and_the_preview_cuts_no_character() -> None:
+    blob = {"blob": "é" * 100}
+    text = json.dumps(blob, ensure_ascii=False, separators=(",", ":"))
+    assert len(text) < 150 < _utf8(text)
+    payload = json.loads(cap_result(blob, ResultCap(max_bytes=150)))
+    assert payload["note"] == (
+        f"result is {_utf8(text)} bytes, over the cap of 150; narrow the query to see the rest"
+    )
+    # 9 bytes of '{"blob":"', then 2-byte characters: byte 150 would split the 71st.
+    assert payload["preview"] == '{"blob":"' + "é" * 70
+    assert _utf8(payload["preview"]) == 149
+
+
+def test_a_lone_surrogate_counts_as_three_bytes_and_does_not_raise() -> None:
+    text = cap_result({"x": "\ud800" * 30}, ResultCap(max_bytes=20))  # json.loads lets it through
+    payload = json.loads(text)
+    assert payload["note"].startswith("result is 98 bytes, over the cap of 20; ")
+    assert payload["preview"] == '{"x":"' + "\ud800" * 4  # 6 + 4 * 3 bytes

@@ -177,7 +177,16 @@ client.
   subclassing `AsyncClient`.
 - The testing plugin keeps offline tests free of quota pauses and of quotas left spent
   by a replay; ADR-0013 lists it as its decision 4.
+- The plugin turns the pause off by replacing `QuotaPolicy._pause`, which
+  `before_request` and the hook `install` sets both call, so a subclass that overrides
+  `before_request` opts out of that neutralisation for any wait or refusal of its own,
+  wherever its override runs, called directly or set as the hook by hand; the hook
+  `install` sets calls the pause, never the override.
 - Conventions 1.10: §4 names `xippios_cache_stored_at` as the `retrieved_at` of a cache
   hit; §6 states the hooks, the quota policy, `classify`'s part in retries and `auth=`
   per request; §10 the plugin's quota guarantee. ADR-0010's "core today" note is
   resolved.
+
+Amended by ADR-0016 (2026-10-24): a consequence, that a subclass's override of
+`before_request` is not called through the hook `install` sets and is not neutralised by
+the testing plugin.

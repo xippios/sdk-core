@@ -132,10 +132,19 @@ done's grep of every fixture for key patterns before it is committed.
   - The logger levels are saved per test, after fixtures of wider scope are set up; one
     of those that changes a level leaves it behind.
   - The quota snapshots are forgotten for every policy alive when a test not marked
-    `live` starts and ends; a live test keeps them, and a live test after another live
-    test sees what the first one left.
+    `live` starts and ends. A live test keeps them, so consecutive live tests share
+    every policy's snapshot: a quota one live test spends makes the next one wait within
+    the cap, or raise `RateLimitError` without sending.
+  - The reset runs in a test's setup after the fixtures of wider scope, so a policy that
+    such a fixture spends while it is set up is forgotten in the setup of the first test
+    not marked `live` from then on, the one that set it up included, and never reaches
+    that test's body; a fixture that hands an offline test a spent quota is
+    function-scoped.
 - A subclass of `EnvKeyAuth` outside core that implements `apply(request, key)` breaks;
   none is known (0.x, conventions §12).
 - Conventions §10 states the guarantees and names the markers.
 
 Amended by ADR-0015 (2026-10-24): decision 4, no quota pause and no quota left spent.
+
+Amended by ADR-0016 (2026-10-24): two edges of decision 4, the snapshots consecutive
+live tests share and when a quota spent by a fixture of wider scope is forgotten.

@@ -1,6 +1,6 @@
 # xippios SDK family — conventions
 
-Version 1.10 · 2026-10-24 · applies to every `sdk-*` repository under github.com/xippios.
+Version 1.11 · 2026-10-24 · applies to every `sdk-*` repository under github.com/xippios.
 Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 
 ## 1. Naming
@@ -219,8 +219,18 @@ Messages and results name tenants and variables, never a value.
   it on a loopback host only (`127.0.0.1`, `localhost`, `::1`) unless `--allow-remote`
   is passed, with a gateway in front. A write server exposes write tools only;
   reference tools, the tenant list among them, stay on the read server.
-- Result cap: default 200 rows or 64 KB, whichever first. Over the cap, return the
-  first page plus a note on how to narrow the query. Never truncate silently.
+- Result cap: default 200 rows or 64 KB, whichever first, bytes counted in the UTF-8
+  encoding of the compact JSON text. Over the cap, return the first page plus a note on
+  how to narrow the query. Never truncate silently. A reference tool whose whole list an
+  agent needs gets a cap of its own, keyed by the task function's name, with the rows
+  and bytes the source judges it needs (`register_tasks(..., caps={"list_partners":
+  ResultCap(max_rows=400, max_bytes=100_000)})`); a byte bound above the default is a
+  deliberate choice for that tool, and every other tool keeps the default (ADR-0016).
+  The note never promises a filter the tool lacks: the default says "narrow the query to
+  see the rest", and a tool with filters names them in its cap's `note`. Since that note
+  names a task's filters, a source keeps its caps with its tasks, as `MCP_CAPS:
+  Mapping[str, ResultCap]` in `tasks.py` next to `__all__`, and its `mcp.py` passes them
+  through as `caps=getattr(tasks, "MCP_CAPS", None)`.
 - Reference lookups are tools too: `<source>_list_<thing>` (commodities, countries,
   attributes). Agents need them to form valid calls. A multi-tenant source lists its
   tenants the same way, names only (`list_task`, `cashctrl_list_organisations`).
@@ -290,7 +300,10 @@ consumer, never served standalone from the package.
   - No quota pause and no quota left spent, in every test not marked `live`: every
     `QuotaPolicy`'s snapshot is forgotten before and after the test, so a replayed 429
     cannot refuse the tests after it, and a policy neither waits nor refuses. A test
-    that asserts the pause or the refusal is marked `rate_limited` (ADR-0015).
+    that asserts the pause or the refusal is marked `rate_limited` (ADR-0015); the
+    edges, snapshots shared by consecutive live tests, a quota spent by a fixture of
+    wider scope, a subclass's override of `before_request`, are listed in ADR-0013 and
+    ADR-0015.
   - Placeholder key, in every test not marked `live`: every `EnvKeyAuth` sends
     `PLACEHOLDER_KEY`, pinned on the class, and the variables named in the ini option
     `xippios_placeholder_key_envs` hold it; the fixture `placeholder_api_key` returns

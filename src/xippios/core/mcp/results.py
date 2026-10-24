@@ -9,31 +9,78 @@ from pydantic_core import to_jsonable_python
 __all__ = ["ResultCap", "cap_result"]
 
 
+_DEFAULT_NOTE = "narrow the query to see the rest"
+"""What a capped result tells the agent when its cap has no ``note``: no filter promised."""
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ResultCap:
-    """Limits for one tool result (conventions §8 defaults).
+    """Limits for one tool result, and what to tell the agent when they cut it (conventions §8).
+
+    The defaults are the family's: 200 rows or 64 KB. A reference tool whose whole list
+    an agent needs gets a cap of its own, through ``caps=`` of ``register_tasks`` or
+    ``build_server`` (ADR-0016), with the rows and bytes the source judges it needs; a
+    byte bound above the default is a deliberate choice for that tool.
 
     Attributes:
         max_rows: Most items of a list result that are returned.
-        max_bytes: Most bytes of JSON text that are returned.
+        max_bytes: Bytes of JSON text, encoded as UTF-8, a soft bound: it bounds the
+            rows and the preview, and the envelope and the note can add to it (see
+            ``cap_result``).
+        note: The text after the counts when the cap cuts a result, used verbatim, e.g.
+            ``"filter by period or by reporter to see the rest"`` for a tool that has
+            those filters. ``None`` says ``"narrow the query to see the rest"``, which
+            promises no filter the tool may lack.
+
+    Raises:
+        ValueError: ``max_rows`` or ``max_bytes`` is below 1, or ``note`` is blank.
     """
 
     max_rows: int = 200
     max_bytes: int = 65_536
+    note: str | None = None
 
     def __post_init__(self) -> None:
         if self.max_rows < 1 or self.max_bytes < 1:
             raise ValueError("max_rows and max_bytes must be at least 1")
+        if self.note is not None and not self.note.strip():
+            raise ValueError("note must say how to see the rest; None keeps the default")
 
 
 def _dumps(payload: Any) -> str:
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
 
 
+def _encode(text: str) -> bytes:
+    # surrogatepass: a lone surrogate, which json.loads lets through, counts as its three
+    # bytes instead of raising out of the tool.
+    return text.encode("utf-8", "surrogatepass")
+
+
+def _size(text: str) -> int:
+    """The length of ``text`` in UTF-8 bytes, the unit of ``max_bytes``."""
+    return len(_encode(text))
+
+
+def _head(text: str, size: int) -> str:
+    """The longest start of ``text`` that is at most ``size`` UTF-8 bytes, no character cut."""
+    data = _encode(text)
+    if len(data) <= size:
+        return text
+    end = size
+    while end > 0 and (data[end] & 0xC0) == 0x80:  # a continuation byte: back to a boundary
+        end -= 1
+    return data[:end].decode("utf-8", "surrogatepass")
+
+
+def _how(cap: ResultCap) -> str:
+    return _DEFAULT_NOTE if cap.note is None else cap.note
+
+
 def _note(shown: int, total: int, cap: ResultCap) -> str:
     return (
         f"showing {shown} of {total} rows (cap: {cap.max_rows} rows or {cap.max_bytes} bytes); "
-        "narrow the query, for example with more filters or a shorter date range, to see the rest"
+        f"{_how(cap)}"
     )
 
 
@@ -41,9 +88,19 @@ def cap_result(value: Any, cap: ResultCap | None = None) -> str:
     """Serialise a task result as compact JSON text within ``cap``.
 
     A ``Result`` whose ``data`` is a list, or a bare list, is cut to the cap and gains a
-    ``note`` saying how many rows were omitted and how to narrow the query. A bare
-    list is wrapped as ``{"data": [...]}`` so the shape is the same either way. Any
-    other value that exceeds the byte cap is replaced by a note and a preview.
+    ``note``: ``"showing <shown> of <total> rows (cap: <max_rows> rows or <max_bytes>
+    bytes); "`` and then the cap's ``note``, or ``"narrow the query to see the rest"``.
+    A bare list is wrapped as ``{"data": [...]}`` so the shape is the same either way.
+    Any other value that exceeds the byte cap is replaced by a note, ``"result is <n>
+    bytes, over the cap of <max_bytes>; "`` and the same text, and a preview of its first
+    ``max_bytes`` bytes. Bytes are those of the JSON text encoded as UTF-8.
+
+    ``max_bytes`` is a soft bound. A list keeps the most rows whose text, envelope and
+    note included, fits it; when not even zero rows fit, a tiny bound or a long note,
+    the result is zero rows plus the note, over the bound. A preview is ``max_bytes``
+    bytes of the text, and the note and the preview's JSON escaping come on top. Either
+    way the result stays bounded and says what it left out; nothing is cut silently
+    (conventions §8).
 
     Args:
         value: What the task function returned; pydantic models are dumped in JSON mode.
@@ -56,25 +113,25 @@ def cap_result(value: Any, cap: ResultCap | None = None) -> str:
     rows = payload.get("data") if isinstance(payload, dict) else None
     if not isinstance(rows, list):
         text = _dumps(payload)
-        if len(text) <= cap.max_bytes:
+        size = _size(text)
+        if size <= cap.max_bytes:
             return text
         return _dumps(
             {
-                "note": f"result is {len(text)} bytes, over the cap of {cap.max_bytes}; "
-                "narrow the query",
-                "preview": text[: cap.max_bytes],
+                "note": f"result is {size} bytes, over the cap of {cap.max_bytes}; {_how(cap)}",
+                "preview": _head(text, cap.max_bytes),
             }
         )
 
     total = len(rows)
     high = min(total, cap.max_rows)
     text = _render(payload, rows, high, total, cap)
-    if len(text) <= cap.max_bytes:
+    if _size(text) <= cap.max_bytes:
         return text
     low = 0
     while high - low > 1:
         mid = (low + high) // 2
-        if len(_render(payload, rows, mid, total, cap)) <= cap.max_bytes:
+        if _size(_render(payload, rows, mid, total, cap)) <= cap.max_bytes:
             low = mid
         else:
             high = mid

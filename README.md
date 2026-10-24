@@ -254,6 +254,12 @@ Tool names are `<source>_<function>` (`example_get_series`), the docstring is th
 description, the signature is the input schema. Results are capped at 200 rows or
 64 KB with a note on how to narrow the query; errors come back as
 `error: <Class>: <message>`. `--http` serves streamable HTTP instead of stdio.
+A reference tool whose whole list an agent needs gets a cap of its own, keyed by the
+task function's name, with the rows and bytes the source judges it needs:
+`build_server(..., caps={"list_commodities": ResultCap(max_rows=500,
+max_bytes=100_000)})`; every other tool keeps 200 rows or 64 KB. The note says "narrow
+the query to see the rest" and promises no filter; a tool with filters names them in
+its cap, `ResultCap(note="filter by year to see the rest")`.
 A write server (`build_server(..., read_only=False)`) refuses, with `ValueError`, a task
 that does not take `confirm: bool = False`, and `--http` serves it on a loopback
 `--host` only (`127.0.0.1`, `localhost`, `::1`): it carries no authentication.

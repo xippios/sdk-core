@@ -212,6 +212,21 @@ All notable changes to this project are documented here. The format follows
   value, is still never used, and the value never appears. A hint for a field not in
   `fields`, or for one without a `validate` check, where it could never be shown, is a
   `ValueError` at construction. Carried over from the `Tenants` work of ADR-0014.
+- `caps=` for `register_tasks` and `build_server` (ADR-0016): a mapping from a task
+  function's `__name__` (`list_partners`, not the tool name `comtrade_list_partners`) to
+  a `ResultCap` that replaces `cap` for that tool; every other tool keeps `cap`. A key
+  that names none of the tasks is refused with `ValueError`, naming it, before anything
+  is registered. For a reference tool whose whole list an agent needs: a per-tool cap
+  sets `max_rows` and `max_bytes` as the source judges, a byte bound above the default
+  64 KB (65,536 bytes) being a deliberate choice for that tool. The one cap of a server
+  cut `comtrade_list_reporters` (255 rows, 69,011 bytes) and `comtrade_list_partners`
+  (310, 83,270 bytes) at 200 (sdk-comtrade), and `usda_psd_list_countries` (251) before
+  the United States (sdk-usda-psd).
+- `ResultCap(note=...)`: the text after the counts when the cap cuts a result, used
+  verbatim, in the note of a cut list and in that of a non-list result over the byte
+  cap, e.g. `"filter by period or by reporter to see the rest"` for a tool with those
+  filters. `None`, the default, keeps the default text; a blank note is refused with
+  `ValueError`.
 
 ### Changed
 
@@ -329,9 +344,33 @@ All notable changes to this project are documented here. The format follows
   implementation of ADR-0010's quota rules, `classify`'s part in retries, and `auth=`
   per request; §10 the plugin's quota guarantee. ADR-0015 added; ADR-0013 gains its
   decision 4.
+- The note of a capped MCP result promises no filter: "showing {shown} of {total} rows
+  (cap: {max_rows} rows or {max_bytes} bytes); narrow the query to see the rest", and
+  for a non-list result over the byte cap "result is {n} bytes, over the cap of
+  {max_bytes}; narrow the query to see the rest". It read "narrow the query, for example
+  with more filters or a shorter date range, to see the rest", which sent an agent
+  looking for filters a reference list does not have (sdk-comtrade). A cap's `note`
+  replaces the text after the counts.
+- Conventions 1.11: §8 states that the byte cap counts the UTF-8 bytes of the compact
+  JSON text, the per-tool cap, rows and bytes, for a reference tool whose whole list an
+  agent needs, with the default kept for every other tool; that a source keeps its caps
+  as `MCP_CAPS` in its `tasks.py`, which its `mcp.py` passes as
+  `caps=getattr(tasks, "MCP_CAPS", None)`; and that the note never promises a filter
+  the tool lacks. §10 points to the edges of the quota guarantee. ADR-0016 added.
+- ADR-0013's edges, ADR-0015's consequences, the plugin's docstring and `QuotaPolicy`'s
+  `before_request` and `install` docstrings name three more edges of the plugin's quota
+  guarantee: consecutive live tests share every policy's snapshot, so a quota one
+  spends makes the next wait or refuses its request without sending; a policy spent
+  while a fixture of wider scope is set up is forgotten in the setup of the first test
+  not marked `live` from then on, before its body; and a `QuotaPolicy` subclass's
+  override of `before_request` is not called through the hook `install` sets, and a
+  wait or refusal of its own is not neutralised. ADR-0013 and ADR-0015 are marked as
+  amended by ADR-0016.
 
 ### Fixed
 
+- `cap_result` measures `max_bytes` in UTF-8 bytes, as the convention says, not in
+  characters, which let non-ASCII text past the byte cap; the preview cuts no character.
 - `parse_retry_after` raised `ValueError` for a `Retry-After` of non-ASCII digits such
   as `"²"`, which `str.isdigit` accepts and `float` refuses, so the retry loop raised it
   out of a request; it reads ASCII digits only now and returns `None` for anything

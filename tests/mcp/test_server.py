@@ -9,7 +9,9 @@ from xippios.core import sync
 from xippios.core.errors import NotFoundError
 from xippios.core.mcp import (
     ResultCap,
+    TenantLock,
     build_server,
+    is_write_server,
     quiet_request_logging,
     register_tasks,
     tool_name,
@@ -83,6 +85,112 @@ async def test_call_returns_capped_json_text() -> None:
     assert [row["id"] for row in payload["data"]] == ["CORN"] * 3
     assert payload["note"].startswith("showing 3 of 10 rows")
     assert payload["meta"]["source"] == "example"
+
+
+async def list_areas_async() -> Result[list[str]]:
+    """List the 310 areas, a reference list an agent needs whole."""
+    areas = [f"A{i:03d}" for i in range(310)]
+    return Result[list[str]](data=areas, meta=ResultMeta(source="example", endpoint="areas"))
+
+
+list_areas = sync(list_areas_async)
+
+
+@pytest.mark.anyio
+async def test_a_tool_with_a_cap_of_its_own_returns_the_whole_list() -> None:
+    caps = {"list_areas": ResultCap(max_rows=400)}  # the sync facade's __name__
+    server = build_server("example", [get_series, list_areas], caps=caps)
+    areas = await mcp_call(server, "example_list_areas", {})
+    assert len(areas["data"]) == 310
+    assert "note" not in areas
+    series = await mcp_call(server, "example_get_series", {"series_id": "CORN", "year": 2500})
+    assert len(series["data"]) == 200  # the default cap
+    assert series["note"] == (
+        "showing 200 of 500 rows (cap: 200 rows or 65536 bytes); narrow the query to see the rest"
+    )
+
+
+@pytest.mark.anyio
+async def test_a_cap_of_its_own_replaces_the_server_cap_for_that_tool_only() -> None:
+    server = build_server("example", [])
+    caps = {"list_areas": ResultCap(max_rows=300, note="ask for one area by code instead")}
+    names = register_tasks(
+        server, "example", [get_series, list_areas], cap=ResultCap(max_rows=3), caps=caps
+    )
+    assert names == ["example_get_series", "example_list_areas"]
+    areas = await mcp_call(server, "example_list_areas", {})
+    assert len(areas["data"]) == 300
+    assert areas["note"] == (
+        "showing 300 of 310 rows (cap: 300 rows or 65536 bytes); ask for one area by code instead"
+    )
+    series = await mcp_call(server, "example_get_series", {"series_id": "CORN", "year": 2010})
+    assert len(series["data"]) == 3
+    assert series["note"].startswith("showing 3 of 10 rows (cap: 3 rows or 65536 bytes); ")
+
+
+async def list_regions_async() -> Result[list[str]]:
+    """List the 300 regions with their long names, about 90 KB of JSON."""
+    regions = [f"R{i:03d} {'x' * 290}" for i in range(300)]
+    return Result[list[str]](data=regions, meta=ResultMeta(source="example", endpoint="regions"))
+
+
+list_regions = sync(list_regions_async)
+
+
+@pytest.mark.anyio
+async def test_a_tool_with_a_byte_bound_of_its_own_returns_what_the_default_would_cut() -> None:
+    default = await mcp_call(build_server("example", [list_regions]), "example_list_regions", {})
+    assert 0 < len(default["data"]) < 300  # the default 64 KB cuts it
+    assert default["note"].startswith(f"showing {len(default['data'])} of 300 rows ")
+    caps = {"list_regions": ResultCap(max_rows=400, max_bytes=200_000)}
+    server = build_server("example", [list_regions], caps=caps)
+    whole = await mcp_call(server, "example_list_regions", {})
+    assert len(whole["data"]) == 300
+    assert "note" not in whole
+
+
+@pytest.mark.anyio
+async def test_a_cap_for_a_name_that_is_no_task_is_refused() -> None:
+    caps = {"example_list_areas": ResultCap(max_rows=400), "list_nothing": ResultCap()}
+    rule = (
+        "^caps names no task among the tasks: example_list_areas, list_nothing; a key is the "
+        "task function's __name__, not the tool name with the source prefix$"
+    )
+    with pytest.raises(ValueError, match=rule):
+        build_server("example", [get_series, list_areas], caps=caps)
+    server = build_server("example", [])
+    middleware = list(server.middleware)  # the SDK's own
+    with pytest.raises(ValueError, match=r"^caps names no task among the tasks: list_nothing;"):
+        register_tasks(server, "example", iter([list_areas]), caps={"list_nothing": ResultCap()})
+    with pytest.raises(ValueError, match=r"^caps names no task among the tasks: list_nothing;"):
+        register_tasks(
+            server,
+            "example",
+            [create_thing],
+            caps={"list_nothing": ResultCap()},
+            read_only=False,
+            tenant_lock=TenantLock("org", "acme"),
+        )
+    assert await server.list_tools() == []  # checked before anything is registered
+    assert not is_write_server(server)  # nor marked a write server
+    assert server.middleware == middleware  # nor locked: another lock is still accepted
+    register_tasks(server, "example", [plain], tenant_lock=TenantLock("org", "other"))
+    assert len(server.middleware) == len(middleware) + 1
+
+
+@pytest.mark.anyio
+async def test_a_cap_of_its_own_falls_back_to_the_family_default_not_to_the_server_cap() -> None:
+    caps = {"list_areas": ResultCap(max_rows=300)}  # max_bytes unset
+    server = build_server(
+        "example", [get_series, list_areas], cap=ResultCap(max_bytes=1000), caps=caps
+    )
+    areas = await mcp_call(server, "example_list_areas", {})
+    assert len(areas["data"]) == 300  # over 2,000 bytes, more than the server cap allows
+    assert areas["note"].startswith("showing 300 of 310 rows (cap: 300 rows or 65536 bytes); ")
+    series = await mcp_call(server, "example_get_series", {"series_id": "CORN", "year": 2100})
+    assert series["note"].endswith(
+        "rows (cap: 200 rows or 1000 bytes); narrow the query to see the rest"
+    )
 
 
 @pytest.mark.anyio
