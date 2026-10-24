@@ -1,5 +1,6 @@
 import importlib
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -235,22 +236,63 @@ def test_render_str_enums_sorts_all_as_ruff_does(tmp_path: Path) -> None:
     assert classes == ["Zeta", "Code10", "HS", "Code2", "Alpha"]  # upstream order
 
 
-def test_render_str_enums_leaves_a_member_name_longer_than_any_line_whole(
-    tmp_path: Path,
-) -> None:
-    value = (
-        "CORN, GRAIN, IRRIGATED, ENTIRE CROP - ACRES HARVESTED, MEASURED IN ACRES / PLANTED, "
-        "NET OF ABANDONMENT, EXCL SILAGE AND SEED, ALL PRACTICES"
+LONG_VALUE = (
+    "CORN, GRAIN, IRRIGATED, ENTIRE CROP - ACRES HARVESTED, MEASURED IN ACRES / PLANTED, "
+    "NET OF ABANDONMENT, EXCL SILAGE AND SEED, ALL PRACTICES, ALL TYPES"
+)
+"""150 characters of ASCII; its derived member name is far longer than 92."""
+
+
+def test_render_str_enums_refuses_a_member_name_too_long_for_any_line() -> None:
+    assert len(LONG_VALUE) == 150
+    width = len(enum_member_name(LONG_VALUE))
+    assert width > 92
+    message = (
+        rf"^short_desc: the member name for '{re.escape(LONG_VALUE)}' is {width} characters "
+        r"long; at most 92 fit a line of 100 columns\. Name it by hand in "
+        r"member_names=\{'short_desc': \{\.\.\.\}\}$"
     )
-    source = render_str_enums({"short_desc": [value]}, generator="tests")
-    path = written(tmp_path, source)
-    assert ruff(path, "format", "--check").returncode == 0
-    check = ruff(path, "check", "--output-format", "concise")
-    assert check.returncode == 1
-    findings = [line for line in check.stdout.splitlines() if ".py:" in line]
-    assert len(findings) == 1
-    assert "E501" in findings[0]
-    assert f"    {enum_member_name(value)} = " in source  # no layout can shorten the name
+    with pytest.raises(ValueError, match=message):
+        render_str_enums({"short_desc": ["CORN", LONG_VALUE]})
+
+
+def test_render_str_enums_takes_a_member_name_set_by_hand(tmp_path: Path) -> None:
+    source = render_str_enums(
+        {"short_desc": ["CORN", LONG_VALUE]},
+        member_names={"short_desc": {LONG_VALUE: "CORN_GRAIN_IRRIGATED_ALL"}},
+        generator="tests",
+    )
+    namespace = assert_ruff_clean(tmp_path, source)
+    short_desc = namespace["ShortDesc"]
+    assert short_desc.CORN_GRAIN_IRRIGATED_ALL.value == LONG_VALUE
+    assert [m.name for m in short_desc] == ["CORN", "CORN_GRAIN_IRRIGATED_ALL"]
+
+
+def test_render_str_enums_takes_a_member_name_that_resolves_a_collision(tmp_path: Path) -> None:
+    source = render_str_enums(
+        {"x": ["A B", "A-B"]}, member_names={"x": {"A-B": "A_HYPHEN_B"}}, generator="tests"
+    )
+    namespace = assert_ruff_clean(tmp_path, source)
+    assert [(m.name, m.value) for m in namespace["X"]] == [("A_B", "A B"), ("A_HYPHEN_B", "A-B")]
+
+
+@pytest.mark.parametrize(
+    ("member_names", "message"),
+    [
+        ({"x": {"CORN": "WHEAT"}}, r"^x: member names collide: \['WHEAT', 'WHEAT'\]$"),
+        ({"x": {"CORN": "corn-grain"}}, r"^x: 'corn-grain' is not a member name an enum"),
+        ({"x": {"CORN": "class"}}, r"^x: 'class' is not a member name an enum"),
+        ({"x": {"CORN": "_CORN_"}}, r"^x: '_CORN_' is not a member name an enum"),
+        ({"x": {"RICE": "RICE"}}, r"^x: member_names names what the list does not hold"),
+        ({"y": {"CORN": "C"}}, r"^member_names names lists that are not rendered: \['y'\]$"),
+        ({"x": {"CORN": "C" * 93}}, r"^x: the member name for 'CORN' is 93 characters long"),
+    ],
+)  # fmt: skip
+def test_render_str_enums_refuses_a_member_name_set_by_hand_it_cannot_use(
+    member_names: dict[str, dict[str, str]], message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        render_str_enums({"x": ["CORN", "WHEAT"]}, member_names=member_names)
 
 
 def test_render_str_enums_rejects_colliding_members() -> None:
@@ -358,8 +400,56 @@ def test_render_int_enums_parenthesizes_a_member_too_long_for_its_line(tmp_path:
 def test_render_int_enums_rejects_names_it_cannot_make_unique(
     pairs: list[tuple[int, str]],
 ) -> None:
-    with pytest.raises(ValueError, match=r"^attributeId: (member names collide|not identifiers)"):
+    with pytest.raises(
+        ValueError, match=r"^attributeId: (member names collide|'LOSS_-1' is not a member name)"
+    ):
         render_int_enums({"attributeId": pairs})
+
+
+def test_render_int_enums_refuses_a_member_name_too_long_for_any_line(tmp_path: Path) -> None:
+    pairs = [(1, "Area"), (2, LONG_VALUE)]
+    with pytest.raises(
+        ValueError, match=r"^attributeId: the member name for 2 is \d+ characters long; at most 92"
+    ):
+        render_int_enums({"attributeId": pairs})
+    source = render_int_enums(
+        {"attributeId": pairs}, member_names={"attributeId": {2: "CORN_ALL"}}, generator="tests"
+    )
+    assert assert_ruff_clean(tmp_path, source)["Attributeid"].CORN_ALL == 2
+
+
+def test_render_int_enums_takes_a_member_name_and_leaves_the_others(tmp_path: Path) -> None:
+    pairs = id_name_pairs(ATTRIBUTES, id_field="attributeId", name_field="attributeName")
+    source = render_int_enums(
+        {"attributeId": pairs},
+        class_names={"attributeId": "AttributeId"},
+        member_names={"attributeId": {173: "TOTAL_USE"}},
+        generator="tests",
+    )
+    namespace = assert_ruff_clean(tmp_path, source)
+    assert [m.name for m in namespace["AttributeId"]] == [
+        "TOTAL_DISAPPEARANCE_126",  # keeps its suffix: the rule counts upstream's names
+        "AREA_HARVESTED",
+        "TOTAL_USE",
+        "BEGINNING_STOCKS",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("member_names", "message"),
+    [
+        ({"attributeId": {173: "AREA_HARVESTED"}}, r"member names collide"),
+        ({"attributeId": {173: "1ST"}}, r"'1ST' is not a member name an enum accepts"),
+        ({"attributeId": {999: "X"}}, r"member_names names what the list does not hold: \[999\]"),
+        ({"unitId": {1: "X"}}, r"member_names names lists that are not rendered: \['unitId'\]"),
+    ],
+)  # fmt: skip
+def test_render_int_enums_refuses_a_member_name_set_by_hand_it_cannot_use(
+    member_names: dict[str, dict[int, str]], message: str
+) -> None:
+    pairs = id_name_pairs(ATTRIBUTES, id_field="attributeId", name_field="attributeName")
+    with pytest.raises(ValueError, match=message):
+        render_int_enums({"attributeId": pairs}, member_names=member_names)
 
 
 def test_render_int_enums_with_no_lists_imports_nothing(tmp_path: Path) -> None:

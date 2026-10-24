@@ -6,13 +6,14 @@ contents are cached per process; callers get fresh objects on every call.
 The renderers write a source's generated ``enums.py``: ``StrEnum`` for value lists,
 ``IntEnum`` for lists of integer ids and names (conventions §3, ADR-0008). Their output is
 what ``ruff format`` would write and passes ``ruff check`` under the family's
-configuration, but for the two edges ``render_str_enums`` names.
+configuration; a member name too long for any line is refused, not rendered.
 """
 
 import csv
 import functools
 import io
 import json
+import keyword
 import re
 import textwrap
 import unicodedata
@@ -36,7 +37,10 @@ __all__ = [
 ]
 
 _LINE_LENGTH = 100
-"""The family's ``line-length``, which every line of a generated module keeps where it can."""
+"""The family's ``line-length``, which every line of a generated module keeps."""
+
+_NAME_LIMIT = _LINE_LENGTH - len("    ") - len(" = (")
+"""The longest member name, in columns, for which ``    NAME = (`` still fits a line."""
 
 
 @functools.cache
@@ -192,16 +196,53 @@ def _member(name: str, literal: str, value: str | None = None) -> list[str]:
 
     A literal too long for the line moves into parentheses on a line of its own; a string
     too long even there (``value`` given) is split into implicitly concatenated parts.
-    Where ``name = (`` itself is too long, nothing can shorten the line and it stays one.
+    ``name`` is at most ``_NAME_LIMIT`` columns wide, so ``name = (`` fits.
     """
     line = f"    {name} = {literal}"
-    if _width(line) <= _LINE_LENGTH or _width(f"    {name} = (") > _LINE_LENGTH:
+    if _width(line) <= _LINE_LENGTH:
         return [line]
     if _width(f"        {literal}") <= _LINE_LENGTH:
         return [f"    {name} = (", f"        {literal}", "    )"]
     if value is None:
         return [line]
     return [f"    {name} = (", *(f"        {part}" for part in _parts(value)), "    )"]
+
+
+def _member_names[T](
+    key: str, items: Sequence[T], derived: Sequence[str], overrides: Mapping[T, str]
+) -> list[str]:
+    """Member names for ``items``: each item's override, else its derived name.
+
+    Raises:
+        ValueError: When an override names an item the list does not hold, a name is no
+            identifier an enum accepts, two names collide, or a name is too long for a
+            line (``_NAME_LIMIT``).
+    """
+    held = set(items)
+    unknown = [item for item in overrides if item not in held]
+    if unknown:
+        raise ValueError(f"{key}: member_names names what the list does not hold: {unknown}")
+    members = [overrides.get(item, name) for item, name in zip(items, derived, strict=True)]
+    for member in members:
+        reserved = member.startswith("_") and member.endswith("_")
+        if not member.isidentifier() or keyword.iskeyword(member) or reserved:
+            raise ValueError(f"{key}: {member!r} is not a member name an enum accepts")
+    if len(set(members)) != len(members):
+        raise ValueError(f"{key}: member names collide: {sorted(members)}")
+    for item, member in zip(items, members, strict=True):
+        if _width(member) > _NAME_LIMIT:
+            raise ValueError(
+                f"{key}: the member name for {item!r} is {_width(member)} characters long; at "
+                f"most {_NAME_LIMIT} fit a line of {_LINE_LENGTH} columns. Name it by hand in "
+                f"member_names={{{key!r}: {{...}}}}"
+            )
+    return members
+
+
+def _unknown_keys(member_names: Mapping[str, object], lists: Mapping[str, object]) -> None:
+    unknown = sorted(set(member_names) - set(lists))
+    if unknown:
+        raise ValueError(f"member_names names lists that are not rendered: {unknown}")
 
 
 def _all_order(name: str) -> tuple[int, list[str | int]]:
@@ -238,42 +279,52 @@ def render_str_enums(
     lists: Mapping[str, Sequence[str]],
     *,
     class_names: Mapping[str, str] | None = None,
+    member_names: Mapping[str, Mapping[str, str]] | None = None,
     fetched: str | None = None,
     generator: str = "the reference refresh script",
 ) -> str:
     """Python source for one ``StrEnum`` per value list, formatted as ruff formats it.
 
-    Member names come from ``enum_member_name``; values are the upstream strings,
-    verbatim, each written through ``repr()``, so a quote, a backslash or a control
-    character is escaped, in double quotes unless single quotes need fewer escapes. A
+    Member names come from ``enum_member_name``, or from ``member_names`` where a source
+    names a member by hand. Values are the upstream strings, verbatim, each written
+    through ``repr()``, so a quote, a backslash or a control character is escaped, in
+    double quotes unless single quotes need fewer escapes. A character ruff calls
+    confusable (RUF001: a typographic apostrophe U+2019, an en dash U+2013, a no-break
+    space U+00A0, a Greek omicron) is written as a Unicode escape; every other character
+    stays readable, ``Côte`` stays ``Côte``, and the value is the same at runtime. A
     member too long for a line of 100 columns is laid out as ruff lays it out: the value
     in parentheses on a line of its own, and a value too long for that line split into
     implicitly concatenated parts. ``__all__`` names the classes sorted as ruff sorts it
     (RUF022), one per line; the classes keep the order of ``lists``.
 
-    The result passes ``ruff format --check`` and ``ruff check`` unchanged, with two
-    edges: a member name too long for a line of its own cannot be shortened (E501), and a
-    value holding a character ruff calls ambiguous, such as a typographic apostrophe
-    (U+2019) or an en dash (U+2013), trips RUF001.
-    Generated code is the only way enums enter a source package, so this module is the
-    one place the rendering lives.
+    The result passes ``ruff format --check`` and ``ruff check`` unchanged. A member name
+    longer than 92 columns fits no line, so it is refused: the source's refresh script
+    names that member once in ``member_names``. Generated code is the only way enums
+    enter a source package, so this module is the one place the rendering lives.
 
     Args:
         lists: Enum key (``"state_alpha"``) to its values, in upstream order.
         class_names: Class name per key; default ``StateAlpha`` for ``state_alpha``.
+        member_names: Member names set by hand, per key and value, for a value whose
+            derived name is too long or collides, e.g.
+            ``{"short_desc": {"CORN, GRAIN, ... ALL PRACTICES": "CORN_GRAIN_ALL"}}``. Each
+            must be an identifier an enum accepts and unique in its list.
         fetched: Date to mention in each docstring.
         generator: What to name as the generator in the module docstring.
 
     Raises:
-        ValueError: When two values of one list map to the same member name.
+        ValueError: When two members of one list share a name, a member name is longer
+            than 92 columns (naming the key, its length and the limit), or a name in
+            ``member_names`` is no identifier, reserved by ``enum``, or for a key or a
+            value that ``lists`` does not hold.
     """
+    _unknown_keys(member_names or {}, lists)
     names = {key: (class_names or {}).get(key, _class_name(key)) for key in lists}
     when = f" (fetched {fetched})" if fetched else ""
     classes: list[tuple[str, list[str]]] = []
     for key, values in lists.items():
-        members = [enum_member_name(value) for value in values]
-        if len(set(members)) != len(members):
-            raise ValueError(f"{key}: member names collide: {sorted(members)}")
+        derived = [enum_member_name(value) for value in values]
+        members = _member_names(key, values, derived, (member_names or {}).get(key, {}))
         body = [f"class {names[key]}(StrEnum):", f'    """Values of ``{key}``{when}."""', ""]
         for member, value in zip(members, values, strict=True):
             body += _member(member, _literal(value), value)
@@ -293,6 +344,7 @@ def render_int_enums(
     lists: Mapping[str, Sequence[tuple[int, str]]],
     *,
     class_names: Mapping[str, str] | None = None,
+    member_names: Mapping[str, Mapping[int, str]] | None = None,
     fetched: str | None = None,
     generator: str = "the reference refresh script",
 ) -> str:
@@ -302,36 +354,42 @@ def render_int_enums(
     compares equal to the id in upstream's data, where a ``StrEnum`` of its digits would
     not. Values are the ids, in upstream order; member names come from the names through
     ``enum_member_name``, and a name several ids share gets ``_<id>`` appended
-    (``TOTAL_DISAPPEARANCE_126``, ``TOTAL_DISAPPEARANCE_173``). Layout and ``__all__`` as
-    in ``render_str_enums``. ``id_name_pairs`` builds the pairs from upstream's records.
+    (``TOTAL_DISAPPEARANCE_126``, ``TOTAL_DISAPPEARANCE_173``); ``member_names`` names a
+    member by hand and leaves every other member's name as it was. Layout, ``__all__`` and
+    the refusal of a member name longer than 92 columns as in ``render_str_enums``; the
+    values are integers, so no character needs escaping. ``id_name_pairs`` builds the
+    pairs from upstream's records.
 
     Args:
         lists: Enum key (``"attributeId"``) to its ``(id, name)`` pairs, in upstream order,
             e.g. ``[(4, "Area Harvested"), (20, "Beginning Stocks")]``.
         class_names: Class name per key; default ``Attributeid`` for ``attributeId``, so a
             camelCase key wants one (``{"attributeId": "AttributeId"}``).
+        member_names: Member names set by hand, per key and id, for an id whose derived
+            name is too long or collides, e.g. ``{"attributeId": {173: "TOTAL_USE"}}``.
+            Each must be an identifier an enum accepts and unique in its list.
         fetched: Date to mention in each docstring.
         generator: What to name as the generator in the module docstring.
 
     Raises:
-        ValueError: When two members of one list still share a name after the suffix,
-            or a suffix makes no identifier (a negative id).
+        ValueError: When two members of one list still share a name after the suffix, a
+            suffix makes no identifier (a negative id), a member name is longer than 92
+            columns, or a name in ``member_names`` is no identifier, reserved by
+            ``enum``, or for a key or an id that ``lists`` does not hold.
     """
+    _unknown_keys(member_names or {}, lists)
     names = {key: (class_names or {}).get(key, _class_name(key)) for key in lists}
     when = f" (fetched {fetched})" if fetched else ""
     classes: list[tuple[str, list[str]]] = []
     for key, pairs in lists.items():
         plain = [enum_member_name(name) for _, name in pairs]
         counts = Counter(plain)
-        members = [
+        derived = [
             name if counts[name] == 1 else f"{name}_{ident}"
             for name, (ident, _) in zip(plain, pairs, strict=True)
         ]
-        if len(set(members)) != len(members):
-            raise ValueError(f"{key}: member names collide: {sorted(members)}")
-        invalid = [member for member in members if not member.isidentifier()]
-        if invalid:
-            raise ValueError(f"{key}: not identifiers: {invalid}")
+        ids = [ident for ident, _ in pairs]
+        members = _member_names(key, ids, derived, (member_names or {}).get(key, {}))
         body = [f"class {names[key]}(IntEnum):", f'    """Values of ``{key}``{when}."""', ""]
         for member, (ident, _) in zip(members, pairs, strict=True):
             body += _member(member, f"{ident:d}")
