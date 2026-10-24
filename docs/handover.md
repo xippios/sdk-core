@@ -1,6 +1,6 @@
 # Handover — from planning to Claude Code
 
-Date: 2026-10-20 · Author: Johannes Didaskalu (with Claude) · Refreshed 2026-10-22 with the state after sessions 1 and 2.
+Date: 2026-10-20 · Author: Johannes Didaskalu (with Claude) · Refreshed 2026-10-22 with the state after sessions 1 and 2, and 2026-10-24 with the state after core PR G.
 
 ## State
 
@@ -10,86 +10,89 @@ GitHub org ruleset `sdk-main-protection` (PR + `ci` check on `main` for `sdk-*`)
 `sdk-core`, `sdk-template`, `.github` created, topics set, `pypi` environments with
 required reviewer `jdidaskalu`; PyPI account `xippios`.
 
-- **Session 1, `sdk-core`: done.** PR #1 merged 2026-10-22. Layout and decisions are in
-  `CLAUDE.md` and ADR-0004 (subpackages `client/`, `mcp/`, `http/`, `testing/`; official
-  `mcp` SDK 2.x with `MCPServer`; one background loop for the sync facade). Review
-  follow-ups are in PR #2 (conventions §4/§13 + ADR-0005) and the `chore/release-0.1.0` PR.
-- **Session 2, `sdk-template`: done.** PR sdk-template#1 open with CI green, including the
-  end-to-end proof (generate `sdk-example`, run every check). Generated repos depend on
-  `xippios-core` from git (`core_git_ref=main`) until the package is on PyPI.
+- **`sdk-core`**: 0.1.0 on PyPI since 2026-10-22. The consolidation for 0.2.0, what the
+  first four sources taught core, is merged up to PR F and written up to PR G (below).
+- **`sdk-template`**: v0.1.5 tagged. Generated repositories depend on `xippios-core` from
+  PyPI.
+- **Sources**: `sdk-usda-nass` (the pilot), `sdk-comtrade` and `sdk-usda-psd` are built
+  on core 0.1.0 from PyPI, `sdk-cashctrl` on a git pin of core's `main`; `sdk-usda-esr`
+  and `sdk-usda-gats` are briefed and start from `QuotaPolicy` (ADR-0015).
 
-Open (human): merge sdk-core #2 and the release PR, tag `v0.1.0`, approve the `pypi` run
-(pending publisher first); merge sdk-template#1 and tag it `v0.1.0`; API keys in `.envrc`
-and as org secrets; Claude GitHub App after the pilot.
+Work runs as parallel sessions from the workspace root, one per source plus `core` and
+`template`. A session is an orchestrator: it plans, delegates to the `worker` subagent,
+passes every branch through the `reviewer` subagent, and works in worktrees under
+`.worktrees/`. sdk-core and sdk-template are changed only under the lock in
+`COORDINATION.md`, which, with `coordination/`, holds the live state (locks, queue, core
+pin, open PRs, the human inbox). This file is the narrative; session briefings live in
+`.claude/briefings/`.
 
-## Session 3 — `sdk-usda-nass` (pilot): done
+## Sessions 3 and 4 — `sdk-usda-nass` and `sdk-comtrade`: done
 
-Completed 2026-10-22: scaffold, documentation snapshot, `get_counts`, `get_data`,
-`list_param_values`, packaged reference lists with generated enums, filter-key
-validation, and the four task-shaped slices (crop progress and condition, county yield
-and production, acreage, prices received). What the pilot taught core is ADR-0007 and
-ADR-0008. The architect's review fixes (raw value plus `value_number` on projections,
-slices skipping the count, `get_acreage_forecasts`) landed in the pilot's adoption
-PR (#15). `published_at` stays empty: Quick Stats publishes no release time and
-`load_time` carries no zone, so reading one into it would be a guess (ADR-0003).
-The pilot depends on core from PyPI since its PR #16.
+The pilot, `sdk-usda-nass`, wraps Quick Stats' `get_counts`, `get_data` and
+`list_param_values`, with packaged reference lists, generated enums, filter-key
+validation and four task-shaped slices (crop progress and condition, county yield and
+production, acreage, prices received). What it taught core is ADR-0007 and ADR-0008.
+`published_at` stays empty: Quick Stats publishes no release time and `load_time`
+carries no zone, so reading one into it would be a guess (ADR-0003).
 
-## Session 4 — `sdk-comtrade`
+`sdk-comtrade` exercises the flat branch of ADR-0006 (`xippios.comtrade`) and is wrapped
+through core's client against the documented REST endpoints (ADR-0002); the official
+`comtradeapicall` package is a second reference, not a dependency. v0.1.0 is tagged.
+`sdk-usda-psd` (v0.1.0) and `sdk-cashctrl` followed the same sequence: `/new-source`,
+the snapshot PR first, API-shaped tasks, reference data, then task-shaped slices.
 
-Decided 2026-10-22: UN Comtrade is a single-API provider, so it exercises the flat branch
-of ADR-0006 (`xippios.comtrade`), and it is wrapped through core's client against the
-documented REST endpoints (ADR-0002 holds); the official `comtradeapicall` package is a
-second reference next to the documentation, not a dependency. Same sequence as the
-pilot: `/new-source comtrade`, snapshot PR first, API-shaped tasks, reference data, then
-task-shaped slices after a pattern review.
+## Core consolidation for 0.2.0 (session `core`)
 
-## Session 3 — original plan
+What the sources had to build around core, moved into core one PR at a time, each with
+its ADR and a conventions version:
 
-Decisions already taken (2026-10-22 interview):
+| PR | sdk-core | What | ADR | Conventions |
+| --- | --- | --- | --- | --- |
+| A | #14 `fix/client-correctness` | cache replay without wire headers, 5xx retried for idempotent methods only, host-free error messages | ADR-0011, ADR-0005 amendment | 1.6 |
+| | #15 `feature/result-meta-total` | `ResultMeta.total`, upstream's record count | ADR-0012 | 1.7 |
+| B | #16 `feature/testing` | recorder scrub, request bodies, form data, replay params, offline guarantees owned by the plugin | ADR-0013 | 1.8 |
+| C | #17 `feature/tenants` | `Tenants`, tenant lock, CLI option hooks, `ResultMeta.tenant`, the `confirm` check | ADR-0014 | 1.9 |
+| D | #18 `feature/client-policy` | request hooks, `QuotaPolicy`, retries shaped by `classify`, `auth=` per request | ADR-0015; ADR-0010's "core today" note resolved | 1.10 |
+| E | #19 `feature/mcp-result-cap` | per-tool result caps, a cap note that promises no filter | ADR-0016 | 1.11 |
+| F | #20 `feature/reference` | ruff-clean ASCII enum rendering, `render_int_enums`, `id_name_pairs` | ADR-0008 amendment | 1.12 |
+| G | `docs/adoption-and-hygiene` | §15 adoption checklist and the definition of done's Adoption PR block, the one-minor core bound (§11, §12), `InvalidRequestError` wording (§5), `Fetched` in UTC, HTML tables, vendor snapshots and sensitive fields (§3, §8, §9), CI runs pre-commit, docstring examples on `xippios.usda.nass` | ADR-0017; ADR-0003 and ADR-0007 amendments | 1.13 |
 
-- A session runs `/new-source usda-nass` from `sdk-template`; the human approves the
-  `gh repo create` and environment prompts. Nothing is created outside the script.
-- The first PR in the new repo is the documentation snapshot alone (`/refresh-upstream`),
-  reviewed before any wrapper is written.
-- Task functions mirror the API (ADR-0003): `get_data(...)` exposing `api_GET`'s filter
-  parameters under upstream names, `list_param_values(param)`, `get_counts(...)`. Named
-  convenience tasks come later, once the `source_desc`/`sector_desc` combinations that
-  matter are named.
-- `api_base_url` is `https://quickstats.nass.usda.gov/api`; the key is sent as the `key`
-  query parameter from `NASS_API_KEY`. NASS documents no per-minute limit; the client
-  enforces a self-imposed 30 per minute, and the generated CLAUDE.md says so.
-- Import path `xippios.usda.nass` (ADR-0006): the `/new-source` answer `import_path`
-  keeps its default, `usda.nass`.
-- Quick Stats rejects queries over 50,000 records and does not paginate: `get_data`
-  calls `get_counts` first and raises a taxonomy error with the count and a narrowing
-  hint before fetching.
-- Reference data: package only the small stable parameter lists (`sector_desc`,
-  `group_desc`, `agg_level_desc`, `source_desc`, `freq_desc`, `state_alpha`) with
-  provenance; `commodity_desc` and other large lists stay live via `list_param_values`.
-- Second wave, task-shaped functions after the three API-shaped ones: crop progress and
-  condition, county yield and production, planted and harvested acreage, prices received.
+Ahead, in this order:
 
-Opening prompt, from inside `sdk-template`:
+- **PR H, `feature/sensitive-fields`**: the mechanism of ADR-0017, `UpstreamModel.sensitive`,
+  `dump_redacted`, `reveal_sensitive=` on the adapters and `--reveal-sensitive` in
+  `mcp.main`. Branched from PR G's branch; its PR against `main` opens after PR G merges,
+  since a stacked PR does not retarget.
+- **The release PR, `chore/release-0.2.0`**: version and CHANGELOG section. Johannes then
+  tags `v0.2.0` and approves the `pypi` run.
 
-```text
-Run /new-source usda-nass with the answers from docs/handover.md in sdk-core (session 3).
-Then, in the generated repository: run /refresh-upstream and open that PR first. After it
-is merged, add get_data, list_param_values and get_counts with /add-endpoint, one PR each,
-with recorded fixtures and live smoke tests. Do not tag, merge or release.
-```
+## After PR G
 
-Human gates: approve the repository-creation prompts; review the snapshot PR; review
-the first endpoint PR closely (is the task signature what an agent wants?); merge; tag.
-
-## After session 3
-
-Install the Claude GitHub App on the org (`/install-github-app` inside Claude Code),
-raise `required_approving_review_count` to 1 in the ruleset, and move to issue-driven
-work: one issue per endpoint or change, `@claude` in the issue, PR arrives, CI gates,
-you merge. Switch generated repos to the PyPI release of `xippios-core` with
-`copier update -d core_git_ref=` once it is published.
+- **Template (session `template`)**: T1, `feature/template-hygiene-2`, brings the
+  template's hygiene rows and the core bound (`xippios-core~=<core_version>`, §12); T2
+  adds the `/adopt-release` command, which walks conventions §15. The template's half of
+  the 0.2.0 ADRs goes into the template release that adopts core 0.2.0, tagged after
+  core's: the `multi_tenant` question (ADR-0014), `caps=getattr(tasks, "MCP_CAPS",
+  None)` in `mcp.py` (ADR-0016), the placeholder key through the plugin (ADR-0013) and
+  the sensitive-fields declaration (ADR-0017).
+- **Sources**: each adopts core 0.2.0 and that template release in one adoption PR before
+  its next release (conventions §12, §15), judged against the definition of done's
+  Adoption PR block and nothing else. The Consequences of ADR-0013 to ADR-0017 list per
+  source what goes: the hand-written placeholder fixtures (ADR-0013); sdk-cashctrl's
+  organisation registry and `_org_lock.py` (ADR-0014); sdk-usda-psd's `QuotaAwareClient`
+  and sdk-comtrade's `reference_client` (ADR-0015); the caps of comtrade's and PSD's
+  reference lists (ADR-0016); cashctrl's `ssn` and `iban` declared sensitive (ADR-0017).
+  Generated enum files are re-rendered once (ADR-0008 amendment). Sources already
+  published with an open bound stay as published and get the bound with their next
+  release.
+- **Later**: install the Claude GitHub App on the org, raise
+  `required_approving_review_count` to 1 in the ruleset, and move to issue-driven work:
+  one issue per endpoint or change, `@claude` in the issue, PR arrives, CI gates, a human
+  merges.
 
 ## Standing human gates
 
-Merge on every repo; every tag and `pypi` approval; new API keys and org secrets;
-changes to `docs/conventions.md`; repository creation (approved at the prompt).
+Every tag and every `pypi` approval; the merge of every PR except `chore/template-update*`
+and `chore/release-*`, which a session sets to auto-merge after the reviewer's `ready`;
+new API keys and org secrets; changes to `docs/conventions.md`; repository creation
+(approved at the prompt); the decisions asked as an interview before each work package.
