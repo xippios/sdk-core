@@ -1,6 +1,6 @@
 # xippios SDK family — conventions
 
-Version 1.10 · 2026-10-24 · applies to every `sdk-*` repository under github.com/xippios.
+Version 1.11 · 2026-10-24 · applies to every `sdk-*` repository under github.com/xippios.
 Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 
 ## 1. Naming
@@ -220,7 +220,12 @@ Messages and results name tenants and variables, never a value.
   is passed, with a gateway in front. A write server exposes write tools only;
   reference tools, the tenant list among them, stay on the read server.
 - Result cap: default 200 rows or 64 KB, whichever first. Over the cap, return the
-  first page plus a note on how to narrow the query. Never truncate silently.
+  first page plus a note on how to narrow the query. Never truncate silently. A
+  reference tool whose whole list an agent needs gets a per-tool row cap
+  (`register_tasks(..., caps={"list_partners": ResultCap(max_rows=400)})`, keyed by the
+  task function's name); the 64 KB byte cap stays the bound for every tool (ADR-0016).
+  The note never promises a filter the tool lacks: the default says "narrow the query
+  to see the rest", and a tool with filters names them in its cap's `note`.
 - Reference lookups are tools too: `<source>_list_<thing>` (commodities, countries,
   attributes). Agents need them to form valid calls. A multi-tenant source lists its
   tenants the same way, names only (`list_task`, `cashctrl_list_organisations`).

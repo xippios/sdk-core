@@ -212,6 +212,19 @@ All notable changes to this project are documented here. The format follows
   value, is still never used, and the value never appears. A hint for a field not in
   `fields`, or for one without a `validate` check, where it could never be shown, is a
   `ValueError` at construction. Carried over from the `Tenants` work of ADR-0014.
+- `caps=` for `register_tasks` and `build_server` (ADR-0016): a mapping from a task
+  function's `__name__` (`list_partners`, not the tool name `comtrade_list_partners`) to
+  a `ResultCap` that replaces `cap` for that tool; every other tool keeps `cap`. A key
+  that names none of the tasks is refused with `ValueError`, naming it, before anything
+  is registered. For a reference tool whose whole list an agent needs: a per-tool cap
+  raises the rows, and its byte bound stays at the default 64 KB, the family's bound for
+  every tool. The one cap of a server cut `comtrade_list_reporters` (255 rows) and
+  `comtrade_list_partners` (310) at 200 (sdk-comtrade).
+- `ResultCap(note=...)`: the text after the counts when the cap cuts a result, used
+  verbatim, in the note of a cut list and in that of a non-list result over the byte
+  cap, e.g. `"filter by period or by reporter to see the rest"` for a tool with those
+  filters. `None`, the default, keeps the default text; a blank note is refused with
+  `ValueError`.
 
 ### Changed
 
@@ -329,6 +342,16 @@ All notable changes to this project are documented here. The format follows
   implementation of ADR-0010's quota rules, `classify`'s part in retries, and `auth=`
   per request; §10 the plugin's quota guarantee. ADR-0015 added; ADR-0013 gains its
   decision 4.
+- The note of a capped MCP result promises no filter: "showing {shown} of {total} rows
+  (cap: {max_rows} rows or {max_bytes} bytes); narrow the query to see the rest", and
+  for a non-list result over the byte cap "result is {n} bytes, over the cap of
+  {max_bytes}; narrow the query to see the rest". It read "narrow the query, for example
+  with more filters or a shorter date range, to see the rest", which sent an agent
+  looking for filters a reference list does not have (sdk-comtrade). A cap's `note`
+  replaces the text after the counts.
+- Conventions 1.11: §8 states the per-tool row cap for a reference tool whose whole list
+  an agent needs, with the byte cap kept for every tool, and that the note never
+  promises a filter the tool lacks. ADR-0016 added.
 
 ### Fixed
 
