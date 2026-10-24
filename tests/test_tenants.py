@@ -130,9 +130,9 @@ def test_attributes_and_repr_name_the_scheme_only(monkeypatch: pytest.MonkeyPatc
         ({"validate": {"HOST": check_subdomain}}, ValueError, "fields not in fields: HOST"),
         ({"hints": {"HOST": "a host"}}, ValueError, "hints names fields not in fields: HOST"),
         (
-            {"hints": {"API_KEY": "the key"}},
+            {"validate": {}, "hints": {"SUBDOMAIN": "the subdomain alone"}},
             ValueError,
-            "hints names fields without a validate check: API_KEY",
+            "hints names fields without a validate check: SUBDOMAIN",
         ),
     ],
 )
