@@ -79,3 +79,59 @@ def test_non_list_payload_passes_or_previews() -> None:
 def test_cap_validation() -> None:
     with pytest.raises(ValueError, match="max_rows"):
         ResultCap(max_rows=0)
+
+
+def test_the_default_note_promises_no_filter() -> None:
+    payload = json.loads(cap_result(envelope(500), ResultCap(max_rows=10)))
+    assert payload["note"] == (
+        "showing 10 of 500 rows (cap: 10 rows or 65536 bytes); narrow the query to see the rest"
+    )
+    assert "filter" not in payload["note"]
+    assert "date range" not in payload["note"]
+
+
+def test_a_cap_note_is_used_verbatim_after_the_counts() -> None:
+    cap = ResultCap(max_rows=10, note="filter by period or by reporter to see the rest")
+    payload = json.loads(cap_result(envelope(500), cap))
+    assert len(payload["data"]) == 10
+    assert payload["note"] == (
+        "showing 10 of 500 rows (cap: 10 rows or 65536 bytes); "
+        "filter by period or by reporter to see the rest"
+    )
+
+
+def test_a_cap_note_counts_against_the_byte_cap() -> None:
+    cap = ResultCap(max_rows=1000, max_bytes=2000, note="filter by period to see the rest")
+    text = cap_result(envelope(500), cap)
+    assert len(text) <= 2000
+    payload = json.loads(text)
+    shown = len(payload["data"])
+    assert 0 < shown < 500
+    assert payload["note"] == (
+        f"showing {shown} of 500 rows (cap: 1000 rows or 2000 bytes); "
+        "filter by period to see the rest"
+    )
+
+
+def test_the_byte_cap_note_promises_no_filter_or_uses_the_cap_note() -> None:
+    blob = {"blob": "x" * 500}
+    size = len(json.dumps(blob, separators=(",", ":")))
+    payload = json.loads(cap_result(blob, ResultCap(max_bytes=100)))
+    assert payload["note"] == (
+        f"result is {size} bytes, over the cap of 100; narrow the query to see the rest"
+    )
+    noted = json.loads(cap_result(blob, ResultCap(max_bytes=100, note="ask for one blob")))
+    assert noted["note"] == f"result is {size} bytes, over the cap of 100; ask for one blob"
+    assert noted["preview"] == payload["preview"]
+
+
+def test_a_cap_note_is_not_shown_when_nothing_is_cut() -> None:
+    cap = ResultCap(note="filter by period to see the rest")
+    assert "note" not in json.loads(cap_result(envelope(3), cap))
+    assert json.loads(cap_result({"a": 1}, cap)) == {"a": 1}
+
+
+@pytest.mark.parametrize("note", ["", "   "])
+def test_a_blank_note_is_refused(note: str) -> None:
+    with pytest.raises(ValueError, match="note must say how to see the rest"):
+        ResultCap(note=note)
