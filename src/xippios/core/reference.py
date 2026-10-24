@@ -190,33 +190,60 @@ def _member(name: str, literal: str, value: str | None = None) -> list[str]:
     return [f"    {name} = (", *(f"        {part}" for part in _parts(value)), "    )"]
 
 
+def _derived(text: str) -> str | None:
+    """``enum_member_name(text)``, or ``None`` when ``text`` has nothing to derive it from."""
+    try:
+        return enum_member_name(text)
+    except ValueError:
+        return None
+
+
 def _member_names[T](
-    key: str, items: Sequence[T], derived: Sequence[str], overrides: Mapping[T, str]
+    key: str,
+    items: Sequence[T],
+    derived: Sequence[str | None],
+    labels: Sequence[str],
+    overrides: Mapping[T, str],
 ) -> list[str]:
     """Member names for ``items``: each item's override, else its derived name.
 
+    An override is taken before any name is derived, so a value with nothing to derive a
+    name from (``None`` in ``derived``) can be named by hand. ``labels`` describe the
+    items in messages.
+
     Raises:
-        ValueError: When an override names an item the list does not hold, a name is no
-            identifier an enum accepts, two names collide, or a name is too long for a
-            line (``_NAME_LIMIT``).
+        ValueError: When an override names an item the list does not hold, an item has
+            neither a derived name nor an override, a name is no identifier an enum
+            accepts, two names collide, or a name is too long for a line
+            (``_NAME_LIMIT``).
     """
     held = set(items)
     unknown = [item for item in overrides if item not in held]
     if unknown:
         raise ValueError(f"{key}: member_names names what the list does not hold: {unknown}")
-    members = [overrides.get(item, name) for item, name in zip(items, derived, strict=True)]
+    hint = f"name it by hand in member_names={{{key!r}: {{...}}}}"
+    members: list[str] = []
+    for index, (item, name, label) in enumerate(zip(items, derived, labels, strict=True)):
+        if item in overrides:
+            members.append(overrides[item])
+        elif name is None:
+            raise ValueError(
+                f"{key}: no member name can be derived from {label} at position {index}; {hint}"
+            )
+        else:
+            members.append(name)
     for member in members:
         reserved = member.startswith("_") and member.endswith("_")
         if not member.isidentifier() or keyword.iskeyword(member) or reserved:
             raise ValueError(f"{key}: {member!r} is not a member name an enum accepts")
     if len(set(members)) != len(members):
         raise ValueError(f"{key}: member names collide: {sorted(members)}")
-    for item, member in zip(items, members, strict=True):
+    for index, (member, label) in enumerate(zip(members, labels, strict=True)):
         if len(member) > _NAME_LIMIT:
             raise ValueError(
-                f"{key}: the member name for {item!r} is {len(member)} characters long; at "
-                f"most {_NAME_LIMIT} fit a line of {_LINE_LENGTH} columns. Name it by hand in "
-                f"member_names={{{key!r}: {{...}}}}"
+                f"{key}: the member name for {label} at position {index} is {len(member)} "
+                f"characters long; at most {_NAME_LIMIT} fit a line of {_LINE_LENGTH} "
+                f"columns; {hint}"
             )
     return members
 
@@ -288,25 +315,30 @@ def render_str_enums(
         lists: Enum key (``"state_alpha"``) to its values, in upstream order.
         class_names: Class name per key; default ``StateAlpha`` for ``state_alpha``.
         member_names: Member names set by hand, per key and value, for a value whose
-            derived name is too long or collides, e.g.
-            ``{"short_desc": {"CORN, GRAIN, ... ALL PRACTICES": "CORN_GRAIN_ALL"}}``. Each
-            must be an identifier an enum accepts and unique in its list.
+            derived name is too long or collides, or that has none (an empty or a
+            non-Latin label), e.g.
+            ``{"short_desc": {"CORN, GRAIN, ... ALL PRACTICES": "CORN_GRAIN_ALL"}}``. Taken
+            before any name is derived; each must be an identifier an enum accepts and
+            unique in its list.
         fetched: Date to mention in each docstring.
         generator: What to name as the generator in the module docstring.
 
     Raises:
         ValueError: When two members of one list share a name, a member name is longer
-            than 92 columns (naming the key, its length and the limit), or a name in
-            ``member_names`` is no identifier, reserved by ``enum``, or for a key or a
-            value that ``lists`` does not hold.
+            than 92 columns (naming the key, its length and the limit), a value without
+            an override has nothing to derive a name from (naming the key and the
+            position), or a name in ``member_names`` is no identifier, reserved by
+            ``enum``, or for a key or a value that ``lists`` does not hold.
     """
     _unknown_keys(member_names or {}, lists)
     names = {key: (class_names or {}).get(key, _class_name(key)) for key in lists}
     when = f" (fetched {fetched})" if fetched else ""
     classes: list[tuple[str, list[str]]] = []
     for key, values in lists.items():
-        derived = [enum_member_name(value) for value in values]
-        members = _member_names(key, values, derived, (member_names or {}).get(key, {}))
+        derived = [_derived(value) for value in values]
+        labels = [repr(value) for value in values]
+        overrides = (member_names or {}).get(key, {})
+        members = _member_names(key, values, derived, labels, overrides)
         body = [f"class {names[key]}(StrEnum):", f'    """Values of ``{key}``{when}."""', ""]
         for member, value in zip(members, values, strict=True):
             body += _member(member, _literal(value), value)
@@ -348,30 +380,34 @@ def render_int_enums(
         class_names: Class name per key; default ``Attributeid`` for ``attributeId``, so a
             camelCase key wants one (``{"attributeId": "AttributeId"}``).
         member_names: Member names set by hand, per key and id, for an id whose derived
-            name is too long or collides, e.g. ``{"attributeId": {173: "TOTAL_USE"}}``.
-            Each must be an identifier an enum accepts and unique in its list.
+            name is too long or collides, or whose name has none, e.g.
+            ``{"attributeId": {173: "TOTAL_USE"}}``. Taken before any name is derived;
+            each must be an identifier an enum accepts and unique in its list.
         fetched: Date to mention in each docstring.
         generator: What to name as the generator in the module docstring.
 
     Raises:
         ValueError: When two members of one list still share a name after the suffix, a
             suffix makes no identifier (a negative id), a member name is longer than 92
-            columns, or a name in ``member_names`` is no identifier, reserved by
-            ``enum``, or for a key or an id that ``lists`` does not hold.
+            columns, a name without an override has nothing to derive one from, or a
+            name in ``member_names`` is no identifier, reserved by ``enum``, or for a key
+            or an id that ``lists`` does not hold.
     """
     _unknown_keys(member_names or {}, lists)
     names = {key: (class_names or {}).get(key, _class_name(key)) for key in lists}
     when = f" (fetched {fetched})" if fetched else ""
     classes: list[tuple[str, list[str]]] = []
     for key, pairs in lists.items():
-        plain = [enum_member_name(name) for _, name in pairs]
-        counts = Counter(plain)
+        plain = [_derived(name) for _, name in pairs]
+        counts = Counter(name for name in plain if name is not None)
         derived = [
-            name if counts[name] == 1 else f"{name}_{ident}"
+            name if name is None or counts[name] == 1 else f"{name}_{ident}"
             for name, (ident, _) in zip(plain, pairs, strict=True)
         ]
         ids = [ident for ident, _ in pairs]
-        members = _member_names(key, ids, derived, (member_names or {}).get(key, {}))
+        labels = [f"{name!r} (id {ident})" for ident, name in pairs]
+        overrides = (member_names or {}).get(key, {})
+        members = _member_names(key, ids, derived, labels, overrides)
         body = [f"class {names[key]}(IntEnum):", f'    """Values of ``{key}``{when}."""', ""]
         for member, (ident, _) in zip(members, pairs, strict=True):
             body += _member(member, f"{ident:d}")

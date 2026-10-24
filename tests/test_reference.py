@@ -229,8 +229,8 @@ def test_render_str_enums_refuses_a_member_name_too_long_for_any_line() -> None:
     width = len(enum_member_name(LONG_VALUE))
     assert width > 92
     message = (
-        rf"^short_desc: the member name for '{re.escape(LONG_VALUE)}' is {width} characters "
-        r"long; at most 92 fit a line of 100 columns\. Name it by hand in "
+        rf"^short_desc: the member name for '{re.escape(LONG_VALUE)}' at position 1 is "
+        rf"{width} characters long; at most 92 fit a line of 100 columns; name it by hand in "
         r"member_names=\{'short_desc': \{\.\.\.\}\}$"
     )
     with pytest.raises(ValueError, match=message):
@@ -247,6 +247,25 @@ def test_render_str_enums_takes_a_member_name_set_by_hand(tmp_path: Path) -> Non
     short_desc = namespace["ShortDesc"]
     assert short_desc.CORN_GRAIN_IRRIGATED_ALL.value == LONG_VALUE
     assert [m.name for m in short_desc] == ["CORN", "CORN_GRAIN_IRRIGATED_ALL"]
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["", "北京", "Κρέας", "---"],  # empty, CJK, Greek, punctuation: nothing to derive from
+)
+def test_render_str_enums_takes_a_member_name_for_a_value_with_no_derivable_name(
+    tmp_path: Path, value: str
+) -> None:
+    message = (
+        rf"^note: no member name can be derived from {re.escape(repr(value))} at position 1; "
+        r"name it by hand in member_names=\{'note': \{\.\.\.\}\}$"
+    )
+    with pytest.raises(ValueError, match=message):
+        render_str_enums({"note": ["A", value]})
+    source = render_str_enums(
+        {"note": ["A", value]}, member_names={"note": {value: "OTHER"}}, generator="tests"
+    )
+    assert assert_ruff_clean(tmp_path, source)["Note"].OTHER.value == value
 
 
 def test_render_str_enums_takes_a_member_name_that_resolves_a_collision(tmp_path: Path) -> None:
@@ -266,7 +285,7 @@ def test_render_str_enums_takes_a_member_name_that_resolves_a_collision(tmp_path
         ({"x": {"CORN": "_CORN_"}}, r"^x: '_CORN_' is not a member name an enum"),
         ({"x": {"RICE": "RICE"}}, r"^x: member_names names what the list does not hold"),
         ({"y": {"CORN": "C"}}, r"^member_names names lists that are not rendered: \['y'\]$"),
-        ({"x": {"CORN": "C" * 93}}, r"^x: the member name for 'CORN' is 93 characters long"),
+        ({"x": {"CORN": "C" * 93}}, r"^x: the member name for 'CORN' at position 0 is 93 "),
     ],
 )  # fmt: skip
 def test_render_str_enums_refuses_a_member_name_set_by_hand_it_cannot_use(
@@ -391,13 +410,30 @@ def test_render_int_enums_rejects_names_it_cannot_make_unique(
 def test_render_int_enums_refuses_a_member_name_too_long_for_any_line(tmp_path: Path) -> None:
     pairs = [(1, "Area"), (2, LONG_VALUE)]
     with pytest.raises(
-        ValueError, match=r"^attributeId: the member name for 2 is \d+ characters long; at most 92"
+        ValueError, match=r"^attributeId: the member name for '.+' \(id 2\) at position 1 is \d+ "
     ):
         render_int_enums({"attributeId": pairs})
     source = render_int_enums(
         {"attributeId": pairs}, member_names={"attributeId": {2: "CORN_ALL"}}, generator="tests"
     )
     assert assert_ruff_clean(tmp_path, source)["Attributeid"].CORN_ALL == 2
+
+
+def test_render_int_enums_takes_a_member_name_for_a_name_with_none_derivable(
+    tmp_path: Path,
+) -> None:
+    pairs = [(1, "Area"), (2, "北京"), (3, "")]
+    message = (
+        r"^unitId: no member name can be derived from '北京' \(id 2\) at position 1; "
+        r"name it by hand in member_names=\{'unitId': \{\.\.\.\}\}$"
+    )
+    with pytest.raises(ValueError, match=message):
+        render_int_enums({"unitId": pairs})
+    source = render_int_enums(
+        {"unitId": pairs}, member_names={"unitId": {2: "BEIJING", 3: "BLANK"}}, generator="tests"
+    )
+    unit_id = assert_ruff_clean(tmp_path, source)["Unitid"]
+    assert [(m.name, m.value) for m in unit_id] == [("AREA", 1), ("BEIJING", 2), ("BLANK", 3)]
 
 
 def test_render_int_enums_takes_a_member_name_and_leaves_the_others(tmp_path: Path) -> None:
