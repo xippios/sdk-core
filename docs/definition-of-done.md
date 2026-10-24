@@ -21,7 +21,7 @@ instead.
 ## Tests
 - [ ] each new task function has a fixture-backed unit test (`tests/fixtures/...` recorded, not hand-written)
 - [ ] each new task function has a `@pytest.mark.live` smoke test
-- [ ] fixtures contain no credentials (grep for the key pattern before committing)
+- [ ] fixtures contain no credentials and no value of a field declared sensitive (grep for the key pattern and those values before committing; ADR-0017)
 
 ## Docs
 - [ ] docstrings written for agents: one-line summary, `Args:` with valid-value examples
