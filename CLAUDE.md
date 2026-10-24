@@ -33,7 +33,7 @@ src/xippios/core/
   models.py          UpstreamModel, ResultMeta, Result[T], parse()
   config.py          SourceSettings base, resolve_api_key()
   pagination.py      offset / page-number / cursor iterators, collect()
-  reference.py       loader for packaged reference data (CSV, JSON)
+  reference.py       loader for packaged reference data (CSV, JSON); StrEnum/IntEnum renderers
   tenants.py         Tenants (tenants declared in the environment, one client each), list_task
   client/            httpx client: config, retry, ratelimit, cache, quota, auth (env-key helpers), _core, Client
   mcp/               MCP server helpers: server, results (caps), errors (to text), cli   [extra: mcp]
