@@ -60,7 +60,8 @@ def main(
     ``ConfigError``) stops the process like an argparse error: the message on stderr,
     exit status 2, no traceback. A write server (``is_write_server``) is served over
     ``--http`` on a loopback ``--host`` only (``127.0.0.1``, ``localhost``, ``::1``),
-    unless ``--allow-remote`` is passed: it carries no authentication.
+    unless ``--allow-remote`` is passed: it carries no authentication. On a read-only
+    server ``--allow-remote`` changes nothing.
 
     The httpx and httpcore loggers are quieted again right before the server runs
     (``quiet_request_logging``), in case the server was built another way or a level was

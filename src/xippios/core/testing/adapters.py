@@ -81,6 +81,8 @@ def assert_write_tools(
 
     Fails the test, naming the offending tool, unless all of these hold:
 
+    - the write server was registered with ``read_only=False`` (``is_write_server``),
+      which ``main``'s loopback rule for ``--http`` depends on;
     - the write server's tools are exactly ``tool_name(source, fn)`` for the write
       tasks, no more and no fewer;
     - every write task takes ``confirm: bool = False``, so a call without it is a
@@ -99,8 +101,11 @@ def assert_write_tools(
         read_server: The read-only ``MCPServer`` of ``xippios-<source>-mcp``, if any.
         router: The source's FastAPI router from ``router_from_tasks``, if any.
     """
-    from xippios.core.mcp.server import _confirm_problem, tool_name
+    from xippios.core.mcp.server import _confirm_problem, is_write_server, tool_name
 
+    assert is_write_server(write_server), (
+        "the write server was not registered with read_only=False; the loopback rule depends on it"
+    )
     expected = {tool_name(source, fn): fn for fn in write_tasks}
     listed = _tool_names(write_server)
     unexpected = sorted(listed - expected.keys())

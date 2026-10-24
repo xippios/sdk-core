@@ -138,6 +138,19 @@ async def test_assert_write_tools_works_in_an_async_test() -> None:
     assert_write_tools(build_server("example", WRITE, read_only=False), WRITE, source="example")
 
 
+def test_assert_write_tools_wants_a_server_registered_as_a_write_server() -> None:
+    read_only = build_server("example", [])
+    register_tasks(read_only, "example", WRITE)  # the write tasks, registered read-only
+    with pytest.raises(
+        AssertionError,
+        match=(
+            r"^the write server was not registered with read_only=False; "
+            r"the loopback rule depends on it$"
+        ),
+    ):
+        assert_write_tools(read_only, WRITE, source="example")
+
+
 def test_assert_write_tools_wants_exactly_the_write_tasks() -> None:
     # build_server refuses a write task without confirm (conventions §8); a read-only
     # registration on the write server is how a stray tool would get there.
