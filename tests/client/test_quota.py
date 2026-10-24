@@ -168,6 +168,28 @@ def test_a_huge_retry_after_is_cut_to_the_window() -> None:
     assert snapshot.resumes_at == NOW + timedelta(hours=1)
 
 
+@pytest.mark.parametrize(
+    ("offset", "resumes_after"),
+    [(timedelta(minutes=15), timedelta(minutes=15)), (-timedelta(minutes=1), timedelta(0))],
+)
+def test_an_epoch_reset_is_read_as_a_time(offset: timedelta, resumes_after: timedelta) -> None:
+    # GitHub's x-ratelimit-reset is epoch seconds; read as a delay it would be 56 years.
+    epoch = str(int((NOW + offset).timestamp()))
+    policy = QuotaPolicy(reset_header="x-ratelimit-reset", window=3600.0, clock=Clock())
+    policy.observe(answer(headers={**SPENT, "x-ratelimit-reset": epoch}))
+    snapshot = policy.snapshot()
+    assert snapshot is not None
+    assert snapshot.resumes_at == NOW + resumes_after
+
+
+def test_ten_years_of_seconds_is_still_a_delay() -> None:
+    policy = QuotaPolicy(reset_header="x-ratelimit-reset", window=315_360_000.0, clock=Clock())
+    policy.observe(answer(headers={**SPENT, "x-ratelimit-reset": "315360000"}))
+    snapshot = policy.snapshot()
+    assert snapshot is not None
+    assert snapshot.resumes_at == NOW + timedelta(seconds=315_360_000)
+
+
 @pytest.mark.parametrize("value", [str(10**12), "9" * 400, "²", "Fri, 31 Dec 9999 23:59:59 GMT"])
 def test_a_huge_or_unreadable_reset_is_cut_to_the_window(value: str) -> None:
     policy = QuotaPolicy(reset_header="x-ratelimit-reset", window=3600.0, clock=Clock())

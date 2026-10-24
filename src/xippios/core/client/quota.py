@@ -34,7 +34,11 @@ logger = logging.getLogger("xippios.core.client")
 _DEFAULT_PAUSE_CAP = RetryPolicy().backoff_max
 """The cap of a policy that was given none and is not installed: 30 s, as ``backoff_max``."""
 _TEN_YEARS = 315_360_000.0
-"""Seconds in ten years: the longest ``window``, so a ``resumes_at`` can always be computed."""
+"""Seconds in ten years: the longest ``window``, so a ``resumes_at`` can always be computed.
+
+Also where a reset header's integer stops being a delay and becomes an epoch timestamp:
+no quota resets in more than ten years, and no epoch timestamp since 1980 is smaller.
+"""
 
 
 def _utc_now() -> datetime:
@@ -113,8 +117,10 @@ class QuotaPolicy:
         limit_header: The header with the quota's size, e.g. ``"x-ratelimit-limit"``.
         remaining_header: The header with the requests left, e.g.
             ``"x-ratelimit-remaining"``.
-        reset_header: The header saying when a spent quota comes back, read like
-            ``Retry-After``: seconds to wait, or an HTTP-date; ``None`` when upstream
+        reset_header: The header saying when a spent quota comes back, e.g.
+            ``"x-ratelimit-reset"``, in any of three formats: delay-seconds (``"120"``),
+            epoch seconds (``"1761206400"``, as GitHub sends it; an integer above ten
+            years of seconds is read as one), or an HTTP-date. ``None`` when upstream
             sends none, as api.data.gov does.
         window: Seconds a spent quota stays spent when neither ``Retry-After`` (on a
             429) nor ``reset_header`` names a time, e.g. ``3600.0`` for a rolling hour;
@@ -275,7 +281,16 @@ class QuotaPolicy:
             if retry_after is not None:
                 return min(retry_after, self.window)
         if self.reset_header is not None:
-            reset = parse_retry_after(response.headers.get(self.reset_header), now=now)
+            reset = _reset_wait(response.headers.get(self.reset_header), now)
             if reset is not None:
                 return min(reset, self.window)
         return self.window
+
+
+def _reset_wait(value: str | None, now: datetime) -> float | None:
+    """Seconds from ``now`` to a reset header's time: delay, epoch seconds or HTTP-date."""
+    seconds = parse_retry_after(value, now=now)
+    if seconds is None or value is None or seconds <= _TEN_YEARS or not value.strip().isdigit():
+        return seconds
+    # An integer beyond ten years is an epoch timestamp (GitHub's x-ratelimit-reset).
+    return max(0.0, seconds - now.timestamp())

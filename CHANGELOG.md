@@ -177,8 +177,9 @@ All notable changes to this project are documented here. The format follows
   keeps a thread-safe `QuotaSnapshot(limit, remaining, observed_at, resumes_at)` from
   the quota headers of every response from the wire, never from a cache hit; a 429, or
   a response that leaves nothing, marks the quota spent until `Retry-After` (on a 429),
-  else the reset header, else `window` from now; a wait read from a header is cut to
-  `window`, and a count that is not ASCII digits is ignored. `before_request(request)`
+  else the reset header (delay-seconds, epoch seconds as GitHub sends them, or an
+  HTTP-date), else `window` from now; a wait read from a header is cut to `window`, and
+  a count that is not ASCII digits is ignored. `before_request(request)`
   waits a spent quota out when it is back within `pause_cap`, logging one warning with
   the method and path, and otherwise raises `RateLimitError` with `retry_after`, saying
   that nothing was sent and when the quota is expected back. `install(config)` returns
