@@ -319,6 +319,58 @@ def _all_order(left: str, right: str) -> int:
     return (_kind(left) > _kind(right)) - (_kind(left) < _kind(right)) or _natural(left, right)
 
 
+def _plain_text(text: str) -> bool:
+    """Whether ``text`` fits a generated docstring as it is.
+
+    It must be printable ASCII, with no backslash and no three double quotes in a row.
+    """
+    return text.isascii() and text.isprintable() and "\\" not in text and '"""' not in text
+
+
+def _checked_class_names(
+    kind: str,
+    lists: Mapping[str, object],
+    class_names: Mapping[str, str] | None,
+    fetched: str | None,
+    generator: str,
+) -> dict[str, str]:
+    """The class name per key, once the text the caller supplies is known to fit.
+
+    Everything a generated module holds is printable ASCII, so a module stays ASCII-only
+    and no ruff version finds an ambiguous character in a docstring (RUF002). The errors
+    name the argument and a position, never the text, which can be long.
+
+    Raises:
+        ValueError: When ``generator``, ``fetched`` or a key is not printable ASCII or holds
+            a backslash or three double quotes, or a class name is no ASCII identifier, is a
+            keyword or is too long for its ``class`` line.
+    """
+    rule = "printable ASCII without a backslash or three double quotes"
+    if not _plain_text(generator):
+        raise ValueError(f"generator must be {rule}")
+    if fetched is not None and not _plain_text(fetched):
+        raise ValueError(f"fetched must be {rule}")
+    names: dict[str, str] = {}
+    for index, key in enumerate(lists):
+        if not _plain_text(key):
+            raise ValueError(f"the key at position {index} of lists must be {rule}")
+        given = (class_names or {}).get(key)
+        name = _class_name(key) if given is None else given
+        too_long = len(f"class {name}({kind}):") > _LINE_LENGTH
+        if not (name.isascii() and name.isidentifier()) or keyword.iskeyword(name) or too_long:
+            where = (
+                f"the class name derived from the key at position {index} of lists"
+                if given is None
+                else f"class_names for the key at position {index} of lists"
+            )
+            raise ValueError(
+                f"{where} must be an ASCII identifier, not a keyword, of at most "
+                f"{_LINE_LENGTH - len(f'class ({kind}):')} characters; set it in class_names"
+            )
+        names[key] = name
+    return names
+
+
 def _class_docstring(key: str, fetched: str | None) -> list[str]:
     """The docstring of the class for ``key``, on one line where it fits.
 
@@ -395,10 +447,13 @@ def render_str_enums(
     concatenated parts. ``__all__`` names the classes sorted as ruff sorts it (RUF022), one
     per line; the classes keep the order of ``lists``.
 
-    The result passes ``ruff format --check`` and ``ruff check`` unchanged. A member name
-    longer than 92 columns fits no line, so it is refused: the source's refresh script
-    names that member once in ``member_names``. Generated code is the only way enums
-    enter a source package, so this module is the one place the rendering lives.
+    The result passes ``ruff format --check`` and ``ruff check`` unchanged, and all of it
+    is printable ASCII: the values are escaped, and the text the caller supplies
+    (``generator``, ``fetched``, the keys, the class names) is refused where it is not
+    printable ASCII or holds a backslash or three double quotes. A member name longer
+    than 92 columns fits no line, so it is refused: the source's refresh script names
+    that member once in ``member_names``. Generated code is the only way enums enter a
+    source package, so this module is the one place the rendering lives.
 
     Args:
         lists: Enum key (``"state_alpha"``) to its values, in upstream order.
@@ -414,16 +469,19 @@ def render_str_enums(
         generator: What to name as the generator in the module docstring.
 
     Raises:
-        ValueError: When two members of one list share a name, a member name is longer
-            than 92 columns (naming the key, its length and the limit), a value without
-            an override has nothing to derive a name from (naming the key and the
-            position), a key is longer than the 75 characters its class docstring has
-            room for, or a name in ``member_names`` is no ASCII identifier, one ``enum``
-            does not take (``mro``, ``_x_``, any with ``__``), or for a key or a value that
-            ``lists`` does not hold.
+        ValueError: When ``generator``, ``fetched`` or a key is not printable ASCII or holds
+            a backslash or three double quotes, a class name is no ASCII identifier, a
+            keyword or longer than 84 characters, a key is longer than the 75 characters its
+            class docstring has room for, two members of one list share a name, a member
+            name is longer than 92 columns (naming the key, the position, its length and the
+            limit), a value without an override has nothing to derive a name from (naming
+            the key and the position), or a name in ``member_names`` is no ASCII identifier,
+            one ``enum`` does not take (``mro``, ``_x_``, any with ``__``), or for a key or
+            a value that ``lists`` does not hold. A message names the argument and the
+            position, not text that can be long.
     """
+    names = _checked_class_names("StrEnum", lists, class_names, fetched, generator)
     _unknown_keys(member_names or {}, lists)
-    names = {key: (class_names or {}).get(key, _class_name(key)) for key in lists}
     classes: list[tuple[str, list[str]]] = []
     for key, values in lists.items():
         derived = [_derived(value) for value in values]
@@ -460,10 +518,11 @@ def render_int_enums(
     not. Values are the ids, in upstream order; member names come from the names through
     ``enum_member_name``, and a name several ids share gets ``_<id>`` appended
     (``TOTAL_DISAPPEARANCE_126``, ``TOTAL_DISAPPEARANCE_173``); ``member_names`` names a
-    member by hand and leaves every other member's name as it was. Layout, ``__all__`` and
-    the refusal of a member name longer than 92 columns as in ``render_str_enums``; the
-    values are integers, so no character needs escaping. ``id_name_pairs`` builds the
-    pairs from upstream's records.
+    member by hand and leaves every other member's name as it was. Layout, ``__all__``,
+    the checks of the caller's text and the refusal of a member name longer than 92
+    columns as in ``render_str_enums``, so the module is printable ASCII too; the values
+    are integers and need no escaping. ``id_name_pairs`` builds the pairs from upstream's
+    records.
 
     Args:
         lists: Enum key (``"attributeId"``) to its ``(id, name)`` pairs, in upstream order,
@@ -474,19 +533,21 @@ def render_int_enums(
             name is too long or collides, or whose name has none, e.g.
             ``{"attributeId": {173: "TOTAL_USE"}}``. Taken before any name is derived;
             each must be an identifier an enum accepts and unique in its list.
-        fetched: Date to mention in each docstring.
+        fetched: Date to mention in each class docstring, as in ``render_str_enums``.
         generator: What to name as the generator in the module docstring.
 
     Raises:
-        ValueError: When an id is listed twice (naming the key and the id), two members of
-            one list still share a name after the suffix, a suffix makes no identifier (a
+        ValueError: When an id is listed twice (naming the key and the id), the caller's
+            text or a class name is refused as in ``render_str_enums``, two members of one
+            list still share a name after the suffix, a suffix makes no identifier (a
             negative id), a member name is longer than 92 columns, a name without an
             override has nothing to derive one from, a key is longer than 75 characters, or
             a name in ``member_names`` is no ASCII identifier, one ``enum`` does not take
-            (``mro``, ``_x_``, any with ``__``), or for a key or an id that ``lists`` does not hold.
+            (``mro``, ``_x_``, any with ``__``), or for a key or an id that ``lists`` does
+            not hold.
     """
+    names = _checked_class_names("IntEnum", lists, class_names, fetched, generator)
     _unknown_keys(member_names or {}, lists)
-    names = {key: (class_names or {}).get(key, _class_name(key)) for key in lists}
     classes: list[tuple[str, list[str]]] = []
     for key, pairs in lists.items():
         repeated = sorted(

@@ -256,6 +256,66 @@ def test_a_key_too_long_for_its_class_docstring_is_refused(render: Callable[...,
         render({"k" * 76: values})
 
 
+BAD_TEXT = ["2026\u201310\u201324", "scripts\u2019s refresh", "C:\\data", 'say """hi"""', "a\nb"]
+"""An en dash, a typographic apostrophe, a backslash, three double quotes, a newline."""
+
+
+@pytest.mark.parametrize("render", [render_str_enums, render_int_enums])
+@pytest.mark.parametrize("text", BAD_TEXT)
+@pytest.mark.parametrize("argument", ["generator", "fetched"])
+def test_caller_text_that_would_not_stay_ascii_is_refused(
+    render: Callable[..., str], text: str, argument: str
+) -> None:
+    values: list[Any] = ["A"] if render is render_str_enums else [(1, "A")]
+    message = rf"^{argument} must be printable ASCII without a backslash or three double quotes$"
+    with pytest.raises(ValueError, match=message):
+        render({"x": values}, **{argument: text})
+
+
+@pytest.mark.parametrize("render", [render_str_enums, render_int_enums])
+@pytest.mark.parametrize("text", BAD_TEXT)
+def test_a_key_that_would_not_stay_ascii_is_refused(render: Callable[..., str], text: str) -> None:
+    values: list[Any] = ["A"] if render is render_str_enums else [(1, "A")]
+    with pytest.raises(
+        ValueError, match=r"^the key at position 1 of lists must be printable ASCII without"
+    ):
+        render({"ok": values, text: values}, class_names={text: "Fine"})
+
+
+@pytest.mark.parametrize("render", [render_str_enums, render_int_enums])
+@pytest.mark.parametrize(
+    ("class_name", "where"),
+    [
+        ("Caf\u00e9", "class_names for the key"),
+        ("Two Words", "class_names for the key"),
+        ('X"""', "class_names for the key"),
+        ("None", "class_names for the key"),
+        ("C" * 85, "class_names for the key"),
+        (None, "the class name derived from the key"),  # the key "1st" gives "1st"
+    ],
+)
+def test_a_class_name_that_is_no_ascii_identifier_is_refused(
+    render: Callable[..., str], class_name: str | None, where: str
+) -> None:
+    values: list[Any] = ["A"] if render is render_str_enums else [(1, "A")]
+    class_names = {} if class_name is None else {"1st": class_name}
+    message = (
+        rf"^{where} at position 1 of lists must be an ASCII identifier, not a keyword, of at "
+        r"most 84 characters; set it in class_names$"
+    )
+    with pytest.raises(ValueError, match=message):
+        render({"ok": values, "1st": values}, class_names=class_names)
+    assert render({"x": values}, class_names={"x": "C" * 84}).count("C" * 84) == 2
+
+
+def test_the_whole_module_is_ascii(tmp_path: Path) -> None:
+    source = render_str_enums(
+        {"x": ["Caf\u00e9"]}, fetched="2026-10-24", generator="scripts/refresh_reference.py"
+    )
+    assert source.isascii()
+    assert_ruff_clean(tmp_path, source)
+
+
 LONG_VALUE = (
     "CORN, GRAIN, IRRIGATED, ENTIRE CROP - ACRES HARVESTED, MEASURED IN ACRES / PLANTED, "
     "NET OF ABANDONMENT, EXCL SILAGE AND SEED, ALL PRACTICES, ALL TYPES"
