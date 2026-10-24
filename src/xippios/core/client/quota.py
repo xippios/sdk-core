@@ -137,8 +137,9 @@ class QuotaPolicy:
             "replenished in 01:02:03" from a 403's body and returns ``3723.0``. An
             exception it raises propagates, as one from any ``observe`` hook does.
         pause_cap: The longest wait inside a call, in seconds, e.g. ``30.0``. ``None``
-            takes ``config.retry.backoff_max`` at the first ``install``, the bound the
-            retry loop uses for a ``Retry-After``; uninstalled, it is 30 s.
+            takes the ``retry.backoff_max`` of each config the policy is installed on,
+            the bound the retry loop uses for a ``Retry-After``; called directly,
+            ``before_request`` then uses 30 s.
         source: Source slug for the ``RateLimitError`` and the log line, e.g.
             ``"usda-psd"``.
         clock: The current time, timezone-aware, replaceable in tests.
@@ -150,7 +151,7 @@ class QuotaPolicy:
         reset_header: As given.
         window: As given.
         spent: As given.
-        pause_cap: As given, or the installed config's ``retry.backoff_max``.
+        pause_cap: As given.
         source: As given.
 
     Raises:
@@ -254,26 +255,68 @@ class QuotaPolicy:
     async def before_request(self, request: httpx.Request) -> None:
         """Wait out a spent quota within ``pause_cap``; beyond it, refuse without sending.
 
-        The ``ClientConfig.before_request`` hook: called once per request, after the
-        cache lookup. Does nothing while the snapshot shows requests left or the quota
-        is expected back already.
+        Called once per request, after the cache lookup. ``install`` sets a hook that
+        does the same with the cap of the config it was installed on; called directly,
+        the cap is ``pause_cap``, or 30 s when that is ``None``. Does nothing while the
+        snapshot shows requests left or the quota is expected back already.
 
         Args:
             request: The request about to be sent; its method and path name it in the
                 log line and the error, never its host or query (conventions §5).
 
         Raises:
-            RateLimitError: The quota is expected back later than ``pause_cap`` seconds
-                from now; ``retry_after`` is the wait, and the message says that nothing
-                was sent and when the quota is expected back.
+            RateLimitError: The quota is expected back later than the cap from now;
+                ``retry_after`` is the wait, and the message says that nothing was sent
+                and when the quota is expected back.
         """
+        cap = self.pause_cap if self.pause_cap is not None else _DEFAULT_PAUSE_CAP
+        await self._pause(request, cap)
+
+    def install(self, config: ClientConfig) -> ClientConfig:
+        """``config`` with this policy's ``before_request`` and ``observe`` hooks.
+
+        Returns ``dataclasses.replace(config, before_request=..., observe=...)``;
+        ``config`` itself is unchanged. The ``before_request`` hook is bound to this
+        config's cap: ``pause_cap`` when the policy was given one, else
+        ``config.retry.backoff_max``, so one policy installed on two configs pauses each
+        within its own bound, and a client from ``AsyncClient.derive`` keeps its
+        parent's hooks and cap. Installing the policy again on a config it is installed
+        on is allowed.
+
+        Args:
+            config: The source's client configuration.
+
+        Raises:
+            ValueError: ``config`` has a ``before_request`` or ``observe`` hook that is
+                not this policy's; combine them in hooks of the source's own instead.
+        """
+        foreign = [
+            name
+            for name, hook in (
+                ("before_request", config.before_request),
+                ("observe", config.observe),
+            )
+            if hook is not None and not self._owns(hook)
+        ]
+        if foreign:
+            raise ValueError(
+                f"the config already has hooks of its own ({', '.join(foreign)}); a "
+                "QuotaPolicy installs before_request and observe, so combine them in hooks "
+                "of your own instead"
+            )
+        cap = self.pause_cap if self.pause_cap is not None else config.retry.backoff_max
+        return dataclasses.replace(
+            config, before_request=_InstalledPause(self, cap), observe=self.observe
+        )
+
+    async def _pause(self, request: httpx.Request, cap: float) -> None:
+        """Wait out a spent quota within ``cap`` seconds; beyond it, raise without sending."""
         snapshot = self.snapshot()
         if snapshot is None or snapshot.resumes_at is None:
             return
         wait = (snapshot.resumes_at - self._clock()).total_seconds()
         if wait <= 0:
             return
-        cap = self.pause_cap if self.pause_cap is not None else _DEFAULT_PAUSE_CAP
         where = f"{request.method} {request.url.path}"
         if wait > cap:
             raise RateLimitError(
@@ -292,20 +335,11 @@ class QuotaPolicy:
         )
         await self._sleep(wait)
 
-    def install(self, config: ClientConfig) -> ClientConfig:
-        """``config`` with this policy's ``before_request`` and ``observe`` hooks.
-
-        Returns ``dataclasses.replace(config, before_request=..., observe=...)``; hooks
-        the config had are replaced, and ``config`` itself is unchanged. A policy given
-        no ``pause_cap`` takes ``config.retry.backoff_max`` here, at its first install.
-
-        Args:
-            config: The source's client configuration.
-        """
-        with self._lock:
-            if self.pause_cap is None:
-                self.pause_cap = config.retry.backoff_max
-        return dataclasses.replace(config, before_request=self.before_request, observe=self.observe)
+    def _owns(self, hook: object) -> bool:
+        """True for a hook this policy set or is: an installed pause, or a bound method."""
+        if isinstance(hook, _InstalledPause):
+            return hook.policy is self
+        return hook == self.before_request or hook == self.observe
 
     def _cut(self, wait: float) -> float:
         """``wait`` within ``[0, window]``: no refusal outlives one window, no date overflows."""
@@ -337,3 +371,18 @@ def _reset_wait(value: str | None, now: datetime) -> float | None:
         return seconds
     # An integer beyond ten years is an epoch timestamp (GitHub's x-ratelimit-reset).
     return max(0.0, seconds - now.timestamp())
+
+
+@dataclass(frozen=True, slots=True)
+class _InstalledPause:
+    """The ``before_request`` hook ``QuotaPolicy.install`` sets: the pause at one config's cap.
+
+    A value, so a config installed twice compares equal, and a ``derive``d config, which
+    copies its hooks, keeps the cap of the config it came from.
+    """
+
+    policy: QuotaPolicy
+    cap: float
+
+    async def __call__(self, request: httpx.Request) -> None:
+        await self.policy._pause(request, self.cap)

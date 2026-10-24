@@ -192,8 +192,9 @@ All notable changes to this project are documented here. The format follows
   `before_request(request)` waits a spent quota out when it is back within `pause_cap`,
   logging one warning with the method and path, and otherwise raises `RateLimitError`
   with `retry_after`, saying that nothing was sent and when the quota is expected back.
-  `install(config)` returns the config with both hooks set; a policy given no
-  `pause_cap` takes `config.retry.backoff_max` there. `snapshot()`, `reset()`;
+  `install(config)` returns the config with both hooks set, the pause bound to that
+  config's cap (`pause_cap`, else its `retry.backoff_max`), and refuses with
+  `ValueError` a config that has a hook of its own. `snapshot()`, `reset()`;
   `QuotaSnapshot.describe()` names numbers and times only. Generalises sdk-usda-psd's
   `Quota`, `observe_quota`, `quota_pause` and `QuotaAwareClient`, which sdk-usda-esr and
   sdk-usda-gats would otherwise copy.

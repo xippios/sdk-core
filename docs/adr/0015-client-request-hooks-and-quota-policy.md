@@ -80,9 +80,15 @@ client.
      and when the quota is expected back. Messages and the log line carry numbers,
      times, the method and the path; never a host, a query, a key or a variable's value.
    - `install(config)` returns `dataclasses.replace(config, before_request=...,
-     observe=...)`. A policy given no `pause_cap` takes `config.retry.backoff_max` at its
-     first install, the bound the retry loop uses for a `Retry-After`; uninstalled, it
-     is 30 s. `snapshot()` reads, `reset()` forgets.
+     observe=...)`. The installed `before_request` is bound to that config's cap: the
+     policy's `pause_cap` when it was given one, else `config.retry.backoff_max`, the
+     bound the retry loop uses for a `Retry-After`; nothing is written back into the
+     policy, so one policy on two configs pauses each within its own bound, and a
+     client from `derive` keeps its parent's hooks and cap. A config that already has a
+     `before_request` or `observe` hook that is not this policy's is refused with
+     `ValueError`, never silently overwritten; installing the same policy again is
+     allowed. Called directly, `before_request` caps at `pause_cap`, or 30 s.
+     `snapshot()` reads, `reset()` forgets.
    - The snapshot belongs to the policy instance: clients that draw on one quota, one
      key say, share one policy. ADR-0010 left open whether the snapshot is kept per key
      or per source; the package decides by where it installs the instance.

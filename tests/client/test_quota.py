@@ -431,23 +431,88 @@ def test_install_sets_both_hooks_on_a_copy() -> None:
     config = make_config(retry=RetryPolicy(backoff_max=12.0))
     policy = QuotaPolicy()
     installed = policy.install(config)
-    assert installed.before_request == policy.before_request
+    assert installed.before_request is not None
     assert installed.observe == policy.observe
     assert dataclasses.replace(installed, before_request=None, observe=None) == config
     assert config.before_request is None
     assert config.observe is None
+    assert policy.pause_cap is None, "the cap is bound to the config, not written back"
 
 
-def test_the_cap_defaults_to_the_config_s_backoff_max_at_install() -> None:
-    assert QuotaPolicy().pause_cap is None
+def test_installing_the_same_policy_again_is_allowed() -> None:
     policy = QuotaPolicy()
-    policy.install(make_config(retry=RetryPolicy(backoff_max=12.0)))
-    assert policy.pause_cap == 12.0
-    policy.install(make_config(retry=RetryPolicy(backoff_max=99.0)))
-    assert policy.pause_cap == 12.0, "fixed at the first install"
-    explicit = QuotaPolicy(pause_cap=5.0)
-    explicit.install(make_config(retry=RetryPolicy(backoff_max=12.0)))
-    assert explicit.pause_cap == 5.0
+    once = policy.install(make_config())
+    assert policy.install(once) == once
+    by_hand = make_config(before_request=policy.before_request, observe=policy.observe)
+    assert policy.install(by_hand).observe == policy.observe
+
+
+@pytest.mark.parametrize(
+    ("hooks", "named"),
+    [
+        ({"observe": lambda response: None}, "(observe)"),
+        ({"before_request": lambda request: None}, "(before_request)"),
+        (
+            {"before_request": lambda request: None, "observe": lambda response: None},
+            "(before_request, observe)",
+        ),
+    ],
+)
+def test_install_refuses_a_config_with_hooks_of_its_own(
+    hooks: dict[str, object], named: str
+) -> None:
+    with pytest.raises(ValueError, match=re.escape(f"hooks of its own {named}")):
+        QuotaPolicy().install(make_config(**hooks))
+
+
+def test_another_policy_s_hooks_are_foreign_too() -> None:
+    installed = QuotaPolicy().install(make_config())
+    with pytest.raises(ValueError, match="hooks of its own"):
+        QuotaPolicy().install(installed)
+
+
+async def pause(config: ClientConfig) -> None:
+    """Run the installed ``before_request`` hook as the client would."""
+    assert config.before_request is not None
+    outcome = config.before_request(httpx.Request("GET", f"{BASE}/v1/x"))
+    assert outcome is not None
+    await outcome
+
+
+@pytest.mark.anyio
+@pytest.mark.rate_limited
+async def test_each_installed_config_pauses_within_its_own_backoff_max() -> None:
+    events: list[str] = []
+    clock = Clock()
+    policy = QuotaPolicy(window=20.0, clock=clock, sleep=Sleeper(events))
+    policy.observe(answer(headers=SPENT))
+    short = policy.install(make_config(retry=RetryPolicy(backoff_max=12.0)))
+    patient = policy.install(make_config(retry=RetryPolicy(backoff_max=60.0)))
+    with pytest.raises(RateLimitError, match=r"\(12 s\)"):
+        await pause(short)
+    await pause(patient)
+    assert events == ["sleep 20"]
+    explicit = QuotaPolicy(window=20.0, pause_cap=5.0, clock=clock)
+    explicit.observe(answer(headers=SPENT))
+    with pytest.raises(RateLimitError, match=r"\(5 s\)"):
+        await pause(explicit.install(make_config(retry=RetryPolicy(backoff_max=60.0))))
+
+
+@pytest.mark.anyio
+@pytest.mark.rate_limited
+async def test_a_derived_client_keeps_its_parent_s_cap() -> None:
+    events: list[str] = []
+    clock = Clock()
+    policy = QuotaPolicy(window=20.0, clock=clock, sleep=Sleeper(events, clock))
+    upstream = Upstream(events, answer(headers=SPENT))
+    config = policy.install(make_config(retry=RetryPolicy(max_attempts=1, backoff_max=12.0)))
+    client = AsyncClient(config, transport=upstream)
+    await client.get("/v1/x")
+    derived = client.derive(retry=RetryPolicy(max_attempts=1, backoff_max=600.0))
+    assert derived.config.before_request == config.before_request
+    with pytest.raises(RateLimitError, match=r"\(12 s\)"):
+        await derived.get("/v1/x")
+    assert upstream.sent == 1
 
 
 # -- the pause, through the client --------------------------------------------------------
