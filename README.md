@@ -16,6 +16,9 @@ It gives a source package the things that should be identical across the family:
   the same `limiter` share one pace. A body goes as JSON (`json=`) or form-encoded
   (`data=`); `AsyncClient.derive` gives a client with another retry policy or other
   timeouts that shares auth, pace, cache and transport, and never closes the transport.
+  Two hooks, `before_request` and `observe`, see each call and each response;
+  `QuotaPolicy` uses them to wait out or refuse a request into a spent quota.
+  `auth=None` sends one call without the client's key.
 - **Auth helpers** that read the key from the environment on the first request:
   query parameter, header, bearer token or basic auth. A source's documented error
   shapes go into `ClientConfig.classify`, consulted on every response.
@@ -127,6 +130,48 @@ except RateLimitError as exc:
 
 A message names the method and path of the request, never its host or query string:
 the host can name a tenant and the query can carry a key.
+
+## Quotas, hooks and keyless calls
+
+An upstream that reports a longer-window quota in its headers (api.data.gov:
+`x-ratelimit-limit`, `x-ratelimit-remaining`) gets a `QuotaPolicy`, installed on the
+client's configuration:
+
+```python
+from xippios.core import AsyncClient, ClientConfig, HeaderKeyAuth
+from xippios.core.client import QuotaPolicy
+
+quota = QuotaPolicy(window=3600.0, source="example")  # spent for an hour unless told otherwise
+config = quota.install(
+    ClientConfig(source="example", version="0.1.0", base_url="https://api.example.org")
+)
+client = AsyncClient(config, auth=HeaderKeyAuth("X-Api-Key", "EXAMPLE_API_KEY"))
+
+quota.snapshot()  # QuotaSnapshot(limit=1000, remaining=994, observed_at=..., resumes_at=None)
+
+
+async def list_countries_async() -> object:
+    return await client.get_json("/files/countries.json", auth=None)  # public: no key sent
+```
+
+The policy reads the quota headers of every response from the wire through
+`ClientConfig.observe`. Once a 429, or a response that leaves nothing, shows the quota
+spent, `ClientConfig.before_request` makes the next request wait until it is back if
+that is within `RetryPolicy.backoff_max` (30 s by default), with one warning in the log,
+and otherwise raises `RateLimitError` with `retry_after`, saying that nothing was sent.
+A request the cache answers never waits: `before_request` runs after the cache lookup,
+and a cache hit carries the time its entry was stored in
+`response.extensions["xippios_cache_stored_at"]`, the hit's `retrieved_at`. The hooks
+are plain callables on `ClientConfig` (`before_request` may be async) for anything else
+that has to see each call or each response.
+
+`ClientConfig.classify` is asked before a 429 or 5xx is retried: a `RateLimitError`
+with a `retry_after` beyond `backoff_max` is raised after one attempt instead of being
+retried into a spent quota, and any other error it returns ends the retries.
+
+`auth=` on `request`, `get`, `get_json` and `record` overrides the client's credentials
+for one call: `None` sends none, for a keyless endpoint on the same host, and another
+`httpx.Auth` replaces them. The cache key leaves `auth` out.
 
 ## Multi-tenant sources
 
@@ -348,7 +393,7 @@ refused unless `Scrub(allow_binary=True)` stores it base64, flagged.
 
 | Module | What | Status |
 | --- | --- | --- |
-| `xippios.core.client` | httpx client, retries, rate limit, cache, sync facade | alpha |
+| `xippios.core.client` | httpx client, retries, rate limit, cache, quota policy, request hooks, sync facade | alpha |
 | `xippios.core.errors` | taxonomy and response classification | alpha |
 | `xippios.core.models` | `UpstreamModel`, `Result`, `ResultMeta`, `parse` | alpha |
 | `xippios.core.config` | `SourceSettings`, `resolve_api_key` | alpha |

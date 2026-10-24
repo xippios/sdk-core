@@ -301,6 +301,10 @@ All notable changes to this project are documented here. The format follows
   hourly quota, was retried three more times into the spent quota before `classify`
   could say "one hour" (sdk-usda-psd). A source whose `classify` maps a 5xx or 429 to
   an error it still wants retried returns `None` for it, or a `RateLimitError`.
+- Conventions 1.10: §4 names `xippios_cache_stored_at` as the `retrieved_at` of a cache
+  hit; §6 states the `before_request` and `observe` hooks, `QuotaPolicy` as the
+  implementation of ADR-0010's quota rules, `classify`'s part in retries, and `auth=`
+  per request. ADR-0015 added.
 
 ### Fixed
 
