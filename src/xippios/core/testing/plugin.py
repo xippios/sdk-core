@@ -318,9 +318,9 @@ def _skip_quota_pauses(
       test a spent quota is function-scoped.
     - The pause is turned off by replacing ``QuotaPolicy._pause``, which
       ``before_request`` and the hook ``install`` sets both call. A subclass that
-      overrides ``before_request`` opts out wherever its override runs, called directly
-      or set as the hook by hand; the hook ``install`` sets calls the pause, never the
-      override.
+      overrides ``before_request`` opts out for any wait or refusal of its own, wherever
+      its override runs, called directly or set as the hook by hand; the hook
+      ``install`` sets calls the pause, never the override.
     """
     if _marked(request, "live"):
         yield

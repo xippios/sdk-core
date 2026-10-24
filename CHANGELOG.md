@@ -358,7 +358,7 @@ All notable changes to this project are documented here. The format follows
   sending; a policy spent while a fixture of wider scope is set up is forgotten in the
   setup of the first test not marked `live` from then on, before its body; and a
   `QuotaPolicy` subclass that overrides `before_request` opts out of the neutralisation
-  wherever its override runs.
+  for any wait or refusal of its own.
 
 ### Fixed
 
