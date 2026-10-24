@@ -52,10 +52,11 @@ client.
      that came from the wire, each retried attempt included and a cache hit never,
      before `classify` and before the retry decision, whether or not the caller asked
      for the raw response. An exception it raises propagates: it is a programming error.
-2. **A quota policy on those hooks.** `xippios.core.client.QuotaPolicy(*,
+2. **A quota policy on those hooks.** `QuotaPolicy(*,
    limit_header="x-ratelimit-limit", remaining_header="x-ratelimit-remaining",
    reset_header=None, window=3600.0, spent=None, pause_cap=None, source=None,
-   clock=..., sleep=asyncio.sleep)` implements ADR-0010's decisions 3 to 5:
+   clock=..., sleep=asyncio.sleep)` and `QuotaSnapshot`, exported from `xippios.core`
+   and `xippios.core.client`, implement ADR-0010's decisions 3 to 5:
    - `observe(response)` keeps a `QuotaSnapshot(limit, remaining, observed_at,
      resumes_at)`, frozen and replaced under a lock. A response with neither quota header
      leaves it alone; a missing limit keeps the last one; a count that is not ASCII
@@ -154,8 +155,9 @@ client.
   them apart with `cache_filter`; one that sends another identity's credentials passes
   that `httpx.Auth` and never shares an entry.
 - `UseClientDefault`, the type of `httpx.USE_CLIENT_DEFAULT`, is private to httpx
-  (`httpx._client`); core imports it in one place, `client/_core.py`. An httpx release
-  that moves it breaks that import, which mypy and the tests catch.
+  (`httpx._client`); core imports it in one place, `client/_core.py`, and re-exports it
+  from `xippios.core.client` for sources whose wrappers pass `auth=` through. An httpx
+  release that moves it breaks that import, which mypy and the tests catch.
 - The two hooks are general: a source can observe other headers or refuse other
   requests before they are sent, with the same placement guarantees, without
   subclassing `AsyncClient`.

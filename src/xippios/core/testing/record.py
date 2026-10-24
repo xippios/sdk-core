@@ -13,8 +13,7 @@ from typing import Any
 import httpx
 
 from xippios.core._loop import sync
-from xippios.core.client import AsyncClient, Params, RetryPolicy, Timeouts
-from xippios.core.client._core import UseClientDefault
+from xippios.core.client import AsyncClient, Params, RetryPolicy, Timeouts, UseClientDefault
 from xippios.core.testing.fixtures import Fixture, write_fixture
 from xippios.core.testing.scrub import Scrub
 

@@ -14,7 +14,8 @@ import httpx
 
 # httpx exports the sentinel USE_CLIENT_DEFAULT but not its class, which the annotation
 # of ``auth=`` needs; the class lives in httpx's private ``_client`` module (httpx 0.28).
-# Aliased here once; the rest of core imports it from this module.
+# Imported here once and re-exported from xippios.core.client, for sources whose
+# wrappers pass ``auth=`` through.
 from httpx._client import UseClientDefault
 
 from xippios.core.client.cache import CachedResponse, cache_key, strip_wire_headers

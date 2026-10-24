@@ -48,6 +48,7 @@ __all__ = [
     "RetryPolicy",
     "Timeouts",
     "TokenBucket",
+    "UseClientDefault",
     "cache_key",
     "decode_json",
     "send_with_retries",

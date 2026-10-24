@@ -160,14 +160,15 @@ All notable changes to this project are documented here. The format follows
   sdk-usda-psd had to subclass `AsyncClient` and override `request` to pause before a
   request, and called its quota observer from `classify`, which a raw response skips.
 - `auth=` per request for `AsyncClient.request`, `get` and `get_json`, `Client.request`,
-  `get` and `get_json`, and `record`/`record_sync`, typed as httpx types it (`httpx.Auth
-  | UseClientDefault | None`, default `httpx.USE_CLIENT_DEFAULT`): `None` sends the
-  request, every retry included, without the client's credentials, an `httpx.Auth`
-  replaces them for that call, the default sends the client's. `None` and the default
-  share the cache; a call with an `httpx.Auth` of its own bypasses it, neither looked up
-  nor stored, since another identity may get another answer. sdk-comtrade fetches its
-  public reference files from the same host as its keyed data API and needed a second
-  client to keep the key off them.
+  `get` and `get_json`, and `record`/`record_sync`, typed as httpx types it:
+  `httpx.Auth | UseClientDefault | None`, default `httpx.USE_CLIENT_DEFAULT`
+  (`UseClientDefault`, private in httpx, is re-exported from `xippios.core.client`).
+  `None` sends the request, every retry included, without the client's credentials, an
+  `httpx.Auth` replaces them for that call, the default sends the client's. `None` and
+  the default share the cache; a call with an `httpx.Auth` of its own bypasses it,
+  neither looked up nor stored, since another identity may get another answer.
+  sdk-comtrade fetches its public reference files from the same host as its keyed data
+  API and needed a second client to keep the key off them.
 - `response.extensions["xippios_cache_stored_at"]` on a cache hit, next to
   `"xippios_cache": "hit"`: the entry's `stored_at`, in epoch seconds. On a hit a task
   sets `retrieved_at` from it, since the data was fetched then, not now (conventions
@@ -176,8 +177,9 @@ All notable changes to this project are documented here. The format follows
   decoding of `get_json`, with its `ValidationError` for a body that is not JSON, for a
   wrapper that calls `get` because it needs the response too, e.g. a cache hit's
   `xippios_cache_stored_at` (conventions §6). `get_json` calls it.
-- `xippios.core.client.QuotaPolicy` and `QuotaSnapshot`, ADR-0010's quota rules on the
-  two hooks (ADR-0015). `QuotaPolicy(*, limit_header="x-ratelimit-limit",
+- `QuotaPolicy` and `QuotaSnapshot`, exported from `xippios.core` and
+  `xippios.core.client`: ADR-0010's quota rules on the two hooks (ADR-0015).
+  `QuotaPolicy(*, limit_header="x-ratelimit-limit",
   remaining_header="x-ratelimit-remaining", reset_header=None, window=3600.0,
   spent=None, pause_cap=None, source=None, clock=..., sleep=asyncio.sleep)`:
   `observe(response)` keeps a thread-safe `QuotaSnapshot(limit, remaining, observed_at,

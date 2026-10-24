@@ -138,8 +138,7 @@ An upstream that reports a longer-window quota in its headers (api.data.gov:
 client's configuration:
 
 ```python
-from xippios.core import AsyncClient, ClientConfig, HeaderKeyAuth
-from xippios.core.client import QuotaPolicy
+from xippios.core import AsyncClient, ClientConfig, HeaderKeyAuth, QuotaPolicy
 
 quota = QuotaPolicy(window=3600.0, source="example")  # spent for an hour unless told otherwise
 config = quota.install(
