@@ -7,6 +7,7 @@ on a fictitious upstream. Headers and statuses follow api.data.gov's documented 
 
 import dataclasses
 import logging
+import re
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -293,6 +294,120 @@ def test_describe_names_numbers_and_times_only() -> None:
     )
     assert HIDDEN_KEY not in text
     assert "api.example.test" not in text
+
+
+# -- spent and mark_spent -----------------------------------------------------------------
+
+_REPLENISHED = re.compile(r"replenished in (\d+):(\d{2}):(\d{2})")
+
+
+def comtrade_spent(response: httpx.Response) -> float | None:
+    """sdk-comtrade's daily quota: a 403 whose body names the time left (APIM's text)."""
+    match = _REPLENISHED.search(response.text) if response.status_code == 403 else None
+    if match is None:
+        return None
+    hours, minutes, seconds = (int(part) for part in match.groups())
+    return float(hours * 3600 + minutes * 60 + seconds)
+
+
+def quota_403(left: str) -> httpx.Response:
+    request = httpx.Request("GET", f"{BASE}/data/v1/get")
+    text = f"Out of call volume quota. Quota will be replenished in {left}."
+    return httpx.Response(403, text=text, request=request)
+
+
+def test_spent_marks_a_documented_refusal_as_a_spent_quota() -> None:
+    policy = QuotaPolicy(spent=comtrade_spent, window=86_400.0, clock=Clock())
+    policy.observe(quota_403("05:04:03"))
+    assert policy.snapshot() == QuotaSnapshot(
+        limit=None,
+        remaining=0,
+        observed_at=NOW,
+        resumes_at=NOW + timedelta(hours=5, minutes=4, seconds=3),
+    )
+
+
+def test_spent_is_asked_about_every_observed_response() -> None:
+    seen: list[int] = []
+
+    def spent(response: httpx.Response) -> float | None:
+        seen.append(response.status_code)
+        return None
+
+    policy = QuotaPolicy(spent=spent, clock=Clock())
+    policy.observe(answer(headers=QUOTA))
+    policy.observe(answer(403))
+    hit = answer(headers=QUOTA)
+    hit.extensions["xippios_cache"] = "hit"
+    policy.observe(hit)
+    assert seen == [200, 403]  # a cache hit is not observed at all
+    snapshot = policy.snapshot()
+    assert snapshot is not None
+    assert (snapshot.remaining, snapshot.resumes_at) == (999, None), "None tells nothing"
+
+
+def test_spent_wins_over_the_headers_and_is_cut_to_the_window() -> None:
+    policy = QuotaPolicy(spent=lambda response: 90_000.0, window=3600.0, clock=Clock())
+    policy.observe(answer(429, {**QUOTA, "Retry-After": "60"}))
+    snapshot = policy.snapshot()
+    assert snapshot is not None
+    assert (snapshot.limit, snapshot.remaining) == (1000, 0)
+    assert snapshot.resumes_at == NOW + timedelta(hours=1)
+
+
+def test_spent_returning_nan_is_a_programming_error() -> None:
+    policy = QuotaPolicy(spent=lambda response: float("nan"), clock=Clock())
+    with pytest.raises(ValueError, match="not NaN"):
+        policy.observe(answer())
+
+
+@pytest.mark.anyio
+@pytest.mark.rate_limited
+async def test_after_a_documented_refusal_the_next_request_is_not_sent() -> None:
+    # ADR-0010 decision 4 for a source whose spent limit is not a 429 (sdk-comtrade).
+    events: list[str] = []
+    policy = QuotaPolicy(spent=comtrade_spent, window=86_400.0, clock=Clock(), source="example")
+    upstream = Upstream(events, quota_403("20:00:00"))
+    client = AsyncClient(policy.install(make_config()), transport=upstream)
+    response = await client.request("GET", "/data/v1/get", raise_on_error=False)
+    assert response.status_code == 403
+    with pytest.raises(RateLimitError, match="nothing was sent for GET /data/v1/get") as info:
+        await client.get("/data/v1/get")
+    assert info.value.retry_after == 72_000.0
+    assert upstream.sent == 1
+
+
+def test_mark_spent_keeps_the_limit_and_cuts_the_wait() -> None:
+    clock = Clock()
+    policy = QuotaPolicy(window=3600.0, clock=clock)
+    policy.mark_spent(120.0)
+    assert policy.snapshot() == QuotaSnapshot(
+        limit=None, remaining=0, observed_at=NOW, resumes_at=NOW + timedelta(minutes=2)
+    )
+    policy.observe(answer(headers=QUOTA))
+    clock.now += timedelta(minutes=1)
+    policy.mark_spent(10**12)
+    snapshot = policy.snapshot()
+    assert snapshot is not None
+    assert (snapshot.limit, snapshot.remaining) == (1000, 0)
+    assert snapshot.resumes_at == clock.now + timedelta(hours=1)
+    policy.mark_spent(-5.0)
+    snapshot = policy.snapshot()
+    assert snapshot is not None
+    assert snapshot.resumes_at == clock.now
+    with pytest.raises(ValueError, match="not NaN"):
+        policy.mark_spent(float("nan"))
+
+
+@pytest.mark.anyio
+@pytest.mark.rate_limited
+async def test_mark_spent_pauses_the_next_request() -> None:
+    events: list[str] = []
+    clock = Clock()
+    policy = QuotaPolicy(clock=clock, sleep=Sleeper(events, clock))
+    policy.mark_spent(12.0)
+    await policy.before_request(httpx.Request("GET", f"{BASE}/v1/x"))
+    assert events == ["sleep 12"]
 
 
 @pytest.mark.parametrize(

@@ -17,6 +17,7 @@ one policy. A cache hit never waits and never updates the snapshot.
 import asyncio
 import dataclasses
 import logging
+import math
 import threading
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -110,8 +111,11 @@ class QuotaPolicy:
     ``RateLimitError`` with ``retry_after`` and sends nothing, so a sync call or an MCP
     tool never blocks for an hour. A request the cache answers never reaches it.
 
-    The source's ``classify`` still maps the upstream's refusal (ADR-0010) and can read
-    ``snapshot()`` for its message: ``observe`` runs before it.
+    A 429 marks the quota spent by itself. A source whose upstream answers a spent
+    limit otherwise, UN Comtrade's 403 "Quota will be replenished in HH:MM:SS" for one,
+    passes ``spent``, which reads that answer; code that learns of a spent quota some
+    other way calls ``mark_spent``. The source's ``classify`` still maps the refusal
+    (ADR-0010) and can read ``snapshot()`` for its message: ``observe`` runs before it.
 
     Args:
         limit_header: The header with the quota's size, e.g. ``"x-ratelimit-limit"``.
@@ -126,6 +130,12 @@ class QuotaPolicy:
             429) nor ``reset_header`` names a time, e.g. ``3600.0`` for a rolling hour;
             also the longest wait a header can set: a longer one is cut to ``window``,
             so no refusal outlives one window. At most ten years.
+        spent: Called by ``observe`` with every response it observes, after the quota
+            headers are read: a number of seconds marks the quota spent for that long
+            (cut to ``window``, and ahead of ``Retry-After`` and the reset header);
+            ``None`` says the response does not tell. E.g. a function that reads
+            "replenished in 01:02:03" from a 403's body and returns ``3723.0``. An
+            exception it raises propagates, as one from any ``observe`` hook does.
         pause_cap: The longest wait inside a call, in seconds, e.g. ``30.0``. ``None``
             takes ``config.retry.backoff_max`` at the first ``install``, the bound the
             retry loop uses for a ``Retry-After``; uninstalled, it is 30 s.
@@ -139,6 +149,7 @@ class QuotaPolicy:
         remaining_header: As given.
         reset_header: As given.
         window: As given.
+        spent: As given.
         pause_cap: As given, or the installed config's ``retry.backoff_max``.
         source: As given.
 
@@ -154,6 +165,7 @@ class QuotaPolicy:
         remaining_header: str = "x-ratelimit-remaining",
         reset_header: str | None = None,
         window: float = 3600.0,
+        spent: Callable[[httpx.Response], float | None] | None = None,
         pause_cap: float | None = None,
         source: str | None = None,
         clock: Callable[[], datetime] = _utc_now,
@@ -167,6 +179,7 @@ class QuotaPolicy:
         self.remaining_header = remaining_header
         self.reset_header = reset_header
         self.window = window
+        self.spent = spent
         self.pause_cap = pause_cap
         self.source = source
         self._clock = clock
@@ -187,9 +200,10 @@ class QuotaPolicy:
     def observe(self, response: httpx.Response) -> None:
         """Update the snapshot from ``response``'s quota headers and status.
 
-        A response with neither quota header leaves the snapshot alone, except a 429,
-        which marks the quota spent. A cache hit is ignored: its headers are as old as
-        the entry (ADR-0010). The ``ClientConfig.observe`` hook.
+        A response with neither quota header leaves the snapshot alone, unless it is a
+        429 or ``spent`` returns a number for it, either of which marks the quota spent.
+        A cache hit is ignored: its headers are as old as the entry (ADR-0010). The
+        ``ClientConfig.observe`` hook.
 
         Args:
             response: A response from the wire, any status.
@@ -199,19 +213,42 @@ class QuotaPolicy:
         limit = _count(response.headers.get(self.limit_header))
         remaining = _count(response.headers.get(self.remaining_header))
         limited = response.status_code == 429
-        if limit is None and remaining is None and not limited:
+        named = self.spent(response) if self.spent is not None else None
+        if limit is None and remaining is None and not limited and named is None:
             return
         now = self._clock()
-        if limited:
+        if limited or named is not None:
             remaining = 0
         resumes_at = None
         if remaining == 0:
-            resumes_at = now + timedelta(seconds=self._wait(response, now))
+            wait = self._cut(named) if named is not None else self._wait(response, now)
+            resumes_at = now + timedelta(seconds=wait)
         with self._lock:
             if limit is None and self._snapshot is not None:
                 limit = self._snapshot.limit
             self._snapshot = QuotaSnapshot(
                 limit=limit, remaining=remaining, observed_at=now, resumes_at=resumes_at
+            )
+
+    def mark_spent(self, retry_after: float) -> None:
+        """Mark the quota spent from now, for ``retry_after`` seconds cut to ``window``.
+
+        For a spent quota the policy cannot see in a response, e.g. one a task learns
+        from a payload it parses itself. The last limit is kept; ``remaining`` is ``0``.
+
+        Args:
+            retry_after: Seconds until the quota is expected back, e.g. ``3600.0``; a
+                negative wait is ``0``.
+
+        Raises:
+            ValueError: ``retry_after`` is NaN.
+        """
+        now = self._clock()
+        resumes_at = now + timedelta(seconds=self._cut(retry_after))
+        with self._lock:
+            limit = self._snapshot.limit if self._snapshot is not None else None
+            self._snapshot = QuotaSnapshot(
+                limit=limit, remaining=0, observed_at=now, resumes_at=resumes_at
             )
 
     async def before_request(self, request: httpx.Request) -> None:
@@ -269,6 +306,12 @@ class QuotaPolicy:
             if self.pause_cap is None:
                 self.pause_cap = config.retry.backoff_max
         return dataclasses.replace(config, before_request=self.before_request, observe=self.observe)
+
+    def _cut(self, wait: float) -> float:
+        """``wait`` within ``[0, window]``: no refusal outlives one window, no date overflows."""
+        if math.isnan(wait):
+            raise ValueError("a wait is a number of seconds, not NaN")
+        return min(max(wait, 0.0), self.window)
 
     def _wait(self, response: httpx.Response, now: datetime) -> float:
         """Seconds until a spent quota is back: ``Retry-After``, the reset header, ``window``.

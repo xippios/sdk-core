@@ -54,14 +54,25 @@ client.
      for the raw response. An exception it raises propagates: it is a programming error.
 2. **A quota policy on those hooks.** `xippios.core.client.QuotaPolicy(*,
    limit_header="x-ratelimit-limit", remaining_header="x-ratelimit-remaining",
-   reset_header=None, window=3600.0, pause_cap=None, source=None, clock=...,
-   sleep=asyncio.sleep)` implements ADR-0010's decisions 3 to 5:
+   reset_header=None, window=3600.0, spent=None, pause_cap=None, source=None,
+   clock=..., sleep=asyncio.sleep)` implements ADR-0010's decisions 3 to 5:
    - `observe(response)` keeps a `QuotaSnapshot(limit, remaining, observed_at,
      resumes_at)`, frozen and replaced under a lock. A response with neither quota header
-     leaves it alone; a missing limit keeps the last one. A 429 marks the quota spent,
-     and so does a response that leaves nothing; `resumes_at` is then `Retry-After` (on
-     a 429), else the reset header, read like `Retry-After`, else `window` from now. A
-     cache hit is ignored.
+     leaves it alone; a missing limit keeps the last one; a count that is not ASCII
+     digits is ignored. A 429 marks the quota spent, and so does a response that leaves
+     nothing; `resumes_at` is then `Retry-After` (on a 429), else the reset header, else
+     `window` from now. The reset header is read as delay-seconds, as epoch seconds
+     when its integer exceeds ten years of seconds (GitHub's `x-ratelimit-reset`), or as
+     an HTTP-date. A cache hit is ignored.
+   - `spent(response) -> float | None`, optional, is asked about every observed
+     response after the headers are read: a number marks the quota spent for that many
+     seconds, ahead of `Retry-After` and the reset header, so an upstream that answers a
+     spent limit with something other than a 429 is covered too (UN Comtrade's 403,
+     "Quota will be replenished in HH:MM:SS"). `mark_spent(retry_after)` does the same
+     from code that learns of a spent quota elsewhere.
+   - Every wait that comes from upstream, through a header or `spent`, is cut to
+     `window`, which is at most ten years: no refusal outlives one window, and no
+     `resumes_at` overflows on a value no upstream means.
    - `before_request(request)` does nothing until the snapshot shows the quota spent and
      not yet back. Then it waits until `resumes_at` when that is within `pause_cap`,
      logging one warning naming the method and path, and otherwise raises
@@ -124,6 +135,11 @@ client.
   `RateLimitError` with `Retry-After` as before. Only a 429 or 5xx is retried at all: an
   answer of another status that `classify` maps to `RateLimitError`, UN Comtrade's 403
   for a spent daily quota, is still raised after one attempt, as ADR-0010 noted.
+- ADR-0010's decision 4, no request fired into a spent quota, now holds for every
+  source through the policy, whatever its answer to a spent limit: a 429 marks the
+  quota spent by itself, and any other answer through `spent`. usda-nass, comtrade and
+  cashctrl adopt decision 4 by installing a policy, as ADR-0010's adoption note
+  foresaw; comtrade passes a `spent` that reads its 403's "replenished in" time.
 - A GET cached with one auth answers the same GET with another, since the cache key
   leaves `auth` out. A source whose keyed and keyless answers differ for one URL keeps
   them apart with `cache_filter`.

@@ -177,21 +177,24 @@ All notable changes to this project are documented here. The format follows
 - `xippios.core.client.QuotaPolicy` and `QuotaSnapshot`, ADR-0010's quota rules on the
   two hooks (ADR-0015). `QuotaPolicy(*, limit_header="x-ratelimit-limit",
   remaining_header="x-ratelimit-remaining", reset_header=None, window=3600.0,
-  pause_cap=None, source=None, clock=..., sleep=asyncio.sleep)`: `observe(response)`
-  keeps a thread-safe `QuotaSnapshot(limit, remaining, observed_at, resumes_at)` from
-  the quota headers of every response from the wire, never from a cache hit; a 429, or
-  a response that leaves nothing, marks the quota spent until `Retry-After` (on a 429),
-  else the reset header (delay-seconds, epoch seconds as GitHub sends them, or an
-  HTTP-date), else `window` from now; a wait read from a header is cut to `window`, and
-  a count that is not ASCII digits is ignored. `before_request(request)`
-  waits a spent quota out when it is back within `pause_cap`, logging one warning with
-  the method and path, and otherwise raises `RateLimitError` with `retry_after`, saying
-  that nothing was sent and when the quota is expected back. `install(config)` returns
-  the config with both hooks set; a policy given no `pause_cap` takes
-  `config.retry.backoff_max` there. `snapshot()`, `reset()`; `QuotaSnapshot.describe()`
-  names numbers and times only. Generalises sdk-usda-psd's `Quota`, `observe_quota`,
-  `quota_pause` and
-  `QuotaAwareClient`, which sdk-usda-esr and sdk-usda-gats would otherwise copy.
+  spent=None, pause_cap=None, source=None, clock=..., sleep=asyncio.sleep)`:
+  `observe(response)` keeps a thread-safe `QuotaSnapshot(limit, remaining, observed_at,
+  resumes_at)` from the quota headers of every response from the wire, never from a
+  cache hit; a 429, or a response that leaves nothing, marks the quota spent until
+  `Retry-After` (on a 429), else the reset header (delay-seconds, epoch seconds as
+  GitHub sends them, or an HTTP-date), else `window` from now; a wait read from a header
+  is cut to `window`, and a count that is not ASCII digits is ignored. `spent=`, a
+  callable asked about every observed response, marks the quota spent for the seconds it
+  returns, for an upstream whose spent limit is not a 429 (sdk-comtrade's 403
+  "replenished in HH:MM:SS"); `mark_spent(retry_after)` does it from code.
+  `before_request(request)` waits a spent quota out when it is back within `pause_cap`,
+  logging one warning with the method and path, and otherwise raises `RateLimitError`
+  with `retry_after`, saying that nothing was sent and when the quota is expected back.
+  `install(config)` returns the config with both hooks set; a policy given no
+  `pause_cap` takes `config.retry.backoff_max` there. `snapshot()`, `reset()`;
+  `QuotaSnapshot.describe()` names numbers and times only. Generalises sdk-usda-psd's
+  `Quota`, `observe_quota`, `quota_pause` and `QuotaAwareClient`, which sdk-usda-esr and
+  sdk-usda-gats would otherwise copy.
 - `Tenants(..., hints=None)`: per field, static text appended to the `ConfigError` that
   `field()` raises when `validate` refuses a value ("...; <hint>"), so the operator
   learns what the variable should hold; the check's own message, which may quote the
