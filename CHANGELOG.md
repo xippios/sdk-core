@@ -398,23 +398,29 @@ All notable changes to this project are documented here. The format follows
   module docstring wraps at 100 columns, so a long `generator` no longer overflows, and
   reads "conventions, section 3"; a class docstring whose fetch date would pass 100
   columns puts the date in a paragraph of its own. The collision error names only the
-  colliding members. The result passes `ruff format --check` and `ruff check` under the
-  family's configuration. sdk-comtrade formatted the file after every refresh and sorted
-  its lists itself. A source that diffs its generated `enums.py` sees a one-time change
-  on its next refresh: the module docstring's first line, `__all__` sorted, one name per
-  line, long members wrapped, non-ASCII characters escaped (sdk-usda-nass's file changes
-  in its first line only).
+  colliding members, with their positions, and a member name an enum refuses is named
+  with its value and position. The result passes `ruff format --check` and `ruff check`
+  under the family's configuration. sdk-comtrade formatted the file after every refresh
+  and sorted its lists itself. A source that diffs its generated `enums.py` sees a
+  one-time change on its next refresh: the module docstring's first line, `__all__`
+  sorted, one name per line, long members wrapped, non-ASCII characters escaped
+  (sdk-usda-nass's file changes in its first line only).
 - **Breaking:** `render_str_enums` refuses with `ValueError` what it rendered into a
   file ruff rejects: a member name longer than 92 columns, which fits no line of 100
   (`NAME = (` alone, indented, is too long), naming the key, the position, the name's
-  length and the limit; and a key longer than the 75 characters its class docstring has
-  room for. A value with nothing to derive a member name from (an empty string, a Greek,
-  Cyrillic or CJK label) still raises `ValueError`, now naming the key and the position.
-  The new keyword `member_names` (key to `{value: member name}`) names such a member by
-  hand, once, in the source's refresh script, and is taken before any name is derived;
-  it also resolves a collision. A name set there must be an ASCII identifier an enum
-  takes as a member (no keyword, not `mro`, not starting with `__`, no `_sunder_` name),
-  unique in its list, and for a key and a value the lists hold, else `ValueError`.
+  length and the limit; a key longer than the 75 characters its class docstring has room
+  for; and caller text the module could not hold as printable ASCII: a `generator`,
+  `fetched` text or key that is not printable ASCII or holds a backslash or three double
+  quotes, which made a non-ASCII module that fails RUF002 (an en dash in `fetched`), and
+  a class name that is no ASCII identifier, is a keyword or is longer than 84
+  characters, each error naming the argument and the key's position, never the text. A
+  value with nothing to derive a member name from (an empty string, a Greek, Cyrillic or
+  CJK label) still raises `ValueError`, now naming the key and the position. The new
+  keyword `member_names` (key to `{value: member name}`) names such a member by hand,
+  once, in the source's refresh script, and is taken before any name is derived; it also
+  resolves a collision. A name set there must be an ASCII identifier an enum takes as a
+  member (no keyword, not `mro`, no `__` anywhere, no `_sunder_` name), unique in its
+  list, and for a key and a value the lists hold, else `ValueError`.
 - Conventions 1.12: §3 states that an upstream enum of integer ids becomes an `IntEnum`
   and that the generated enums module is ASCII-only and passes `ruff check` and
   `ruff format --check` as rendered. ADR-0008 gains an amendment.
