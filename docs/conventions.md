@@ -198,7 +198,8 @@ name tenants and variables, never a value.
   enforces it: a task without `confirm: bool = False` is refused before anything is
   registered (ADR-0014). A write server carries no authentication, so `--http` serves
   it on a loopback host only (`127.0.0.1`, `localhost`, `::1`) unless `--allow-remote`
-  is passed, with a gateway in front.
+  is passed, with a gateway in front. A write server exposes write tools only;
+  reference tools, the tenant list among them, stay on the read server.
 - Result cap: default 200 rows or 64 KB, whichever first. Over the cap, return the
   first page plus a note on how to narrow the query. Never truncate silently.
 - Reference lookups are tools too: `<source>_list_<thing>` (commodities, countries,

@@ -91,6 +91,9 @@ def assert_write_tools(
       task (matched by the route name and path ``router_from_tasks`` gives it), when
       given.
 
+    A write server exposes write tools only: reference tools, the tenant list of
+    ``xippios.core.tenants.list_task`` among them, stay on the read server.
+
     Works in sync and async tests alike: the tools are listed on core's background loop.
 
     Args:
