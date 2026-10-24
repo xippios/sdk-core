@@ -286,7 +286,10 @@ class QuotaPolicy:
         Called once per request, after the cache lookup. ``install`` sets a hook that
         does the same with the cap of the config it was installed on; called directly,
         the cap is ``pause_cap``, or 30 s when that is ``None``. Does nothing while the
-        snapshot shows requests left or the quota is expected back already.
+        snapshot shows requests left or the quota is expected back already. A subclass's
+        override of this method is not called through that hook, which runs the pause
+        step directly, and a wait or refusal of the override's own is not turned off by
+        the testing plugin (ADR-0015).
 
         Args:
             request: The request about to be sent; its method and path name it in the
@@ -309,7 +312,9 @@ class QuotaPolicy:
         ``config.retry.backoff_max``, so one policy installed on two configs pauses each
         within its own bound, and a client from ``AsyncClient.derive`` keeps its
         parent's hooks and cap. Installing the policy again on a config it is installed
-        on is allowed.
+        on is allowed. The hook calls the pause step directly, never ``before_request``,
+        so a subclass's override of ``before_request`` is not called through it, and the
+        testing plugin, which turns off the pause step, does not turn off the override.
 
         Args:
             config: The source's client configuration.
