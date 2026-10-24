@@ -17,6 +17,12 @@ Switzerland and the USA, and showed only the top of a classification tree. sdk-c
 worked around it in its own package: its three list tasks took a `search` filter, and
 their docstrings told agents to search.
 
+More rows alone would not have made the two lists whole. Computed from sdk-comtrade's
+packaged tables (fetched 2026-10-23), the compact JSON of the 255 reporters is about
+69 KB and of the 310 partners about 83 KB, both over the 64 KB byte cap: with their row
+caps raised and the byte cap at the default, the tools would show about 242 and 244
+rows.
+
 The note said "narrow the query, for example with more filters or a shorter date range,
 to see the rest". A reference list has neither a filter nor a date range unless its
 source adds one, so the note sent an agent looking for parameters the tool did not
@@ -48,28 +54,27 @@ commodity classification), and a tool that needs more rows need not be named `li
    a non-list result over the byte cap "result is {n} bytes, over the cap of
    {max_bytes}; narrow the query to see the rest". Neither names a filter or a date
    range the tool may lack.
-4. **Rows per tool, bytes global.** A per-tool cap raises `max_rows`. The 64 KB byte cap
-   stays the family's bound on what one tool result puts into an agent's context, for
-   every tool: `ResultCap` keeps its `max_bytes` field, and a source may set it, but
-   conventions §8 and the `caps` docstring say to leave it at the default. There is no
-   byte-cap exemption.
+4. **A per-tool cap sets rows and bytes.** A cap in `caps` sets `max_rows` and
+   `max_bytes` as the source judges the tool needs. A byte bound above the default 64 KB
+   is a deliberate choice for one tool, a reference list an agent needs whole, made in
+   that tool's entry; every tool without one keeps the family default, 200 rows or
+   64 KB. No tool goes uncapped: every result stays bounded, and every cut carries the
+   note.
 
 ## Consequences
 
-- sdk-comtrade sets caps for its list tasks, `caps={"list_reporters": ResultCap(...),
-  "list_partners": ResultCap(...)}` with `max_rows` at least the list's length, and may
-  drop its `search` filters or keep them as a convenience. The byte cap still applies:
-  computed from its packaged tables (fetched 2026-10-23), the compact JSON of the 255
-  reporters is about 69 KB and of the 310 partners about 83 KB, so under the default
-  byte cap the tools show about 242 and 244 rows, with the note. A classification of 8,262 codes stays
-  far over the byte cap whatever its row cap; `list_commodities` keeps `search`, and a
-  cap of its own whose note names it.
+- sdk-comtrade sets caps for `list_reporters` and `list_partners` with `max_rows` at
+  least the list's length and `max_bytes` about 100 KB, e.g.
+  `ResultCap(max_rows=400, max_bytes=100_000)`, so both lists, about 69 KB and 83 KB,
+  reach an agent whole; it may drop their `search` filters or keep them as a
+  convenience. The HS commodity list, about 2 MB, is not served whole:
+  `list_commodities` keeps `search` and a cap of its own whose note names it.
 - A tool that has filters sets a note naming them; one without keeps the default.
 - sdk-template's `mcp.py` passes `caps=` to `build_server` where a source has large
   reference lists, in a template PR after the core release that carries this ADR.
 - **Behaviour change**, pre-1.0 (conventions §12): the default note's wording changes.
   A test that asserts the old text ("more filters or a shorter date range") fails; none
   is known in the family.
-- Conventions 1.11: §8 states the default cap, the per-tool row cap for a reference tool
-  whose whole list an agent needs, and that the note never promises a filter the tool
-  lacks.
+- Conventions 1.11: §8 states the default cap, the per-tool cap, rows and bytes, for a
+  reference tool whose whole list an agent needs, and that the note never promises a
+  filter the tool lacks.

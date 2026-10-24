@@ -217,9 +217,10 @@ All notable changes to this project are documented here. The format follows
   a `ResultCap` that replaces `cap` for that tool; every other tool keeps `cap`. A key
   that names none of the tasks is refused with `ValueError`, naming it, before anything
   is registered. For a reference tool whose whole list an agent needs: a per-tool cap
-  raises the rows, and its byte bound stays at the default 64 KB, the family's bound for
-  every tool. The one cap of a server cut `comtrade_list_reporters` (255 rows) and
-  `comtrade_list_partners` (310) at 200 (sdk-comtrade).
+  sets `max_rows` and `max_bytes` as the source judges, a byte bound above the default
+  64 KB being a deliberate choice for that tool. The one cap of a server cut
+  `comtrade_list_reporters` (255 rows, about 69 KB) and `comtrade_list_partners` (310,
+  about 83 KB) at 200 (sdk-comtrade).
 - `ResultCap(note=...)`: the text after the counts when the cap cuts a result, used
   verbatim, in the note of a cut list and in that of a non-list result over the byte
   cap, e.g. `"filter by period or by reporter to see the rest"` for a tool with those
@@ -349,9 +350,9 @@ All notable changes to this project are documented here. The format follows
   with more filters or a shorter date range, to see the rest", which sent an agent
   looking for filters a reference list does not have (sdk-comtrade). A cap's `note`
   replaces the text after the counts.
-- Conventions 1.11: §8 states the per-tool row cap for a reference tool whose whole list
-  an agent needs, with the byte cap kept for every tool, and that the note never
-  promises a filter the tool lacks. ADR-0016 added.
+- Conventions 1.11: §8 states the per-tool cap, rows and bytes, for a reference tool
+  whose whole list an agent needs, with the default kept for every other tool, and that
+  the note never promises a filter the tool lacks. ADR-0016 added.
 - ADR-0013's edges, ADR-0015's consequences and the plugin's docstring name three more
   edges of the plugin's quota guarantee: consecutive live tests share every policy's
   snapshot, so a quota one spends makes the next wait or refuses its request without

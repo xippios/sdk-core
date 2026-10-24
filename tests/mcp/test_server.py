@@ -126,6 +126,27 @@ async def test_a_cap_of_its_own_replaces_the_server_cap_for_that_tool_only() -> 
     assert series["note"].startswith("showing 3 of 10 rows (cap: 3 rows or 65536 bytes); ")
 
 
+async def list_regions_async() -> Result[list[str]]:
+    """List the 300 regions with their long names, about 90 KB of JSON."""
+    regions = [f"R{i:03d} {'x' * 290}" for i in range(300)]
+    return Result[list[str]](data=regions, meta=ResultMeta(source="example", endpoint="regions"))
+
+
+list_regions = sync(list_regions_async)
+
+
+@pytest.mark.anyio
+async def test_a_tool_with_a_byte_bound_of_its_own_returns_what_the_default_would_cut() -> None:
+    default = await mcp_call(build_server("example", [list_regions]), "example_list_regions", {})
+    assert 0 < len(default["data"]) < 300  # the default 64 KB cuts it
+    assert default["note"].startswith(f"showing {len(default['data'])} of 300 rows ")
+    caps = {"list_regions": ResultCap(max_rows=400, max_bytes=200_000)}
+    server = build_server("example", [list_regions], caps=caps)
+    whole = await mcp_call(server, "example_list_regions", {})
+    assert len(whole["data"]) == 300
+    assert "note" not in whole
+
+
 @pytest.mark.anyio
 async def test_a_cap_for_a_name_that_is_no_task_is_refused() -> None:
     caps = {"example_list_areas": ResultCap(max_rows=400), "list_nothing": ResultCap()}

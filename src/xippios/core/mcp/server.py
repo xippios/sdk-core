@@ -325,11 +325,13 @@ def register_tasks(
         cap: Result cap of every tool without an entry in ``caps``; defaults to 200 rows
             or 64 KB.
         caps: A tool's own result cap, replacing ``cap`` for it, keyed by the task
-            function's ``__name__``, e.g. ``{"list_partners": ResultCap(max_rows=400)}``
-            for the tool ``comtrade_list_partners``: for a reference tool whose whole
-            list an agent needs (conventions §8, ADR-0016). A per-tool cap is for rows;
-            leave its ``max_bytes`` at the default, the family's global 64 KB bound. Its
-            ``note`` says how to see the rest when the cap still cuts.
+            function's ``__name__``, e.g. ``{"list_partners": ResultCap(max_rows=400,
+            max_bytes=100_000)}`` for the tool ``comtrade_list_partners``: for a
+            reference tool whose whole list an agent needs (conventions §8, ADR-0016).
+            It sets ``max_rows`` and ``max_bytes`` as the source judges; a byte bound
+            above the default 64 KB is a deliberate choice for that tool, so that an
+            agent gets the list whole. Its ``note`` says how to see the rest when the
+            cap still cuts.
         read_only: Mark the tools read-only. Write tools belong in a separate server.
         tenant_lock: Lock the whole server to one tenant, e.g.
             ``TenantLock("org", "acme")``; installed once per server, the same lock
@@ -414,8 +416,8 @@ def build_server(
         instructions: Server-level guidance for agents, e.g. which tool to call first.
         cap: Result cap of every tool without an entry in ``caps``.
         caps: A tool's own result cap, keyed by the task function's ``__name__``, e.g.
-            ``{"list_partners": ResultCap(max_rows=400)}``; rows only, the byte bound
-            stays at the default (see ``register_tasks``).
+            ``{"list_partners": ResultCap(max_rows=400, max_bytes=100_000)}`` for a
+            reference list an agent needs whole (see ``register_tasks``).
         read_only: Whether the tools are read-only; ``False`` for a write server, whose
             every task takes ``confirm: bool = False`` (see ``register_tasks``).
         tenant_lock: Lock the server to one tenant, e.g. ``TenantLock("org", "acme")``

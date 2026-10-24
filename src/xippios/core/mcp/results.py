@@ -18,9 +18,9 @@ class ResultCap:
     """Limits for one tool result, and what to tell the agent when they cut it (conventions §8).
 
     The defaults are the family's: 200 rows or 64 KB. A reference tool whose whole list
-    an agent needs gets a cap of its own with more rows, through ``caps=`` of
-    ``register_tasks`` or ``build_server`` (ADR-0016); its byte bound stays at the
-    default, the family's global one.
+    an agent needs gets a cap of its own, through ``caps=`` of ``register_tasks`` or
+    ``build_server`` (ADR-0016), with the rows and bytes the source judges it needs; a
+    byte bound above the default is a deliberate choice for that tool.
 
     Attributes:
         max_rows: Most items of a list result that are returned.
