@@ -480,7 +480,8 @@ async def test_mark_spent_pauses_the_next_request() -> None:
         ({"window": -1.0}, "window must be between 0 and ten years"),
         ({"window": 315_360_001.0}, "window must be between 0 and ten years"),
         ({"window": float("nan")}, "window must be between 0 and ten years"),
-        ({"pause_cap": -1.0}, "pause_cap must be non-negative"),
+        ({"pause_cap": -1.0}, "pause_cap must be non-negative, not NaN"),
+        ({"pause_cap": float("nan")}, "pause_cap must be non-negative, not NaN"),
     ],
 )
 def test_impossible_waits_are_refused(arguments: dict[str, float], match: str) -> None:

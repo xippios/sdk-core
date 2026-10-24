@@ -181,8 +181,8 @@ class QuotaPolicy:
         source: As given.
 
     Raises:
-        ValueError: A ``window`` that is negative or longer than ten years, or a
-            negative ``pause_cap``.
+        ValueError: A ``window`` that is negative, NaN or longer than ten years, or a
+            ``pause_cap`` that is negative or NaN.
     """
 
     def __init__(
@@ -200,8 +200,8 @@ class QuotaPolicy:
     ) -> None:
         if not 0 <= window <= _TEN_YEARS:
             raise ValueError("window must be between 0 and ten years (315360000 s)")
-        if pause_cap is not None and pause_cap < 0:
-            raise ValueError("pause_cap must be non-negative")
+        if pause_cap is not None and not pause_cap >= 0:  # NaN fails it too
+            raise ValueError("pause_cap must be non-negative, not NaN")
         self.limit_header = limit_header
         self.remaining_header = remaining_header
         self.reset_header = reset_header
