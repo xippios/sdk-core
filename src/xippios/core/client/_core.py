@@ -2,6 +2,7 @@
 
 import asyncio
 import dataclasses
+import inspect
 import threading
 import time
 import weakref
@@ -153,10 +154,12 @@ class AsyncClient:
         """Send one request and return the response.
 
         Retries, rate limiting and caching (GET only, narrowed by
-        ``ClientConfig.cache_filter``) apply as configured. The source's
-        ``classify`` hook, if any, sees the response first; otherwise a 4xx/5xx that
-        survives the retry policy is raised as the matching error from the taxonomy; a
-        transport failure as ``TransportError``.
+        ``ClientConfig.cache_filter``) apply as configured. A cache hit returns at once;
+        otherwise ``ClientConfig.before_request`` runs once, before the rate limiter, and
+        ``ClientConfig.observe`` sees every response from the wire, retried attempts
+        included. The source's ``classify`` hook, if any, sees the response first;
+        otherwise a 4xx/5xx that survives the retry policy is raised as the matching
+        error from the taxonomy; a transport failure as ``TransportError``.
 
         Args:
             method: HTTP method.
@@ -183,6 +186,16 @@ class AsyncClient:
             cached = self.config.cache.get(key)
             if cached is not None:
                 return _from_cache(cached, probe)
+        before_request = self.config.before_request
+        if before_request is not None:
+            # Built as each attempt is, before auth applies; a change to it is not sent.
+            built = pool.build_request(
+                method, path, params=params, json=json, data=data, headers=headers
+            )
+            outcome = before_request(built)
+            if inspect.isawaitable(outcome):
+                await outcome
+        observe = self.config.observe
 
         async def send() -> httpx.Response:
             if self._bucket is not None:
@@ -190,7 +203,10 @@ class AsyncClient:
             request = pool.build_request(
                 method, path, params=params, json=json, data=data, headers=headers
             )
-            return await pool.send(request)
+            response = await pool.send(request)
+            if observe is not None:
+                observe(response)
+            return response
 
         response = await send_with_retries(
             send, policy=self.config.retry, method=method, source=self.source, sleep=self._sleep

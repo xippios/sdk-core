@@ -150,6 +150,15 @@ All notable changes to this project are documented here. The format follows
 - `xippios.core.testing.mcp_call_text(server, name, arguments)`: the tool's text, through
   the same in-process client as `mcp_call`, so a test can assert a refusal or any other
   `error:` text.
+- `ClientConfig.before_request` and `ClientConfig.observe` (ADR-0015). `before_request`
+  is called once per `request()` call, not per retry, after the cache lookup (a cache
+  hit returns before it) and before the rate limiter, with the request as built and no
+  credentials on it yet; it may be sync or async, may wait, and may raise a taxonomy
+  error, in which case nothing is sent. `observe` is called with every response from
+  the wire, each retried attempt included and a cache hit never, before `classify` and
+  the retry decision, also with `raise_on_error=False`; an exception from it propagates.
+  sdk-usda-psd had to subclass `AsyncClient` and override `request` to pause before a
+  request, and called its quota observer from `classify`, which a raw response skips.
 
 ### Changed
 
