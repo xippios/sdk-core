@@ -351,18 +351,21 @@ All notable changes to this project are documented here. The format follows
   with more filters or a shorter date range, to see the rest", which sent an agent
   looking for filters a reference list does not have (sdk-comtrade). A cap's `note`
   replaces the text after the counts.
-- Conventions 1.11: §8 states the per-tool cap, rows and bytes, for a reference tool
-  whose whole list an agent needs, with the default kept for every other tool; that a
-  source keeps its caps as `MCP_CAPS` in its `tasks.py`, which its `mcp.py` passes as
+- Conventions 1.11: §8 states that the byte cap counts the UTF-8 bytes of the compact
+  JSON text, the per-tool cap, rows and bytes, for a reference tool whose whole list an
+  agent needs, with the default kept for every other tool; that a source keeps its caps
+  as `MCP_CAPS` in its `tasks.py`, which its `mcp.py` passes as
   `caps=getattr(tasks, "MCP_CAPS", None)`; and that the note never promises a filter
-  the tool lacks. ADR-0016 added.
-- ADR-0013's edges, ADR-0015's consequences and the plugin's docstring name three more
-  edges of the plugin's quota guarantee: consecutive live tests share every policy's
-  snapshot, so a quota one spends makes the next wait or refuses its request without
-  sending; a policy spent while a fixture of wider scope is set up is forgotten in the
-  setup of the first test not marked `live` from then on, before its body; and a
-  `QuotaPolicy` subclass that overrides `before_request` opts out of the neutralisation
-  for any wait or refusal of its own.
+  the tool lacks. §10 points to the edges of the quota guarantee. ADR-0016 added.
+- ADR-0013's edges, ADR-0015's consequences, the plugin's docstring and `QuotaPolicy`'s
+  `before_request` and `install` docstrings name three more edges of the plugin's quota
+  guarantee: consecutive live tests share every policy's snapshot, so a quota one
+  spends makes the next wait or refuses its request without sending; a policy spent
+  while a fixture of wider scope is set up is forgotten in the setup of the first test
+  not marked `live` from then on, before its body; and a `QuotaPolicy` subclass's
+  override of `before_request` is not called through the hook `install` sets, and a
+  wait or refusal of its own is not neutralised. ADR-0013 and ADR-0015 are marked as
+  amended by ADR-0016.
 
 ### Fixed
 
