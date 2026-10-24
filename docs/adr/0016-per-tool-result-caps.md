@@ -42,11 +42,11 @@ commodity classification), and a tool that needs more rows need not be named `li
    `build_server(..., caps=None)`, which passes it through. A key is the task function's
    `__name__` (`list_partners`; a sync facade's, with `_async` stripped), not the tool
    name with the source prefix (`comtrade_list_partners`): the name the source writes in
-   its `tasks.py`. A tool with an entry uses that cap in place of `cap`; every other
-   tool uses `cap`, 200 rows or 64 KB by default. A key that names none of the tasks
-   being registered is refused with `ValueError` naming it, before anything is
-   registered: a misspelt key would otherwise leave the tool on the default cap without
-   a word.
+   its `tasks.py`. A tool with an entry uses that cap in place of `cap`, a field the
+   entry leaves unset taking the family default, not `cap`'s; every other tool uses
+   `cap`, 200 rows or 64 KB by default. A key that names none of the tasks being
+   registered is refused with `ValueError` naming it, before anything is registered: a
+   misspelt key would otherwise leave the tool on the default cap without a word.
 2. **A cap carries its note.** `ResultCap(note: str | None = None)`: when set, the text
    after the counts, used verbatim, in the note of a cut list and in the note of a
    non-list result over the byte cap. A tool with filters names them in its own cap,
@@ -105,6 +105,8 @@ commodity classification), and a tool that needs more rows need not be named `li
   the setup of the first test not marked `live` from then on; and a subclass's override
   of `before_request` is not called through the hook `install` sets and is not
   neutralised by the plugin. ADR-0013's edges and ADR-0015's consequences state them.
-- Conventions 1.11: §8 states the default cap, the per-tool cap, rows and bytes, for a
-  reference tool whose whole list an agent needs, where a source keeps its caps
-  (`MCP_CAPS` in `tasks.py`), and that the note never promises a filter the tool lacks.
+- Conventions 1.11: §8 states the default cap and that its bytes are the UTF-8 bytes of
+  the compact JSON text, the per-tool cap, rows and bytes, for a reference tool whose
+  whole list an agent needs, where a source keeps its caps (`MCP_CAPS` in `tasks.py`),
+  and that the note never promises a filter the tool lacks; §10 points to the edges of
+  the quota guarantee.
