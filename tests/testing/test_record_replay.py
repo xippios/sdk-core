@@ -181,15 +181,27 @@ class ClosingTransport(httpx.AsyncBaseTransport):
 
 
 @pytest.mark.anyio
-async def test_record_closes_the_derived_client(config: ClientConfig, tmp_path: Path) -> None:
+async def test_record_closes_the_derived_client_and_leaves_the_transport_open(
+    config: ClientConfig, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    closed: list[AsyncClient] = []
+    aclose = AsyncClient.aclose
+
+    async def counting_aclose(self: AsyncClient) -> None:
+        closed.append(self)
+        await aclose(self)
+
+    monkeypatch.setattr(AsyncClient, "aclose", counting_aclose)
     transport = ClosingTransport()
     client = AsyncClient(config, transport=transport)
     await record(client, "/v1/x", tmp_path / "a.json", timeouts=Timeouts(read=300.0))
-    assert transport.closed == 1  # the derived client's pool, closed when record returned
+    assert len(closed) == 1  # the derived client, closed when record returned
+    assert closed[0] is not client
+    assert transport.closed == 0  # the client's transport, which derive only borrowed
     await record(client, "/v1/x", tmp_path / "b.json")
-    assert transport.closed == 1  # the caller's own client stays open
+    assert len(closed) == 1  # the caller's own client stays open
     await client.aclose()
-    assert transport.closed == 2
+    assert transport.closed == 1
 
 
 @pytest.mark.anyio

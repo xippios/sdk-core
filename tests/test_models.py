@@ -42,6 +42,7 @@ def test_result_meta_defaults() -> None:
     assert meta.vintage is None
     assert meta.request == {}
     assert meta.total is None
+    assert meta.tenant is None
 
 
 def test_result_meta_rejects_naive_datetimes() -> None:
@@ -60,6 +61,20 @@ def test_result_meta_total_serialises_as_an_integer() -> None:
     assert json.loads(meta.model_dump_json())["total"] == 1234
     assert ResultMeta(source="s", endpoint="e", total=0).total == 0
     assert ResultMeta(source="s", endpoint="e").model_dump(mode="json")["total"] is None
+
+
+def test_result_meta_tenant_round_trips_by_name() -> None:
+    meta = ResultMeta(source="example", endpoint="account/list.json", tenant="acme")
+    assert meta.tenant == "acme"
+    dumped = meta.model_dump(mode="json")
+    assert dumped["tenant"] == "acme"
+    assert json.loads(meta.model_dump_json())["tenant"] == "acme"
+    assert ResultMeta.model_validate(dumped) == meta
+    assert ResultMeta.model_validate_json(meta.model_dump_json()) == meta
+    assert ResultMeta(source="s", endpoint="e").model_dump(mode="json")["tenant"] is None
+    rows = [Series(series_id="a", value=1)]
+    result = Result[list[Series]](data=rows, meta=meta)
+    assert Result[list[Series]].model_validate(result.model_dump(mode="json")) == result
 
 
 def test_result_meta_rejects_a_negative_total() -> None:

@@ -1,6 +1,6 @@
 # xippios SDK family — conventions
 
-Version 1.8 · 2026-10-23 · applies to every `sdk-*` repository under github.com/xippios.
+Version 1.9 · 2026-10-23 · applies to every `sdk-*` repository under github.com/xippios.
 Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 
 ## 1. Naming
@@ -12,7 +12,7 @@ Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 | Import path | `xippios.<source>`; a provider with several APIs nests: `xippios.<provider>.<api>` | `xippios.comtrade`, `xippios.usda.nass` |
 | MCP entry point | `xippios-<source>-mcp` | `xippios-usda-nass-mcp` |
 | MCP tool | `<source>_<verb>_<noun>` | `usda_nass_get_series` |
-| Env var for a key | `<SOURCE>_API_KEY`, or the issuer's variable when one key serves several sources (ADR-0009) | `COMTRADE_API_KEY`, `DATA_GOV_API_KEY` |
+| Env var for a key | `<SOURCE>_API_KEY`, or the issuer's variable when one key serves several sources (ADR-0009); per tenant of a multi-tenant source `<SOURCE>_<NAME>_API_KEY`, its other values `<SOURCE>_<NAME>_<FIELD>` (ADR-0014, §7) | `COMTRADE_API_KEY`, `DATA_GOV_API_KEY`, `CASHCTRL_ACME_API_KEY` |
 
 `<source>` names the data provider and, where one provider has several APIs, the API:
 `usda-nass`, `usda-psd`, `usda-esr`, `usda-gats`, `usda-esmis`, `comtrade`, `eurostat`,
@@ -83,6 +83,7 @@ class ResultMeta(BaseModel):
     vintage: str | None           # upstream release identifier if the source has one
     request: dict[str, Any]       # the parameters used, for reproducibility
     total: int | None             # upstream's record count, if it reports one
+    tenant: str | None            # the tenant the data came from, by name (§7)
 
 class Result(BaseModel, Generic[T]):
     data: T
@@ -96,6 +97,10 @@ key that looks like one (`key`, `api_key`, `token`, `secret`, `password`, `auth`
 `signature`, `credential`) to `"REDACTED"` at construction, so an envelope is safe to
 hand to an agent, return over HTTP, or write to a store. A task that wants the
 credential's provenance records the variable name, never the value.
+
+`tenant` is the name of the tenant a multi-tenant source served the data for (§7),
+never a credential, a host or another of the tenant's values; `None` for a
+single-tenant source and for the list of tenants.
 
 `total` is upstream's count of the records matching the request, or `None` when the
 source reports none or the count is unknown (ADR-0012). A paginated task called without
@@ -168,6 +173,19 @@ ADR-0009 applies, overridable by constructor argument. No config files, no doten
 loading inside the package — the environment is the contract (direnv in development,
 secrets in CI).
 
+A multi-tenant source, whose upstream serves each tenant from a host or under a key of
+its own (CashCtrl's organisations), declares its tenants with `xippios.core.Tenants`
+(ADR-0014). One variable lists the tenant names, comma-separated, lower-case letters,
+digits and underscores (`CASHCTRL_ORGS=acme,acme_test`); each tenant's values sit in
+`<SOURCE>_<NAME>_<FIELD>`, source and name upper-cased and `-` made `_`
+(`CASHCTRL_ACME_SUBDOMAIN`, `CASHCTRL_ACME_API_KEY`). The reserved test tenant (`demo`)
+is declared by its own variables alone and never listed: it exists when all of them
+are set. Every tenant has one client of its own, with its own rate limiter and no cache
+shared with another tenant, built on first use and rebuilt when one of its values
+changes. A name that is not declared is the caller's mistake, `InvalidRequestError`; a
+missing or malformed variable of a declared tenant is the operator's, `ConfigError`.
+Messages and results name tenants and variables, never a value.
+
 ## 8. MCP conventions
 
 - Register task functions, not endpoint wrappers. Tool name `<source>_<verb>_<noun>`.
@@ -176,14 +194,28 @@ secrets in CI).
   this; write it for them.
 - Read-only by default. A tool that writes to the upstream (CashCtrl) lives in a
   separate server entry point (`xippios-<source>-mcp-write`), takes `confirm: bool`
-  and returns a dry-run preview when `confirm=False`.
+  and returns a dry-run preview when `confirm=False`. `register_tasks(read_only=False)`
+  enforces it: a task without `confirm: bool = False` is refused before anything is
+  registered (ADR-0014). A write server carries no authentication, so `--http` serves
+  it on a loopback host only (`127.0.0.1`, `localhost`, `::1`) unless `--allow-remote`
+  is passed, with a gateway in front. A write server exposes write tools only;
+  reference tools, the tenant list among them, stay on the read server.
 - Result cap: default 200 rows or 64 KB, whichever first. Over the cap, return the
   first page plus a note on how to narrow the query. Never truncate silently.
 - Reference lookups are tools too: `<source>_list_<thing>` (commodities, countries,
-  attributes). Agents need them to form valid calls.
+  attributes). Agents need them to form valid calls. A multi-tenant source lists its
+  tenants the same way, names only (`list_task`, `cashctrl_list_organisations`).
+- A multi-tenant source's servers take an option that locks them to one tenant
+  (`--org acme`), passed to `build_server` as `TenantLock` (ADR-0014): a tool call
+  naming another tenant is refused with `error: InvalidRequestError: ...` before the
+  tool runs, the instructions name the tenant, and the list tool lists it alone. A tool
+  that takes the tenant parameter must receive it on a locked server; a default is
+  refused.
 - Errors return as text starting with `error: <ErrorClass>: <message>`; never raise
   through the MCP boundary.
 - Entry point `xippios-<source>-mcp` runs stdio by default; `--http` for streamable HTTP.
+  A source's own options reach core's `main` through `add_options` and `apply_options`,
+  parsed once with core's; an error applying them stops the process with exit status 2.
 
 ## 9. HTTP adapter conventions
 
@@ -207,8 +239,11 @@ consumer, never served standalone from the package.
 - The recorder scrubs in memory and writes once, so nothing unscrubbed touches disk: a
   multi-tenant source records with a placeholder host that its offline tests replay
   against, and names the values that must never be written (`xippios.core.testing.Scrub`).
-  The scrubbed exchange is verified before the write, a JSON body also decoded; the
-  original host or a named value still present refuses it, the error naming where.
+  A placeholder that contains the original host (`demo.example.test` for
+  `example.test`) is allowed and written as such, never scrubbed again; one that is the
+  original host is refused. The scrubbed exchange is verified before the write, a JSON
+  body also decoded; the original host or a named value still present refuses it, the
+  error naming where.
   The verify is best effort, one JSON-aware pass over URL, headers and bodies; the
   backstops are recording only against synthetic or demo tenants and the fixture grep
   of the definition of done.

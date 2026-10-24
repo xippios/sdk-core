@@ -35,10 +35,11 @@ async def record(
     """Perform one live request and write the scrubbed exchange to ``fixture``.
 
     With ``retry`` or ``timeouts`` the request goes through ``client.derive(...)``,
-    which shares the client's auth, rate limiter and cache and is closed afterwards;
-    otherwise through ``client`` itself. ``derive`` returns a plain ``AsyncClient``: the
-    request logic of a subclass of ``AsyncClient`` is not carried over, so a source
-    that overrides ``request`` records without ``retry`` and ``timeouts``.
+    which shares the client's auth, rate limiter, cache and transport and is closed
+    afterwards, leaving the client and its transport open; otherwise through ``client``
+    itself. ``derive`` returns a plain ``AsyncClient``: the request logic of a subclass
+    of ``AsyncClient`` is not carried over, so a source that overrides ``request``
+    records without ``retry`` and ``timeouts``.
 
     A refusal writes nothing. One raised after the request was sent (a binary body, or
     the verify step finding the original host or a secret value) comes after upstream

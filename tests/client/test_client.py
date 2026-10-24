@@ -432,6 +432,43 @@ async def test_derive_shares_the_transport(config: ClientConfig) -> None:
     assert [str(request.url) for request in seen] == [f"{BASE}/v1/x"]
 
 
+class CountingTransport(httpx.AsyncBaseTransport):
+    """Answers every request and counts the requests and how often it was closed."""
+
+    def __init__(self) -> None:
+        self.requests = 0
+        self.closed = 0
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        self.requests += 1
+        return httpx.Response(200, json={})
+
+    async def aclose(self) -> None:
+        self.closed += 1
+
+
+@pytest.mark.anyio
+async def test_a_derived_client_never_closes_the_transport_it_borrowed(
+    config: ClientConfig,
+) -> None:
+    transport = CountingTransport()
+    client = AsyncClient(config, transport=transport)
+    await client.get("/v1/x")
+    derived = client.derive(retry=RetryPolicy(max_attempts=1))
+    await derived.get("/v1/x")
+    pool = derived._pool()
+    await derived.aclose()
+    assert pool.is_closed  # the derived client's own pool is closed
+    assert transport.closed == 0  # the parent's transport is not
+    async with derived.derive(timeouts=Timeouts(read=1.0)) as grandchild:
+        await grandchild.get("/v1/x")
+    assert transport.closed == 0
+    await client.get("/v1/x")  # the parent still sends through it
+    assert transport.requests == 4
+    await client.aclose()
+    assert transport.closed == 1  # a transport passed by the caller closes with its client
+
+
 @pytest.mark.anyio
 async def test_get_responses_are_cached(respx_mock: respx.MockRouter) -> None:
     route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={"n": 1})

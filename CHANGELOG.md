@@ -87,9 +87,11 @@ All notable changes to this project are documented here. The format follows
   placeholder pin under Changed.
 - `xippios.core.testing.assert_write_tools(write_server, write_tasks, *, source,
   read_server=None, router=None)`: fails the test, naming the offending tool, unless
-  the write server's tools are exactly the write tasks by `tool_name`, every write task
-  takes `confirm: bool = False`, and, when given, no write tool is on the read server
-  and no route of the router serves a write task. Works in sync and async tests.
+  the write server was registered with `read_only=False` (`is_write_server`, which the
+  loopback rule of `main` reads), its tools are exactly the write tasks by `tool_name`,
+  every write task takes `confirm: bool = False`, and, when given, no write tool is on
+  the read server and no route of the router serves a write task. Works in sync and
+  async tests.
   Conventions §8's write-server rules had no check in `xippios.core.testing`
   (sdk-cashctrl).
 - `xippios.core.testing.ReplayFixture`: a `Protocol` for the plugin's `replay_fixture`
@@ -97,6 +99,57 @@ All notable changes to this project are documented here. The format follows
   can annotate it; the fixture is annotated with it instead of `Callable[..., Route]`.
 - `fixture_from_response` is exported from `xippios.core.testing`; sdk-cashctrl's
   recorder imported it from `xippios.core.testing.fixtures`.
+- `ResultMeta.tenant` (default `None`): the tenant the data came from, by name, for a
+  multi-tenant source; never a credential, a host or another of the tenant's values.
+  A source carried the tenant only inside `request` (`request.org` in sdk-cashctrl),
+  where nothing marked it as the tenant. Single-tenant sources leave it `None` (every
+  envelope's JSON now carries `"tenant": null`); conventions §4 lists it.
+- `xippios.core.Tenants(source, *, list_var, fields, reserved=(), validate=None)`: the
+  tenants a multi-tenant source declares in the environment, and one client per tenant
+  (conventions §7). `list_var` lists the names, comma-separated, `^[a-z0-9_]+$`; each
+  tenant's values sit in `<SOURCE>_<NAME>_<FIELD>` (`var(name, field)` gives the
+  variable's name). `names()` reads the list on every call, in declared order, and
+  appends each reserved name whose field variables are all set; a reserved name in the
+  list, a malformed name or a name listed twice is a `ConfigError`. `require(name)`
+  returns a declared name or raises `InvalidRequestError`, the caller's bad argument
+  (MCP text, HTTP 422), listing the declared names, or the variables to set when there
+  are none. `field(name, field)` returns a value stripped and passed through
+  `validate[field]`; a missing value of a declared tenant, or one the check refuses, is
+  a `ConfigError` naming the variable, never the value. `client_for(name, build)` builds a
+  tenant's client with `build(name)` on first use and keeps it, thread-safe, under a
+  digest of the tenant's current values, so a changed value builds a new client;
+  `reset()` drops them. Generalises sdk-cashctrl's organisation registry (`orgs()`,
+  `require_org()`, `client_for()`), which every multi-tenant source would otherwise
+  write again.
+- `xippios.core.tenants.list_task(tenants, *, name, doc=None)`: a synchronous task named
+  `name` (`list_organisations`) that returns the declared tenants' names in the
+  envelope, names only (ADR-0005), for a `<source>_list_<tenants>` reference tool. Its
+  default docstring is written for agents. On a server locked to one tenant its tool
+  lists that tenant only.
+- `xippios.core.mcp.TenantLock(param, value)` and `tenant_lock=` for `build_server` and
+  `register_tasks` (ADR-0014): installs, once per server, a middleware that answers a
+  tool call naming another tenant with `error: InvalidRequestError: this server is
+  locked to <param>=<value>; the call named another tenant` without running the tool,
+  and a call that leaves out a `param` the tool's input schema declares with `...; the
+  call did not name the tenant`, also when that schema lookup fails; a call to a tool
+  without `param` passes unless it names another tenant, and listing tools is left
+  alone. On a locked server, `register_tasks` refuses with `ValueError` a task whose
+  `param` has a default, and the lock on a server that has one: a tool that takes the
+  tenant parameter must receive it. `build_server` adds "This server is locked to
+  <param> <value>; every tool call that takes <param> must pass <param>=<value>." to the
+  instructions. sdk-cashctrl wrote the same lock itself, set the instructions through
+  the SDK's private low-level server and parsed the command line twice.
+- `main(server, argv=None, *, add_options=None, apply_options=None)` and
+  `build_parser(prog, *, add_options=None)`: `add_options` puts a source's arguments on
+  core's parser, so the command line is parsed once and `--help` lists every option;
+  `apply_options(namespace, server)` returns the server to run. A `XippiosError` it
+  raises, such as an undeclared tenant, exits with status 2 and the message on stderr,
+  like an argparse error.
+- `--allow-remote` for `main`, and `xippios.core.mcp.is_write_server(server)`: true once
+  tasks were registered on the server with `read_only=False`. See Changed for the rule.
+- `xippios.core.testing.mcp_call_text(server, name, arguments)`: the tool's text, through
+  the same in-process client as `mcp_call`, so a test can assert a refusal or any other
+  `error:` text.
 
 ### Changed
 
@@ -169,6 +222,34 @@ All notable changes to this project are documented here. The format follows
   rules (scrub in memory before the one write, a placeholder host for a multi-tenant
   source, no binary body unless flagged) and the plugin's offline guarantees with the
   markers `network` and `rate_limited`; ADR-0013 added.
+- **Breaking:** `register_tasks(..., read_only=False)`, and so
+  `build_server(..., read_only=False)`, refuses a task without a parameter `confirm`
+  annotated `bool` (resolved with `typing.get_type_hints`, so `Annotated[bool, ...]`
+  counts and `bool | None` does not) with the default `False`: it raises `ValueError`
+  naming the tool and the rule before any task is registered. A write server could
+  register a task that writes on its first call, which conventions §8 forbids and only
+  `assert_write_tools` caught, in a test (sdk-cashctrl). `assert_write_tools` uses the
+  same check. Read-only servers are unaffected.
+- **Breaking:** `main` serves a write server over `--http` on a loopback `--host` only
+  (`127.0.0.1`, `localhost`, `::1`) and otherwise exits with status 2, unless
+  `--allow-remote` is passed. A write server carries no authentication; beyond loopback
+  a gateway in front of it has to provide it (ADR-0014). Read-only servers and stdio
+  are unaffected.
+- `xippios.core.testing.mcp_call` calls the tool through `mcp.Client(server)` connected
+  in-process instead of `MCPServer.call_tool`, so the server's middleware runs, a tenant
+  lock included; `MCPServer.call_tool` bypasses it (sdk-cashctrl drove `mcp.Client` by
+  hand). It returns the decoded JSON as before and fails on `error:` text as before. A
+  call the server answers with an MCP error, arguments the tool's schema refuses or an
+  unknown tool, now fails with `AssertionError` instead of raising the SDK's
+  `ToolError`, and the server must be one `mcp.Client` connects to (an `MCPServer` or
+  a low-level `Server`).
+- `main` quiets the httpx and httpcore loggers right before the server runs, after
+  `apply_options`, instead of first thing.
+- Conventions 1.9: §1 names the per-tenant variables, §4 lists `ResultMeta.tenant`, §7
+  states the tenant scheme and the error split, §8 the `confirm` check at
+  registration, the loopback rule, the tenant list tool, the tenant lock and the option
+  hooks; §10 states that a placeholder host that contains the original host is allowed
+  and written as such. ADR-0014 added.
 
 ### Fixed
 
@@ -183,6 +264,12 @@ All notable changes to this project are documented here. The format follows
   raised `TypeError`, because `Exception` rebuilds with positional arguments only.
   `XippiosError.__reduce__` restores every attribute without calling `__init__`
   (sdk-cashctrl).
+- A client from `AsyncClient.derive` no longer closes a transport it did not create.
+  It shares the parent's transport, and closing the derived client, as `record` does
+  after a recording with `retry=` or `timeouts=`, closed that transport under the
+  parent, which still uses it. The derived client's pools are still
+  closed; the borrowed transport is left for the parent's `aclose`. A transport passed
+  to a client by its own caller is still closed with that client.
 
 ### Security
 

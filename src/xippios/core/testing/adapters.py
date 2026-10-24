@@ -1,8 +1,6 @@
 """Helpers for tests that go through the adapters or check projections."""
 
-import inspect
 import json
-import typing
 from collections.abc import Callable, Iterable
 from typing import Any
 
@@ -10,7 +8,7 @@ from pydantic import BaseModel
 
 from xippios.core._loop import run
 
-__all__ = ["assert_projection", "assert_write_tools", "mcp_call"]
+__all__ = ["assert_projection", "assert_write_tools", "mcp_call", "mcp_call_text"]
 
 
 def assert_projection(projected: BaseModel, source: BaseModel, **overrides: Any) -> None:
@@ -32,23 +30,43 @@ def assert_projection(projected: BaseModel, source: BaseModel, **overrides: Any)
         assert actual == expected, f"{name}: {actual!r} != {expected!r}"
 
 
-async def mcp_call(server: Any, name: str, arguments: dict[str, Any]) -> Any:
-    """Call a tool on an ``MCPServer`` in-process and return its JSON result, decoded.
+async def mcp_call_text(server: Any, name: str, arguments: dict[str, Any]) -> str:
+    """Call a tool on an ``MCPServer`` through an in-process client and return its text.
 
-    Fails the test when the server reports an error, or when the tool answered with the
-    family's ``error: <Class>: <message>`` text instead of JSON.
+    The call goes through ``mcp.Client(server)``, as a real client's would, so the
+    server's middleware runs: a ``TenantLock`` refusal comes back here as the family's
+    ``error: InvalidRequestError: ...`` text, which a test can assert. Fails the test
+    when the server reports an MCP error (``is_error``, e.g. arguments the tool's schema
+    refuses) or answers with anything but text.
+
+    Args:
+        server: The ``MCPServer`` under test, e.g. from ``build_server``.
+        name: The tool name, e.g. ``"example_get_series"``.
+        arguments: The tool arguments, e.g. ``{"series_id": "CORN"}``.
     """
-    from mcp.types import CallToolResult, TextContent
+    from mcp.client import Client
+    from mcp.types import TextContent
 
-    result = await server.call_tool(name, arguments)
-    assert isinstance(result, CallToolResult), result
+    async with Client(server) as client:
+        result = await client.call_tool(name, arguments)
     assert not result.is_error, result.content
     assert result.content, "tool returned no content"
     content = result.content[0]
     assert isinstance(content, TextContent), content
-    if content.text.startswith("error:"):
-        raise AssertionError(content.text)
-    return json.loads(content.text)
+    return content.text
+
+
+async def mcp_call(server: Any, name: str, arguments: dict[str, Any]) -> Any:
+    """Call a tool on an ``MCPServer`` through an in-process client; its JSON, decoded.
+
+    Like ``mcp_call_text``, so the server's middleware runs, and fails the test as well
+    when the tool answered with the family's ``error: <Class>: <message>`` text instead
+    of JSON.
+    """
+    text = await mcp_call_text(server, name, arguments)
+    if text.startswith("error:"):
+        raise AssertionError(text)
+    return json.loads(text)
 
 
 def assert_write_tools(
@@ -63,6 +81,8 @@ def assert_write_tools(
 
     Fails the test, naming the offending tool, unless all of these hold:
 
+    - the write server was registered with ``read_only=False`` (``is_write_server``),
+      which ``main``'s loopback rule for ``--http`` depends on;
     - the write server's tools are exactly ``tool_name(source, fn)`` for the write
       tasks, no more and no fewer;
     - every write task takes ``confirm: bool = False``, so a call without it is a
@@ -70,6 +90,9 @@ def assert_write_tools(
     - no write tool is on ``read_server``, and no route of ``router`` serves a write
       task (matched by the route name and path ``router_from_tasks`` gives it), when
       given.
+
+    A write server exposes write tools only: reference tools, the tenant list of
+    ``xippios.core.tenants.list_task`` among them, stay on the read server.
 
     Works in sync and async tests alike: the tools are listed on core's background loop.
 
@@ -81,8 +104,11 @@ def assert_write_tools(
         read_server: The read-only ``MCPServer`` of ``xippios-<source>-mcp``, if any.
         router: The source's FastAPI router from ``router_from_tasks``, if any.
     """
-    from xippios.core.mcp.server import tool_name
+    from xippios.core.mcp.server import _confirm_problem, is_write_server, tool_name
 
+    assert is_write_server(write_server), (
+        "the write server was not registered with read_only=False; the loopback rule depends on it"
+    )
     expected = {tool_name(source, fn): fn for fn in write_tasks}
     listed = _tool_names(write_server)
     unexpected = sorted(listed - expected.keys())
@@ -116,20 +142,3 @@ def _serves(route: Any, source: str, fn: Callable[..., Any]) -> bool:
     """
     named = getattr(route, "name", None) == f"{source}_{fn.__name__}"
     return named or str(getattr(route, "path", "")).endswith(f"/{fn.__name__}")
-
-
-def _confirm_problem(fn: Callable[..., Any]) -> str | None:
-    """Why ``fn`` does not take ``confirm: bool = False``, or ``None`` when it does."""
-    parameter = inspect.signature(fn).parameters.get("confirm")
-    if parameter is None:
-        return "no parameter confirm"
-    annotation = typing.get_type_hints(fn).get("confirm", parameter.annotation)
-    if annotation is inspect.Parameter.empty:
-        return "confirm is not annotated"
-    if annotation is not bool:
-        return f"confirm is annotated {annotation!r}, not bool"
-    if parameter.default is inspect.Parameter.empty:
-        return "confirm has no default"
-    if parameter.default is not False:
-        return f"confirm defaults to {parameter.default!r}, not False"
-    return None

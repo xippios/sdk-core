@@ -6,8 +6,8 @@ import pytest
 
 from xippios.core import NotFoundError, Result, ResultMeta, UpstreamModel, parse_decimal, sync
 from xippios.core.http import router_from_tasks
-from xippios.core.mcp import build_server
-from xippios.core.testing import assert_projection, assert_write_tools, mcp_call
+from xippios.core.mcp import TenantLock, build_server, register_tasks
+from xippios.core.testing import assert_projection, assert_write_tools, mcp_call, mcp_call_text
 
 
 class Full(UpstreamModel):
@@ -67,6 +67,33 @@ async def test_mcp_call_fails_on_error_text() -> None:
         await mcp_call(server, "example_get_thing", {"name": "missing"})
 
 
+@pytest.mark.anyio
+async def test_mcp_call_text_returns_the_text_error_text_included() -> None:
+    server = build_server("example", [get_thing])
+    text = await mcp_call_text(server, "example_get_thing", {"name": "missing"})
+    assert text == "error: NotFoundError: no such thing"
+    assert (await mcp_call_text(server, "example_get_thing", {"name": "a"})).startswith('{"data"')
+
+
+@pytest.mark.anyio
+async def test_mcp_call_goes_through_the_middleware() -> None:
+    server = build_server("example", [get_thing], tenant_lock=TenantLock("name", "a"))
+    assert (await mcp_call(server, "example_get_thing", {"name": "a"}))["data"][0]["name"] == "a"
+    refusal = "error: InvalidRequestError: this server is locked to name=a"
+    assert (await mcp_call_text(server, "example_get_thing", {"name": "b"})).startswith(refusal)
+    with pytest.raises(AssertionError, match=refusal):
+        await mcp_call(server, "example_get_thing", {"name": "b"})
+
+
+@pytest.mark.anyio
+async def test_mcp_call_fails_when_the_server_reports_an_error() -> None:
+    server = build_server("example", [get_thing])
+    with pytest.raises(AssertionError, match="name"):
+        await mcp_call_text(server, "example_get_thing", {})  # the schema requires name
+    with pytest.raises(AssertionError):
+        await mcp_call(server, "example_no_such_tool", {})
+
+
 def create_thing(name: str, confirm: bool = False) -> dict[str, str]:
     """Create a thing; without confirm, return a preview.
 
@@ -111,8 +138,24 @@ async def test_assert_write_tools_works_in_an_async_test() -> None:
     assert_write_tools(build_server("example", WRITE, read_only=False), WRITE, source="example")
 
 
+def test_assert_write_tools_wants_a_server_registered_as_a_write_server() -> None:
+    read_only = build_server("example", [])
+    register_tasks(read_only, "example", WRITE)  # the write tasks, registered read-only
+    with pytest.raises(
+        AssertionError,
+        match=(
+            r"^the write server was not registered with read_only=False; "
+            r"the loopback rule depends on it$"
+        ),
+    ):
+        assert_write_tools(read_only, WRITE, source="example")
+
+
 def test_assert_write_tools_wants_exactly_the_write_tasks() -> None:
-    write = build_server("example", [*WRITE, list_things], read_only=False)
+    # build_server refuses a write task without confirm (conventions §8); a read-only
+    # registration on the write server is how a stray tool would get there.
+    write = build_server("example", WRITE, read_only=False)
+    register_tasks(write, "example", [list_things])
     with pytest.raises(AssertionError, match=r"not write tasks: \['example_list_things'\]"):
         assert_write_tools(write, WRITE, source="example")
     write = build_server("example", [create_thing], read_only=False)
@@ -156,7 +199,8 @@ def confirm_zero(confirm: int = 0) -> None:
     ],
 )
 def test_assert_write_tools_wants_confirm_false(task: Callable[..., Any], problem: str) -> None:
-    write = build_server("example", [create_thing, task], read_only=False)
+    write = build_server("example", [create_thing], read_only=False)
+    register_tasks(write, "example", [task])  # build_server(read_only=False) refuses it
     with pytest.raises(AssertionError, match=f"^example_{task.__name__}: {problem}; "):
         assert_write_tools(write, [create_thing, task], source="example")
 
