@@ -7,7 +7,7 @@ from typing import Any, Self
 import httpx
 
 from xippios.core._loop import run
-from xippios.core.client._core import AsyncClient, Params, UseClientDefault
+from xippios.core.client._core import AsyncClient, Params, UseClientDefault, decode_json
 from xippios.core.client.auth import (
     BasicKeyAuth,
     BearerAuth,
@@ -49,6 +49,7 @@ __all__ = [
     "Timeouts",
     "TokenBucket",
     "cache_key",
+    "decode_json",
     "send_with_retries",
     "strip_wire_headers",
 ]

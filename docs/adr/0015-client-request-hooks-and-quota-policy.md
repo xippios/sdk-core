@@ -91,7 +91,10 @@ client.
    cache key leaves `auth` out.
 5. **A cache hit says when it was stored.** Next to `"xippios_cache": "hit"`, a hit
    carries `response.extensions["xippios_cache_stored_at"]`, the entry's `stored_at` in
-   epoch seconds. On a hit a task sets `retrieved_at` from it (conventions §4).
+   epoch seconds. On a hit a task sets `retrieved_at` from it (conventions §4). Since
+   `get_json` returns the payload alone, a wrapper that needs the response calls `get`
+   and then `xippios.core.client.decode_json(response, *, source=None, path=None)`, the
+   decoding `get_json` does, with its `ValidationError` for a body that is not JSON.
 
 ## Consequences
 

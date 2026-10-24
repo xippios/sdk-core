@@ -23,7 +23,7 @@ from xippios.core.client.ratelimit import TokenBucket
 from xippios.core.client.retry import send_with_retries
 from xippios.core.errors import BODY_LIMIT, ValidationError, XippiosError, raise_for_status
 
-__all__ = ["AsyncClient", "Params", "UseClientDefault"]
+__all__ = ["AsyncClient", "Params", "UseClientDefault", "decode_json"]
 
 Params = Mapping[str, Any] | None
 
@@ -273,17 +273,12 @@ class AsyncClient:
     ) -> Any:
         """GET and decode a JSON body, raising ``ValidationError`` when it is not JSON.
 
-        ``auth`` as for ``request``: ``None`` sends no credentials.
+        ``auth`` as for ``request``: ``None`` sends no credentials. A wrapper that needs
+        the response too, e.g. a cache hit's ``xippios_cache_stored_at``, calls ``get``
+        and then ``decode_json``.
         """
         response = await self.get(path, params=params, headers=headers, auth=auth)
-        try:
-            return response.json()
-        except ValueError as exc:
-            raise ValidationError(
-                f"{self.source}: response from {path} is not JSON",
-                raw=response.text[:BODY_LIMIT],
-                source=self.source,
-            ) from exc
+        return decode_json(response, source=self.source, path=path)
 
     async def aclose(self) -> None:
         """Close the connection pool bound to the current event loop.
@@ -307,6 +302,41 @@ class AsyncClient:
         tb: TracebackType | None,
     ) -> None:
         await self.aclose()
+
+
+def decode_json(
+    response: httpx.Response, *, source: str | None = None, path: str | None = None
+) -> Any:
+    """Decode ``response``'s JSON body, raising ``ValidationError`` when it is not JSON.
+
+    What ``get_json`` does after ``get``. A wrapper that needs the response as well as
+    its payload, such as a cache hit's ``response.extensions["xippios_cache_stored_at"]``
+    for ``retrieved_at`` (conventions §4), calls ``get`` and then this.
+
+    Args:
+        response: A response with its body read, e.g. from ``AsyncClient.get``.
+        source: Source slug for the error, e.g. ``"usda-psd"``.
+        path: The request path the message names, e.g. ``"/api/psd/regions"``; ``None``
+            takes the path of the response's request. Never the host or query
+            (conventions §5).
+
+    Raises:
+        ValidationError: The body is not JSON; ``raw`` holds its text, truncated.
+    """
+    try:
+        return response.json()
+    except ValueError as exc:
+        if path is None:
+            try:
+                path = response.request.url.path
+            except RuntimeError:  # httpx raises it for a response built without a request
+                path = None
+        where = f"response from {path}" if path else "response"
+        raise ValidationError(
+            f"{source + ': ' if source else ''}{where} is not JSON",
+            raw=response.text[:BODY_LIMIT],
+            source=source,
+        ) from exc
 
 
 class _BorrowedTransport(httpx.AsyncBaseTransport):

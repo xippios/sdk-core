@@ -20,6 +20,7 @@ from xippios.core.client import (
     Timeouts,
     TokenBucket,
     cache_key,
+    decode_json,
 )
 from xippios.core.client._core import _from_cache
 from xippios.core.errors import (
@@ -618,6 +619,35 @@ async def test_get_json_rejects_non_json(
     with pytest.raises(ValidationError) as info:
         await client.get_json("/v1/x")
     assert info.value.raw == "<html>oops</html>"
+
+
+@pytest.mark.anyio
+async def test_get_then_decode_json_keeps_the_provenance(respx_mock: respx.MockRouter) -> None:
+    # A wrapper that sets retrieved_at from a cache hit needs the response, not only the JSON.
+    respx_mock.get(f"{BASE}/v1/x").respond(200, json={"n": 1})
+    config = ClientConfig(source="example", version="1", base_url=BASE, cache=MemoryCache())
+    client = AsyncClient(config)
+    fresh = await client.get("/v1/x")
+    assert decode_json(fresh, source="example") == {"n": 1}
+    assert "xippios_cache_stored_at" not in fresh.extensions
+    hit = await client.get("/v1/x")
+    assert decode_json(hit, source="example") == {"n": 1}
+    assert isinstance(hit.extensions["xippios_cache_stored_at"], float)
+
+
+def test_decode_json_refuses_a_body_that_is_not_json() -> None:
+    request = httpx.Request("GET", f"{BASE}/v1/x?key=SECRET")
+    response = httpx.Response(200, text="<html>oops</html>", request=request)
+    with pytest.raises(ValidationError) as info:
+        decode_json(response, source="example")
+    assert info.value.message == "example: response from /v1/x is not JSON"
+    assert info.value.raw == "<html>oops</html>"
+    assert info.value.source == "example"
+    assert isinstance(info.value.__cause__, ValueError)
+    with pytest.raises(ValidationError, match=r"^response from /v1/data is not JSON$"):
+        decode_json(response, path="/v1/data")
+    with pytest.raises(ValidationError, match=r"^response is not JSON$"):
+        decode_json(httpx.Response(200, text="oops"))
 
 
 def test_one_pool_per_event_loop(respx_mock: respx.MockRouter, config: ClientConfig) -> None:

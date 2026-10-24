@@ -92,7 +92,8 @@ class Result(BaseModel, Generic[T]):
 
 `meta` is never optional. It is what makes a later as-of/vintage store possible.
 On a cache hit, `retrieved_at` is the time the entry was stored, which the client puts
-on the response as `extensions["xippios_cache_stored_at"]` (ADR-0015).
+on the response as `extensions["xippios_cache_stored_at"]` (ADR-0015); a wrapper reads
+it with `get()` and `decode_json()` (§6).
 
 `request` never carries credentials (ADR-0005). `ResultMeta` redacts the value of any
 key that looks like one (`key`, `api_key`, `token`, `secret`, `password`, `auth`,
@@ -149,7 +150,9 @@ or query string: the host can name a tenant, the query can carry a key (ADR-0005
   or because the source only reads through POST (ADR-0011); never another 4xx.
 - A source maps its documented error shapes once, in `ClientConfig.classify`, which
   sees every response before the default status mapping (ADR-0008); endpoint
-  wrappers then use `get_json` and never inspect status codes themselves.
+  wrappers then use `get_json` and never inspect status codes themselves. A wrapper
+  that needs provenance from the response, a cache hit's `xippios_cache_stored_at`,
+  calls `get()`, then `decode_json()`, and reads `response.extensions`.
 - A per-source rate limiter sets a fast pace within the source's documented per-second
   or per-minute limit or, where none is documented, a self-imposed pace that the
   package's CLAUDE.md names as such; longer-window quotas (hourly, daily) may be

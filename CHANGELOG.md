@@ -170,6 +170,10 @@ All notable changes to this project are documented here. The format follows
   `"xippios_cache": "hit"`: the entry's `stored_at`, in epoch seconds. On a hit a task
   sets `retrieved_at` from it, since the data was fetched then, not now (conventions
   §4). sdk-usda-psd's tasks could only stamp a hit with the current time.
+- `xippios.core.client.decode_json(response, *, source=None, path=None)`: the JSON
+  decoding of `get_json`, with its `ValidationError` for a body that is not JSON, for a
+  wrapper that calls `get` because it needs the response too, e.g. a cache hit's
+  `xippios_cache_stored_at` (conventions §6). `get_json` calls it.
 - `xippios.core.client.QuotaPolicy` and `QuotaSnapshot`, ADR-0010's quota rules on the
   two hooks (ADR-0015). `QuotaPolicy(*, limit_header="x-ratelimit-limit",
   remaining_header="x-ratelimit-remaining", reset_header=None, window=3600.0,
