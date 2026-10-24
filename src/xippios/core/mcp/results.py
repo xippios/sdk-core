@@ -24,7 +24,7 @@ class ResultCap:
 
     Attributes:
         max_rows: Most items of a list result that are returned.
-        max_bytes: Most bytes of JSON text that are returned.
+        max_bytes: Most bytes of JSON text, encoded as UTF-8, that are returned.
         note: The text after the counts when the cap cuts a result, used verbatim, e.g.
             ``"filter by period or by reporter to see the rest"`` for a tool that has
             those filters. ``None`` says ``"narrow the query to see the rest"``, which
@@ -49,6 +49,28 @@ def _dumps(payload: Any) -> str:
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
 
 
+def _encode(text: str) -> bytes:
+    # surrogatepass: a lone surrogate, which json.loads lets through, counts as its three
+    # bytes instead of raising out of the tool.
+    return text.encode("utf-8", "surrogatepass")
+
+
+def _size(text: str) -> int:
+    """The length of ``text`` in UTF-8 bytes, the unit of ``max_bytes``."""
+    return len(_encode(text))
+
+
+def _head(text: str, size: int) -> str:
+    """The longest start of ``text`` that is at most ``size`` UTF-8 bytes, no character cut."""
+    data = _encode(text)
+    if len(data) <= size:
+        return text
+    end = size
+    while end > 0 and (data[end] & 0xC0) == 0x80:  # a continuation byte: back to a boundary
+        end -= 1
+    return data[:end].decode("utf-8", "surrogatepass")
+
+
 def _how(cap: ResultCap) -> str:
     return _DEFAULT_NOTE if cap.note is None else cap.note
 
@@ -68,7 +90,8 @@ def cap_result(value: Any, cap: ResultCap | None = None) -> str:
     bytes); "`` and then the cap's ``note``, or ``"narrow the query to see the rest"``.
     A bare list is wrapped as ``{"data": [...]}`` so the shape is the same either way.
     Any other value that exceeds the byte cap is replaced by a note, ``"result is <n>
-    bytes, over the cap of <max_bytes>; "`` and the same text, and a preview.
+    bytes, over the cap of <max_bytes>; "`` and the same text, and a preview of its first
+    ``max_bytes`` bytes. Bytes are those of the JSON text encoded as UTF-8.
 
     Args:
         value: What the task function returned; pydantic models are dumped in JSON mode.
@@ -81,25 +104,25 @@ def cap_result(value: Any, cap: ResultCap | None = None) -> str:
     rows = payload.get("data") if isinstance(payload, dict) else None
     if not isinstance(rows, list):
         text = _dumps(payload)
-        if len(text) <= cap.max_bytes:
+        size = _size(text)
+        if size <= cap.max_bytes:
             return text
         return _dumps(
             {
-                "note": f"result is {len(text)} bytes, over the cap of {cap.max_bytes}; "
-                f"{_how(cap)}",
-                "preview": text[: cap.max_bytes],
+                "note": f"result is {size} bytes, over the cap of {cap.max_bytes}; {_how(cap)}",
+                "preview": _head(text, cap.max_bytes),
             }
         )
 
     total = len(rows)
     high = min(total, cap.max_rows)
     text = _render(payload, rows, high, total, cap)
-    if len(text) <= cap.max_bytes:
+    if _size(text) <= cap.max_bytes:
         return text
     low = 0
     while high - low > 1:
         mid = (low + high) // 2
-        if len(_render(payload, rows, mid, total, cap)) <= cap.max_bytes:
+        if _size(_render(payload, rows, mid, total, cap)) <= cap.max_bytes:
             low = mid
         else:
             high = mid

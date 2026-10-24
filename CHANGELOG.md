@@ -363,6 +363,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- `cap_result` measures `max_bytes` in UTF-8 bytes, as the convention says, not in
+  characters, which let non-ASCII text past the byte cap; the preview cuts no character.
 - `parse_retry_after` raised `ValueError` for a `Retry-After` of non-ASCII digits such
   as `"²"`, which `str.isdigit` accepts and `float` refuses, so the retry loop raised it
   out of a request; it reads ASCII digits only now and returns `None` for anything
