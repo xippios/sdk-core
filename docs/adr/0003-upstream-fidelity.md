@@ -26,3 +26,17 @@ real reference offline, and so documentation changes are visible as diffs.
 - Field names look different across packages. That is correct, not a defect.
 - The product layer carries the full cost of normalization and owns its audit trail
   (source-shaped landing tables, normalized views on top).
+
+## Amendment 2026-10-24
+
+Vendor documentation is reproduced in the snapshot for reference. CashCtrl's API page,
+the family's first snapshot of a vendor's documentation, is "© 2026 CashCtrl Ltd.", as
+its footer states. The snapshot stays: it is what the agent and the reviewer check every
+wrapper against, offline and as a diff. Its `FETCHED.md` carries the copyright line as
+the documentation states it and the URL the text was fetched from, and says that the
+text is reproduced as the package's reference under this ADR; sdk-cashctrl's section
+"Attribution and vendor examples" has the form. A vendor's objection is honoured by
+replacing the snapshot with a summary in the package's own words, by PR like any
+refresh, that keeps the URL and the names and semantics the wrappers rely on. Raised in
+the review of sdk-cashctrl's snapshot and agreed with its session; conventions §3 states
+it from 1.13 on.
