@@ -254,12 +254,22 @@ def _member_names[T](
             )
         else:
             members.append(name)
-    for member in members:
+    for index, (member, label) in enumerate(zip(members, labels, strict=True)):
         if not _acceptable(member):
-            raise ValueError(f"{key}: {member!r} is not a member name an enum accepts")
-    if len(set(members)) != len(members):
-        colliding = sorted(name for name, count in Counter(members).items() if count > 1)
-        raise ValueError(f"{key}: member names collide: {colliding}")
+            raise ValueError(
+                f"{key}: {member!r} for {label} at position {index} is not a member name an "
+                "enum accepts"
+            )
+    positions: dict[str, list[int]] = {}
+    for index, member in enumerate(members):
+        positions.setdefault(member, []).append(index)
+    colliding = [
+        f"{member!r} at positions {', '.join(map(str, where))}"
+        for member, where in sorted(positions.items())
+        if len(where) > 1
+    ]
+    if colliding:
+        raise ValueError(f"{key}: member names collide: {'; '.join(colliding)}")
     for index, (member, label) in enumerate(zip(members, labels, strict=True)):
         if len(member) > _NAME_LIMIT:
             raise ValueError(
@@ -472,13 +482,13 @@ def render_str_enums(
         ValueError: When ``generator``, ``fetched`` or a key is not printable ASCII or holds
             a backslash or three double quotes, a class name is no ASCII identifier, a
             keyword or longer than 84 characters, a key is longer than the 75 characters its
-            class docstring has room for, two members of one list share a name, a member
-            name is longer than 92 columns (naming the key, the position, its length and the
-            limit), a value without an override has nothing to derive a name from (naming
-            the key and the position), or a name in ``member_names`` is no ASCII identifier,
-            one ``enum`` does not take (``mro``, ``_x_``, any with ``__``), or for a key or
-            a value that ``lists`` does not hold. A message names the argument and the
-            position, not text that can be long.
+            class docstring has room for, two members of one list share a name (naming them
+            and their positions), a member name is longer than 92 columns (naming the key,
+            the position, its length and the limit), a value without an override has nothing
+            to derive a name from (naming the key and the position), or a name in
+            ``member_names`` is no ASCII identifier, one ``enum`` does not take (``mro``,
+            ``_x_``, any with ``__``), or for a key or a value that ``lists`` does not hold.
+            A message names the argument and the position, not text that can be long.
     """
     names = _checked_class_names("StrEnum", lists, class_names, fetched, generator)
     _unknown_keys(member_names or {}, lists)
@@ -540,11 +550,11 @@ def render_int_enums(
         ValueError: When an id is listed twice (naming the key and the id), the caller's
             text or a class name is refused as in ``render_str_enums``, two members of one
             list still share a name after the suffix, a suffix makes no identifier (a
-            negative id), a member name is longer than 92 columns, a name without an
-            override has nothing to derive one from, a key is longer than 75 characters, or
-            a name in ``member_names`` is no ASCII identifier, one ``enum`` does not take
-            (``mro``, ``_x_``, any with ``__``), or for a key or an id that ``lists`` does
-            not hold.
+            negative id; naming the id and the position), a member name is longer than 92
+            columns, a name without an override has nothing to derive one from, a key is
+            longer than 75 characters, or a name in ``member_names`` is no ASCII identifier,
+            one ``enum`` does not take (``mro``, ``_x_``, any with ``__``), or for a key or
+            an id that ``lists`` does not hold.
     """
     names = _checked_class_names("IntEnum", lists, class_names, fetched, generator)
     _unknown_keys(member_names or {}, lists)

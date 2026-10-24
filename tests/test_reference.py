@@ -367,6 +367,12 @@ def test_render_str_enums_takes_a_member_name_for_a_value_with_no_derivable_name
     assert assert_ruff_clean(tmp_path, source)["Note"].OTHER.value == value
 
 
+def test_a_member_name_an_enum_refuses_is_named_with_its_value_and_position() -> None:
+    message = r"^x: 'mro' for 'WHEAT' at position 1 is not a member name an enum accepts$"
+    with pytest.raises(ValueError, match=message):
+        render_str_enums({"x": ["CORN", "WHEAT"]}, member_names={"x": {"WHEAT": "mro"}})
+
+
 @pytest.mark.parametrize("member", ["_", "_CORN", "CORN_", "name", "value"])
 def test_render_str_enums_takes_a_member_name_an_enum_accepts(tmp_path: Path, member: str) -> None:
     source = render_str_enums({"x": ["CORN"]}, member_names={"x": {"CORN": member}})
@@ -384,15 +390,15 @@ def test_render_str_enums_takes_a_member_name_that_resolves_a_collision(tmp_path
 @pytest.mark.parametrize(
     ("member_names", "message"),
     [
-        ({"x": {"CORN": "WHEAT"}}, r"^x: member names collide: \['WHEAT'\]$"),
-        ({"x": {"CORN": "corn-grain"}}, r"^x: 'corn-grain' is not a member name an enum"),
-        ({"x": {"CORN": "class"}}, r"^x: 'class' is not a member name an enum"),
-        ({"x": {"CORN": "_CORN_"}}, r"^x: '_CORN_' is not a member name an enum"),
-        ({"x": {"CORN": "__CORN"}}, r"^x: '__CORN' is not a member name an enum"),
-        ({"x": {"CORN": "_X__CORN"}}, r"^x: '_X__CORN' is not a member name an enum"),
-        ({"x": {"CORN": "CORN__ALL"}}, r"^x: 'CORN__ALL' is not a member name an enum"),
-        ({"x": {"CORN": "mro"}}, r"^x: 'mro' is not a member name an enum"),
-        ({"x": {"CORN": "MA\u00cfS"}}, r"^x: 'MA\u00cfS' is not a member name an enum"),
+        ({"x": {"CORN": "WHEAT"}}, r"^x: member names collide: 'WHEAT' at positions 0, 1$"),
+        ({"x": {"CORN": "corn-grain"}}, r"^x: 'corn-grain' for 'CORN' at position 0 is not a"),
+        ({"x": {"CORN": "class"}}, r"^x: 'class' for 'CORN' at position 0 is not a"),
+        ({"x": {"CORN": "_CORN_"}}, r"^x: '_CORN_' for 'CORN' at position 0 is not a"),
+        ({"x": {"CORN": "__CORN"}}, r"^x: '__CORN' for 'CORN' at position 0 is not a"),
+        ({"x": {"CORN": "_X__CORN"}}, r"^x: '_X__CORN' for 'CORN' at position 0 is not a"),
+        ({"x": {"CORN": "CORN__ALL"}}, r"^x: 'CORN__ALL' for 'CORN' at position 0 is not a"),
+        ({"x": {"CORN": "mro"}}, r"^x: 'mro' for 'CORN' at position 0 is not a"),
+        ({"x": {"CORN": "MA\u00cfS"}}, r"^x: 'MA\u00cfS' for 'CORN' at position 0 is not a"),
         ({"x": {"RICE": "RICE"}}, r"^x: member_names names what the list does not hold"),
         ({"y": {"CORN": "C"}}, r"^member_names names lists that are not rendered: \['y'\]$"),
         ({"x": {"CORN": "C" * 93}}, r"^x: the member name for 'CORN' at position 0 is 93 "),
@@ -406,7 +412,10 @@ def test_render_str_enums_refuses_a_member_name_set_by_hand_it_cannot_use(
 
 
 def test_render_str_enums_rejects_colliding_members() -> None:
-    with pytest.raises(ValueError, match=r"^x: member names collide: \['A_B', 'C_D'\]$"):
+    with pytest.raises(
+        ValueError,
+        match=r"^x: member names collide: 'A_B' at positions 0, 3; 'C_D' at positions 2, 4$",
+    ):
         render_str_enums({"x": ["A B", "OK", "C D", "A-B", "C-D", "FINE"]})  # only those two
 
 
@@ -529,7 +538,9 @@ def test_render_int_enums_rejects_names_it_cannot_make_unique(
     pairs: list[tuple[int, str]],
 ) -> None:
     with pytest.raises(
-        ValueError, match=r"^attributeId: (member names collide|'LOSS_-1' is not a member name)"
+        ValueError,
+        match=r"^attributeId: (member names collide: 'A_1' at positions 0, 2$|"
+        r"'LOSS_-1' for 'Loss' \(id -1\) at position 0 is not a member name)",
     ):
         render_int_enums({"attributeId": pairs})
 
@@ -598,8 +609,14 @@ def test_render_int_enums_takes_a_member_name_and_leaves_the_others(tmp_path: Pa
 @pytest.mark.parametrize(
     ("member_names", "message"),
     [
-        ({"attributeId": {173: "AREA_HARVESTED"}}, r"member names collide: \['AREA_HARVESTED'\]$"),
-        ({"attributeId": {173: "1ST"}}, r"'1ST' is not a member name an enum accepts"),
+        (
+            {"attributeId": {173: "AREA_HARVESTED"}},
+            r"member names collide: 'AREA_HARVESTED' at positions 1, 2$",
+        ),
+        (
+            {"attributeId": {173: "1ST"}},
+            r"'1ST' for 'Total Disappearance' \(id 173\) at position 2 is not a member name",
+        ),
         ({"attributeId": {999: "X"}}, r"member_names names what the list does not hold: \[999\]"),
         ({"unitId": {1: "X"}}, r"member_names names lists that are not rendered: \['unitId'\]"),
     ],
