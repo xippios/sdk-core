@@ -34,7 +34,7 @@ __all__ = ["QuotaPolicy", "QuotaSnapshot"]
 logger = logging.getLogger("xippios.core.client")
 
 _DEFAULT_PAUSE_CAP = RetryPolicy().backoff_max
-"""The cap of a policy that was given none and is not installed: 30 s, as ``backoff_max``."""
+"""The cap of ``before_request`` called directly on a policy given none: 30 s."""
 _TEN_YEARS = 315_360_000.0
 """Seconds in ten years: the longest ``window``, so a ``resumes_at`` can always be computed.
 
