@@ -23,8 +23,10 @@ It gives a source package the things that should be identical across the family:
   query parameter, header, bearer token or basic auth. A source's documented error
   shapes go into `ClientConfig.classify`, consulted on every response.
 - **Error taxonomy**: `ConfigError`, `AuthError`, `RateLimitError`, `NotFoundError`,
-  `ValidationError`, `UpstreamError`, `TransportError` and `InvalidRequestError` (a
-  request refused before it is sent), all under `XippiosError`.
+  `ValidationError`, `UpstreamError`, `TransportError` and `InvalidRequestError` (the
+  request as given cannot be served: a bad argument, or a refusal the source documents,
+  detected before the call or mapped from upstream's own refusal), all under
+  `XippiosError`.
 - **Result envelope**: every task function returns `Result[T]` with `ResultMeta`
   (source, endpoint, retrieved_at, published_at, vintage, request, total: upstream's
   count of the matching records when the source reports one, and tenant: the tenant the
