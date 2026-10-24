@@ -49,3 +49,25 @@ are generic, and one behaviour was a surprise:
 Followed up by ADR-0015 (2026-10-24): before a 429 or 5xx is retried, the client also
 asks `classify`, for a raw response (`raise_on_error=False`) too, and its answer can
 set the wait or end the retries.
+
+## Amendment 2026-10-24
+
+The enum renderers guarantee a generated `enums.py` that is committed as rendered.
+`render_str_enums` writes each value through `repr()`, so a quote, a backslash or a
+control character in upstream's value is escaped where it broke the file; lays out a
+member too long for 100 columns as ruff formats it, the value in parentheses on a line
+of its own and, too long even there, split into implicitly concatenated parts; and
+writes `__all__` sorted in ruff's order (RUF022), one name per line, so a source's own
+lines do not conflict on `copier update`. The module passes `ruff format --check` and
+`ruff check` under the family's configuration with no exemption, where sdk-comtrade had
+to format it after every refresh. Two edges remain: a member name too long for a line of
+its own, which no layout shortens (E501), and a value holding a character ruff calls
+ambiguous, such as an en dash, which `repr()` keeps as it is (RUF001). An upstream whose
+ids are integers renders `IntEnum`, not the `StrEnum` default: `render_int_enums` takes
+`(id, name)` pairs, which `id_name_pairs` builds from upstream's records, takes member
+names from the names and appends `_<id>` to a name several ids share. Fidelity wins over
+the default, because upstream's data carries the ids as integers, which a `StrEnum` of
+their digits never equals, and its names are not unique (PSD's "Total Disappearance" is
+both attribute 126 and 173). sdk-usda-psd ruled this on 2026-10-23 and rendered its
+`AttributeId` and `UnitId` in its own refresh script; conventions §3 states the rule
+from 1.12 on.
