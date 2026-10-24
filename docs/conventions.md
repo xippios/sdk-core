@@ -286,6 +286,10 @@ consumer, never served standalone from the package.
   - No rate-limit wait, in every test not marked `live`: a client's limiter neither
     waits nor takes a token. A test that asserts the limiter's waits is marked
     `rate_limited`.
+  - No quota pause and no quota left spent, in every test not marked `live`: every
+    `QuotaPolicy`'s snapshot is forgotten before and after the test, so a replayed 429
+    cannot refuse the tests after it, and a policy neither waits nor refuses. A test
+    that asserts the pause or the refusal is marked `rate_limited` (ADR-0015).
   - Placeholder key, in every test not marked `live`: every `EnvKeyAuth` sends
     `PLACEHOLDER_KEY`, pinned on the class, and the variables named in the ini option
     `xippios_placeholder_key_envs` hold it; the fixture `placeholder_api_key` returns

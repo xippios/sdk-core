@@ -3,6 +3,8 @@
 The behaviours are the ones sdk-usda-psd proved in its own client (``Quota``,
 ``observe_quota``, ``quota_pause``, ``QuotaAwareClient``; its tests/test_client.py),
 on a fictitious upstream. Headers and statuses follow api.data.gov's documented answers.
+A test that exercises the pause or the refusal is marked ``rate_limited``: otherwise the
+plugin turns both off (ADR-0013).
 """
 
 import dataclasses
@@ -530,6 +532,7 @@ def quota_client(
 
 
 @pytest.mark.anyio
+@pytest.mark.rate_limited
 async def test_a_spent_quota_within_the_cap_is_waited_out() -> None:
     events: list[str] = []
     client, policy, upstream, _ = quota_client(
@@ -546,6 +549,7 @@ async def test_a_spent_quota_within_the_cap_is_waited_out() -> None:
 
 
 @pytest.mark.anyio
+@pytest.mark.rate_limited
 async def test_a_spent_quota_beyond_the_cap_is_refused_without_sending(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -573,6 +577,7 @@ async def test_a_spent_quota_beyond_the_cap_is_refused_without_sending(
 
 
 @pytest.mark.anyio
+@pytest.mark.rate_limited
 async def test_the_pause_logs_one_warning_with_method_and_path_only(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -593,6 +598,7 @@ async def test_the_pause_logs_one_warning_with_method_and_path_only(
 
 
 @pytest.mark.anyio
+@pytest.mark.rate_limited
 async def test_the_cap_is_the_config_s_backoff_max() -> None:
     events: list[str] = []
     clock = Clock()
@@ -606,6 +612,7 @@ async def test_the_cap_is_the_config_s_backoff_max() -> None:
 
 
 @pytest.mark.anyio
+@pytest.mark.rate_limited
 async def test_a_cache_hit_never_waits_and_never_updates_the_snapshot() -> None:
     events: list[str] = []
     clock = Clock()
@@ -650,6 +657,7 @@ async def test_raw_answers_and_retried_attempts_update_the_snapshot() -> None:
 
 
 @pytest.mark.anyio
+@pytest.mark.rate_limited
 async def test_a_recorded_style_429_is_raised_once_and_the_next_request_refused() -> None:
     # sdk-usda-psd's over_rate_limit.json: Retry-After 3151 s, beyond backoff_max.
     events: list[str] = []
@@ -668,6 +676,7 @@ async def test_a_recorded_style_429_is_raised_once_and_the_next_request_refused(
 
 
 @pytest.mark.anyio
+@pytest.mark.rate_limited
 async def test_before_request_alone_uses_a_30_s_cap() -> None:
     events: list[str] = []
     clock = Clock()
@@ -682,6 +691,7 @@ async def test_before_request_alone_uses_a_30_s_cap() -> None:
     assert events == ["sleep 29"], "the quota is expected back by now"
 
 
+@pytest.mark.rate_limited
 def test_the_sync_facade_pauses_too() -> None:
     events: list[str] = []
     clock = Clock()

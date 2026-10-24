@@ -335,10 +335,12 @@ xippios_placeholder_key_envs = ["EXAMPLE_API_KEY"]
   `RuntimeError` naming its method and path unless `respx` answers it, a `respx` route
   that passes through included; mark a test `network` to let it through. In every test
   not marked `live`, the rate limiter never waits (mark a test `rate_limited` to keep
-  it), and every `EnvKeyAuth` sends `PLACEHOLDER_KEY` while the variables named in
-  `xippios_placeholder_key_envs` hold it (fixture `placeholder_api_key`), whatever the
-  shell or an earlier live test left behind. The `httpx` and `httpcore` logger levels
-  come back after every test. ADR-0013 states the edges of these guarantees.
+  it) and no `QuotaPolicy` pauses, refuses or stays spent from one test to the next
+  (`rate_limited` keeps the pause too), and every `EnvKeyAuth` sends `PLACEHOLDER_KEY`
+  while the variables named in `xippios_placeholder_key_envs` hold it (fixture
+  `placeholder_api_key`), whatever the shell or an earlier live test left behind. The
+  `httpx` and `httpcore` logger levels come back after every test. ADR-0013 states the
+  edges of these guarantees.
 - `replay_fixture("api_GET", "corn_2024")` mounts `tests/fixtures/api_GET/corn_2024.json`
   on its method, host and path; `match_params=["countOnly"]` makes the route match those
   recorded query parameters too. A parameter's absence cannot be matched: where two

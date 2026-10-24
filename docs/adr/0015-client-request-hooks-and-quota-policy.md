@@ -127,8 +127,10 @@ client.
   source=SOURCE)` replaces them; its client becomes
   `AsyncClient(policy.install(config), auth=auth)`, its `classify` reads
   `policy.snapshot()` for its message instead of updating the snapshot, and its tests
-  reset the policy with `policy.reset()`. Its 429 without `Retry-After` is raised after
-  one request, carrying the one-hour `retry_after`, instead of four.
+  reset nothing: the testing plugin forgets every policy's snapshot around each offline
+  test and turns the pause off unless the test is marked `rate_limited` (ADR-0013,
+  decision 4). Its 429 without `Retry-After` is raised after one request, carrying the
+  one-hour `retry_after`, instead of four.
 - sdk-usda-esr and sdk-usda-gats start from `QuotaPolicy` instead of copying PSD's
   client. A package that shares one key across several of its clients installs one
   policy on all of them. Processes, and packages that share a key in one process, still
@@ -161,6 +163,9 @@ client.
 - The two hooks are general: a source can observe other headers or refuse other
   requests before they are sent, with the same placement guarantees, without
   subclassing `AsyncClient`.
+- The testing plugin keeps offline tests free of quota pauses and of quotas left spent
+  by a replay; ADR-0013 lists it as its decision 4.
 - Conventions 1.10: §4 names `xippios_cache_stored_at` as the `retrieved_at` of a cache
   hit; §6 states the hooks, the quota policy, `classify`'s part in retries and `auth=`
-  per request. ADR-0010's "core today" note is resolved.
+  per request; §10 the plugin's quota guarantee. ADR-0010's "core today" note is
+  resolved.

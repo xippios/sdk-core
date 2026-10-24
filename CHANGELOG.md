@@ -200,6 +200,11 @@ All notable changes to this project are documented here. The format follows
   `QuotaSnapshot.describe()` names numbers and times only. Generalises sdk-usda-psd's
   `Quota`, `observe_quota`, `quota_pause` and `QuotaAwareClient`, which sdk-usda-esr and
   sdk-usda-gats would otherwise copy.
+- The pytest plugin keeps quota policies out of offline tests (ADR-0013 decision 4,
+  added by ADR-0015): in every test not marked `live`, every `QuotaPolicy`'s snapshot
+  is forgotten before and after the test, so a replayed 429 cannot leave a source's
+  module-level policy spent for the tests after it, and unless the test is marked
+  `rate_limited` a policy neither waits nor refuses.
 - `Tenants(..., hints=None)`: per field, static text appended to the `ConfigError` that
   `field()` raises when `validate` refuses a value ("...; <hint>"), so the operator
   learns what the variable should hold; the check's own message, which may quote the
@@ -321,7 +326,8 @@ All notable changes to this project are documented here. The format follows
 - Conventions 1.10: §4 names `xippios_cache_stored_at` as the `retrieved_at` of a cache
   hit; §6 states the `before_request` and `observe` hooks, `QuotaPolicy` as the
   implementation of ADR-0010's quota rules, `classify`'s part in retries, and `auth=`
-  per request. ADR-0015 added.
+  per request; §10 the plugin's quota guarantee. ADR-0015 added; ADR-0013 gains its
+  decision 4.
 
 ### Fixed
 

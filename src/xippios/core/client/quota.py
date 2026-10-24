@@ -19,6 +19,7 @@ import dataclasses
 import logging
 import math
 import threading
+import weakref
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -40,6 +41,19 @@ _TEN_YEARS = 315_360_000.0
 Also where a reset header's integer stops being a delay and becomes an epoch timestamp:
 no quota resets in more than ten years, and no epoch timestamp since 1980 is smaller.
 """
+
+
+_POLICIES: "weakref.WeakSet[QuotaPolicy]" = weakref.WeakSet()
+"""Every live policy, for the testing plugin's reset between tests (ADR-0013)."""
+_POLICIES_LOCK = threading.Lock()
+
+
+def _reset_every_policy() -> None:
+    """Forget every live policy's snapshot; the testing plugin calls it around each test."""
+    with _POLICIES_LOCK:
+        policies = list(_POLICIES)
+    for policy in policies:
+        policy.reset()
 
 
 def _utc_now() -> datetime:
@@ -187,6 +201,8 @@ class QuotaPolicy:
         self._sleep = sleep
         self._snapshot: QuotaSnapshot | None = None
         self._lock = threading.Lock()
+        with _POLICIES_LOCK:
+            _POLICIES.add(self)
 
     def snapshot(self) -> QuotaSnapshot | None:
         """The quota as the last response reported it; ``None`` before the first one."""
