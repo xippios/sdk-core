@@ -3,7 +3,7 @@
 A source's ``mcp.py`` is a handful of lines::
 
     from xippios.core.mcp import build_server, main
-    from xippios.usda_nass import tasks
+    from xippios.usda.nass import tasks
 
     server = build_server("usda-nass", [tasks.get_series, tasks.list_commodities])
 
