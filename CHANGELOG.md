@@ -227,20 +227,23 @@ All notable changes to this project are documented here. The format follows
   cap, e.g. `"filter by period or by reporter to see the rest"` for a tool with those
   filters. `None`, the default, keeps the default text; a blank note is refused with
   `ValueError`.
-- `xippios.core.reference.render_int_enums(lists, *, class_names=None, fetched=None,
-  generator="the reference refresh script")`: Python source for one `IntEnum` per list
-  of `(id, name)` pairs, for an upstream whose ids are integers (conventions §3, ADR-0008
-  as amended): values are the ids in upstream order, so a member compares equal to the
-  id in upstream's data; member names come from the names through `enum_member_name`,
-  and a name several ids share gets `_<id>` appended (`TOTAL_DISAPPEARANCE_126`,
-  `TOTAL_DISAPPEARANCE_173`); a name still shared, or a suffix that makes no identifier
-  (a negative id), raises `ValueError`. The module docstring states the rule; layout and
-  `__all__` as `render_str_enums` writes them. `id_name_pairs(records, *, id_field,
-  name_field)` builds the pairs from upstream's records in upstream order: an id is an
-  `int` or a string of ASCII digits, a name a string; a record lacking a field, or with
-  a value of another kind, raises `ValueError` naming the field and the record's
-  position, never the record. Generalises sdk-usda-psd's `render_id_enums`, which
-  rendered PSD's `AttributeId` and `UnitId` locally.
+- `xippios.core.reference.render_int_enums(lists, *, class_names=None,
+  member_names=None, fetched=None, generator="the reference refresh script")`: Python
+  source for one `IntEnum` per list of `(id, name)` pairs, for an upstream whose ids are
+  integers (conventions §3, ADR-0008 as amended): values are the ids in upstream order,
+  so a member compares equal to the id in upstream's data; member names come from the
+  names through `enum_member_name`, and a name several ids share gets `_<id>` appended
+  (`TOTAL_DISAPPEARANCE_126`, `TOTAL_DISAPPEARANCE_173`); a name still shared, or a
+  suffix that makes no identifier (a negative id), raises `ValueError`. `member_names`
+  (key to `{id: member name}`) names a member by hand; the suffix rule still counts
+  upstream's names, so no other member is renamed. The module docstring states the rule;
+  layout, `__all__`, `member_names` and the refusal of a member name too long for any
+  line as in `render_str_enums`. `id_name_pairs(records, *, id_field, name_field)`
+  builds the pairs from upstream's records in upstream order: an id is an `int` or a
+  string of ASCII digits, a name a string; a record lacking a field, or with a value of
+  another kind, raises `ValueError` naming the field and the record's position, never
+  the record. Generalises sdk-usda-psd's `render_id_enums`, which rendered PSD's
+  `AttributeId` and `UnitId` locally.
 
 ### Changed
 
@@ -385,16 +388,27 @@ All notable changes to this project are documented here. The format follows
   quotes unless single quotes need fewer escapes; a member too long for 100 columns laid
   out as ruff formats it, the value in parentheses on a line of its own and, too long
   even there, split into implicitly concatenated parts; `__all__` sorted in ruff's order
-  (RUF022), one name per line, the classes still in the order given. The module
-  docstring wraps at 100 columns, so a long `generator` no longer overflows. The result
-  passes `ruff format --check` and `ruff check` under the family's configuration, but
-  for a member name too long for a line of its own (E501) and a value with a character
-  ruff calls ambiguous, such as an en dash (RUF001). sdk-comtrade formatted the file
-  after every refresh and sorted its lists itself. A source that diffs its generated
-  `enums.py` sees a one-time change on its next refresh: `__all__` sorted, one name per
-  line, long members wrapped, escapes written as ruff writes them. A file that ruff had
-  formatted and whose `__all__` was already sorted renders unchanged (sdk-usda-nass's
-  does).
+  (RUF022), one name per line, the classes still in the order given; a character ruff
+  calls confusable (RUF001: a typographic apostrophe U+2019, an en dash U+2013, a
+  no-break space U+00A0 and the rest of ruff's table, 1582 code points read from ruff
+  0.17.1 by `scripts/refresh_confusables.py`) as a `\u` escape, the value unchanged at
+  runtime and every other character readable (`Côte` stays `Côte`). The module docstring
+  wraps at 100 columns, so a long `generator` no longer overflows. The result passes
+  `ruff format --check` and `ruff check` under the family's configuration. sdk-comtrade
+  formatted the file after every refresh and sorted its lists itself. A source that
+  diffs its generated `enums.py` sees a one-time change on its next refresh: `__all__`
+  sorted, one name per line, long members wrapped, escapes written as ruff writes them,
+  confusable characters escaped. A file that ruff had formatted, whose `__all__` was
+  already sorted and whose values hold no confusable character renders unchanged
+  (sdk-usda-nass's does).
+- **Breaking:** `render_str_enums` refuses a member name longer than 92 columns, which
+  fits no line of 100 (`    NAME = (` alone is too long), with `ValueError` naming the
+  key, the name's length and the limit; it rendered the line too long before. The new
+  keyword `member_names` (key to `{value: member name}`) names such a member by hand,
+  once, in the source's refresh script; it also resolves a collision. A name set there
+  must be an identifier an enum accepts (no keyword, no `_sunder_` or `__dunder__`
+  name), unique in its list, and for a key and a value the lists hold, else
+  `ValueError`.
 - Conventions 1.12: §3 states that an upstream enum of integer ids becomes an `IntEnum`
   and that the generated enums module passes `ruff check` and `ruff format --check` as
   rendered. ADR-0008 gains an amendment.
