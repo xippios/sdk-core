@@ -242,3 +242,24 @@ def test_the_server_from_apply_options_is_the_one_checked(
     assert info.value.code == 2
     assert "is a write server" in capsys.readouterr().err
     assert runs.calls == []
+
+
+def test_the_request_log_is_quiet_when_the_server_from_apply_options_runs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = build_server("example", [])
+    seen: dict[str, int] = {}
+
+    def fake_run(transport: str = "stdio", **kwargs: Any) -> None:
+        seen.update({name: logging.getLogger(name).level for name in ("httpx", "httpcore")})
+
+    monkeypatch.setattr(server, "run", fake_run)
+
+    def apply(args: argparse.Namespace, given: MCPServer) -> MCPServer:
+        # Something the source does here, building a server another way say, raises it.
+        logging.getLogger("httpx").setLevel(logging.INFO)
+        logging.getLogger("httpcore").setLevel(logging.DEBUG)
+        return given
+
+    main(server, [], apply_options=apply)
+    assert seen == {"httpx": logging.WARNING, "httpcore": logging.WARNING}
