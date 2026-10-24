@@ -160,7 +160,7 @@ def parse_retry_after(value: str | None, *, now: datetime | None = None) -> floa
         return seconds if math.isfinite(seconds) else None
     try:
         when = email.utils.parsedate_to_datetime(text)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):  # a huge zone offset overflows
         return None
     if when.tzinfo is None:
         when = when.replace(tzinfo=UTC)

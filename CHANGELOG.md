@@ -335,7 +335,9 @@ All notable changes to this project are documented here. The format follows
   as `"²"`, which `str.isdigit` accepts and `float` refuses, so the retry loop raised it
   out of a request; it reads ASCII digits only now and returns `None` for anything
   else, and for a value too long to be a finite float, which made `retry_after`
-  infinite (the HTTP adapter's `int(retry_after)` then raised `OverflowError`).
+  infinite (the HTTP adapter's `int(retry_after)` then raised `OverflowError`). An
+  HTTP-date whose zone offset is a huge number made `parsedate_to_datetime` raise
+  `OverflowError` out of the retry loop; it is unparseable now, `None` like any other.
 - The live gate skipped every test under a directory named `live`, marked or not: it
   matched the keyword `live`, which a directory's name adds. It follows the marker now.
 - A gzip answer replayed from the cache raised `httpx.DecodingError`: the client stored

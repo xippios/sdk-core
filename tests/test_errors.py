@@ -115,10 +115,20 @@ def test_parse_retry_after_past_date_is_zero() -> None:
     assert parse_retry_after("Tue, 20 Oct 2026 11:00:00 GMT", now=now) == 0.0
 
 
-@pytest.mark.parametrize("value", [None, "", "soon", "-5", "²", "٣", "1²", "9" * 400])
+HUGE_ZONE = "Fri, 23 Oct 2026 08:00:00 +9999999999999999999999999"
+
+
+@pytest.mark.parametrize("value", [None, "", "soon", "-5", "²", "٣", "1²", "9" * 400, HUGE_ZONE])
 def test_parse_retry_after_unparseable(value: str | None) -> None:
-    # "²" and "٣" pass str.isdigit(); int("²") raised, and "9" * 400 is float("inf").
+    # "²" and "٣" pass str.isdigit(); int("²") raised, and "9" * 400 is float("inf");
+    # HUGE_ZONE made parsedate_to_datetime raise OverflowError.
     assert parse_retry_after(value) is None
+
+
+def test_a_429_with_an_overflowing_date_is_a_rate_limit_error() -> None:
+    error = error_from_response(_response(429, headers={"Retry-After": HUGE_ZONE}))
+    assert isinstance(error, RateLimitError)
+    assert error.retry_after is None
 
 
 def test_parse_retry_after_keeps_a_large_finite_delay() -> None:

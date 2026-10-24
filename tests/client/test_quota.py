@@ -14,6 +14,7 @@ from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
+import respx
 
 from xippios.core.client import (
     AsyncClient,
@@ -161,6 +162,34 @@ def test_a_retry_after_that_is_no_number_falls_back_to_the_window(value: str) ->
     snapshot = policy.snapshot()
     assert snapshot is not None
     assert snapshot.resumes_at == NOW + timedelta(minutes=10)
+
+
+@pytest.mark.parametrize(
+    "header", ["Retry-After", "x-ratelimit-reset"], ids=["retry-after", "reset"]
+)
+def test_a_date_that_overflows_falls_back_to_the_window(header: str) -> None:
+    # parsedate_to_datetime raised OverflowError for a huge zone offset, out of observe.
+    value = "Fri, 23 Oct 2026 08:00:00 +9999999999999999999999999"
+    policy = QuotaPolicy(reset_header="x-ratelimit-reset", window=600.0, clock=Clock())
+    policy.observe(answer(429, {header: value}))
+    snapshot = policy.snapshot()
+    assert snapshot is not None
+    assert snapshot.resumes_at == NOW + timedelta(minutes=10)
+
+
+@pytest.mark.anyio
+async def test_a_503_with_an_overflowing_retry_after_is_retried(
+    respx_mock: respx.MockRouter,
+) -> None:
+    events: list[str] = []
+    value = "Fri, 23 Oct 2026 08:00:00 +9999999999999999999999999"
+    route = respx_mock.get(f"{BASE}/v1/x").mock(
+        side_effect=[httpx.Response(503, headers={"Retry-After": value}), httpx.Response(200)]
+    )
+    config = make_config(retry=RetryPolicy(max_attempts=2, jitter=False))
+    await AsyncClient(config, sleep=Sleeper(events)).get("/v1/x")
+    assert route.call_count == 2
+    assert events == ["sleep 0"]
 
 
 def test_a_huge_retry_after_is_cut_to_the_window() -> None:
