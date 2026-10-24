@@ -139,6 +139,39 @@ def test_the_header_names_are_the_policy_s() -> None:
     assert (snapshot.limit, snapshot.remaining) == (500, 12)
 
 
+def test_header_reading_can_be_turned_off() -> None:
+    # UN Comtrade's x-ratelimit-* headers describe its per-second pace, not its daily quota.
+    policy = QuotaPolicy(limit_header=None, remaining_header=None, clock=Clock())
+    policy.observe(answer(headers=SPENT))
+    assert policy.snapshot() is None, "a 200 leaving remaining 0 is not read"
+    policy.observe(answer(429, {**QUOTA, "Retry-After": "60"}))
+    assert policy.snapshot() == QuotaSnapshot(
+        limit=None, remaining=0, observed_at=NOW, resumes_at=NOW + timedelta(minutes=1)
+    )
+    policy.reset()
+    remaining_only = QuotaPolicy(limit_header=None, clock=Clock())
+    remaining_only.observe(answer(headers=QUOTA))
+    assert remaining_only.snapshot() == QuotaSnapshot(
+        limit=None, remaining=999, observed_at=NOW, resumes_at=None
+    )
+
+
+def test_without_headers_spent_and_mark_spent_still_mark_the_quota() -> None:
+    policy = QuotaPolicy(
+        limit_header=None, remaining_header=None, spent=comtrade_spent, window=86_400.0,
+        clock=Clock(),
+    )  # fmt: skip
+    policy.observe(quota_403("02:00:00"))
+    snapshot = policy.snapshot()
+    assert snapshot is not None
+    assert snapshot.resumes_at == NOW + timedelta(hours=2)
+    policy.reset()
+    policy.mark_spent(30.0)
+    snapshot = policy.snapshot()
+    assert snapshot is not None
+    assert snapshot.resumes_at == NOW + timedelta(seconds=30)
+
+
 @pytest.mark.parametrize("value", ["", "many", "-1", "1.5", "²", "٣", "1²", "9" * 19, "9" * 5000])
 def test_a_header_that_is_no_count_is_ignored(value: str) -> None:
     # "²" and "٣" pass str.isdigit(), and int("²") raised; int() refuses 5,000 digits.

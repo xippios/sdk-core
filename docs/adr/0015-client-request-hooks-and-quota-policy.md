@@ -64,7 +64,9 @@ client.
      nothing; `resumes_at` is then `Retry-After` (on a 429), else the reset header, else
      `window` from now. The reset header is read as delay-seconds, as epoch seconds
      when its integer exceeds ten years of seconds (GitHub's `x-ratelimit-reset`), or as
-     an HTTP-date. A cache hit is ignored.
+     an HTTP-date. A cache hit is ignored. `limit_header` or `remaining_header` set to
+     `None` turns that header's reading off; with both off, the policy relies on a 429,
+     `spent` and `mark_spent` alone.
    - `spent(response) -> float | None`, optional, is asked about every observed
      response after the headers are read: a number marks the quota spent for that many
      seconds, ahead of `Retry-After` and the reset header, so an upstream that answers a

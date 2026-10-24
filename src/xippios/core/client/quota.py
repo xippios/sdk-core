@@ -64,6 +64,11 @@ def _utc(moment: datetime) -> str:
     return moment.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _header_count(response: httpx.Response, name: str | None) -> int | None:
+    """The count in header ``name``; ``None`` when that header's reading is off (``None``)."""
+    return None if name is None else _count(response.headers.get(name))
+
+
 def _count(value: str | None) -> int | None:
     """A header's non-negative integer in ASCII digits, or ``None`` when absent or not one.
 
@@ -132,9 +137,14 @@ class QuotaPolicy:
     (ADR-0010) and can read ``snapshot()`` for its message: ``observe`` runs before it.
 
     Args:
-        limit_header: The header with the quota's size, e.g. ``"x-ratelimit-limit"``.
+        limit_header: The header with the quota's size, e.g. ``"x-ratelimit-limit"``;
+            ``None`` turns its reading off.
         remaining_header: The header with the requests left, e.g.
-            ``"x-ratelimit-remaining"``.
+            ``"x-ratelimit-remaining"``; ``None`` turns its reading off. Read only a
+            header that describes the long-window quota: where upstream's
+            ``x-ratelimit-*`` headers describe a per-second or per-minute pace (UN
+            Comtrade's), a remaining ``0`` would pause for ``window``. With both
+            ``None`` the policy relies on a 429, ``spent`` and ``mark_spent`` alone.
         reset_header: The header saying when a spent quota comes back, e.g.
             ``"x-ratelimit-reset"``, in any of three formats: delay-seconds (``"120"``),
             epoch seconds (``"1761206400"``, as GitHub sends it; an integer above ten
@@ -176,8 +186,8 @@ class QuotaPolicy:
     def __init__(
         self,
         *,
-        limit_header: str = "x-ratelimit-limit",
-        remaining_header: str = "x-ratelimit-remaining",
+        limit_header: str | None = "x-ratelimit-limit",
+        remaining_header: str | None = "x-ratelimit-remaining",
         reset_header: str | None = None,
         window: float = 3600.0,
         spent: Callable[[httpx.Response], float | None] | None = None,
@@ -227,8 +237,8 @@ class QuotaPolicy:
         """
         if response.extensions.get("xippios_cache") == "hit":
             return
-        limit = _count(response.headers.get(self.limit_header))
-        remaining = _count(response.headers.get(self.remaining_header))
+        limit = _header_count(response, self.limit_header)
+        remaining = _header_count(response, self.remaining_header)
         limited = response.status_code == 429
         named = self.spent(response) if self.spent is not None else None
         if limit is None and remaining is None and not limited and named is None:
