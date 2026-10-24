@@ -1,6 +1,6 @@
 # xippios SDK family — conventions
 
-Version 1.12 · 2026-10-24 · applies to every `sdk-*` repository under github.com/xippios.
+Version 1.13 · 2026-10-24 · applies to every `sdk-*` repository under github.com/xippios.
 Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 
 ## 1. Naming
@@ -56,6 +56,15 @@ plus a loader), `_client.py` (the configured `xippios.core.client` instance).
 - Names and semantics come from the upstream documentation, which is snapshotted in
   `docs/upstream/` with a `FETCHED.md` recording date and URL. The snapshot is the
   reference for the agent; refresh it deliberately, by PR, and diff it.
+- `Fetched` in `FETCHED.md` is the UTC time of the run in ISO 8601 with an explicit `Z`
+  (`2026-10-24T09:15:00Z`), never a local date or time. A table that a Markdown pipe
+  table cannot hold, one with merged cells (`rowspan`, `colspan`) or with a table nested
+  in it, stays its HTML in the Markdown snapshot, and one line in `FETCHED.md` says so.
+- A vendor's documentation is reproduced in the snapshot for reference (ADR-0003,
+  amendment 2026-10-24): `FETCHED.md` carries the copyright line as the documentation
+  states it (`© 2026 CashCtrl Ltd.`) and the URL the text was fetched from. A vendor's
+  objection is honoured by replacing the snapshot with a summary that keeps the names and
+  semantics the wrappers rely on.
 - Within-source hygiene is required: dates → `datetime.date`/`datetime`, numbers →
   `int`/`Decimal`/`float` as appropriate, upstream enums → `StrEnum`, pagination
   resolved, errors typed. An upstream enum of integer ids becomes an `IntEnum` instead,
@@ -65,6 +74,12 @@ plus a loader), `_client.py` (the configured `xippios.core.client` instance).
 - Task-shaped functions may return a *projection* of an upstream record: a subset of
   its columns under their upstream names, typed, built with `UpstreamModel.project`.
   Nothing is renamed or computed; parsing a value is the only permitted override.
+- Sensitive upstream fields stay faithful in Python and are redacted at the adapters
+  (ADR-0017). A sensitive field, such as a person's government identifier or bank
+  account number (CashCtrl's `ssn`, `iban`), keeps its upstream name and its value in the
+  models and the task results; the MCP text and the HTTP envelope show it as `REDACTED`
+  unless the operator opts in (§8, §9). A source lists the sensitive fields its snapshot
+  documents once, on its models, and its fixtures never record their values.
 - **No cross-source normalization.** A USDA `marketing_year` stays a USDA concept.
   Mapping between sources is business logic and lives outside this family.
 - Reference data (commodity codes, country codes, report calendars) ships inside the
@@ -132,17 +147,21 @@ XippiosError
 ├── ValidationError      we could not parse what upstream returned (carries raw body)
 ├── UpstreamError        other 4xx/5xx (carries status, body)
 ├── TransportError       network, timeout
-└── InvalidRequestError  the request cannot be sent as given: a bad argument, or a query
-                         the source documents it will refuse (ADR-0007); raised before
-                         any upstream call
+└── InvalidRequestError  the request as given cannot be served: a bad argument or a
+                         documented refusal, detected before the call or by upstream's
+                         own refusal of the query (ADR-0007)
 ```
 
 Source packages subclass only when upstream has a distinct, documented failure mode;
 a refusal the package makes itself, such as a query over a documented record limit or
-an unknown filter name, subclasses `InvalidRequestError`. Adapters convert these to
-structured text (MCP) or problem+json (HTTP; `InvalidRequestError` is 422); they never
-leak tracebacks. An error message names the request's method and path, never its host
-or query string: the host can name a tenant, the query can carry a key (ADR-0005).
+an unknown filter name, subclasses `InvalidRequestError`. Upstream's own refusal of
+the query as given is mapped to `InvalidRequestError`, or a subclass, in `classify` (§6):
+usda-nass's HTTP 413 over the record limit, comtrade's HTTP 400, cashctrl's
+`RequestRejected`. Agents and HTTP 422 treat both alike: the caller has to change the
+request. Adapters convert these to structured text (MCP) or problem+json (HTTP;
+`InvalidRequestError` is 422); they never leak tracebacks. An error message names the
+request's method and path, never its host or query string: the host can name a tenant,
+the query can carry a key (ADR-0005).
 
 ## 6. HTTP client (`xippios.core.client`)
 
@@ -246,6 +265,9 @@ Messages and results name tenants and variables, never a value.
   refused.
 - Errors return as text starting with `error: <ErrorClass>: <message>`; never raise
   through the MCP boundary.
+- A field the source declares sensitive (§3) appears in a tool's text as `REDACTED`
+  unless the operator opts in when starting the server; no tool argument reveals it
+  (ADR-0017).
 - Entry point `xippios-<source>-mcp` runs stdio by default; `--http` for streamable HTTP.
   A source's own options reach core's `main` through `add_options` and `apply_options`,
   parsed once with core's; an error applying them stops the process with exit status 2.
@@ -257,7 +279,9 @@ one tag per source; responses are the `Result[T]` envelope; errors as RFC 9457
 problem details. A task whose parameters are all scalars is a `GET` with query
 parameters; a task with any non-scalar parameter (a mapping, a list, a model) is a
 `POST` whose JSON body is an object keyed by parameter name (ADR-0007). Mounted by the
-consumer, never served standalone from the package.
+consumer, never served standalone from the package. A field the source declares
+sensitive (§3) appears in the envelope as `REDACTED` unless the operator opts in when
+building the router; no request parameter reveals it (ADR-0017).
 
 ## 10. Testing
 
@@ -324,12 +348,17 @@ consumer, never served standalone from the package.
 `uv` for everything (lock, sync, build, publish). Python ≥ 3.12. `ruff` (lint +
 format, line length 100), `mypy --strict`, `pre-commit` with those two plus
 `detect-secrets`. Dependencies pinned by `uv.lock`; runtime deps declared with
-lower bounds only.
+lower bounds only, except `xippios-core`, which §12 bounds to one minor.
 
 ## 12. Versioning and releases
 
 - SemVer. Pre-1.0: breaking changes bump minor. Post-1.0: breaking changes bump major.
 - An upstream API change that changes our public surface is a breaking change.
+- A source depends on one core minor with an upper bound, `xippios-core~=0.2.0`, and its
+  extras likewise (`xippios-core[mcp]~=0.2.0`). Core patch releases stay compatible; core
+  keeps no backward compatibility across minors, so a new core minor may break, and a
+  source adopts it through §15 before its next release. A source already published with
+  an open bound stays as published and gets the bound with its next release.
 - `CHANGELOG.md` in Keep a Changelog format; every PR adds an entry under Unreleased.
 - Release = human tags `vX.Y.Z` on `main` → `publish.yml` → environment `pypi` →
   human approves → trusted publisher uploads. No tokens anywhere.
@@ -351,3 +380,36 @@ lower bounds only.
 
 Not a place for normalization across sources, scheduling, storage, or any product
 logic. Those live in product repositories that depend on these packages.
+
+## 15. Adopting a core or template release
+
+A source adopts a new core minor, and the sdk-template release that goes with it, in one
+adoption PR before its next release (§12). The PR description is this checklist, ticked;
+an item the release does not touch is ticked with a one-line reason. sdk-template's
+`/adopt-release` command walks the list step by step.
+
+1. The core floor is raised: `xippios-core` and each of its extras name the new minor
+   with the bound of §12 (`xippios-core~=0.2.0`), resolved from PyPI with no git pin left
+   in `[tool.uv.sources]`, and `uv.lock` is updated.
+2. `copier update` brings the repository to the template release, its conflicts
+   resolved.
+3. Every local workaround that a core change replaced is deleted, its tests with it, and
+   the PR description names the core change for each (`QuotaAwareClient` → `QuotaPolicy`,
+   ADR-0015); the Consequences of the release's ADRs list them per source.
+4. Logic duplicated across sources is moved into core or dropped: what core now provides
+   is dropped here; what it does not provide yet is proposed to sdk-core and named in
+   the PR description, never copied further.
+5. Every test that asserted a limiter wait or key resolution is marked or overridden per
+   ADR-0013: marked `rate_limited`, or given a `placeholder_api_key` fixture of its own
+   that pins nothing.
+6. Generated enum files are re-rendered once with the release's renderers and committed
+   as rendered.
+7. `mypy --strict` covers `scripts/` too (`files = ["src", "tests", "scripts"]`).
+8. The current conventions version is applied: every rule changed since the version the
+   source last applied holds in the source.
+9. `CHANGELOG.md` has a line under Unreleased naming the core, template and conventions
+   versions adopted.
+
+An adoption PR changes nothing else: no new endpoints, tasks or fixtures ride along. The
+reviewer judges it against this list and nothing else (definition of done, block
+"Adoption PR").
