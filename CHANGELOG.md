@@ -246,6 +246,9 @@ All notable changes to this project are documented here. The format follows
   naming the field and the record's position, never the record. Generalises
   sdk-usda-psd's `render_id_enums`, which rendered PSD's `AttributeId` and `UnitId`
   locally.
+- ADR-0017, sensitive upstream fields: faithful in Python, redacted at the adapters
+  unless the operator opts in, declared once by the source, never recorded in fixtures
+  (CashCtrl's `ssn`, `iban`). The mechanism follows in this release.
 
 ### Changed
 
@@ -424,6 +427,15 @@ All notable changes to this project are documented here. The format follows
 - Conventions 1.12: §3 states that an upstream enum of integer ids becomes an `IntEnum`
   and that the generated enums module is ASCII-only and passes `ruff check` and
   `ruff format --check` as rendered. ADR-0008 gains an amendment.
+- Conventions 1.13: §3 states `Fetched` as UTC ISO 8601 with `Z`, tables with merged
+  cells kept as HTML, vendor snapshots (ADR-0003 amendment) and sensitive fields
+  (ADR-0017); §5 that `InvalidRequestError` also covers upstream's own refusal, mapped in
+  `classify` (ADR-0007 amendment; its docstring and the README follow); §8 and §9 the
+  redaction at the adapters; §11 and §12 one core minor with an upper bound
+  (`xippios-core~=0.2.0`); §15, new, how a source adopts a core or template release,
+  mirrored by an "Adoption PR" block in the definition of done.
+- CI runs `uv run pre-commit run --all-files` after the tests, its hook environments
+  cached, so the definition of done's "Enforced by CI" block holds.
 
 ### Fixed
 
