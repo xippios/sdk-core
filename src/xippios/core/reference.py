@@ -198,6 +198,23 @@ def _derived(text: str) -> str | None:
         return None
 
 
+def _acceptable(member: str) -> bool:
+    """Whether ``member`` is an ASCII identifier that an enum takes as a member.
+
+    An enum refuses ``mro`` and ``_sunder_`` names and does not make a member of a name
+    that starts with ``__``; a keyword is no identifier to assign to.
+    """
+    sunder = len(member) > 2 and member[0] == member[-1] == "_"
+    return (
+        member.isascii()
+        and member.isidentifier()
+        and not keyword.iskeyword(member)
+        and not member.startswith("__")
+        and not sunder
+        and member != "mro"
+    )
+
+
 def _member_names[T](
     key: str,
     items: Sequence[T],
@@ -233,8 +250,7 @@ def _member_names[T](
         else:
             members.append(name)
     for member in members:
-        reserved = member.startswith("_") and member.endswith("_")
-        if not member.isidentifier() or keyword.iskeyword(member) or reserved:
+        if not _acceptable(member):
             raise ValueError(f"{key}: {member!r} is not a member name an enum accepts")
     if len(set(members)) != len(members):
         raise ValueError(f"{key}: member names collide: {sorted(members)}")
@@ -327,8 +343,9 @@ def render_str_enums(
         ValueError: When two members of one list share a name, a member name is longer
             than 92 columns (naming the key, its length and the limit), a value without
             an override has nothing to derive a name from (naming the key and the
-            position), or a name in ``member_names`` is no identifier, reserved by
-            ``enum``, or for a key or a value that ``lists`` does not hold.
+            position), or a name in ``member_names`` is no ASCII identifier, one ``enum``
+            does not take (``mro``, ``__x``, ``_x_``), or for a key or a value that
+            ``lists`` does not hold.
     """
     _unknown_keys(member_names or {}, lists)
     names = {key: (class_names or {}).get(key, _class_name(key)) for key in lists}
@@ -390,8 +407,9 @@ def render_int_enums(
         ValueError: When two members of one list still share a name after the suffix, a
             suffix makes no identifier (a negative id), a member name is longer than 92
             columns, a name without an override has nothing to derive one from, or a
-            name in ``member_names`` is no identifier, reserved by ``enum``, or for a key
-            or an id that ``lists`` does not hold.
+            name in ``member_names`` is no ASCII identifier, one ``enum`` does not take
+            (``mro``, ``__x``, ``_x_``), or for a key or an id that ``lists`` does not
+            hold.
     """
     _unknown_keys(member_names or {}, lists)
     names = {key: (class_names or {}).get(key, _class_name(key)) for key in lists}

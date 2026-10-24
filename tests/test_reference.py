@@ -268,6 +268,12 @@ def test_render_str_enums_takes_a_member_name_for_a_value_with_no_derivable_name
     assert assert_ruff_clean(tmp_path, source)["Note"].OTHER.value == value
 
 
+@pytest.mark.parametrize("member", ["_", "_CORN", "CORN_", "name", "value"])
+def test_render_str_enums_takes_a_member_name_an_enum_accepts(tmp_path: Path, member: str) -> None:
+    source = render_str_enums({"x": ["CORN"]}, member_names={"x": {"CORN": member}})
+    assert getattr(assert_ruff_clean(tmp_path, source)["X"], member).value == "CORN"
+
+
 def test_render_str_enums_takes_a_member_name_that_resolves_a_collision(tmp_path: Path) -> None:
     source = render_str_enums(
         {"x": ["A B", "A-B"]}, member_names={"x": {"A-B": "A_HYPHEN_B"}}, generator="tests"
@@ -283,6 +289,9 @@ def test_render_str_enums_takes_a_member_name_that_resolves_a_collision(tmp_path
         ({"x": {"CORN": "corn-grain"}}, r"^x: 'corn-grain' is not a member name an enum"),
         ({"x": {"CORN": "class"}}, r"^x: 'class' is not a member name an enum"),
         ({"x": {"CORN": "_CORN_"}}, r"^x: '_CORN_' is not a member name an enum"),
+        ({"x": {"CORN": "__CORN"}}, r"^x: '__CORN' is not a member name an enum"),
+        ({"x": {"CORN": "mro"}}, r"^x: 'mro' is not a member name an enum"),
+        ({"x": {"CORN": "MA\u00cfS"}}, r"^x: 'MA\u00cfS' is not a member name an enum"),
         ({"x": {"RICE": "RICE"}}, r"^x: member_names names what the list does not hold"),
         ({"y": {"CORN": "C"}}, r"^member_names names lists that are not rendered: \['y'\]$"),
         ({"x": {"CORN": "C" * 93}}, r"^x: the member name for 'CORN' at position 0 is 93 "),
