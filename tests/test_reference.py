@@ -324,7 +324,7 @@ def test_render_str_enums_takes_a_member_name_that_resolves_a_collision(tmp_path
 @pytest.mark.parametrize(
     ("member_names", "message"),
     [
-        ({"x": {"CORN": "WHEAT"}}, r"^x: member names collide: \['WHEAT', 'WHEAT'\]$"),
+        ({"x": {"CORN": "WHEAT"}}, r"^x: member names collide: \['WHEAT'\]$"),
         ({"x": {"CORN": "corn-grain"}}, r"^x: 'corn-grain' is not a member name an enum"),
         ({"x": {"CORN": "class"}}, r"^x: 'class' is not a member name an enum"),
         ({"x": {"CORN": "_CORN_"}}, r"^x: '_CORN_' is not a member name an enum"),
@@ -344,8 +344,8 @@ def test_render_str_enums_refuses_a_member_name_set_by_hand_it_cannot_use(
 
 
 def test_render_str_enums_rejects_colliding_members() -> None:
-    with pytest.raises(ValueError, match="collide"):
-        render_str_enums({"x": ["A B", "A-B"]})
+    with pytest.raises(ValueError, match=r"^x: member names collide: \['A_B', 'C_D'\]$"):
+        render_str_enums({"x": ["A B", "OK", "C D", "A-B", "C-D", "FINE"]})  # only those two
 
 
 def test_render_str_enums_with_no_lists_imports_nothing(tmp_path: Path) -> None:
@@ -519,7 +519,7 @@ def test_render_int_enums_takes_a_member_name_and_leaves_the_others(tmp_path: Pa
 @pytest.mark.parametrize(
     ("member_names", "message"),
     [
-        ({"attributeId": {173: "AREA_HARVESTED"}}, r"member names collide"),
+        ({"attributeId": {173: "AREA_HARVESTED"}}, r"member names collide: \['AREA_HARVESTED'\]$"),
         ({"attributeId": {173: "1ST"}}, r"'1ST' is not a member name an enum accepts"),
         ({"attributeId": {999: "X"}}, r"member_names names what the list does not hold: \[999\]"),
         ({"unitId": {1: "X"}}, r"member_names names lists that are not rendered: \['unitId'\]"),

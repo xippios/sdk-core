@@ -253,7 +253,8 @@ def _member_names[T](
         if not _acceptable(member):
             raise ValueError(f"{key}: {member!r} is not a member name an enum accepts")
     if len(set(members)) != len(members):
-        raise ValueError(f"{key}: member names collide: {sorted(members)}")
+        colliding = sorted(name for name, count in Counter(members).items() if count > 1)
+        raise ValueError(f"{key}: member names collide: {colliding}")
     for index, (member, label) in enumerate(zip(members, labels, strict=True)):
         if len(member) > _NAME_LIMIT:
             raise ValueError(
