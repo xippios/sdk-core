@@ -134,6 +134,13 @@ done's grep of every fixture for key patterns before it is committed.
   - The quota snapshots are forgotten for every policy alive when a test not marked
     `live` starts and ends; a live test keeps them, and a live test after another live
     test sees what the first one left.
+  - Consecutive live tests share every policy's snapshot: a quota one live test spends
+    makes the next one wait within the cap, or raise `RateLimitError` without sending.
+  - The reset runs in a test's setup after the fixtures of wider scope, so a policy that
+    such a fixture spends while it is set up is forgotten in the setup of the first test
+    not marked `live` from then on, the one that set it up included, and never reaches
+    that test's body; a fixture that hands an offline test a spent quota is
+    function-scoped.
 - A subclass of `EnvKeyAuth` outside core that implements `apply(request, key)` breaks;
   none is known (0.x, conventions §12).
 - Conventions §10 states the guarantees and names the markers.

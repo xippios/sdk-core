@@ -352,6 +352,13 @@ All notable changes to this project are documented here. The format follows
 - Conventions 1.11: §8 states the per-tool row cap for a reference tool whose whole list
   an agent needs, with the byte cap kept for every tool, and that the note never
   promises a filter the tool lacks. ADR-0016 added.
+- ADR-0013's edges, ADR-0015's consequences and the plugin's docstring name three more
+  edges of the plugin's quota guarantee: consecutive live tests share every policy's
+  snapshot, so a quota one spends makes the next wait or refuses its request without
+  sending; a policy spent while a fixture of wider scope is set up is forgotten in the
+  setup of the first test not marked `live` from then on, before its body; and a
+  `QuotaPolicy` subclass that overrides `before_request` opts out of the neutralisation
+  wherever its override runs.
 
 ### Fixed
 
