@@ -99,6 +99,12 @@ commodity classification), and a tool that needs more rows need not be named `li
   A test that asserts the old text ("more filters or a shorter date range") fails; none
   is known in the family. A result with non-ASCII text keeps fewer rows under the same
   `max_bytes`, since each such character now counts its two to four UTF-8 bytes.
+- The review of ADR-0015's change found three edges of the testing plugin's quota
+  guarantee, documented with this change: consecutive live tests share every policy's
+  snapshot; a quota a fixture of wider scope spends while it is set up is forgotten in
+  the setup of the first test not marked `live` from then on; and a subclass's override
+  of `before_request` is not called through the hook `install` sets and is not
+  neutralised by the plugin. ADR-0013's edges and ADR-0015's consequences state them.
 - Conventions 1.11: §8 states the default cap, the per-tool cap, rows and bytes, for a
   reference tool whose whole list an agent needs, where a source keeps its caps
   (`MCP_CAPS` in `tasks.py`), and that the note never promises a filter the tool lacks.

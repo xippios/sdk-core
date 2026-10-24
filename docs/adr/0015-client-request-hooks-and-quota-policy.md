@@ -186,3 +186,7 @@ client.
   hit; §6 states the hooks, the quota policy, `classify`'s part in retries and `auth=`
   per request; §10 the plugin's quota guarantee. ADR-0010's "core today" note is
   resolved.
+
+Amended by ADR-0016 (2026-10-24): a consequence, that a subclass's override of
+`before_request` is not called through the hook `install` sets and is not neutralised by
+the testing plugin.
