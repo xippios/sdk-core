@@ -176,8 +176,9 @@ or query string: the host can name a tenant, the query can carry a key (ADR-0005
 - Optional response cache (in-memory by default, pluggable) keyed on method+URL+params.
 - Credentials come from the client's `auth`. A call to a keyless endpoint on the same
   host passes `auth=None` and is sent without them; another `httpx.Auth` replaces them
-  for one call; no second client is needed to leave the key off (ADR-0015). The cache
-  key leaves `auth` out.
+  for one call; no second client is needed to leave the key off (ADR-0015). `auth=None`
+  and the client's own share the cache; a call with an `httpx.Auth` of its own bypasses
+  it, neither looked up nor stored.
 - One `User-Agent`: `xippios-<source>/<version> (+https://github.com/xippios)`.
 - Timeouts explicit; defaults 10 s connect, 60 s read.
 - A request body is JSON (`json=`) or form-encoded (`data=`, for an upstream whose

@@ -100,8 +100,11 @@ client.
    `Client`, and `record`/`record_sync` take `auth: httpx.Auth | UseClientDefault | None
    = httpx.USE_CLIENT_DEFAULT`, typed as httpx types it and passed to httpx's `send`:
    `None` sends the request, every retry included, without the client's credentials,
-   an `httpx.Auth` replaces them for that call, the default sends the client's. The
-   cache key leaves `auth` out.
+   an `httpx.Auth` replaces them for that call, the default sends the client's. A call
+   with `auth=None` and one with the default share the cache: the keyless endpoints
+   this is for answer alike either way. A call with an `httpx.Auth` of its own bypasses
+   the cache, neither looked up nor stored, since another identity may get another
+   answer from the same URL.
 5. **A cache hit says when it was stored.** Next to `"xippios_cache": "hit"`, a hit
    carries `response.extensions["xippios_cache_stored_at"]`, the entry's `stored_at` in
    epoch seconds. On a hit a task sets `retrieved_at` from it (conventions §4). Since
@@ -140,9 +143,10 @@ client.
   quota spent by itself, and any other answer through `spent`. usda-nass, comtrade and
   cashctrl adopt decision 4 by installing a policy, as ADR-0010's adoption note
   foresaw; comtrade passes a `spent` that reads its 403's "replenished in" time.
-- A GET cached with one auth answers the same GET with another, since the cache key
-  leaves `auth` out. A source whose keyed and keyless answers differ for one URL keeps
-  them apart with `cache_filter`.
+- A GET cached by a keyed call answers the same GET sent with `auth=None`, and the
+  other way round. A source whose keyed and keyless answers differ for one URL keeps
+  them apart with `cache_filter`; one that sends another identity's credentials passes
+  that `httpx.Auth` and never shares an entry.
 - `UseClientDefault`, the type of `httpx.USE_CLIENT_DEFAULT`, is private to httpx
   (`httpx._client`); core imports it in one place, `client/_core.py`. An httpx release
   that moves it breaks that import, which mypy and the tests catch.

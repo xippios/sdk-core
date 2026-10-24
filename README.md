@@ -172,7 +172,8 @@ any other error it returns, an `AuthError` say, ends them.
 
 `auth=` on `request`, `get`, `get_json` and `record` overrides the client's credentials
 for one call: `None` sends none, for a keyless endpoint on the same host, and another
-`httpx.Auth` replaces them. The cache key leaves `auth` out.
+`httpx.Auth` replaces them. `None` and the default share the cache; a call with an
+`httpx.Auth` of its own bypasses it, neither looked up nor stored.
 
 ## Multi-tenant sources
 

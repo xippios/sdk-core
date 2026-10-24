@@ -184,9 +184,9 @@ class AsyncClient:
             auth: Credentials for this request only, every retry included:
                 ``httpx.USE_CLIENT_DEFAULT`` (the default) sends the client's ``auth``,
                 ``None`` sends none, for a keyless endpoint on the same host, and an
-                ``httpx.Auth`` replaces the client's, e.g.
-                ``QueryKeyAuth("key", "OTHER_API_KEY")``. The cache key leaves it out:
-                a GET cached with one auth answers the same GET with another.
+                ``httpx.Auth`` replaces the client's. The default and ``None`` share the
+                cache; a call with an ``httpx.Auth`` of its own bypasses it, neither
+                looked up nor stored, since another identity may get another answer.
 
         Raises:
             ValueError: Both ``json`` and ``data`` were given; a request has one body.
@@ -196,7 +196,8 @@ class AsyncClient:
         pool = self._pool()
         method = method.upper()
         probe = pool.build_request(method, path, params=params)
-        key = self._cache_key_for(probe)
+        # A call with credentials of its own may get another answer: no cache for it.
+        key = None if isinstance(auth, httpx.Auth) else self._cache_key_for(probe)
         if key is not None and self.config.cache is not None:
             cached = self.config.cache.get(key)
             if cached is not None:

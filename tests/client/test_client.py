@@ -949,7 +949,29 @@ async def test_auth_none_holds_for_every_retry(
 
 
 @pytest.mark.anyio
-async def test_the_cache_key_leaves_auth_out(respx_mock: respx.MockRouter) -> None:
+async def test_a_call_with_its_own_auth_bypasses_the_cache(respx_mock: respx.MockRouter) -> None:
+    route = respx_mock.get(f"{BASE}/v1/x").mock(
+        side_effect=[
+            httpx.Response(200, json={"who": "client"}),
+            httpx.Response(200, json={"who": "other"}),
+        ]
+    )
+    cache = MemoryCache()
+    config = ClientConfig(source="example", version="1", base_url=BASE, cache=cache)
+    client = AsyncClient(config, auth=HeaderKeyAuth("X-Api-Key", KEY_ENV))
+    assert await client.get_json("/v1/x") == {"who": "client"}
+    other = await client.get_json("/v1/x", auth=httpx.BasicAuth("user", "pw"))
+    assert other == {"who": "other"}  # reached the transport, not the keyed entry
+    assert route.call_count == 2
+    assert route.calls.last.request.headers["authorization"].startswith("Basic ")
+    assert len(cache) == 1
+    hit = await client.get("/v1/x")
+    assert hit.extensions["xippios_cache"] == "hit"
+    assert hit.json() == {"who": "client"}  # the other auth's answer was not stored
+
+
+@pytest.mark.anyio
+async def test_auth_none_and_the_default_share_the_cache(respx_mock: respx.MockRouter) -> None:
     route = respx_mock.get(f"{BASE}/v1/reference").respond(200, json={"codes": [1]})
     config = ClientConfig(source="example", version="1", base_url=BASE, cache=MemoryCache())
     client = AsyncClient(config, auth=QueryKeyAuth("key", KEY_ENV))
