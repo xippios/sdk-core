@@ -23,6 +23,8 @@ from typing import Any, cast
 
 from pydantic import TypeAdapter
 
+from xippios.core._confusables import CONFUSABLES
+
 __all__ = [
     "enum_member_name",
     "id_name_pairs",
@@ -143,7 +145,15 @@ def _width(text: str) -> int:
 
 
 def _escaped(char: str, quote: str) -> str:
-    """``char`` inside a literal delimited by ``quote``: ``repr()``'s escape, the quote escaped."""
+    """``char`` inside a literal delimited by ``quote``, escaped where it has to be.
+
+    A character ruff calls confusable (RUF001) becomes a Unicode escape, the quote is
+    escaped, and every other character is as ``repr()`` writes it: printable ones as they
+    are, ``Côte`` stays ``Côte``.
+    """
+    code = ord(char)
+    if code in CONFUSABLES:
+        return f"\\u{code:04x}" if code <= 0xFFFF else f"\\U{code:08x}"
     return "\\" + char if char == quote else repr(char)[1:-1]
 
 
@@ -160,7 +170,7 @@ def _parts(value: str) -> list[str]:
     though every quote needed its escape, since each part picks its own quotes.
     """
     budget = _LINE_LENGTH - 10
-    widths = [_width(repr(char)[1:-1]) + (char in "'\"") for char in value]
+    widths = [_width(_escaped(char, '"')) + (char == "'") for char in value]
     parts: list[str] = []
     start, used, space = 0, 0, -1
     for index, width in enumerate(widths):
