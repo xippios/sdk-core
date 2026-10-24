@@ -78,11 +78,16 @@ not check that a task takes `confirm: bool = False`, which conventions §8 requi
 7. **The lock is a server option, implemented once.** `TenantLock(param, value)` in
    `xippios.core.mcp`. `build_server(..., tenant_lock=...)` and
    `register_tasks(..., tenant_lock=...)` install, once per server, a middleware that runs
-   before every tool call: a call whose `param` is `value` passes; one naming another
-   tenant is answered with `error: InvalidRequestError: this server is locked to
-   <param>=<value>; the call named another tenant` and the tool does not run; a call
-   without `param` is left to the tool's own argument validation; listing tools and every
-   other request are untouched. `build_server` passes the instructions one more
+   before every tool call. A tool that takes the tenant parameter must receive it on a
+   locked server; a default is refused. A call whose `param` is `value` passes; one
+   naming another tenant is answered with `error: InvalidRequestError: this server is
+   locked to <param>=<value>; the call named another tenant`, and one that leaves `param`
+   out while the tool's input schema declares it with `...; the call did not name the
+   tenant`; the tool does not run. `register_tasks` refuses with `ValueError` a task whose
+   `param` has a default on a locked server, and the lock on a server that already has
+   such a task, since the default would name a tenant the caller never chose. A tool
+   that does not take `param`, the tenant list for one, listing tools and every other
+   request are untouched. `build_server` passes the instructions one more
    sentence, "This server is locked to <param> <value>; every tool call must pass
    <param>=<value>.", through the constructor. The list tool of a locked server lists the
    locked tenant only. The HTTP router has no lock: a deployment that needs one declares

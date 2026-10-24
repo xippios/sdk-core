@@ -79,16 +79,76 @@ async def test_another_tenant_is_refused_without_running_the_tool(other: str | N
     assert calls == []
 
 
-async def test_a_call_without_the_parameter_is_left_to_the_tool_validation() -> None:
+MISSING = (
+    "error: InvalidRequestError: this server is locked to org=acme; "
+    "the call did not name the tenant"
+)
+
+
+async def test_a_call_that_leaves_out_the_declared_parameter_is_refused() -> None:
     calls: list[str] = []
-    async with Client(locked_server(calls)) as client:
-        result = await client.call_tool(TOOL, {})
-    assert result.is_error
+    server = locked_server(calls)
+    assert await mcp_call_text(server, TOOL, {}) == MISSING
+    async with Client(server) as client:
+        result = await client.call_tool(TOOL)  # no arguments at all
     content = result.content[0]
     assert isinstance(content, TextContent)
-    assert "org" in content.text
-    assert not content.text.startswith("error: InvalidRequestError")
+    assert content.text == MISSING
+    assert not result.is_error
     assert calls == []
+
+
+async def ping() -> dict[str, bool]:
+    """Answer without a tenant."""
+    return {"pong": True}
+
+
+async def test_a_tool_that_does_not_take_the_parameter_is_untouched() -> None:
+    calls: list[str] = []
+    server = build_server(
+        "example", [echo_task(calls), ping], tenant_lock=TenantLock("org", "acme")
+    )
+    assert await mcp_call(server, "example_ping", {}) == {"pong": True}
+    assert await mcp_call_text(server, "example_ping", {"org": "other"}) == REFUSAL
+
+
+def defaulted_task() -> Callable[..., Any]:
+    async def echo_default(org: str = "acme") -> dict[str, str]:
+        """Return the tenant, which has a default.
+
+        Args:
+            org: A declared tenant, e.g. ``acme``.
+        """
+        return {"org": org}
+
+    return echo_default
+
+
+def test_a_locked_server_refuses_a_tenant_parameter_with_a_default() -> None:
+    lock = TenantLock("org", "acme")
+    rule = (
+        r"^example_echo_default: org has a default; a tool that takes the tenant parameter "
+        r"must receive it on a locked server \(org=acme\), and a default is refused"
+    )
+    with pytest.raises(ValueError, match=rule):
+        build_server("example", [echo_task([]), defaulted_task()], tenant_lock=lock)
+    server = locked_server([])
+    before = len(server.middleware)
+    with pytest.raises(ValueError, match=rule):
+        register_tasks(server, "example", [defaulted_task()])
+    with pytest.raises(ValueError, match=rule):
+        register_tasks(server, "example", [defaulted_task()], tenant_lock=lock)
+    assert len(server.middleware) == before
+
+
+async def test_a_lock_is_refused_on_a_server_with_a_defaulted_tenant_parameter() -> None:
+    server = build_server("example", [defaulted_task()])  # unlocked: the default is fine
+    assert await mcp_call(server, "example_echo_default", {}) == {"org": "acme"}
+    before = len(server.middleware)
+    with pytest.raises(ValueError, match=r"^example_echo_default: org has a default"):
+        register_tasks(server, "example", [], tenant_lock=TenantLock("org", "beta"))
+    assert len(server.middleware) == before  # nothing installed
+    assert await mcp_call(server, "example_echo_default", {}) == {"org": "acme"}
 
 
 async def test_listing_tools_is_unaffected() -> None:

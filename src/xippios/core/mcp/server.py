@@ -18,7 +18,7 @@ import logging
 import typing
 import weakref
 from collections.abc import Awaitable, Callable, Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from mcp.server.context import CallNext, HandlerResult, ServerMiddleware, ServerRequestContext
@@ -77,13 +77,20 @@ def quiet_request_logging() -> None:
 class TenantLock:
     """Lock a server to one tenant: a tool call naming another never reaches the tool.
 
-    Given to ``build_server`` or ``register_tasks`` (conventions §8, ADR-0014). A
-    ``tools/call`` whose arguments carry ``param`` with a value other than ``value`` is
-    answered with ``error: InvalidRequestError: this server is locked to
-    <param>=<value>; the call named another tenant`` and the tool does not run; a call
-    without ``param`` is left to the tool's own argument validation; listing tools and
-    every other request are untouched. A tool built by ``xippios.core.tenants.list_task``
-    lists the locked tenant only.
+    Given to ``build_server`` or ``register_tasks`` (conventions §8, ADR-0014). A tool
+    that takes the tenant parameter must receive it on a locked server, and a default is
+    refused:
+
+    - a ``tools/call`` whose arguments carry ``param`` with a value other than ``value``
+      is answered with ``error: InvalidRequestError: this server is locked to
+      <param>=<value>; the call named another tenant``, and one that leaves ``param``
+      out while the tool's input schema declares it with ``...; the call did not name
+      the tenant``; the tool does not run;
+    - a task whose ``param`` has a default is refused with ``ValueError`` when it is
+      registered on a locked server, and so is the lock on a server that has one;
+    - a tool that does not take ``param``, such as the tenant list, listing tools and
+      every other request are untouched. A tool built by
+      ``xippios.core.tenants.list_task`` lists the locked tenant only.
 
     Attributes:
         param: The tool parameter that names the tenant, e.g. ``"org"``.
@@ -103,7 +110,16 @@ class TenantLock:
             raise ValueError("value must name the tenant the server serves")
 
 
-_LOCKS: weakref.WeakKeyDictionary[MCPServer, TenantLock] = weakref.WeakKeyDictionary()
+@dataclass(slots=True)
+class _ServerRecord:
+    """What ``register_tasks`` knows about a server: its lock, its tasks' defaults."""
+
+    lock: TenantLock | None = None
+    defaulted: dict[str, frozenset[str]] = field(default_factory=dict)
+    """Per tool name, the task's parameters that have a default."""
+
+
+_RECORDS: weakref.WeakKeyDictionary[MCPServer, _ServerRecord] = weakref.WeakKeyDictionary()
 _WRITE_SERVERS: weakref.WeakSet[MCPServer] = weakref.WeakSet()
 
 
@@ -119,52 +135,88 @@ def _lock_sentence(lock: TenantLock) -> str:
     )
 
 
-def _lock_middleware(lock: TenantLock) -> ServerMiddleware[Any]:
+def _refusal(lock: TenantLock, reason: str) -> CallToolResult:
+    """The family's error text for a call the lock refuses; not an MCP protocol error."""
+    error = InvalidRequestError(f"this server is locked to {lock.param}={lock.value}; {reason}")
+    return CallToolResult(content=[TextContent(type="text", text=error_to_text(error))])
+
+
+async def _declares(server: MCPServer, tool: object, param: str) -> bool:
+    """True when ``tool``'s input schema on ``server`` declares ``param``."""
+    for listed in await server.list_tools():
+        if listed.name == tool:
+            properties = listed.input_schema.get("properties")
+            return isinstance(properties, Mapping) and param in properties
+    return False
+
+
+def _lock_middleware(server: MCPServer, lock: TenantLock) -> ServerMiddleware[Any]:
     """The pre-call middleware ``TenantLock`` describes.
 
     The ``mcp`` middleware API is provisional in 2.x; the in-process ``mcp.Client``
     tests in ``tests/mcp/test_lock.py`` guard it.
     """
-    refusal = error_to_text(
-        InvalidRequestError(
-            f"this server is locked to {lock.param}={lock.value}; the call named another tenant"
-        )
-    )
+    other = _refusal(lock, "the call named another tenant")
+    missing = _refusal(lock, "the call did not name the tenant")
 
     async def tenant_lock(
         ctx: ServerRequestContext[Any, Any], call_next: CallNext
     ) -> HandlerResult:
         if ctx.method == "tools/call":
-            arguments = (ctx.params or {}).get("arguments")
-            if (
-                isinstance(arguments, Mapping)
-                and lock.param in arguments
-                and arguments[lock.param] != lock.value
-            ):
-                # Text, like every family error: a refusal is not an MCP protocol error.
-                return CallToolResult(content=[TextContent(type="text", text=refusal)])
+            params = ctx.params or {}
+            arguments = params.get("arguments")
+            arguments = {} if arguments is None else arguments
+            if isinstance(arguments, Mapping):
+                if lock.param in arguments:
+                    if arguments[lock.param] != lock.value:
+                        return other
+                elif await _declares(server, params.get("name"), lock.param):
+                    return missing
         return await call_next(ctx)
 
     return tenant_lock
 
 
-def _install_lock(server: MCPServer, lock: TenantLock) -> None:
-    """Install the lock's middleware on ``server`` once; another lock is refused."""
-    current = _LOCKS.get(server)
-    if current == lock:
-        return
-    if current is not None:
+def _defaulted(fn: Callable[..., Any]) -> frozenset[str]:
+    """The parameters of ``fn`` that have a default."""
+    parameters = inspect.signature(fn).parameters.values()
+    return frozenset(p.name for p in parameters if p.default is not inspect.Parameter.empty)
+
+
+def _check_lock(
+    server: MCPServer, source: str, tasks: list[Callable[..., Any]], lock: TenantLock | None
+) -> TenantLock | None:
+    """The lock ``server`` will have once ``tasks`` are registered; refusals before any.
+
+    Raises:
+        ValueError: ``lock`` differs from the lock the server has; or, on a locked
+            server, a task already registered or one of ``tasks`` takes the tenant
+            parameter with a default.
+    """
+    record = _RECORDS.get(server, _ServerRecord())
+    if lock is not None and record.lock is not None and lock != record.lock:
         raise ValueError(
-            f"the server is locked to {current.param}={current.value} already; "
+            f"the server is locked to {record.lock.param}={record.lock.value} already; "
             "a locked server serves one tenant"
         )
-    _LOCKS[server] = lock
-    server.middleware.append(_lock_middleware(lock))
+    lock = lock or record.lock
+    if lock is None:
+        return None
+    defaults = record.defaulted | {tool_name(source, fn): _defaulted(fn) for fn in tasks}
+    offending = sorted(name for name, params in defaults.items() if lock.param in params)
+    if offending:
+        raise ValueError(
+            f"{', '.join(offending)}: {lock.param} has a default; a tool that takes the "
+            f"tenant parameter must receive it on a locked server ({lock.param}="
+            f"{lock.value}), and a default is refused (ADR-0014)"
+        )
+    return lock
 
 
 def _only_the_locked_tenant(server: MCPServer, result: Any) -> Any:
     """A tenant list narrowed to the tenant ``server`` is locked to; unchanged unlocked."""
-    lock = _LOCKS.get(server)
+    record = _RECORDS.get(server)
+    lock = None if record is None else record.lock
     if lock is None or not isinstance(result, Result) or not isinstance(result.data, list):
         return result
     return result.model_copy(update={"data": [name for name in result.data if name == lock.value]})
@@ -256,7 +308,10 @@ def register_tasks(
     Raises:
         ValueError: ``read_only`` is ``False`` and a task has no parameter ``confirm``
             annotated ``bool`` with the default ``False``; the message names the tool.
-            Or ``tenant_lock`` differs from the lock the server already has.
+            Or ``tenant_lock`` differs from the lock the server already has. Or the
+            server is locked, by ``tenant_lock`` or before, and a task, registered now
+            or earlier, gives the tenant parameter a default. Nothing is registered or
+            installed then.
     """
     cap = cap or ResultCap()
     tasks = list(tasks)
@@ -268,8 +323,11 @@ def register_tasks(
                     f"{tool_name(source, fn)}: {problem}; every task of a write server takes "
                     "confirm: bool = False and previews unless it is true (conventions §8)"
                 )
-    if tenant_lock is not None:
-        _install_lock(server, tenant_lock)
+    lock = _check_lock(server, source, tasks, tenant_lock)
+    record = _RECORDS.setdefault(server, _ServerRecord())
+    if lock is not None and record.lock is None:
+        record.lock = lock
+        server.middleware.append(_lock_middleware(server, lock))
     if not read_only:
         _WRITE_SERVERS.add(server)
     annotations = ToolAnnotations(
@@ -290,6 +348,7 @@ def register_tasks(
             annotations=annotations,
             structured_output=False,
         )
+        record.defaulted[name] = _defaulted(fn)
         names.append(name)
     return names
 

@@ -207,7 +207,9 @@ name tenants and variables, never a value.
 - A multi-tenant source's servers take an option that locks them to one tenant
   (`--org acme`), passed to `build_server` as `TenantLock` (ADR-0014): a tool call
   naming another tenant is refused with `error: InvalidRequestError: ...` before the
-  tool runs, the instructions name the tenant, and the list tool lists it alone.
+  tool runs, the instructions name the tenant, and the list tool lists it alone. A tool
+  that takes the tenant parameter must receive it on a locked server; a default is
+  refused.
 - Errors return as text starting with `error: <ErrorClass>: <message>`; never raise
   through the MCP boundary.
 - Entry point `xippios-<source>-mcp` runs stdio by default; `--http` for streamable HTTP.

@@ -128,8 +128,11 @@ All notable changes to this project are documented here. The format follows
   `register_tasks` (ADR-0014): installs, once per server, a middleware that answers a
   tool call naming another tenant with `error: InvalidRequestError: this server is
   locked to <param>=<value>; the call named another tenant` without running the tool,
-  leaves a call without `param` to the tool's own validation and leaves listing tools
-  alone. `build_server` adds "This server is locked to <param> <value>; every tool call
+  and a call that leaves out a `param` the tool's input schema declares with `...; the
+  call did not name the tenant`; it leaves tools without `param` and listing tools
+  alone. On a locked server, `register_tasks` refuses with `ValueError` a task whose
+  `param` has a default, and the lock on a server that has one: a tool that takes the
+  tenant parameter must receive it. `build_server` adds "This server is locked to <param> <value>; every tool call
   must pass <param>=<value>." to the instructions. sdk-cashctrl wrote the same lock
   itself, set the instructions through the SDK's private low-level server and parsed
   the command line twice.
