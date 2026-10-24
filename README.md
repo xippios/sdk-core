@@ -238,7 +238,9 @@ def run() -> None:  # xippios-example-mcp --tenant acme
 
 A locked server answers a call naming another tenant with
 `error: InvalidRequestError: this server is locked to tenant=acme; the call named
-another tenant` before the tool runs, names the tenant in its instructions, and its
+another tenant` before the tool runs, and a call that leaves the tenant out of a tool
+that takes it with `...; the call did not name the tenant`; a task may not give the
+tenant parameter a default. The server names the tenant in its instructions, and its
 `example_list_tenants` tool lists that tenant alone.
 
 Client configuration, for Claude Desktop or any MCP client:
