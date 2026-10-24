@@ -971,6 +971,18 @@ async def test_a_call_with_its_own_auth_bypasses_the_cache(respx_mock: respx.Moc
 
 
 @pytest.mark.anyio
+async def test_any_explicit_auth_form_bypasses_the_cache(respx_mock: respx.MockRouter) -> None:
+    route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
+    config = ClientConfig(source="example", version="1", base_url=BASE, cache=MemoryCache())
+    client = AsyncClient(config)
+    await client.get("/v1/x")
+    basic = ("user", "pw")  # httpx's tuple form, outside the annotation
+    await client.get("/v1/x", auth=basic)  # type: ignore[arg-type]
+    assert route.call_count == 2
+    assert route.calls.last.request.headers["authorization"].startswith("Basic ")
+
+
+@pytest.mark.anyio
 async def test_auth_none_and_the_default_share_the_cache(respx_mock: respx.MockRouter) -> None:
     route = respx_mock.get(f"{BASE}/v1/reference").respond(200, json={"codes": [1]})
     config = ClientConfig(source="example", version="1", base_url=BASE, cache=MemoryCache())

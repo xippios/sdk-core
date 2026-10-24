@@ -197,8 +197,10 @@ class AsyncClient:
         pool = self._pool()
         method = method.upper()
         probe = pool.build_request(method, path, params=params)
-        # A call with credentials of its own may get another answer: no cache for it.
-        key = None if isinstance(auth, httpx.Auth) else self._cache_key_for(probe)
+        # A call with credentials of its own may get another answer: no cache for it. Any
+        # explicit auth counts, also a form httpx accepts beyond the annotation (a tuple).
+        own_auth = auth is not None and not isinstance(auth, UseClientDefault)
+        key = None if own_auth else self._cache_key_for(probe)
         if key is not None and self.config.cache is not None:
             cached = self.config.cache.get(key)
             if cached is not None:
