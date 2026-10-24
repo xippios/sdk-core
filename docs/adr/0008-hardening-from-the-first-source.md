@@ -60,14 +60,17 @@ of its own and, too long even there, split into implicitly concatenated parts; a
 writes `__all__` sorted in ruff's order (RUF022), one name per line, so a source's own
 lines do not conflict on `copier update`. The module passes `ruff format --check` and
 `ruff check` under the family's configuration with no exemption, where sdk-comtrade had
-to format it after every refresh. Two edges remain: a member name too long for a line of
-its own, which no layout shortens (E501), and a value holding a character ruff calls
-ambiguous, such as an en dash, which `repr()` keeps as it is (RUF001). An upstream whose
-ids are integers renders `IntEnum`, not the `StrEnum` default: `render_int_enums` takes
-`(id, name)` pairs, which `id_name_pairs` builds from upstream's records, takes member
-names from the names and appends `_<id>` to a name several ids share. Fidelity wins over
-the default, because upstream's data carries the ids as integers, which a `StrEnum` of
-their digits never equals, and its names are not unique (PSD's "Total Disappearance" is
-both attribute 126 and 173). sdk-usda-psd ruled this on 2026-10-23 and rendered its
-`AttributeId` and `UnitId` in its own refresh script; conventions §3 states the rule
-from 1.12 on.
+to format it after every refresh. A character ruff calls confusable (RUF001: a
+typographic apostrophe, an en dash, a no-break space and the rest of ruff's table, which
+`scripts/refresh_confusables.py` reads from the installed ruff) is written as a `\u`
+escape, so the value is the same at runtime, and every other character stays readable. A
+member name too long for any line of 100 columns is refused with `ValueError`, and the
+source's refresh script names that member once in the renderers' `member_names`. An
+upstream whose ids are integers renders `IntEnum`, not the `StrEnum` default:
+`render_int_enums` takes `(id, name)` pairs, which `id_name_pairs` builds from
+upstream's records, takes member names from the names and appends `_<id>` to a name
+several ids share. Fidelity wins over the default, because upstream's data carries the
+ids as integers, which a `StrEnum` of their digits never equals, and its names are not
+unique (PSD's "Total Disappearance" is both attribute 126 and 173). sdk-usda-psd ruled
+this on 2026-10-23 and rendered its `AttributeId` and `UnitId` in its own refresh
+script; conventions §3 states the rule from 1.12 on.
