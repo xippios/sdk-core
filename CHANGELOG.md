@@ -170,6 +170,21 @@ All notable changes to this project are documented here. The format follows
   `"xippios_cache": "hit"`: the entry's `stored_at`, in epoch seconds. On a hit a task
   sets `retrieved_at` from it, since the data was fetched then, not now (conventions
   §4). sdk-usda-psd's tasks could only stamp a hit with the current time.
+- `xippios.core.client.QuotaPolicy` and `QuotaSnapshot`, ADR-0010's quota rules on the
+  two hooks (ADR-0015). `QuotaPolicy(*, limit_header="x-ratelimit-limit",
+  remaining_header="x-ratelimit-remaining", reset_header=None, window=3600.0,
+  pause_cap=None, source=None, clock=..., sleep=asyncio.sleep)`: `observe(response)`
+  keeps a thread-safe `QuotaSnapshot(limit, remaining, observed_at, resumes_at)` from
+  the quota headers of every response from the wire, never from a cache hit; a 429, or
+  a response that leaves nothing, marks the quota spent until `Retry-After` (on a 429),
+  else the reset header, else `window` from now. `before_request(request)` waits a spent
+  quota out when it is back within `pause_cap`, logging one warning with the method and
+  path, and otherwise raises `RateLimitError` with `retry_after`, saying that nothing
+  was sent and when the quota is expected back. `install(config)` returns the config
+  with both hooks set; a policy given no `pause_cap` takes `config.retry.backoff_max`
+  there. `snapshot()`, `reset()`; `QuotaSnapshot.describe()` names numbers and times
+  only. Generalises sdk-usda-psd's `Quota`, `observe_quota`, `quota_pause` and
+  `QuotaAwareClient`, which sdk-usda-esr and sdk-usda-gats would otherwise copy.
 
 ### Changed
 

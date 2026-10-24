@@ -24,6 +24,7 @@ from xippios.core.client.cache import (
     strip_wire_headers,
 )
 from xippios.core.client.config import ClientConfig, RateLimit, RetryPolicy, Timeouts
+from xippios.core.client.quota import QuotaPolicy, QuotaSnapshot
 from xippios.core.client.ratelimit import TokenBucket
 from xippios.core.client.retry import send_with_retries
 
@@ -41,6 +42,8 @@ __all__ = [
     "MemoryCache",
     "Params",
     "QueryKeyAuth",
+    "QuotaPolicy",
+    "QuotaSnapshot",
     "RateLimit",
     "RetryPolicy",
     "Timeouts",
