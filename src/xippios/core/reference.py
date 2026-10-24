@@ -205,15 +205,16 @@ def _derived(text: str) -> str | None:
 def _acceptable(member: str) -> bool:
     """Whether ``member`` is an ASCII identifier that an enum takes as a member.
 
-    An enum refuses ``mro`` and ``_sunder_`` names and does not make a member of a name
-    that starts with ``__``; a keyword is no identifier to assign to.
+    An enum refuses ``mro`` and ``_sunder_`` names and makes no member of a name with a
+    double underscore in it, a ``__dunder__`` or a class-private ``_Class__name``; a
+    keyword is no identifier to assign to. A derived name never holds ``__``.
     """
     sunder = len(member) > 2 and member[0] == member[-1] == "_"
     return (
         member.isascii()
         and member.isidentifier()
         and not keyword.iskeyword(member)
-        and not member.startswith("__")
+        and "__" not in member
         and not sunder
         and member != "mro"
     )
@@ -418,7 +419,7 @@ def render_str_enums(
             an override has nothing to derive a name from (naming the key and the
             position), a key is longer than the 75 characters its class docstring has
             room for, or a name in ``member_names`` is no ASCII identifier, one ``enum``
-            does not take (``mro``, ``__x``, ``_x_``), or for a key or a value that
+            does not take (``mro``, ``_x_``, any with ``__``), or for a key or a value that
             ``lists`` does not hold.
     """
     _unknown_keys(member_names or {}, lists)
@@ -482,7 +483,7 @@ def render_int_enums(
             negative id), a member name is longer than 92 columns, a name without an
             override has nothing to derive one from, a key is longer than 75 characters, or
             a name in ``member_names`` is no ASCII identifier, one ``enum`` does not take
-            (``mro``, ``__x``, ``_x_``), or for a key or an id that ``lists`` does not hold.
+            (``mro``, ``_x_``, any with ``__``), or for a key or an id that ``lists`` does not hold.
     """
     _unknown_keys(member_names or {}, lists)
     names = {key: (class_names or {}).get(key, _class_name(key)) for key in lists}

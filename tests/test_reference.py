@@ -329,6 +329,8 @@ def test_render_str_enums_takes_a_member_name_that_resolves_a_collision(tmp_path
         ({"x": {"CORN": "class"}}, r"^x: 'class' is not a member name an enum"),
         ({"x": {"CORN": "_CORN_"}}, r"^x: '_CORN_' is not a member name an enum"),
         ({"x": {"CORN": "__CORN"}}, r"^x: '__CORN' is not a member name an enum"),
+        ({"x": {"CORN": "_X__CORN"}}, r"^x: '_X__CORN' is not a member name an enum"),
+        ({"x": {"CORN": "CORN__ALL"}}, r"^x: 'CORN__ALL' is not a member name an enum"),
         ({"x": {"CORN": "mro"}}, r"^x: 'mro' is not a member name an enum"),
         ({"x": {"CORN": "MA\u00cfS"}}, r"^x: 'MA\u00cfS' is not a member name an enum"),
         ({"x": {"RICE": "RICE"}}, r"^x: member_names names what the list does not hold"),
