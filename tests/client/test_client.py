@@ -1,6 +1,7 @@
 import asyncio
 import dataclasses
 import gzip
+import time
 
 import httpx
 import pytest
@@ -487,6 +488,26 @@ async def test_get_responses_are_cached(respx_mock: respx.MockRouter) -> None:
 
 
 @pytest.mark.anyio
+async def test_a_cache_hit_carries_the_time_its_entry_was_stored(
+    respx_mock: respx.MockRouter,
+) -> None:
+    # sdk-usda-psd: a task stamped a hit with the current time as retrieved_at.
+    respx_mock.get(f"{BASE}/v1/x").respond(200, json={"n": 1})
+    cache = MemoryCache(ttl=None)
+    client = AsyncClient(ClientConfig(source="example", version="1", base_url=BASE, cache=cache))
+    before = time.time()
+    first = await client.get("/v1/x")
+    after = time.time()
+    assert "xippios_cache_stored_at" not in first.extensions
+    hit = await client.get("/v1/x")
+    stored = cache.get(cache_key("GET", httpx.URL(f"{BASE}/v1/x")))
+    assert stored is not None
+    assert hit.extensions["xippios_cache"] == "hit"
+    assert hit.extensions["xippios_cache_stored_at"] == stored.stored_at
+    assert before <= stored.stored_at <= after
+
+
+@pytest.mark.anyio
 async def test_gzip_answer_replays_from_the_cache(respx_mock: respx.MockRouter) -> None:
     # Found by sdk-usda-psd PR 3: the cache kept the decoded body with content-encoding,
     # so the replay tried to gunzip plain JSON and raised httpx.DecodingError.
@@ -533,6 +554,7 @@ def test_from_cache_strips_wire_headers_of_an_old_entry() -> None:
         assert name not in response.headers
     assert response.headers.get("content-length") == "8"  # httpx's own, for the decoded body
     assert response.extensions["xippios_cache"] == "hit"
+    assert response.extensions["xippios_cache_stored_at"] == 0.0
 
 
 @pytest.mark.anyio

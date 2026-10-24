@@ -166,6 +166,10 @@ All notable changes to this project are documented here. The format follows
   `httpx.Auth` replaces them for that call, the default sends the client's. The cache
   key leaves `auth` out. sdk-comtrade fetches its public reference files from the same
   host as its keyed data API and needed a second client to keep the key off them.
+- `response.extensions["xippios_cache_stored_at"]` on a cache hit, next to
+  `"xippios_cache": "hit"`: the entry's `stored_at`, in epoch seconds. On a hit a task
+  sets `retrieved_at` from it, since the data was fetched then, not now (conventions
+  §4). sdk-usda-psd's tasks could only stamp a hit with the current time.
 
 ### Changed
 

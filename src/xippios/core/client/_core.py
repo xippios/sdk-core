@@ -343,6 +343,11 @@ class _ClassifyOnce:
 
 
 def _from_cache(cached: CachedResponse, request: httpx.Request) -> httpx.Response:
+    """The cached entry as a response, marked ``xippios_cache: hit`` with its ``stored_at``.
+
+    ``xippios_cache_stored_at`` is the entry's ``stored_at`` in epoch seconds: on a hit,
+    a task sets ``retrieved_at`` from it, not from the clock (conventions §4).
+    """
     # Stripped again: a persistent backend may hold entries stored with wire headers (0.1.0).
     response = httpx.Response(
         cached.status,
@@ -351,4 +356,5 @@ def _from_cache(cached: CachedResponse, request: httpx.Request) -> httpx.Respons
         request=request,
     )
     response.extensions["xippios_cache"] = "hit"
+    response.extensions["xippios_cache_stored_at"] = cached.stored_at
     return response
