@@ -404,8 +404,9 @@ def render_int_enums(
         generator: What to name as the generator in the module docstring.
 
     Raises:
-        ValueError: When two members of one list still share a name after the suffix, a
-            suffix makes no identifier (a negative id), a member name is longer than 92
+        ValueError: When an id is listed twice (naming the key and the id), two members
+            of one list still share a name after the suffix, a suffix makes no
+            identifier (a negative id), a member name is longer than 92
             columns, a name without an override has nothing to derive one from, or a
             name in ``member_names`` is no ASCII identifier, one ``enum`` does not take
             (``mro``, ``__x``, ``_x_``), or for a key or an id that ``lists`` does not
@@ -416,6 +417,11 @@ def render_int_enums(
     when = f" (fetched {fetched})" if fetched else ""
     classes: list[tuple[str, list[str]]] = []
     for key, pairs in lists.items():
+        repeated = sorted(
+            ident for ident, count in Counter(i for i, _ in pairs).items() if count > 1
+        )
+        if repeated:
+            raise ValueError(f"{key}: ids listed more than once: {repeated}")
         plain = [_derived(name) for _, name in pairs]
         counts = Counter(name for name in plain if name is not None)
         derived = [

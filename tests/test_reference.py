@@ -405,7 +405,7 @@ def test_render_int_enums_parenthesizes_a_member_too_long_for_its_line(tmp_path:
 
 @pytest.mark.parametrize(
     "pairs",
-    [[(1, "A B"), (1, "A-B")], [(5, "X"), (5, "X")], [(-1, "Loss"), (2, "Loss")]],
+    [[(1, "A"), (2, "A"), (3, "A 1")], [(-1, "Loss"), (2, "Loss")]],
 )
 def test_render_int_enums_rejects_names_it_cannot_make_unique(
     pairs: list[tuple[int, str]],
@@ -414,6 +414,21 @@ def test_render_int_enums_rejects_names_it_cannot_make_unique(
         ValueError, match=r"^attributeId: (member names collide|'LOSS_-1' is not a member name)"
     ):
         render_int_enums({"attributeId": pairs})
+
+
+@pytest.mark.parametrize(
+    ("pairs", "repeated"),
+    [
+        ([(5, "X"), (5, "Y")], r"\[5\]"),  # would silently become an alias
+        ([(5, "X"), (5, "X")], r"\[5\]"),
+        ([(7, "Z"), (5, "X"), (7, "W"), (5, "Y")], r"\[5, 7\]"),
+    ],
+)
+def test_render_int_enums_refuses_a_repeated_id(
+    pairs: list[tuple[int, str]], repeated: str
+) -> None:
+    with pytest.raises(ValueError, match=rf"^unitId: ids listed more than once: {repeated}$"):
+        render_int_enums({"unitId": pairs})
 
 
 def test_render_int_enums_refuses_a_member_name_too_long_for_any_line(tmp_path: Path) -> None:
