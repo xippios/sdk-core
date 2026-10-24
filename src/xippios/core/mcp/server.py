@@ -88,9 +88,10 @@ class TenantLock:
       the tenant``; the tool does not run;
     - a task whose ``param`` has a default is refused with ``ValueError`` when it is
       registered on a locked server, and so is the lock on a server that has one;
-    - a tool that does not take ``param``, such as the tenant list, listing tools and
-      every other request are untouched. A tool built by
-      ``xippios.core.tenants.list_task`` lists the locked tenant only.
+    - a call to a tool that does not take ``param``, such as the tenant list, passes
+      unless it names another tenant; listing tools and every other request are
+      untouched. A tool built by ``xippios.core.tenants.list_task`` lists the locked
+      tenant only.
 
     Attributes:
         param: The tool parameter that names the tenant, e.g. ``"org"``.

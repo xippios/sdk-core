@@ -131,7 +131,8 @@ All notable changes to this project are documented here. The format follows
   tool call naming another tenant with `error: InvalidRequestError: this server is
   locked to <param>=<value>; the call named another tenant` without running the tool,
   and a call that leaves out a `param` the tool's input schema declares with `...; the
-  call did not name the tenant`; it leaves tools without `param` and listing tools
+  call did not name the tenant`, also when that schema lookup fails; a call to a tool
+  without `param` passes unless it names another tenant, and listing tools is left
   alone. On a locked server, `register_tasks` refuses with `ValueError` a task whose
   `param` has a default, and the lock on a server that has one: a tool that takes the
   tenant parameter must receive it. `build_server` adds "This server is locked to

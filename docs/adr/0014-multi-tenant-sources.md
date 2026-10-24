@@ -86,13 +86,15 @@ not check that a task takes `confirm: bool = False`, which conventions §8 requi
    out while the tool's input schema declares it with `...; the call did not name the
    tenant`; the tool does not run. `register_tasks` refuses with `ValueError` a task whose
    `param` has a default on a locked server, and the lock on a server that already has
-   such a task, since the default would name a tenant the caller never chose. A tool
-   that does not take `param`, the tenant list for one, listing tools and every other
-   request are untouched. `build_server` passes the instructions one more sentence,
-   "This server is locked to <param> <value>; every tool call that takes <param> must
-   pass <param>=<value>.", through the constructor. The list tool of a locked server
-   lists the locked tenant only. The HTTP router has no lock: a deployment that needs
-   one declares only that tenant.
+   such a task, since the default would name a tenant the caller never chose. A call to
+   a tool that does not take `param`, the tenant list for one, passes unless it names
+   another tenant; listing tools and every other request are untouched. If the schema
+   lookup fails, the call is refused as text all the same: the lock fails closed and
+   never raises through the MCP boundary. `build_server` passes the instructions one
+   more sentence, "This server is locked to <param> <value>; every tool call that takes
+   <param> must pass <param>=<value>.", through the constructor. The list tool of a
+   locked server lists the locked tenant only. The HTTP router has no lock: a deployment
+   that needs one declares only that tenant.
 8. **A source's options go through hooks.** `main(server, argv=None, *, add_options=None,
    apply_options=None)` and `build_parser(prog, *, add_options=None)`: `add_options` puts
    the source's arguments on core's parser, the line is parsed once, and
