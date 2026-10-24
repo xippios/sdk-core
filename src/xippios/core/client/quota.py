@@ -150,10 +150,12 @@ class QuotaPolicy:
             epoch seconds (``"1761206400"``, as GitHub sends it; an integer above ten
             years of seconds is read as one), or an HTTP-date. ``None`` when upstream
             sends none, as api.data.gov does.
-        window: Seconds a spent quota stays spent when neither ``Retry-After`` (on a
-            429) nor ``reset_header`` names a time, e.g. ``3600.0`` for a rolling hour;
-            also the longest wait a header can set: a longer one is cut to ``window``,
-            so no refusal outlives one window. At most ten years.
+        window: The quota's window in seconds, the one setting for two things: how long
+            a spent quota stays spent when neither ``Retry-After`` (on a 429), the reset
+            header nor ``spent`` names a time, and the longest wait any of those can
+            set, so no refusal outlives one window. ``3600.0`` for an hourly quota
+            (api.data.gov); ``86400.0`` for a daily one, e.g. UN Comtrade's, whose 403
+            names up to 24 hours and would otherwise be cut to one. At most ten years.
         spent: Called by ``observe`` with every response it observes, after the quota
             headers are read: a number of seconds marks the quota spent for that long
             (cut to ``window``, and ahead of ``Retry-After`` and the reset header);

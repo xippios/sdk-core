@@ -75,7 +75,10 @@ client.
      from code that learns of a spent quota elsewhere.
    - Every wait that comes from upstream, through a header or `spent`, is cut to
      `window`, which is at most ten years: no refusal outlives one window, and no
-     `resumes_at` overflows on a value no upstream means.
+     `resumes_at` overflows on a value no upstream means. `window` is the one setting
+     for both the fallback wait and that ceiling: an hourly quota keeps the default
+     3600 s (api.data.gov), a daily quota sets `window=86400` (UN Comtrade's, whose 403
+     names up to 24 hours, which a one-hour window would cut to one).
    - `before_request(request)` does nothing until the snapshot shows the quota spent and
      not yet back. Then it waits until `resumes_at` when that is within `pause_cap`,
      logging one warning naming the method and path, and otherwise raises
@@ -153,7 +156,14 @@ client.
   source through the policy, whatever its answer to a spent limit: a 429 marks the
   quota spent by itself, and any other answer through `spent`. usda-nass, comtrade and
   cashctrl adopt decision 4 by installing a policy, as ADR-0010's adoption note
-  foresaw; comtrade passes a `spent` that reads its 403's "replenished in" time.
+  foresaw. sdk-comtrade installs `QuotaPolicy(limit_header=None, remaining_header=None,
+  window=86400, spent=...)`: its `x-ratelimit-*` headers describe the per-second pace
+  (`x-ratelimit-limit: 1`), not the daily quota, so a remaining 0 would pause for a
+  whole window; its quota is daily; and its `spent` reads the 403's "replenished in"
+  time.
+- Any source adopting the policy first checks that the `x-ratelimit-*` headers it lets
+  the policy read describe the long-window quota, not a per-second or per-minute pace;
+  otherwise it sets those header names to `None`.
 - A GET cached by a keyed call answers the same GET sent with `auth=None`, and the
   other way round. A source whose keyed and keyless answers differ for one URL keeps
   them apart with `cache_filter`; one that sends another identity's credentials passes

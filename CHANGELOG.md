@@ -187,19 +187,20 @@ All notable changes to this project are documented here. The format follows
   every response from the wire, never from a cache hit; a 429, or a response that leaves
   nothing, marks the quota spent until `Retry-After` (on a 429), else the reset header
   (delay-seconds, epoch seconds as GitHub sends them, or an HTTP-date), else `window`
-  from now; a wait read from a header is cut to `window`, and a count that is not ASCII
-  digits is ignored. `spent=`, a callable asked about every observed response, marks the
-  quota spent for the seconds it returns, for an upstream whose spent limit is not a 429
-  (sdk-comtrade's 403 "replenished in HH:MM:SS"); `mark_spent(retry_after)` does it from
-  code. `before_request(request)` waits a spent quota out when it is back within
-  `pause_cap`, logging one warning with the method and path, and otherwise raises
-  `RateLimitError` with `retry_after`, saying that nothing was sent and when the quota
-  is expected back. `install(config)` returns the config with both hooks set, the pause
-  bound to that config's cap (`pause_cap`, else its `retry.backoff_max`), and refuses
-  with `ValueError` a config that has a hook of its own. `snapshot()`, `reset()`;
-  `QuotaSnapshot.describe()` names numbers and times only. Generalises sdk-usda-psd's
-  `Quota`, `observe_quota`, `quota_pause` and `QuotaAwareClient`, which sdk-usda-esr and
-  sdk-usda-gats would otherwise copy.
+  from now; a wait from upstream, through a header or `spent=`, is cut to `window`, the
+  one setting for the fallback and that ceiling (a daily quota sets `window=86400`), and
+  a count that is not ASCII digits is ignored. `spent=`, a callable asked about every
+  observed response, marks the quota spent for the seconds it returns, for an upstream
+  whose spent limit is not a 429 (sdk-comtrade's 403 "replenished in HH:MM:SS");
+  `mark_spent(retry_after)` does it from code. `before_request(request)` waits a spent
+  quota out when it is back within `pause_cap`, logging one warning with the method and
+  path, and otherwise raises `RateLimitError` with `retry_after`, saying that nothing
+  was sent and when the quota is expected back. `install(config)` returns the config
+  with both hooks set, the pause bound to that config's cap (`pause_cap`, else its
+  `retry.backoff_max`), and refuses with `ValueError` a config that has a hook of its
+  own. `snapshot()`, `reset()`; `QuotaSnapshot.describe()` names numbers and times only.
+  Generalises sdk-usda-psd's `Quota`, `observe_quota`, `quota_pause` and
+  `QuotaAwareClient`, which sdk-usda-esr and sdk-usda-gats would otherwise copy.
 - The pytest plugin keeps quota policies out of offline tests (ADR-0013 decision 4,
   added by ADR-0015): in every test not marked `live`, every `QuotaPolicy`'s snapshot
   is forgotten before and after the test, so a replayed 429 cannot leave a source's
