@@ -162,12 +162,15 @@ class Tenants:
         something other than whitespace. Read from the environment on every call.
 
         Raises:
-            ConfigError: ``list_var`` lists a reserved name, a name that is not lower-case
-                letters, digits and underscores, or a name twice.
+            ConfigError: ``list_var`` lists a reserved name, a name twice, or an entry that
+                is not lower-case letters, digits and underscores; that entry is named by
+                its position, never quoted, since it may be a value pasted by mistake.
         """
         listed = [part.strip() for part in os.environ.get(self.list_var, "").split(",")]
         names: list[str] = []
-        for name in filter(None, listed):
+        for position, name in enumerate(listed, start=1):
+            if not name:
+                continue
             if name in self.reserved:
                 variables = " and ".join(self.var(name, field) for field in self.fields)
                 raise ConfigError(
@@ -176,9 +179,10 @@ class Tenants:
                     source=self.source,
                 )
             if not _NAME.fullmatch(name):
+                # By position, never quoted: a pasted subdomain or key would be a value.
                 raise ConfigError(
-                    f"{self.list_var} lists {name!r}; tenant names use only lower-case "
-                    "letters, digits and underscores",
+                    f"entry {position} of {self.list_var} is not a tenant name; names use "
+                    "only lower-case letters, digits and underscores",
                     source=self.source,
                 )
             if name in names:

@@ -200,11 +200,19 @@ def test_a_reserved_tenant_cannot_be_listed(monkeypatch: pytest.MonkeyPatch) -> 
     assert info.value.source == SOURCE
 
 
-@pytest.mark.parametrize("name", ["Xa", "a-b", "a b", "ä"])
-def test_malformed_names_are_refused(monkeypatch: pytest.MonkeyPatch, name: str) -> None:
-    monkeypatch.setenv(LIST_VAR, f"xa,{name}")
-    with pytest.raises(ConfigError, match="lower-case"):
+@pytest.mark.parametrize("name", ["Xa", "a-b", "a b", "ä", HIDDEN_SUBDOMAIN, HIDDEN_KEY])
+def test_malformed_names_are_refused_by_position_never_quoted(
+    monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    monkeypatch.setenv(LIST_VAR, f"xa,,{name}")
+    with pytest.raises(ConfigError) as info:
         make().names()
+    message = str(info.value)
+    assert message == (
+        "entry 3 of FICTIVE_SRC_TENANTS is not a tenant name; names use only lower-case "
+        "letters, digits and underscores"
+    )
+    assert name not in message
 
 
 def test_duplicate_names_are_refused(monkeypatch: pytest.MonkeyPatch) -> None:
