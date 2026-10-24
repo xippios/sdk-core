@@ -313,6 +313,37 @@ def _all_order(left: str, right: str) -> int:
     return (_kind(left) > _kind(right)) - (_kind(left) < _kind(right)) or _natural(left, right)
 
 
+def _class_docstring(key: str, fetched: str | None) -> list[str]:
+    """The docstring of the class for ``key``, on one line where it fits.
+
+    Where the fetch date would push it past the line, it moves into a paragraph of its
+    own, wrapped as the module docstring is.
+
+    Raises:
+        ValueError: When the key is too long for the summary line on its own.
+    """
+    when = f" (fetched {fetched})" if fetched else ""
+    line = f'    """Values of ``{key}``{when}."""'
+    if len(line) <= _LINE_LENGTH:
+        return [line]
+    summary = f'    """Values of ``{key}``."""'
+    if len(summary) > _LINE_LENGTH:
+        limit = _LINE_LENGTH - len(summary) + len(key)
+        raise ValueError(
+            f"key {key!r} is {len(key)} characters long; at most {limit} fit its class "
+            f"docstring on a line of {_LINE_LENGTH} columns"
+        )
+    paragraph = textwrap.wrap(
+        f"Fetched {fetched}.",
+        _LINE_LENGTH,
+        initial_indent="    ",
+        subsequent_indent="    ",
+        break_long_words=False,
+        break_on_hyphens=False,
+    )
+    return [summary[:-3], "", *paragraph, '    """']
+
+
 def _module(
     kind: str, summary: str, paragraphs: Sequence[str], classes: Sequence[tuple[str, list[str]]]
 ) -> str:
@@ -372,27 +403,28 @@ def render_str_enums(
             ``{"short_desc": {"CORN, GRAIN, ... ALL PRACTICES": "CORN_GRAIN_ALL"}}``. Taken
             before any name is derived; each must be an identifier an enum accepts and
             unique in its list.
-        fetched: Date to mention in each docstring.
+        fetched: Date to mention in each class docstring, in a paragraph of its own
+            where the summary line would grow past 100 columns.
         generator: What to name as the generator in the module docstring.
 
     Raises:
         ValueError: When two members of one list share a name, a member name is longer
             than 92 columns (naming the key, its length and the limit), a value without
             an override has nothing to derive a name from (naming the key and the
-            position), or a name in ``member_names`` is no ASCII identifier, one ``enum``
+            position), a key is longer than the 75 characters its class docstring has
+            room for, or a name in ``member_names`` is no ASCII identifier, one ``enum``
             does not take (``mro``, ``__x``, ``_x_``), or for a key or a value that
             ``lists`` does not hold.
     """
     _unknown_keys(member_names or {}, lists)
     names = {key: (class_names or {}).get(key, _class_name(key)) for key in lists}
-    when = f" (fetched {fetched})" if fetched else ""
     classes: list[tuple[str, list[str]]] = []
     for key, values in lists.items():
         derived = [_derived(value) for value in values]
         labels = [repr(value) for value in values]
         overrides = (member_names or {}).get(key, {})
         members = _member_names(key, values, derived, labels, overrides)
-        body = [f"class {names[key]}(StrEnum):", f'    """Values of ``{key}``{when}."""', ""]
+        body = [f"class {names[key]}(StrEnum):", *_class_docstring(key, fetched), ""]
         for member, value in zip(members, values, strict=True):
             body += _member(member, _literal(value), value)
         classes.append((names[key], body))
@@ -440,17 +472,15 @@ def render_int_enums(
         generator: What to name as the generator in the module docstring.
 
     Raises:
-        ValueError: When an id is listed twice (naming the key and the id), two members
-            of one list still share a name after the suffix, a suffix makes no
-            identifier (a negative id), a member name is longer than 92
-            columns, a name without an override has nothing to derive one from, or a
-            name in ``member_names`` is no ASCII identifier, one ``enum`` does not take
-            (``mro``, ``__x``, ``_x_``), or for a key or an id that ``lists`` does not
-            hold.
+        ValueError: When an id is listed twice (naming the key and the id), two members of
+            one list still share a name after the suffix, a suffix makes no identifier (a
+            negative id), a member name is longer than 92 columns, a name without an
+            override has nothing to derive one from, a key is longer than 75 characters, or
+            a name in ``member_names`` is no ASCII identifier, one ``enum`` does not take
+            (``mro``, ``__x``, ``_x_``), or for a key or an id that ``lists`` does not hold.
     """
     _unknown_keys(member_names or {}, lists)
     names = {key: (class_names or {}).get(key, _class_name(key)) for key in lists}
-    when = f" (fetched {fetched})" if fetched else ""
     classes: list[tuple[str, list[str]]] = []
     for key, pairs in lists.items():
         repeated = sorted(
@@ -468,7 +498,7 @@ def render_int_enums(
         labels = [f"{name!r} (id {ident})" for ident, name in pairs]
         overrides = (member_names or {}).get(key, {})
         members = _member_names(key, ids, derived, labels, overrides)
-        body = [f"class {names[key]}(IntEnum):", f'    """Values of ``{key}``{when}."""', ""]
+        body = [f"class {names[key]}(IntEnum):", *_class_docstring(key, fetched), ""]
         for member, (ident, _) in zip(members, pairs, strict=True):
             body += _member(member, f"{ident:d}")
         classes.append((names[key], body))

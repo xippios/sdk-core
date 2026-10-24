@@ -3,6 +3,7 @@ import json
 import re
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -231,6 +232,28 @@ def test_render_str_enums_sorts_digit_runs_as_ruff_does(
         generator="tests",
     )
     assert assert_ruff_clean(tmp_path, source)["__all__"] == expected  # RUF022 agrees
+
+
+@pytest.mark.parametrize("render", [render_str_enums, render_int_enums])
+def test_a_long_key_and_fetch_date_wrap_the_class_docstring(
+    tmp_path: Path, render: Callable[..., str]
+) -> None:
+    key = "reporter_partner_flow_customs_transport_codes"  # 45 characters
+    fetched = "2026-10-24, reconciled with the snapshot of the spec of 2026-10-23"
+    values: list[Any] = ["A"] if render is render_str_enums else [(1, "A")]
+    source = render({key: values}, fetched=fetched, generator="tests")
+    assert_ruff_clean(tmp_path, source)  # no line over 100 columns, D rules included
+    assert f'    """Values of ``{key}``.\n\n    Fetched {fetched}.\n    """\n' in source
+    short = render({key: values}, fetched="2026-10-24", generator="tests")
+    assert f'    """Values of ``{key}`` (fetched 2026-10-24)."""\n' in short
+
+
+@pytest.mark.parametrize("render", [render_str_enums, render_int_enums])
+def test_a_key_too_long_for_its_class_docstring_is_refused(render: Callable[..., str]) -> None:
+    values: list[Any] = ["A"] if render is render_str_enums else [(1, "A")]
+    assert render({"k" * 75: values}).count("k" * 75) == 1
+    with pytest.raises(ValueError, match=r"^key 'k{76}' is 76 characters long; at most 75 fit"):
+        render({"k" * 76: values})
 
 
 LONG_VALUE = (
