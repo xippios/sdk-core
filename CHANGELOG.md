@@ -233,17 +233,19 @@ All notable changes to this project are documented here. The format follows
   integers (conventions §3, ADR-0008 as amended): values are the ids in upstream order,
   so a member compares equal to the id in upstream's data; member names come from the
   names through `enum_member_name`, and a name several ids share gets `_<id>` appended
-  (`TOTAL_DISAPPEARANCE_126`, `TOTAL_DISAPPEARANCE_173`); a name still shared, or a
-  suffix that makes no identifier (a negative id), raises `ValueError`. `member_names`
-  (key to `{id: member name}`) names a member by hand; the suffix rule still counts
-  upstream's names, so no other member is renamed. The module docstring states the rule;
-  layout, `__all__`, `member_names` and the refusal of a member name too long for any
-  line as in `render_str_enums`. `id_name_pairs(records, *, id_field, name_field)`
+  (`TOTAL_DISAPPEARANCE_126`, `TOTAL_DISAPPEARANCE_173`). An id listed twice, which
+  would silently become an alias, raises `ValueError` naming the key and the id, as does
+  a name still shared or a suffix that makes no identifier (a negative id).
+  `member_names` (key to `{id: member name}`) names a member by hand; the suffix rule
+  still counts upstream's names, so no other member is renamed. The module docstring
+  states the rule; layout, `__all__`, the class docstring, `member_names` and the
+  refusals as in `render_str_enums`. `id_name_pairs(records, *, id_field, name_field)`
   builds the pairs from upstream's records in upstream order: an id is an `int` or a
-  string of ASCII digits, a name a string; a record lacking a field, or with a value of
-  another kind, raises `ValueError` naming the field and the record's position, never
-  the record. Generalises sdk-usda-psd's `render_id_enums`, which rendered PSD's
-  `AttributeId` and `UnitId` locally.
+  string of ASCII digits without leading zeros (`"007"` would lose them), a name a
+  string; a record lacking a field, or with a value of another kind, raises `ValueError`
+  naming the field and the record's position, never the record. Generalises
+  sdk-usda-psd's `render_id_enums`, which rendered PSD's `AttributeId` and `UnitId`
+  locally.
 
 ### Changed
 
@@ -383,35 +385,39 @@ All notable changes to this project are documented here. The format follows
   override of `before_request` is not called through the hook `install` sets, and a
   wait or refusal of its own is not neutralised. ADR-0013 and ADR-0015 are marked as
   amended by ADR-0016.
-- `render_str_enums` writes a module that ruff leaves as it is: each value through
-  `repr()`, so a `"`, a `\` or a control character no longer breaks the file, in double
-  quotes unless single quotes need fewer escapes; a member too long for 100 columns laid
+- `render_str_enums` writes an ASCII-only module that ruff leaves as it is: each value
+  as `ascii()` writes it, so a `"`, a `\` or a control character no longer breaks the
+  file and every character outside ASCII is an escape (`"C\xf4te d\u2019Ivoire"`), in
+  double quotes unless single quotes need fewer escapes, the value unchanged at runtime;
+  readable accents are traded for stability across ruff versions, since no version finds
+  an ambiguous character (RUF001) in ASCII. A member too long for 100 columns is laid
   out as ruff formats it, the value in parentheses on a line of its own and, too long
-  even there, split into implicitly concatenated parts; `__all__` sorted in ruff's order
-  (RUF022), one name per line, the classes still in the order given; a character ruff
-  calls confusable (RUF001: a typographic apostrophe U+2019, an en dash U+2013, a
-  no-break space U+00A0 and the rest of ruff's table, 1582 code points read from ruff
-  0.17.1 by `scripts/refresh_confusables.py`) as a `\u` escape, the value unchanged at
-  runtime and every other character readable (`Côte` stays `Côte`). The module docstring
-  wraps at 100 columns, so a long `generator` no longer overflows. The result passes
-  `ruff format --check` and `ruff check` under the family's configuration. sdk-comtrade
-  formatted the file after every refresh and sorted its lists itself. A source that
-  diffs its generated `enums.py` sees a one-time change on its next refresh: `__all__`
-  sorted, one name per line, long members wrapped, escapes written as ruff writes them,
-  confusable characters escaped. A file that ruff had formatted, whose `__all__` was
-  already sorted and whose values hold no confusable character renders unchanged
-  (sdk-usda-nass's does).
-- **Breaking:** `render_str_enums` refuses a member name longer than 92 columns, which
-  fits no line of 100 (`    NAME = (` alone is too long), with `ValueError` naming the
-  key, the name's length and the limit; it rendered the line too long before. The new
-  keyword `member_names` (key to `{value: member name}`) names such a member by hand,
-  once, in the source's refresh script; it also resolves a collision. A name set there
-  must be an identifier an enum accepts (no keyword, no `_sunder_` or `__dunder__`
-  name), unique in its list, and for a key and a value the lists hold, else
-  `ValueError`.
+  even there, split into implicitly concatenated parts; `__all__` is sorted in ruff's
+  order (RUF022, natural order with zero-padded digit runs as ruff compares them:
+  `Code05` before `Code1`), one name per line, the classes still in the order given. The
+  module docstring wraps at 100 columns, so a long `generator` no longer overflows, and
+  reads "conventions, section 3"; a class docstring whose fetch date would pass 100
+  columns puts the date in a paragraph of its own. The collision error names only the
+  colliding members. The result passes `ruff format --check` and `ruff check` under the
+  family's configuration. sdk-comtrade formatted the file after every refresh and sorted
+  its lists itself. A source that diffs its generated `enums.py` sees a one-time change
+  on its next refresh: the module docstring's first line, `__all__` sorted, one name per
+  line, long members wrapped, non-ASCII characters escaped (sdk-usda-nass's file changes
+  in its first line only).
+- **Breaking:** `render_str_enums` refuses with `ValueError` what it rendered into a
+  file ruff rejects: a member name longer than 92 columns, which fits no line of 100
+  (`NAME = (` alone, indented, is too long), naming the key, the position, the name's
+  length and the limit; and a key longer than the 75 characters its class docstring has
+  room for. A value with nothing to derive a member name from (an empty string, a Greek,
+  Cyrillic or CJK label) still raises `ValueError`, now naming the key and the position.
+  The new keyword `member_names` (key to `{value: member name}`) names such a member by
+  hand, once, in the source's refresh script, and is taken before any name is derived;
+  it also resolves a collision. A name set there must be an ASCII identifier an enum
+  takes as a member (no keyword, not `mro`, not starting with `__`, no `_sunder_` name),
+  unique in its list, and for a key and a value the lists hold, else `ValueError`.
 - Conventions 1.12: §3 states that an upstream enum of integer ids becomes an `IntEnum`
-  and that the generated enums module passes `ruff check` and `ruff format --check` as
-  rendered. ADR-0008 gains an amendment.
+  and that the generated enums module is ASCII-only and passes `ruff check` and
+  `ruff format --check` as rendered. ADR-0008 gains an amendment.
 
 ### Fixed
 
