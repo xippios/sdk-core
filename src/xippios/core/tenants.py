@@ -76,7 +76,7 @@ class Tenants:
             refuses a value, e.g. ``{"SUBDOMAIN": "set the subdomain alone, e.g. acme
             for acme.example.org"}``, read as "...; <hint>". It tells the operator what
             the variable should hold; the check's own message, which may quote the
-            value, is never used.
+            value, is never used. A field with a hint has a ``validate`` check.
 
     Attributes:
         source: The source slug.
@@ -89,7 +89,8 @@ class Tenants:
         ValueError: An empty ``source`` or ``list_var``; no field, a field that is not
             upper-case letters, digits and underscores, or a field given twice; a
             reserved name that is not a valid tenant name or is given twice; a
-            ``validate`` or ``hints`` entry for a field not in ``fields``.
+            ``validate`` or ``hints`` entry for a field not in ``fields``; a ``hints``
+            entry for a field without a ``validate`` check, which could never be shown.
     """
 
     def __init__(
@@ -135,6 +136,10 @@ class Tenants:
         unknown = sorted(set(texts) - set(fields))
         if unknown:
             raise ValueError(f"hints names fields not in fields: {', '.join(unknown)}")
+        unchecked = sorted(set(texts) - set(checks))
+        if unchecked:
+            # Shown only when the check refuses a value: without a check it never would be.
+            raise ValueError(f"hints names fields without a validate check: {', '.join(unchecked)}")
         self.source = source
         self.list_var = list_var
         self.fields = fields

@@ -209,8 +209,8 @@ All notable changes to this project are documented here. The format follows
   `field()` raises when `validate` refuses a value ("...; <hint>"), so the operator
   learns what the variable should hold; the check's own message, which may quote the
   value, is still never used, and the value never appears. A hint for a field not in
-  `fields` is a `ValueError` at construction. Carried over from the `Tenants` work of
-  ADR-0014.
+  `fields`, or for one without a `validate` check, where it could never be shown, is a
+  `ValueError` at construction. Carried over from the `Tenants` work of ADR-0014.
 
 ### Changed
 

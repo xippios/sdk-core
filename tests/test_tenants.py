@@ -129,6 +129,11 @@ def test_attributes_and_repr_name_the_scheme_only(monkeypatch: pytest.MonkeyPatc
         ({"reserved": ("demo", "demo")}, ValueError, "reserved name given twice: demo"),
         ({"validate": {"HOST": check_subdomain}}, ValueError, "fields not in fields: HOST"),
         ({"hints": {"HOST": "a host"}}, ValueError, "hints names fields not in fields: HOST"),
+        (
+            {"hints": {"API_KEY": "the key"}},
+            ValueError,
+            "hints names fields without a validate check: API_KEY",
+        ),
     ],
 )
 def test_construction_refuses_a_malformed_scheme(
