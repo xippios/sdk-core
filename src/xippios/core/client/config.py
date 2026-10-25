@@ -86,7 +86,9 @@ class RateLimit:
     """Client-side rate limit as a token bucket.
 
     Attributes:
-        per_minute: Sustained requests per minute, from the upstream's documented limit.
+        per_minute: Sustained requests per minute: the pace the source sets within
+            upstream's documented per-second or per-minute limit, or a self-imposed pace
+            (ADR-0010).
         burst: Requests allowed at once; defaults to ``per_minute``.
     """
 

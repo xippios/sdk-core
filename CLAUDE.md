@@ -16,7 +16,8 @@ particular upstream API.
    0010 rate-limit policy, 0011 retries and non-idempotent methods,
    0012 upstream totals in the result envelope, 0013 offline tests guaranteed by the
    plugin, 0014 multi-tenant sources, 0015 client request hooks and quota policy,
-   0016 per-tool result caps)
+   0016 per-tool result caps, 0017 sensitive upstream fields, 0018 core versioning and
+   source adoption)
 3. `docs/definition-of-done.md` — what a PR must satisfy before it is opened
 
 The family file `../CLAUDE.md` applies as well.
@@ -33,7 +34,7 @@ src/xippios/core/
   models.py          UpstreamModel, ResultMeta, Result[T], parse()
   config.py          SourceSettings base, resolve_api_key()
   pagination.py      offset / page-number / cursor iterators, collect()
-  reference.py       loader for packaged reference data (CSV, JSON)
+  reference.py       loader for packaged reference data (CSV, JSON); StrEnum/IntEnum renderers
   tenants.py         Tenants (tenants declared in the environment, one client each), list_task
   client/            httpx client: config, retry, ratelimit, cache, quota, auth (env-key helpers), _core, Client
   mcp/               MCP server helpers: server, results (caps), errors (to text), cli   [extra: mcp]
@@ -84,7 +85,9 @@ uv run pre-commit run --all-files
   Never commit to `main`.
 - Commit small, with Conventional Commits messages (`feat(client): add retry budget`).
 - Open the PR with `gh pr create`, body = the definition-of-done checklist, ticked honestly.
-- Never tag, merge, release, force-push, or touch `gh secret`. Those are human actions.
+- Never tag, merge, release, force-push, or touch `gh secret`. Those are human actions,
+  except enabling GitHub auto-merge on an adoption (`chore/template-update*`) or
+  `chore/release-*` PR after the reviewer's `ready` (ADR-0018).
 - Never read or print `.envrc`, `.env`, or any variable ending in `_API_KEY`.
 - `ruff` is configured to leave `docs/` alone; never reformat code blocks in the
   governing documents.

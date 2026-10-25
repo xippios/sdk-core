@@ -52,7 +52,7 @@ def load_csv(package: str, name: str) -> list[dict[str, str]]:
     """Rows of a packaged CSV file as dicts keyed by the header row.
 
     Args:
-        package: Import path of the source package, e.g. ``"xippios.usda_nass"``.
+        package: Import path of the source package, e.g. ``"xippios.usda.nass"``.
         name: File name under ``reference/``, e.g. ``"commodities.csv"``.
     """
     rows = csv.DictReader(io.StringIO(_read_text(package, name)))
@@ -63,7 +63,7 @@ def load_json(package: str, name: str) -> Any:
     """Decoded contents of a packaged JSON file.
 
     Args:
-        package: Import path of the source package, e.g. ``"xippios.usda_nass"``.
+        package: Import path of the source package, e.g. ``"xippios.usda.nass"``.
         name: File name under ``reference/``, e.g. ``"countries.json"``.
     """
     return json.loads(_read_text(package, name))

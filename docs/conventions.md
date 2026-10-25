@@ -1,6 +1,6 @@
 # xippios SDK family — conventions
 
-Version 1.12 · 2026-10-24 · applies to every `sdk-*` repository under github.com/xippios.
+Version 1.13 · 2026-10-25 · applies to every `sdk-*` repository under github.com/xippios.
 Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 
 ## 1. Naming
@@ -54,8 +54,19 @@ plus a loader), `_client.py` (the configured `xippios.core.client` instance).
 ## 3. Upstream fidelity (ADR-0003)
 
 - Names and semantics come from the upstream documentation, which is snapshotted in
-  `docs/upstream/` with a `FETCHED.md` recording date and URL. The snapshot is the
-  reference for the agent; refresh it deliberately, by PR, and diff it.
+  `docs/upstream/` with a `FETCHED.md` recording the UTC time and the URL of the fetch.
+  The snapshot is the reference for the agent; refresh it deliberately, by PR, and diff
+  it.
+- `Fetched` in `FETCHED.md` is the UTC time of the run in ISO 8601 with an explicit `Z`
+  (`2026-10-24T09:15:00Z`), never a local date or time. A table that a Markdown pipe
+  table cannot hold, one with merged cells (`rowspan`, `colspan`) or with a table nested
+  in it, is kept as its HTML in the Markdown snapshot, and one line in `FETCHED.md` says
+  so (ADR-0003, amendment 2026-10-24).
+- A vendor's documentation is reproduced in the snapshot for reference (ADR-0003,
+  amendment 2026-10-24): `FETCHED.md` carries the copyright line as the documentation
+  states it (`© 2026 CashCtrl Ltd.`) and the URL the text was fetched from. A vendor's
+  objection is honoured by replacing the snapshot with a summary that keeps the names and
+  semantics the wrappers rely on.
 - Within-source hygiene is required: dates → `datetime.date`/`datetime`, numbers →
   `int`/`Decimal`/`float` as appropriate, upstream enums → `StrEnum`, pagination
   resolved, errors typed. An upstream enum of integer ids becomes an `IntEnum` instead,
@@ -65,6 +76,13 @@ plus a loader), `_client.py` (the configured `xippios.core.client` instance).
 - Task-shaped functions may return a *projection* of an upstream record: a subset of
   its columns under their upstream names, typed, built with `UpstreamModel.project`.
   Nothing is renamed or computed; parsing a value is the only permitted override.
+- Documented personal identifiers stay out of the projections tasks return (ADR-0017):
+  `ssn`, `iban` and what the source judges equivalent (a national identification number,
+  a bank account number, a tax number), unless a task fetches them deliberately and says
+  so in its docstring; a write task that takes one as a parameter does not echo it in
+  `meta.request` either (§4). The endpoint wrappers' read models stay faithful and carry
+  them. Fixtures never carry their values: the recording names them in
+  `Scrub(secrets=...)` or rewrites them by key (`Scrub(rewrite=...)`).
 - **No cross-source normalization.** A USDA `marketing_year` stays a USDA concept.
   Mapping between sources is business logic and lives outside this family.
 - Reference data (commodity codes, country codes, report calendars) ships inside the
@@ -102,8 +120,9 @@ it with `get()` and `decode_json()` (§6).
 `request` never carries credentials (ADR-0005). `ResultMeta` redacts the value of any
 key that looks like one (`key`, `api_key`, `token`, `secret`, `password`, `auth`,
 `signature`, `credential`) to `"REDACTED"` at construction, so an envelope is safe to
-hand to an agent, return over HTTP, or write to a store. A task that wants the
-credential's provenance records the variable name, never the value.
+hand to an agent, return over HTTP, or write to a store; personal identifiers in
+upstream data stay out of it by §3's rule for projections (ADR-0017). A task that wants
+the credential's provenance records the variable name, never the value.
 
 `tenant` is the name of the tenant a multi-tenant source served the data for (§7),
 never a credential, a host or another of the tenant's values; `None` for a
@@ -132,17 +151,21 @@ XippiosError
 ├── ValidationError      we could not parse what upstream returned (carries raw body)
 ├── UpstreamError        other 4xx/5xx (carries status, body)
 ├── TransportError       network, timeout
-└── InvalidRequestError  the request cannot be sent as given: a bad argument, or a query
-                         the source documents it will refuse (ADR-0007); raised before
-                         any upstream call
+└── InvalidRequestError  the request as given cannot be served: a bad argument or a
+                         documented refusal, detected before the call or by upstream's
+                         own refusal of the query (ADR-0007)
 ```
 
 Source packages subclass only when upstream has a distinct, documented failure mode;
 a refusal the package makes itself, such as a query over a documented record limit or
-an unknown filter name, subclasses `InvalidRequestError`. Adapters convert these to
-structured text (MCP) or problem+json (HTTP; `InvalidRequestError` is 422); they never
-leak tracebacks. An error message names the request's method and path, never its host
-or query string: the host can name a tenant, the query can carry a key (ADR-0005).
+an unknown filter name, subclasses `InvalidRequestError`. Upstream's own refusal of
+the query as given is mapped to `InvalidRequestError`, or a subclass, in `classify` (§6):
+usda-nass's HTTP 413 over the record limit, comtrade's HTTP 400, cashctrl's
+`RequestRejected`. Agents and HTTP 422 treat both alike: the caller has to change the
+request. Adapters convert these to structured text (MCP) or problem+json (HTTP;
+`InvalidRequestError` is 422); they never leak tracebacks. An error message names the
+request's method and path, never its host or query string: the host can name a tenant,
+the query can carry a key (ADR-0005).
 
 ## 6. HTTP client (`xippios.core.client`)
 
@@ -324,12 +347,19 @@ consumer, never served standalone from the package.
 `uv` for everything (lock, sync, build, publish). Python ≥ 3.12. `ruff` (lint +
 format, line length 100), `mypy --strict`, `pre-commit` with those two plus
 `detect-secrets`. Dependencies pinned by `uv.lock`; runtime deps declared with
-lower bounds only.
+lower bounds only, except `xippios-core`, which §12 bounds to one minor.
 
 ## 12. Versioning and releases
 
 - SemVer. Pre-1.0: breaking changes bump minor. Post-1.0: breaking changes bump major.
 - An upstream API change that changes our public surface is a breaking change.
+- A source depends on one core minor with an upper bound, `xippios-core~=0.2.0`, and its
+  extras likewise (`xippios-core[mcp]~=0.2.0`); the template renders it as `~=X.Y.0`
+  (ADR-0018). Core patch releases stay compatible. While core is 0.x it keeps no backward
+  compatibility across minors: a new core minor may break, and a source adopts it
+  through §15 before its next release. From 1.0 a breaking change bumps the major
+  (SemVer), and the `~=` bound stays. A source already published with an open bound
+  stays as published and gets the bound with its next release.
 - `CHANGELOG.md` in Keep a Changelog format; every PR adds an entry under Unreleased.
 - Release = human tags `vX.Y.Z` on `main` → `publish.yml` → environment `pypi` →
   human approves → trusted publisher uploads. No tokens anywhere.
@@ -351,3 +381,41 @@ lower bounds only.
 
 Not a place for normalization across sources, scheduling, storage, or any product
 logic. Those live in product repositories that depend on these packages.
+
+## 15. Adopting a core or template release
+
+A source adopts a new core minor, and the sdk-template release that goes with it, in one
+adoption PR before its next release (§12, ADR-0018). The PR description is this
+checklist, ticked; an unticked item needs a one-line reason, an item the release does
+not touch included. A template-only update, with no new core minor, is judged against
+the items it touches. sdk-template's `/adopt-release` command walks the list step by
+step. An adoption PR is a `chore/template-update*` PR: after the reviewer's `ready` the
+session enables auto-merge, and GitHub merges it once `ci` is green and review threads
+are resolved.
+
+1. The core floor is raised: `xippios-core` and each of its extras name the new minor
+   with the bound of §12 (`xippios-core~=0.2.0`), resolved from PyPI with no git pin left
+   in `[tool.uv.sources]`, and `uv.lock` is updated.
+2. `copier update` brings the repository to the template release, its conflicts
+   resolved.
+3. Every local workaround that a core change replaced is deleted, its tests with it, and
+   the PR description names the core change for each (`QuotaAwareClient` → `QuotaPolicy`,
+   ADR-0015); the release's ADRs and CHANGELOG list them per source.
+4. Logic duplicated across sources is moved into core or dropped: what core now provides
+   is dropped here; what it does not provide yet is proposed to sdk-core and named in
+   the PR description, never copied further.
+5. Every test that asserted a limiter wait, a quota pause or key resolution is marked or
+   overridden: a limiter wait or a quota pause marked `rate_limited` (ADR-0013,
+   ADR-0015), key resolution given a module-level `placeholder_api_key` override that
+   pins nothing (ADR-0013).
+6. Generated enum files are re-rendered once with the release's renderers and committed
+   as rendered.
+7. `mypy --strict` covers `scripts/` too (`files = ["src", "tests", "scripts"]`).
+8. The current conventions version is applied: every rule changed since the version the
+   source last applied holds in the source.
+9. `CHANGELOG.md` has a line under Unreleased naming the core, template and conventions
+   versions adopted.
+
+An adoption PR changes nothing else: no new endpoints, tasks or fixtures ride along. The
+reviewer judges it against this list and nothing else (definition of done, block
+"Adoption PR").

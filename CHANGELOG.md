@@ -246,6 +246,14 @@ All notable changes to this project are documented here. The format follows
   naming the field and the record's position, never the record. Generalises
   sdk-usda-psd's `render_id_enums`, which rendered PSD's `AttributeId` and `UnitId`
   locally.
+- ADR-0017, sensitive upstream fields: a source keeps documented personal identifiers
+  (CashCtrl's `ssn`, `iban`) out of the projections its tasks return unless a task
+  fetches them deliberately; its read models stay faithful, and fixtures never carry the
+  values. A rule for sources; nothing in core changes.
+- ADR-0018, core versioning and source adoption: one core minor per source
+  (`xippios-core~=X.Y.0`), no compatibility across minors while core is 0.x, one
+  adoption PR per core minor against conventions §15, auto-merged as a
+  `chore/template-update*` PR after the reviewer's `ready`.
 
 ### Changed
 
@@ -424,9 +432,23 @@ All notable changes to this project are documented here. The format follows
 - Conventions 1.12: §3 states that an upstream enum of integer ids becomes an `IntEnum`
   and that the generated enums module is ASCII-only and passes `ruff check` and
   `ruff format --check` as rendered. ADR-0008 gains an amendment.
+- Conventions 1.13: §3 states `Fetched` as a UTC time in ISO 8601 with `Z`, tables a
+  pipe table cannot hold kept as HTML, vendor snapshots (ADR-0003 amendment) and
+  personal identifiers kept out of task projections (ADR-0017), to which §4 points; §5
+  that `InvalidRequestError` also covers upstream's own refusal, mapped in `classify`
+  (ADR-0007 amendment; its docstring and the README follow); §11 and §12 one core minor
+  with an upper bound (`xippios-core~=0.2.0`), with no compatibility across minors while
+  core is 0.x; §15, new, how a source adopts a core or template release (ADR-0018),
+  mirrored by an "Adoption PR" block in the definition of done, whose fixture grep now
+  covers `tests/fixtures/` for key patterns and for those identifiers' values.
+- CI runs `uv run pre-commit run --all-files` after the tests, its hook environments
+  cached, so the definition of done's "Enforced by CI" block holds.
 
 ### Fixed
 
+- `RateLimit.per_minute`'s docstring said the pace comes from upstream's documented
+  limit; it is the pace a source sets within that limit, or a self-imposed one
+  (ADR-0010).
 - `cap_result` measures `max_bytes` in UTF-8 bytes, as the convention says, not in
   characters, which let non-ASCII text past the byte cap; the preview cuts no character.
 - `parse_retry_after` raised `ValueError` for a `Retry-After` of non-ASCII digits such

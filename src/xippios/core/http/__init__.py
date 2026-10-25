@@ -3,7 +3,7 @@
 A source's ``http.py`` is a handful of lines::
 
     from xippios.core.http import router_from_tasks
-    from xippios.usda_nass import tasks
+    from xippios.usda.nass import tasks
 
     router = router_from_tasks("usda-nass", [tasks.get_series, tasks.list_commodities])
 
