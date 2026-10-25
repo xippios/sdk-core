@@ -488,9 +488,10 @@ refused unless `Scrub(allow_binary=True)` stores it base64, flagged.
 | `xippios.core.http` | router factory, problem details | alpha |
 | `xippios.core.testing` | live gate, offline run, record, replay, scrub, write checks | alpha |
 
-Alpha: a new minor version may change the public surface, with no backward
-compatibility across minors; patch releases stay compatible. A source depends on one
-minor (`xippios-core~=0.2.0`) and adopts the next through conventions §15.
+Alpha: while core is 0.x, a new minor version may change the public surface, with no
+backward compatibility across minors; patch releases stay compatible. A source depends
+on one minor (`xippios-core~=0.2.0`) and adopts the next through conventions §15
+(ADR-0018).
 
 ## Conventions
 
