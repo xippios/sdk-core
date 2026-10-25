@@ -85,7 +85,9 @@ uv run pre-commit run --all-files
   Never commit to `main`.
 - Commit small, with Conventional Commits messages (`feat(client): add retry budget`).
 - Open the PR with `gh pr create`, body = the definition-of-done checklist, ticked honestly.
-- Never tag, merge, release, force-push, or touch `gh secret`. Those are human actions.
+- Never tag, merge, release, force-push, or touch `gh secret`. Those are human actions,
+  except enabling GitHub auto-merge on an adoption (`chore/template-update*`) or
+  `chore/release-*` PR after the reviewer's `ready` (ADR-0018).
 - Never read or print `.envrc`, `.env`, or any variable ending in `_API_KEY`.
 - `ruff` is configured to leave `docs/` alone; never reformat code blocks in the
   governing documents.
