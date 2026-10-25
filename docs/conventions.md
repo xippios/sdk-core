@@ -54,12 +54,14 @@ plus a loader), `_client.py` (the configured `xippios.core.client` instance).
 ## 3. Upstream fidelity (ADR-0003)
 
 - Names and semantics come from the upstream documentation, which is snapshotted in
-  `docs/upstream/` with a `FETCHED.md` recording date and URL. The snapshot is the
-  reference for the agent; refresh it deliberately, by PR, and diff it.
+  `docs/upstream/` with a `FETCHED.md` recording the UTC time and the URL of the fetch.
+  The snapshot is the reference for the agent; refresh it deliberately, by PR, and diff
+  it.
 - `Fetched` in `FETCHED.md` is the UTC time of the run in ISO 8601 with an explicit `Z`
   (`2026-10-24T09:15:00Z`), never a local date or time. A table that a Markdown pipe
   table cannot hold, one with merged cells (`rowspan`, `colspan`) or with a table nested
-  in it, stays its HTML in the Markdown snapshot, and one line in `FETCHED.md` says so.
+  in it, is kept as its HTML in the Markdown snapshot, and one line in `FETCHED.md` says
+  so (ADR-0003, amendment 2026-10-24).
 - A vendor's documentation is reproduced in the snapshot for reference (ADR-0003,
   amendment 2026-10-24): `FETCHED.md` carries the copyright line as the documentation
   states it (`© 2026 CashCtrl Ltd.`) and the URL the text was fetched from. A vendor's
@@ -381,9 +383,11 @@ logic. Those live in product repositories that depend on these packages.
 ## 15. Adopting a core or template release
 
 A source adopts a new core minor, and the sdk-template release that goes with it, in one
-adoption PR before its next release (§12). The PR description is this checklist, ticked;
-an item the release does not touch is ticked with a one-line reason. sdk-template's
-`/adopt-release` command walks the list step by step.
+adoption PR before its next release (§12, ADR-0018). The PR description is this
+checklist, ticked; an unticked item needs a one-line reason, an item the release does
+not touch included. sdk-template's `/adopt-release` command walks the list step by step.
+An adoption PR is a `chore/template-update*` PR: after the reviewer's `ready` the session
+enables auto-merge, and GitHub merges it once `ci` is green.
 
 1. The core floor is raised: `xippios-core` and each of its extras name the new minor
    with the bound of §12 (`xippios-core~=0.2.0`), resolved from PyPI with no git pin left
@@ -392,13 +396,14 @@ an item the release does not touch is ticked with a one-line reason. sdk-templat
    resolved.
 3. Every local workaround that a core change replaced is deleted, its tests with it, and
    the PR description names the core change for each (`QuotaAwareClient` → `QuotaPolicy`,
-   ADR-0015); the Consequences of the release's ADRs list them per source.
+   ADR-0015); the release's ADRs and CHANGELOG list them per source.
 4. Logic duplicated across sources is moved into core or dropped: what core now provides
    is dropped here; what it does not provide yet is proposed to sdk-core and named in
    the PR description, never copied further.
-5. Every test that asserted a limiter wait or key resolution is marked or overridden per
-   ADR-0013: marked `rate_limited`, or given a `placeholder_api_key` fixture of its own
-   that pins nothing.
+5. Every test that asserted a limiter wait, a quota pause or key resolution is marked or
+   overridden: a limiter wait or a quota pause marked `rate_limited` (ADR-0013,
+   ADR-0015), key resolution given a module-level `placeholder_api_key` override that
+   pins nothing (ADR-0013).
 6. Generated enum files are re-rendered once with the release's renderers and committed
    as rendered.
 7. `mypy --strict` covers `scripts/` too (`files = ["src", "tests", "scripts"]`).
