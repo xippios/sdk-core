@@ -74,12 +74,11 @@ plus a loader), `_client.py` (the configured `xippios.core.client` instance).
 - Task-shaped functions may return a *projection* of an upstream record: a subset of
   its columns under their upstream names, typed, built with `UpstreamModel.project`.
   Nothing is renamed or computed; parsing a value is the only permitted override.
-- Sensitive upstream fields stay faithful in Python and are redacted at the adapters
-  (ADR-0017). A sensitive field, such as a person's government identifier or bank
-  account number (CashCtrl's `ssn`, `iban`), keeps its upstream name and its value in the
-  models and the task results; the MCP text and the HTTP envelope show it as `REDACTED`
-  unless the operator opts in (§8, §9). A source lists the sensitive fields its snapshot
-  documents once, on its models, and its fixtures never record their values.
+- Documented personal identifiers stay out of the projections tasks return (ADR-0017):
+  `ssn`, `iban` and what the source judges equivalent (a national identification number,
+  a bank account number, a tax number), unless a task fetches them deliberately and says
+  so in its docstring. The endpoint wrappers' read models stay faithful and carry them.
+  Fixtures never carry their values: the recording names them in `Scrub(secrets=...)`.
 - **No cross-source normalization.** A USDA `marketing_year` stays a USDA concept.
   Mapping between sources is business logic and lives outside this family.
 - Reference data (commodity codes, country codes, report calendars) ships inside the
@@ -117,8 +116,9 @@ it with `get()` and `decode_json()` (§6).
 `request` never carries credentials (ADR-0005). `ResultMeta` redacts the value of any
 key that looks like one (`key`, `api_key`, `token`, `secret`, `password`, `auth`,
 `signature`, `credential`) to `"REDACTED"` at construction, so an envelope is safe to
-hand to an agent, return over HTTP, or write to a store. A task that wants the
-credential's provenance records the variable name, never the value.
+hand to an agent, return over HTTP, or write to a store; personal identifiers in
+upstream data stay out of it by §3's rule for projections (ADR-0017). A task that wants
+the credential's provenance records the variable name, never the value.
 
 `tenant` is the name of the tenant a multi-tenant source served the data for (§7),
 never a credential, a host or another of the tenant's values; `None` for a
@@ -265,9 +265,6 @@ Messages and results name tenants and variables, never a value.
   refused.
 - Errors return as text starting with `error: <ErrorClass>: <message>`; never raise
   through the MCP boundary.
-- A field the source declares sensitive (§3) appears in a tool's text as `REDACTED`
-  unless the operator opts in when starting the server; no tool argument reveals it
-  (ADR-0017).
 - Entry point `xippios-<source>-mcp` runs stdio by default; `--http` for streamable HTTP.
   A source's own options reach core's `main` through `add_options` and `apply_options`,
   parsed once with core's; an error applying them stops the process with exit status 2.
@@ -279,9 +276,7 @@ one tag per source; responses are the `Result[T]` envelope; errors as RFC 9457
 problem details. A task whose parameters are all scalars is a `GET` with query
 parameters; a task with any non-scalar parameter (a mapping, a list, a model) is a
 `POST` whose JSON body is an object keyed by parameter name (ADR-0007). Mounted by the
-consumer, never served standalone from the package. A field the source declares
-sensitive (§3) appears in the envelope as `REDACTED` unless the operator opts in when
-building the router; no request parameter reveals it (ADR-0017).
+consumer, never served standalone from the package.
 
 ## 10. Testing
 
