@@ -389,7 +389,8 @@ adoption PR before its next release (§12, ADR-0018). The PR description is this
 checklist, ticked; an unticked item needs a one-line reason, an item the release does
 not touch included. sdk-template's `/adopt-release` command walks the list step by step.
 An adoption PR is a `chore/template-update*` PR: after the reviewer's `ready` the session
-enables auto-merge, and GitHub merges it once `ci` is green.
+enables auto-merge, and GitHub merges it once `ci` is green and review threads are
+resolved.
 
 1. The core floor is raised: `xippios-core` and each of its extras name the new minor
    with the bound of §12 (`xippios-core~=0.2.0`), resolved from PyPI with no git pin left

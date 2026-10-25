@@ -33,7 +33,7 @@ the Enforced by CI and Process blocks with it and leaves Code, Tests and Docs ou
 The reviewer judges an adoption PR against this list and nothing else: no new endpoints,
 tasks or fixtures ride along. An adoption PR is a `chore/template-update*` PR: after the
 reviewer's `ready` the session enables auto-merge, and GitHub merges it once `ci` is
-green (ADR-0018).
+green and review threads are resolved (ADR-0018).
 - [ ] core floor raised: `xippios-core~=X.Y.0` (e.g. `~=0.2.0`, §12) and its extras likewise, from PyPI, no git pin, `uv.lock` updated
 - [ ] `copier update` to the template release, conflicts resolved
 - [ ] every local workaround a core change replaced is deleted, its tests with it, the core change named for each in the PR description
