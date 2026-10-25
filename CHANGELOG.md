@@ -10,12 +10,14 @@ All notable changes to this project are documented here. The format follows
 
 What the first four sources, sdk-usda-nass, sdk-comtrade, sdk-usda-psd and sdk-cashctrl,
 had to build around core 0.1.0, moved into core: ADR-0009 to ADR-0018, amendments to
-ADR-0003, ADR-0005, ADR-0007, ADR-0008, ADR-0010, ADR-0011, ADR-0013 and ADR-0015, and
-conventions 1.4 to 1.13. While core is 0.x a minor keeps no compatibility with the one
-before it: a source depends on `xippios-core~=0.2.0` and adopts this release in one
-adoption PR before its next release (conventions §12 and §15, ADR-0018).
-`docs/handover.md`, "Adopting core 0.2.0", lists per source what that PR deletes and
-what replaces it.
+ADR-0003, ADR-0005, ADR-0007, ADR-0008, ADR-0010, ADR-0013 and ADR-0015, a follow-up
+pointer in ADR-0011, and conventions 1.5 to 1.13 (0.1.0 shipped 1.4). While core is 0.x
+a minor keeps no compatibility with the one before it: a source depends on
+`xippios-core~=0.2.0` and adopts this release in one adoption PR before its next release
+(conventions §12 and §15, ADR-0018). The section "Adopting core 0.2.0" of
+[`docs/handover.md`](https://github.com/xippios/sdk-core/blob/main/docs/handover.md), in
+the repository and not in the sdist, lists per source what that PR deletes and what
+replaces it.
 
 ### Breaking changes
 
@@ -89,14 +91,15 @@ what replaces it.
   amendment): `render_str_enums` writes each value as `ascii()` does
   (`"C\xf4te d\u2019Ivoire"`, unchanged at runtime), lays out a long member as ruff
   formats it, sorts `__all__` in ruff's order (RUF022), one name per line, and wraps its
-  docstrings at 100 columns. It refuses with `ValueError`, naming the argument, key and
-  position, never the text, what made a file ruff rejects: a member name over 92
-  columns, a key over 75 characters, a `generator`, `fetched` text, key or class name
-  it cannot write as printable ASCII (a class name must also be an identifier, no
-  keyword, at most 84 characters). A value with nothing to derive a member name from (a
-  Greek, Cyrillic or CJK label) is named once through the new `member_names=`. A source
-  re-renders its enum file once and commits the one-time diff (sdk-usda-nass's first
-  line only); the formatting step after a refresh goes (sdk-comtrade).
+  docstrings at 100 columns. It refuses with `ValueError` what made a file ruff rejects:
+  caller text it cannot write as printable ASCII, a `generator`, `fetched` text, key or
+  class name (a class name must also be an identifier, no keyword, at most 84
+  characters), the error naming the argument and position, never the text; a member name
+  over 92 columns, the error naming the key and quoting the value; and a key over 75
+  characters, the error quoting the key. A value with nothing to derive a member name
+  from (a Greek, Cyrillic or CJK label) is named once through the new `member_names=`. A
+  source re-renders its enum file once and commits the one-time diff (sdk-usda-nass's
+  first line only); the formatting step after a refresh goes (sdk-comtrade).
 - **`Tenants` splits the caller's mistake from the operator's** (ADR-0014): new in this
   release, so it breaks only a source that moves its own tenant registry onto it. An
   undeclared tenant is `InvalidRequestError` (MCP text, HTTP 422), "unknown tenant ...";
@@ -156,9 +159,11 @@ what replaces it.
   `retry_non_idempotent` (default `False`) retries a 5xx and a transport failure for
   POST, PUT, PATCH and DELETE too.
 - **`AsyncClient.derive(retry=..., timeouts=...)`** (sdk-comtrade): a client with only
-  those replaced, sharing auth, transport, sleep, rate limiter and cache; `record` and
-  `record_sync` take `headers=`, `scrub=`, `retry=` and `timeouts=`, overrides going
-  through `derive`.
+  those replaced, sharing auth, transport, sleep, rate limiter and cache. Closing it
+  closes its own pools and leaves the borrowed transport open for its parent, as
+  `record` needs after a recording with `retry=` or `timeouts=`; a transport a caller
+  passed to a client is still closed with that client. `record` and `record_sync` take
+  `headers=`, `scrub=`, `retry=` and `timeouts=`, overrides going through `derive`.
 - **Upstream totals** (ADR-0012, sdk-cashctrl): `ResultMeta.total`, upstream's count of
   the records matching the request, `None` when it reports none. A paginated task sets
   it from upstream's count whether it returns one page or all, never from
@@ -167,20 +172,20 @@ what replaces it.
   name, never a value (`"tenant": null` for a single-tenant source).
   `xippios.core.Tenants(source, *, list_var, fields, reserved=(), validate=None,
   hints=None)` reads the tenants from the environment, names listed in `list_var` and
-  values in `<SOURCE>_<NAME>_<FIELD>`, a reserved tenant (`demo`) present when its
-  variables are set; `names()`, `require(name)`, `field(name, field)` through
-  `validate`, with `hints` text for a refused value, `client_for(name, build)`, one
-  client per tenant rebuilt when a value changes, `reset()`.
-  `xippios.core.tenants.list_task` is the task behind a `<source>_list_<tenants>` tool,
-  names only. `TenantLock(param, value)`, as `tenant_lock=` for `build_server` and
-  `register_tasks`, refuses without running the tool a call that names another tenant
-  or leaves the tenant out, and names the tenant in the instructions; the list tool
-  lists that tenant alone, and a locked server refuses a task whose tenant parameter
-  has a default.
-  `main(..., add_options=, apply_options=)` and `build_parser(prog, *, add_options=)`
-  put a source's options on core's parser, parsed once, a `XippiosError` from
-  `apply_options` exiting with status 2; `is_write_server(server)` serves the loopback
-  rule. Generalises sdk-cashctrl's organisation registry and `--org` lock.
+  values in `<SOURCE>_<NAME>_<FIELD>`, which `var(name, field)` names, a reserved tenant
+  (`demo`) present when its variables are set; `names()`, `require(name)`,
+  `field(name, field)` through `validate`, with `hints` text for a refused value,
+  `client_for(name, build)`, one client per tenant rebuilt when a value changes,
+  `reset()`. `xippios.core.tenants.list_task` is the task behind a
+  `<source>_list_<tenants>` tool, names only. `TenantLock(param, value)`, as
+  `tenant_lock=` for `build_server` and `register_tasks`, refuses without running the
+  tool a call that names another tenant or leaves the tenant out, and names the tenant
+  in the instructions; the list tool lists that tenant alone, and a locked server
+  refuses a task whose tenant parameter has a default. `main(..., add_options=,
+  apply_options=)` and `build_parser(prog, *, add_options=)` put a source's options on
+  core's parser, parsed once, a `XippiosError` from `apply_options` exiting with status
+  2; `is_write_server(server)` serves the loopback rule. Generalises sdk-cashctrl's
+  organisation registry and `--org` lock.
 - **Per-tool result caps** (ADR-0016, sdk-comtrade, sdk-usda-psd): `caps=` on
   `register_tasks` and `build_server` maps a task function's `__name__`
   (`list_partners`, not the tool name) to a `ResultCap` replacing `cap` for that tool;
@@ -242,7 +247,7 @@ what replaces it.
 
 ### Changed
 
-- **Conventions 1.4 to 1.13**: 1.5 the key variable per issuer and the rate-limit
+- **Conventions 1.5 to 1.13**: 1.5 the key variable per issuer and the rate-limit
   policy (§1, §5, §6, §7; ADR-0009, ADR-0010); 1.6 error messages without the host and
   the retry rule (§5, §6; ADR-0011); 1.7 `ResultMeta.total` (§4; ADR-0012); 1.8 form
   bodies, the recorder's rules and the plugin's guarantees (§6, §10; ADR-0013); 1.9
@@ -263,8 +268,6 @@ what replaces it.
   spent while a fixture of wider scope is set up is forgotten before the body of the
   next test not marked `live`; a `QuotaPolicy` subclass's `before_request` override is
   neither called through `install`'s hook nor neutralised.
-- **`main` quiets the request log after `apply_options`**, right before the server
-  runs, instead of first thing.
 - **The `testing` extra declares `httpcore>=1.0`**, which the plugin patches and which
   only httpx's own dependency provided before.
 - **CI runs `uv run pre-commit run --all-files`** after the tests, so the definition of
@@ -284,22 +287,19 @@ what replaces it.
 - **Taxonomy errors survive `copy.copy`, `copy.deepcopy` and `pickle`**: errors with
   keyword-only arguments raised `TypeError`; `XippiosError.__reduce__` restores every
   attribute (sdk-cashctrl).
-- **A client from `AsyncClient.derive` no longer closes a transport it did not create**,
-  which closed it under its parent, as `record` did after a recording with `retry=` or
-  `timeouts=`.
 - **`RateLimit.per_minute`'s docstring**: the pace is the one a source sets within
   upstream's limit, or a self-imposed one (ADR-0010), not upstream's limit.
 
 ### Security
 
-- **The MCP servers no longer log request URLs** (ADR-0005). Constructing an
-  `MCPServer` configures root logging at `INFO`, and httpx logs every request URL at
-  `INFO`, so every `xippios-<source>-mcp` wrote upstream URLs into its MCP client's
-  logs: sdk-usda-nass's key, sent as `key=`, and sdk-cashctrl's tenant host.
+- **The MCP servers no longer log request URLs** (ADR-0005). Constructing an `MCPServer`
+  configures root logging at `INFO`, and httpx logs every request URL at `INFO`, so
+  every `xippios-<source>-mcp` wrote upstream URLs into its MCP client's logs:
+  sdk-usda-nass's key, sent as `key=`, and sdk-cashctrl's tenant host.
   `xippios.core.mcp.quiet_request_logging()` sets the `httpx` and `httpcore` loggers to
-  `WARNING`; `build_server` calls it after constructing the server and `main` before
-  running it. A consumer who wants the log raises the level and runs the server without
-  `main`.
+  `WARNING`; `build_server` calls it after constructing the server, and `main` again
+  right before running it, after `apply_options`. A consumer who wants the log raises
+  the level and runs the server without `main`.
 - **`.gitignore`** also ignores `.env.*` and `.envrc.*` (sdk-comtrade).
 - **The secret scan no longer skips paths containing "swagger"**: detect-secrets'
   `is_swagger_file` filter, which exempted a verbatim upstream Swagger snapshot, is
