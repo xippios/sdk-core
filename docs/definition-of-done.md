@@ -46,5 +46,5 @@ green and review threads are resolved (ADR-0018).
 
 ## Process
 - [ ] branch named `feature/`, `fix/`, `chore/`, or `docs/`; Conventional Commits
-- [ ] no tag, release, merge, or secret operation performed by the session (enabling auto-merge on an adoption PR or a `chore/release-*` PR after the reviewer's `ready` excepted (ADR-0018))
+- [ ] no tag, release, merge, or secret operation performed by the session; the one exception is enabling auto-merge on an adoption or `chore/release-*` PR after the reviewer's `ready`, ADR-0018
 - [ ] assumptions and open questions listed in the PR description
