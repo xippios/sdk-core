@@ -88,8 +88,8 @@ approves the `pypi` run.
   with an open bound stay as published and get the bound with their next release.
 - **Later**: install the Claude GitHub App on the org and move to issue-driven work: one
   issue per endpoint or change, `@claude` in the issue, PR arrives, CI gates, a human
-  merges. The ruleset keeps no required approving review, which would hold every
-  auto-merge (ADR-0018).
+  merges. Auto-merge waits for every required approving review, so the ruleset must
+  require none for adoption and release PRs to merge on `ci` alone (ADR-0018).
 
 ## Standing human gates
 
