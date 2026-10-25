@@ -87,7 +87,7 @@ what replaces it.
   asserts the old text changes; none is known.
 - **Generated enum modules are ASCII-only and pass ruff as rendered** (ADR-0008
   amendment): `render_str_enums` writes each value as `ascii()` does
-  (`"C\xf4te d’Ivoire"`, unchanged at runtime), lays out a long member as ruff
+  (`"C\xf4te d\u2019Ivoire"`, unchanged at runtime), lays out a long member as ruff
   formats it, sorts `__all__` in ruff's order (RUF022), one name per line, and wraps its
   docstrings at 100 columns. It refuses with `ValueError`, naming the argument, key and
   position, never the text, what made a file ruff rejects: a member name over 92
@@ -119,18 +119,18 @@ what replaces it.
   response from the wire, retried attempts and raw responses included, a cache hit
   never, before `classify`. `QuotaPolicy` and `QuotaSnapshot` (in `xippios.core` and
   `xippios.core.client`) implement ADR-0010's quota rules on them:
-  `QuotaPolicy(...).install(config)` keeps a thread-safe snapshot from the quota
-  headers (`limit_header`, `remaining_header`, `reset_header`, each `None` to turn it
-  off); a 429, or `remaining` at 0, marks the quota spent until `Retry-After`, the reset
-  header or `window` from now, upstream's wait cut to `window` (`window=86400` for a
-  daily quota); `spent=` reads any other answer to a spent limit, such as
-  sdk-comtrade's 403 "replenished in HH:MM:SS", and `mark_spent()` marks it from code.
-  A request into a spent quota waits within `pause_cap` (else `retry.backoff_max`),
-  logged once, or raises `RateLimitError` with `retry_after`, saying nothing was sent
-  and when the quota is back. `install` refuses a config with a hook of its own, and a
-  subclass's `before_request` override is not called through the hook it sets;
-  `snapshot()`, `reset()`, and `QuotaSnapshot.describe()`, numbers and times only.
-  Replaces sdk-usda-psd's `QuotaAwareClient`, `Quota`, `observe_quota` and
+  `QuotaPolicy(...).install(config)` sets both, and the policy keeps a thread-safe
+  snapshot from the quota headers (`limit_header`, `remaining_header`, `reset_header`,
+  each `None` to turn it off); a 429, or `remaining` at 0, marks the quota spent until
+  `Retry-After`, the reset header or `window` from now, upstream's wait cut to `window`
+  (`window=86400` for a daily quota); `spent=` reads any other answer to a spent limit,
+  such as sdk-comtrade's 403 "replenished in HH:MM:SS", and `mark_spent()` marks it from
+  code. A request into a spent quota waits within `pause_cap` (else
+  `retry.backoff_max`), logged once, or raises `RateLimitError` with `retry_after`,
+  saying nothing was sent and when the quota is back. `install` refuses a config with a
+  hook of its own, and a subclass's `before_request` override is not called through the
+  hook it sets; `snapshot()`, `reset()`, and `QuotaSnapshot.describe()`, numbers and
+  times only. Replaces sdk-usda-psd's `QuotaAwareClient`, `Quota`, `observe_quota` and
   `quota_pause`, which sdk-usda-esr and sdk-usda-gats would otherwise copy.
 - **Keyless calls on a keyed client** (ADR-0015, sdk-comtrade): `auth=` per call on
   `request`, `get` and `get_json` of `AsyncClient` and `Client`, and on `record` and
@@ -174,8 +174,9 @@ what replaces it.
   `xippios.core.tenants.list_task` is the task behind a `<source>_list_<tenants>` tool,
   names only. `TenantLock(param, value)`, as `tenant_lock=` for `build_server` and
   `register_tasks`, refuses without running the tool a call that names another tenant
-  or leaves the tenant out, names the tenant in the instructions and lists it alone; a
-  locked server refuses a task whose tenant parameter has a default.
+  or leaves the tenant out, and names the tenant in the instructions; the list tool
+  lists that tenant alone, and a locked server refuses a task whose tenant parameter
+  has a default.
   `main(..., add_options=, apply_options=)` and `build_parser(prog, *, add_options=)`
   put a source's options on core's parser, parsed once, a `XippiosError` from
   `apply_options` exiting with status 2; `is_write_server(server)` serves the loopback
