@@ -1,9 +1,9 @@
 # Definition of done
 
 Copy this list into every PR description and tick honestly. An unticked item needs a
-one-line reason. CI enforces the first block; the rest is reviewed by a human. An
-adoption PR (conventions §15) copies the blocks Enforced by CI, Adoption PR and Process
-instead.
+one-line reason. CI enforces the first block; the rest is reviewed by a human. Every PR
+leaves the Adoption PR block out, except an adoption PR (conventions §15), which copies
+the Enforced by CI and Process blocks with it and leaves Code, Tests and Docs out.
 
 ## Enforced by CI
 - [ ] `ruff check` and `ruff format --check` pass
@@ -21,7 +21,7 @@ instead.
 ## Tests
 - [ ] each new task function has a fixture-backed unit test (`tests/fixtures/...` recorded, not hand-written)
 - [ ] each new task function has a `@pytest.mark.live` smoke test
-- [ ] fixtures contain no credentials and no value of a field declared sensitive (grep for the key pattern and those values before committing; ADR-0017)
+- [ ] fixtures contain no credentials: grep `tests/fixtures/` for key patterns and for the values of fields the source keeps out of its projections (ADR-0017) before committing
 
 ## Docs
 - [ ] docstrings written for agents: one-line summary, `Args:` with valid-value examples
@@ -31,12 +31,14 @@ instead.
 
 ## Adoption PR (conventions §15)
 The reviewer judges an adoption PR against this list and nothing else: no new endpoints,
-tasks or fixtures ride along.
-- [ ] core floor raised: `xippios-core~=<minor>` and its extras likewise, from PyPI, no git pin, `uv.lock` updated
+tasks or fixtures ride along. An adoption PR is a `chore/template-update*` PR: after the
+reviewer's `ready` the session enables auto-merge, and GitHub merges it once `ci` is
+green (ADR-0018).
+- [ ] core floor raised: `xippios-core~=X.Y.0` (e.g. `~=0.2.0`, §12) and its extras likewise, from PyPI, no git pin, `uv.lock` updated
 - [ ] `copier update` to the template release, conflicts resolved
-- [ ] every local workaround a core change replaced is deleted, the core change named for each in the PR description
+- [ ] every local workaround a core change replaced is deleted, its tests with it, the core change named for each in the PR description
 - [ ] logic duplicated across sources moved into core or dropped; what core lacks is proposed to sdk-core, not copied
-- [ ] every test that asserted a limiter wait or key resolution is marked `rate_limited` or overrides `placeholder_api_key` (ADR-0013)
+- [ ] every test that asserted a limiter wait or a quota pause is marked `rate_limited`, and one that asserted key resolution has a module-level `placeholder_api_key` override that pins nothing (ADR-0013, ADR-0015)
 - [ ] generated enum files re-rendered once and committed as rendered
 - [ ] `mypy --strict` covers `scripts/` too
 - [ ] the current conventions version applied
@@ -44,5 +46,5 @@ tasks or fixtures ride along.
 
 ## Process
 - [ ] branch named `feature/`, `fix/`, `chore/`, or `docs/`; Conventional Commits
-- [ ] no tag, release, merge, or secret operation performed by the session
+- [ ] no tag, release, merge, or secret operation performed by the session (enabling auto-merge on an adoption PR after the reviewer's `ready` excepted, §15)
 - [ ] assumptions and open questions listed in the PR description
