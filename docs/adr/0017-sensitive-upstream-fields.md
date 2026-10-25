@@ -13,10 +13,10 @@ MCP tool result and HTTP envelope, and from there into the agent's context, logs
 stores. ADR-0005 keeps credentials out of the envelope, but it covers `request` keys
 that look like credentials, not upstream data.
 
-A mechanism in core, fields declared sensitive and redacted by the adapters unless the
-operator opted in, was drafted and dropped: it would add public surface to core for what
-one source's tasks can decide, and conventions §3 already lets a task return a
-projection, a subset of an upstream record's columns under their upstream names.
+A mechanism in core that would hide such fields in the adapters' output was drafted and
+dropped: it would add public surface to core for what one source's tasks can decide,
+and conventions §3 already lets a task return a projection, a subset of an upstream
+record's columns under their upstream names.
 Johannes decided the rule on 2026-10-25.
 
 ## Decision
@@ -28,8 +28,8 @@ Johannes decided the rule on 2026-10-25.
 - The source's Python read models, those of its endpoint wrappers, stay faithful
   (ADR-0003): they carry these fields under their upstream names, with their values.
 - Fixtures never carry the values: the recording names them in `Scrub(secrets=...)`,
-  which writes `REDACTED` in their place (conventions §10), and the definition of done's
-  fixture grep looks for them.
+  which scrubs them before the one write (conventions §10), and the definition of done's
+  fixture grep looks for them in `tests/fixtures/`.
 
 ## Consequences
 
