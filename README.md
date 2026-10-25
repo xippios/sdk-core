@@ -48,13 +48,14 @@ It gives a source package the things that should be identical across the family:
 ## Install
 
 ```bash
-uv add xippios-core                 # client, models, errors, reference, pagination
-uv add "xippios-core[mcp]"          # + MCP server helpers (official mcp SDK 2.x)
-uv add "xippios-core[http]"         # + FastAPI router helpers
-uv add "xippios-core[testing]"      # + pytest plugin, respx replay, fixture recording
+uv add "xippios-core~=0.2.0"            # client, models, errors, reference, pagination
+uv add "xippios-core[mcp]~=0.2.0"       # + MCP server helpers (official mcp SDK 2.x)
+uv add "xippios-core[http]~=0.2.0"      # + FastAPI router helpers
+uv add "xippios-core[testing]~=0.2.0"   # + pytest plugin, respx replay, fixture recording
 ```
 
-Python 3.12 or later.
+Python 3.12 or later. A source package depends on one core minor, `~=0.2.0`, and each
+extra likewise (conventions §12); see the Alpha note under Status.
 
 ## 30-second example
 
@@ -474,6 +475,10 @@ error says where, never what. A body that is not UTF-8 text cannot be scrubbed a
 refused unless `Scrub(allow_binary=True)` stores it base64, flagged.
 
 ## Status
+
+Release 0.2.0, alpha.
+[CHANGELOG.md](https://github.com/xippios/sdk-core/blob/main/CHANGELOG.md) lists what
+changed, breaking changes first.
 
 | Module | What | Status |
 | --- | --- | --- |

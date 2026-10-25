@@ -6,495 +6,306 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-25
+
+What the first four sources, sdk-usda-nass, sdk-comtrade, sdk-usda-psd and sdk-cashctrl,
+had to build around core 0.1.0, moved into core: ADR-0009 to ADR-0018, amendments to
+ADR-0003, ADR-0005, ADR-0007, ADR-0008, ADR-0010, ADR-0013 and ADR-0015, a follow-up
+pointer in ADR-0011, and conventions 1.5 to 1.13 (0.1.0 shipped 1.4). While core is 0.x
+a minor keeps no compatibility with the one before it: a source depends on
+`xippios-core~=0.2.0` and adopts this release in one adoption PR before its next release
+(conventions §12 and §15, ADR-0018). The section "Adopting core 0.2.0" of
+[`docs/handover.md`](https://github.com/xippios/sdk-core/blob/main/docs/handover.md), in
+the repository and not in the sdist, lists per source what that PR deletes and what
+replaces it.
+
+### Breaking changes
+
+- **Writes are not retried after a 5xx** (ADR-0011): a 5xx and a transport failure are
+  retried for GET, HEAD and OPTIONS only; a POST, PUT, PATCH or DELETE answered with a
+  5xx is raised as `UpstreamError` after one attempt, so a write upstream applied before
+  answering 502 is not sent twice (sdk-cashctrl). A 429 is still retried for every
+  method. `RetryPolicy(retry_non_idempotent=True)` retries writes again, for an upstream
+  that makes a repeated write safe or a source that only reads through POST.
+- **Error messages name no host** (ADR-0005 amendment): `error_from_response` writes
+  `404 from GET /v1/series: ...`, and `error_from_exception` writes `<host>` where a
+  transport failure's text quotes the host. A multi-tenant source's host names the
+  tenant; sdk-cashctrl had to mask it in its own `classify`.
+- **Binary bodies are refused when recording** (ADR-0013): a body that is not UTF-8 text
+  raises `ValueError` ("binary body cannot be scrubbed") and nothing is written, unless
+  `Scrub(allow_binary=True)` stores it base64, flagged `body_base64: true` and
+  unscrubbed, as 0.1.0 stored every such body (sdk-cashctrl).
+- **`EnvKeyAuth.apply(self, request)`**: `apply` reads the key through `self.key()`
+  instead of taking it as an argument, which pytest's long tracebacks printed
+  (sdk-usda-nass); core's auth classes keep the key in no argument and no local
+  variable. A subclass outside core that implements `apply(request, key)` drops the
+  parameter; none is known.
+- **The pytest plugin keeps the default run offline on its own** (ADR-0013, decision 4
+  added by ADR-0015). In every test not marked `live`: a request through httpx's default
+  transports or httpcore's pools raises `RuntimeError` naming method and path, from
+  `pytest_configure` on, fixtures and collection included (`respx` answers and a
+  transport a test passes itself are unaffected; a `respx` pass-through is refused); a
+  rate limiter neither waits nor takes a token; every `QuotaPolicy` snapshot is
+  forgotten before and after the test, and no policy waits or refuses; every
+  `EnvKeyAuth` sends `PLACEHOLDER_KEY`, pinned on the class, and the variables named in
+  the ini option `xippios_placeholder_key_envs` hold it. The `httpx` and `httpcore`
+  logger levels come back after every test. A test that must reach the network is
+  marked `network`; one that asserts a limiter wait, a quota pause or a quota refusal
+  is marked `rate_limited`; a module that tests key resolution overrides
+  `placeholder_api_key` with a fixture that pins nothing. A source deletes its own
+  placeholder fixture, which could not reach one auth object per tenant (sdk-comtrade,
+  sdk-cashctrl), and its replays stop waiting behind its limiter (sdk-comtrade,
+  sdk-usda-psd).
+- **`confirm: bool = False` is enforced at registration** (ADR-0014):
+  `register_tasks(..., read_only=False)`, and so `build_server`, refuses with
+  `ValueError`, before registering anything, a task without a parameter `confirm`
+  annotated `bool` (`Annotated[bool, ...]` counts, `bool | None` does not) defaulting
+  to `False`; before, only `assert_write_tools` caught it, in a test (sdk-cashctrl).
+- **Write servers listen on loopback only** (ADR-0014): `main` serves a write server
+  over `--http` on `127.0.0.1`, `localhost` or `::1` and otherwise exits with status 2,
+  unless `--allow-remote` is passed: a write server carries no authentication, so
+  beyond loopback a gateway in front of it has to. Read-only servers and stdio are
+  unaffected.
+- **`mcp_call` runs the server's middleware** (ADR-0014): it calls the tool through an
+  in-process `mcp.Client` instead of `MCPServer.call_tool`, so a tenant lock applies
+  (sdk-cashctrl). An MCP error, arguments the tool's schema refuses or an unknown tool
+  now fail the test with `AssertionError` instead of raising the SDK's `ToolError`, and
+  the server must be one `mcp.Client` connects to (an `MCPServer` or a low-level
+  `Server`).
+- **`classify` shapes retries** (ADR-0015): before a 429 or 5xx is retried, the client
+  asks `classify`, also with `raise_on_error=False`. A `RateLimitError` sets the wait
+  from its `retry_after`, so a wait beyond `RetryPolicy.backoff_max` is raised after
+  one attempt; an `UpstreamError` for a 5xx, or `None`, keeps the status rule; any other
+  error, an `AuthError` say, ends the retries. api.data.gov's 429 without `Retry-After`
+  was sent three more times into the spent quota (sdk-usda-psd). `send_with_retries`
+  takes `classify=`.
+- **Result caps count UTF-8 bytes and promise no filter** (ADR-0016): `cap_result`
+  measures `max_bytes` in UTF-8 bytes of the compact JSON text, as the convention said,
+  not in characters, so non-ASCII text keeps fewer rows; the preview cuts no character.
+  The default note ends "narrow the query to see the rest" ("showing {shown} of {total}
+  rows (cap: {max_rows} rows or {max_bytes} bytes); ...", for a non-list result "result
+  is {n} bytes, over the cap of {max_bytes}; ..."), where it suggested "more filters or
+  a shorter date range" that a reference list does not have (sdk-comtrade). A test that
+  asserts the old text changes; none is known.
+- **Generated enum modules are ASCII-only and pass ruff as rendered** (ADR-0008
+  amendment): `render_str_enums` writes each value as `ascii()` does
+  (`"C\xf4te d\u2019Ivoire"`, unchanged at runtime), lays out a long member as ruff
+  formats it, sorts `__all__` in ruff's order (RUF022), one name per line, and wraps its
+  docstrings at 100 columns. It refuses with `ValueError` what made a file ruff rejects:
+  caller text it cannot write as printable ASCII, a `generator`, `fetched` text, key or
+  class name (a class name must also be an identifier, no keyword, at most 84
+  characters), the error naming the argument and position, never the text; a member name
+  over 92 columns, the error naming the key and quoting the value; and a key over 75
+  characters, the error quoting the key. A value with nothing to derive a member name
+  from (a Greek, Cyrillic or CJK label) is named once through the new `member_names=`. A
+  source re-renders its enum file once and commits the one-time diff (sdk-usda-nass's
+  first line only); the formatting step after a refresh goes (sdk-comtrade).
+- **`Tenants` splits the caller's mistake from the operator's** (ADR-0014): new in this
+  release, so it breaks only a source that moves its own tenant registry onto it. An
+  undeclared tenant is `InvalidRequestError` (MCP text, HTTP 422), "unknown tenant ...";
+  a missing or malformed variable of a declared one is `ConfigError` naming the
+  variable, never the value (sdk-cashctrl, on its git pin already).
+- **Personal identifiers stay out of task projections** (ADR-0017, conventions §3), a
+  rule for sources: documented personal identifiers (CashCtrl's `ssn` and `iban`, and
+  what a source judges equivalent) are left out of the projections tasks return unless
+  a task fetches them deliberately and says so, and a write task does not echo one in
+  `meta.request`; read models stay faithful; fixtures never carry the values, which a
+  recording names in `Scrub(secrets=...)` or rewrites with `Scrub(rewrite=...)`.
+  Nothing in core changes.
+
 ### Added
 
-- `xippios.core.mcp.quiet_request_logging()`: sets the `httpx` and `httpcore` loggers
-  to `WARNING`. Idempotent; `build_server` and `main` call it.
-- `ClientConfig.cache_filter`: called with each GET as built from base URL, path and
-  query parameters; the GET is looked up in and stored to the cache only when it
-  returns `True`. `None` caches every GET, as before. Cache keys are hashes, so a
-  backend cannot tell one path from another, and a source that wanted one cached
-  endpoint needed a second client (sdk-usda-psd).
-- `limiter` keyword for `AsyncClient` and `Client`: a `TokenBucket` used instead of one
-  built from `config.rate_limit`, which is then ignored. `AsyncClient.limiter` returns
-  the bucket in use, so a second client can share the first one's pace; before, a
-  limiter could not be shared through any public API (sdk-usda-psd).
-- `xippios.core.client.WIRE_HEADERS` and `strip_wire_headers`: the headers that describe
-  how a body travelled (`content-length`, `content-encoding`, `transfer-encoding`,
-  `connection`), dropped from cache entries and recorded fixtures alike.
-- `RetryPolicy.retry_non_idempotent` (default `False`): retry a 5xx and a transport
-  failure for POST, PUT, PATCH and DELETE too, for sources whose upstream makes a
-  repeated write safe, e.g. by an idempotency key, or that only read through POST
-  (ADR-0011).
-- `ResultMeta.total` (default `None`): upstream's count of the records matching the
-  request, when the source reports one. A paginated task sets it from upstream's count
-  whether it collects every page or returns one, so the caller can page; it is never
-  computed from `len(data)`, and a negative count is refused. `cap_result` keeps it next
-  to the capped rows, and HTTP responses carry it, as `null` when unset. Optional, so
-  sources on 0.1.0 are unaffected. Needed first by sdk-cashctrl.
-- `xippios.core.testing.Scrub(host, secrets, rewrite, allow_binary)`: what a recording
-  removes besides credentials, applied in memory to the request URL, request body,
-  response headers and response body before the fixture is written once, so the file
-  never holds the removed text, not even briefly. `host` replaces the request's host
-  with a placeholder and every occurrence of the original host (any letter case, its
-  IDNA form too, plain or percent-encoded) with it; `secrets` turns each value into
-  `REDACTED`, plain and percent-encoded, the longest first; `rewrite` is a text hook for
-  the request body, the response body and every response header value (`Location`
-  included), for pre-authenticated URLs. `write_fixture`, `fixture_from_response` and
-  `record` take it as `scrub=`. The credential scrubbing of 0.1.0 still always applies.
-  Ports the recorder pattern sdk-cashctrl had to keep locally: `write_fixture` kept the
-  tenant host in `request.url`, and CashCtrl's `file/prepare.json` answers with signed
-  storage URLs that `file/get` redirects to. With `host` or `secrets` set, the scrubbed
-  exchange is verified before anything is kept: the URL, every header and both bodies
-  are searched raw and, for a JSON body, decoded, so a host or value behind a `\uXXXX`
-  escape is found; one still present raises `ValueError` naming the kind ("request host"
-  or "secret value") and the location, never the value, and nothing is written; the
-  checking frames are hidden from pytest's report, which would print the refused text as
-  their arguments. Modelled on sdk-cashctrl's final check. A placeholder that would
-  write what it hides is refused with `ValueError`, naming neither: a `host` that
-  contains one of the `secrets` (any letter case) when the `Scrub` is built, and a
-  `host` that is the request's own host (`url.host` or its IDNA form) when the exchange
-  is scrubbed. A placeholder that ends with the original host stays allowed. `Scrub`'s
-  `repr` leaves `secrets` out.
-- `FixtureRequest.body`, `body_base64` and `content_type`: the request body as scrubbed
-  UTF-8 text (the form or JSON text sent; `None` without a body) and the request's
-  `Content-Type`, so a write fixture can assert its payload (sdk-cashctrl). Fixtures
-  written by 0.1.0 still load.
-- `data=` for `AsyncClient.request`, `Client.request`, `record` and `record_sync`: a body
-  sent form-encoded (`application/x-www-form-urlencoded`) next to `json=`; passing both
-  raises `ValueError`. CashCtrl's writes are form-encoded (sdk-cashctrl).
-- `AsyncClient.derive(retry=..., timeouts=...)`: a new client on the same configuration
-  with only those replaced, sharing auth, transport, sleep, rate limiter and cache.
-- `record` and `record_sync` take `headers=`, `scrub=`, `retry=` and `timeouts=`; an
-  override goes through `client.derive`. A recording could not override the client's
-  retry policy or timeouts (sdk-comtrade).
-- `match_params=` (keyword-only) for `mount_fixture`, `replay` and the plugin's
-  `replay_fixture`: names of recorded query parameters whose recorded values a request
-  must carry too; a name absent from the recorded URL, or whose recorded value holds
-  `REDACTED` in whole or in part, raises `ValueError` naming it. Replay matched on
-  method, host and path only, so a count call (`countOnly=true`) and the data call on
-  the same path could not be told apart (sdk-comtrade). Absence cannot be matched: the
-  more specific fixture is mounted first, since `respx` tries routes in order. The
-  request body is never matched; a test asserts it from the route's calls.
-- `xippios.core.testing.sent_urls(route)`: the URLs a `respx` route received, oldest
-  first, as strings through `scrub_url`, so a key sent as a query parameter reads
-  `REDACTED`. A test compares these instead of keeping a request from `route.calls` in
-  its own frame, where a failing assertion or `pytest -l` prints it, key included
-  (sdk-usda-nass).
-- `xippios.core.testing.PLACEHOLDER_KEY` (`"placeholder-for-fixture-replay"`, also in
-  the plugin) and the plugin's ini option `xippios_placeholder_key_envs` (type `args`,
-  default empty): the key offline tests send and the variables that hold it; see the
-  placeholder pin under Changed.
-- `xippios.core.testing.assert_write_tools(write_server, write_tasks, *, source,
-  read_server=None, router=None)`: fails the test, naming the offending tool, unless
-  the write server was registered with `read_only=False` (`is_write_server`, which the
-  loopback rule of `main` reads), its tools are exactly the write tasks by `tool_name`,
-  every write task takes `confirm: bool = False`, and, when given, no write tool is on
-  the read server and no route of the router serves a write task. Works in sync and
-  async tests.
-  Conventions §8's write-server rules had no check in `xippios.core.testing`
-  (sdk-cashctrl).
-- `xippios.core.testing.ReplayFixture`: a `Protocol` for the plugin's `replay_fixture`
-  fixture, `(endpoint, case, *, match_params=None) -> respx.Route`, so a source's test
-  can annotate it; the fixture is annotated with it instead of `Callable[..., Route]`.
-- `fixture_from_response` is exported from `xippios.core.testing`; sdk-cashctrl's
-  recorder imported it from `xippios.core.testing.fixtures`.
-- `ResultMeta.tenant` (default `None`): the tenant the data came from, by name, for a
-  multi-tenant source; never a credential, a host or another of the tenant's values.
-  A source carried the tenant only inside `request` (`request.org` in sdk-cashctrl),
-  where nothing marked it as the tenant. Single-tenant sources leave it `None` (every
-  envelope's JSON now carries `"tenant": null`); conventions §4 lists it.
-- `xippios.core.Tenants(source, *, list_var, fields, reserved=(), validate=None)`: the
-  tenants a multi-tenant source declares in the environment, and one client per tenant
-  (conventions §7). `list_var` lists the names, comma-separated, `^[a-z0-9_]+$`; each
-  tenant's values sit in `<SOURCE>_<NAME>_<FIELD>` (`var(name, field)` gives the
-  variable's name). `names()` reads the list on every call, in declared order, and
-  appends each reserved name whose field variables are all set; a reserved name in the
-  list, a malformed name or a name listed twice is a `ConfigError`. `require(name)`
-  returns a declared name or raises `InvalidRequestError`, the caller's bad argument
-  (MCP text, HTTP 422), listing the declared names, or the variables to set when there
-  are none. `field(name, field)` returns a value stripped and passed through
-  `validate[field]`; a missing value of a declared tenant, or one the check refuses, is
-  a `ConfigError` naming the variable, never the value. `client_for(name, build)` builds a
-  tenant's client with `build(name)` on first use and keeps it, thread-safe, under a
-  digest of the tenant's current values, so a changed value builds a new client;
-  `reset()` drops them. Generalises sdk-cashctrl's organisation registry (`orgs()`,
-  `require_org()`, `client_for()`), which every multi-tenant source would otherwise
-  write again.
-- `xippios.core.tenants.list_task(tenants, *, name, doc=None)`: a synchronous task named
-  `name` (`list_organisations`) that returns the declared tenants' names in the
-  envelope, names only (ADR-0005), for a `<source>_list_<tenants>` reference tool. Its
-  default docstring is written for agents. On a server locked to one tenant its tool
-  lists that tenant only.
-- `xippios.core.mcp.TenantLock(param, value)` and `tenant_lock=` for `build_server` and
-  `register_tasks` (ADR-0014): installs, once per server, a middleware that answers a
-  tool call naming another tenant with `error: InvalidRequestError: this server is
-  locked to <param>=<value>; the call named another tenant` without running the tool,
-  and a call that leaves out a `param` the tool's input schema declares with `...; the
-  call did not name the tenant`, also when that schema lookup fails; a call to a tool
-  without `param` passes unless it names another tenant, and listing tools is left
-  alone. On a locked server, `register_tasks` refuses with `ValueError` a task whose
-  `param` has a default, and the lock on a server that has one: a tool that takes the
-  tenant parameter must receive it. `build_server` adds "This server is locked to
-  <param> <value>; every tool call that takes <param> must pass <param>=<value>." to the
-  instructions. sdk-cashctrl wrote the same lock itself, set the instructions through
-  the SDK's private low-level server and parsed the command line twice.
-- `main(server, argv=None, *, add_options=None, apply_options=None)` and
-  `build_parser(prog, *, add_options=None)`: `add_options` puts a source's arguments on
-  core's parser, so the command line is parsed once and `--help` lists every option;
-  `apply_options(namespace, server)` returns the server to run. A `XippiosError` it
-  raises, such as an undeclared tenant, exits with status 2 and the message on stderr,
-  like an argparse error.
-- `--allow-remote` for `main`, and `xippios.core.mcp.is_write_server(server)`: true once
-  tasks were registered on the server with `read_only=False`. See Changed for the rule.
-- `xippios.core.testing.mcp_call_text(server, name, arguments)`: the tool's text, through
-  the same in-process client as `mcp_call`, so a test can assert a refusal or any other
-  `error:` text.
-- `ClientConfig.before_request` and `ClientConfig.observe` (ADR-0015). `before_request`
-  is called once per `request()` call, not per retry, after the cache lookup (a cache
-  hit returns before it) and before the rate limiter, with the request as built and no
-  credentials on it yet; it may be sync or async, may wait, and may raise a taxonomy
-  error, in which case nothing is sent. `observe` is called with every response from
-  the wire, each retried attempt included and a cache hit never, before `classify` and
-  the retry decision, also with `raise_on_error=False`; an exception from it propagates.
-  sdk-usda-psd had to subclass `AsyncClient` and override `request` to pause before a
-  request, and called its quota observer from `classify`, which a raw response skips.
-- `auth=` per request for `AsyncClient.request`, `get` and `get_json`, `Client.request`,
-  `get` and `get_json`, and `record`/`record_sync`, typed as httpx types it:
-  `httpx.Auth | UseClientDefault | None`, default `httpx.USE_CLIENT_DEFAULT`
-  (`UseClientDefault`, private in httpx, is re-exported from `xippios.core.client`).
-  `None` sends the request, every retry included, without the client's credentials, an
-  `httpx.Auth` replaces them for that call, the default sends the client's. `None` and
-  the default share the cache; a call with an `httpx.Auth` of its own bypasses it,
-  neither looked up nor stored, since another identity may get another answer.
-  sdk-comtrade fetches its public reference files from the same host as its keyed data
-  API and needed a second client to keep the key off them.
-- `response.extensions["xippios_cache_stored_at"]` on a cache hit, next to
-  `"xippios_cache": "hit"`: the entry's `stored_at`, in epoch seconds. On a hit a task
-  sets `retrieved_at` from it, since the data was fetched then, not now (conventions
-  §4). sdk-usda-psd's tasks could only stamp a hit with the current time.
-- `xippios.core.client.decode_json(response, *, source=None, path=None)`: the JSON
-  decoding of `get_json`, with its `ValidationError` for a body that is not JSON, for a
-  wrapper that calls `get` because it needs the response too, e.g. a cache hit's
-  `xippios_cache_stored_at` (conventions §6). `get_json` calls it.
-- `QuotaPolicy` and `QuotaSnapshot`, exported from `xippios.core` and
-  `xippios.core.client`: ADR-0010's quota rules on the two hooks (ADR-0015).
-  `QuotaPolicy(*, limit_header="x-ratelimit-limit",
-  remaining_header="x-ratelimit-remaining", reset_header=None, window=3600.0,
-  spent=None, pause_cap=None, source=None, clock=..., sleep=asyncio.sleep)`, either
-  header name `None` to turn its reading off: `observe(response)` keeps a thread-safe
-  `QuotaSnapshot(limit, remaining, observed_at, resumes_at)` from the quota headers of
-  every response from the wire, never from a cache hit; a 429, or a response that leaves
-  nothing, marks the quota spent until `Retry-After` (on a 429), else the reset header
-  (delay-seconds, epoch seconds as GitHub sends them, or an HTTP-date), else `window`
-  from now; a wait from upstream, through a header or `spent=`, is cut to `window`, the
-  one setting for the fallback and that ceiling (a daily quota sets `window=86400`), and
-  a count that is not ASCII digits is ignored. `spent=`, a callable asked about every
-  observed response, marks the quota spent for the seconds it returns, for an upstream
-  whose spent limit is not a 429 (sdk-comtrade's 403 "replenished in HH:MM:SS");
-  `mark_spent(retry_after)` does it from code. `before_request(request)` waits a spent
-  quota out when it is back within `pause_cap`, logging one warning with the method and
-  path, and otherwise raises `RateLimitError` with `retry_after`, saying that nothing
-  was sent and when the quota is expected back. `install(config)` returns the config
-  with both hooks set, the pause bound to that config's cap (`pause_cap`, else its
-  `retry.backoff_max`), and refuses with `ValueError` a config that has a hook of its
-  own. `snapshot()`, `reset()`; `QuotaSnapshot.describe()` names numbers and times only.
-  Generalises sdk-usda-psd's `Quota`, `observe_quota`, `quota_pause` and
-  `QuotaAwareClient`, which sdk-usda-esr and sdk-usda-gats would otherwise copy.
-- The pytest plugin keeps quota policies out of offline tests (ADR-0013 decision 4,
-  added by ADR-0015): in every test not marked `live`, every `QuotaPolicy`'s snapshot
-  is forgotten before and after the test, so a replayed 429 cannot leave a source's
-  module-level policy spent for the tests after it, and unless the test is marked
-  `rate_limited` a policy neither waits nor refuses.
-- `Tenants(..., hints=None)`: per field, static text appended to the `ConfigError` that
-  `field()` raises when `validate` refuses a value ("...; <hint>"), so the operator
-  learns what the variable should hold; the check's own message, which may quote the
-  value, is still never used, and the value never appears. A hint for a field not in
-  `fields`, or for one without a `validate` check, where it could never be shown, is a
-  `ValueError` at construction. Carried over from the `Tenants` work of ADR-0014.
-- `caps=` for `register_tasks` and `build_server` (ADR-0016): a mapping from a task
-  function's `__name__` (`list_partners`, not the tool name `comtrade_list_partners`) to
-  a `ResultCap` that replaces `cap` for that tool; every other tool keeps `cap`. A key
-  that names none of the tasks is refused with `ValueError`, naming it, before anything
-  is registered. For a reference tool whose whole list an agent needs: a per-tool cap
-  sets `max_rows` and `max_bytes` as the source judges, a byte bound above the default
-  64 KB (65,536 bytes) being a deliberate choice for that tool. The one cap of a server
-  cut `comtrade_list_reporters` (255 rows, 69,011 bytes) and `comtrade_list_partners`
-  (310, 83,270 bytes) at 200 (sdk-comtrade), and `usda_psd_list_countries` (251) before
-  the United States (sdk-usda-psd).
-- `ResultCap(note=...)`: the text after the counts when the cap cuts a result, used
-  verbatim, in the note of a cut list and in that of a non-list result over the byte
-  cap, e.g. `"filter by period or by reporter to see the rest"` for a tool with those
-  filters. `None`, the default, keeps the default text; a blank note is refused with
-  `ValueError`.
-- `xippios.core.reference.render_int_enums(lists, *, class_names=None,
-  member_names=None, fetched=None, generator="the reference refresh script")`: Python
-  source for one `IntEnum` per list of `(id, name)` pairs, for an upstream whose ids are
-  integers (conventions §3, ADR-0008 as amended): values are the ids in upstream order,
-  so a member compares equal to the id in upstream's data; member names come from the
-  names through `enum_member_name`, and a name several ids share gets `_<id>` appended
-  (`TOTAL_DISAPPEARANCE_126`, `TOTAL_DISAPPEARANCE_173`). An id listed twice, which
-  would silently become an alias, raises `ValueError` naming the key and the id, as does
-  a name still shared or a suffix that makes no identifier (a negative id).
-  `member_names` (key to `{id: member name}`) names a member by hand; the suffix rule
-  still counts upstream's names, so no other member is renamed. The module docstring
-  states the rule; layout, `__all__`, the class docstring, `member_names` and the
-  refusals as in `render_str_enums`. `id_name_pairs(records, *, id_field, name_field)`
-  builds the pairs from upstream's records in upstream order: an id is an `int` or a
-  string of ASCII digits without leading zeros (`"007"` would lose them), a name a
-  string; a record lacking a field, or with a value of another kind, raises `ValueError`
-  naming the field and the record's position, never the record. Generalises
-  sdk-usda-psd's `render_id_enums`, which rendered PSD's `AttributeId` and `UnitId`
-  locally.
-- ADR-0017, sensitive upstream fields: a source keeps documented personal identifiers
-  (CashCtrl's `ssn`, `iban`) out of the projections its tasks return unless a task
-  fetches them deliberately; its read models stay faithful, and fixtures never carry the
-  values. A rule for sources; nothing in core changes.
-- ADR-0018, core versioning and source adoption: one core minor per source
-  (`xippios-core~=X.Y.0`), no compatibility across minors while core is 0.x, one
-  adoption PR per core minor against conventions §15, auto-merged as a
-  `chore/template-update*` PR after the reviewer's `ready`.
+- **Request hooks and a quota policy** (ADR-0015, sdk-usda-psd).
+  `ClientConfig.before_request` runs once per call, after the cache lookup and before
+  the rate limiter, with no credentials on the request yet; sync or async, it may wait,
+  or raise a taxonomy error and nothing is sent. `ClientConfig.observe` sees every
+  response from the wire, retried attempts and raw responses included, a cache hit
+  never, before `classify`. `QuotaPolicy` and `QuotaSnapshot` (in `xippios.core` and
+  `xippios.core.client`) implement ADR-0010's quota rules on them:
+  `QuotaPolicy(...).install(config)` sets both, and the policy keeps a thread-safe
+  snapshot from the quota headers (`limit_header`, `remaining_header`, `reset_header`,
+  each `None` to turn it off); a 429, or `remaining` at 0, marks the quota spent until
+  `Retry-After`, the reset header or `window` from now, upstream's wait cut to `window`
+  (`window=86400` for a daily quota); `spent=` reads any other answer to a spent limit,
+  such as sdk-comtrade's 403 "replenished in HH:MM:SS", and `mark_spent()` marks it from
+  code. A request into a spent quota waits within `pause_cap` (else
+  `retry.backoff_max`), logged once, or raises `RateLimitError` with `retry_after`,
+  saying nothing was sent and when the quota is back. `install` refuses a config with a
+  hook of its own, and a subclass's `before_request` override is not called through the
+  hook it sets; `snapshot()`, `reset()`, and `QuotaSnapshot.describe()`, numbers and
+  times only. Replaces sdk-usda-psd's `QuotaAwareClient`, `Quota`, `observe_quota` and
+  `quota_pause`, which sdk-usda-esr and sdk-usda-gats would otherwise copy.
+- **Keyless calls on a keyed client** (ADR-0015, sdk-comtrade): `auth=` per call on
+  `request`, `get` and `get_json` of `AsyncClient` and `Client`, and on `record` and
+  `record_sync`, default `httpx.USE_CLIENT_DEFAULT` (its type, `UseClientDefault`, is
+  re-exported from `xippios.core.client`). `None` sends the call, retries included,
+  without the client's credentials and shares the cache; an `httpx.Auth` replaces them
+  for that call and bypasses the cache. sdk-comtrade needed a second client to keep its
+  key off public files on its data API's host.
+- **Cache provenance and a cache filter** (ADR-0015, sdk-usda-psd): a cache hit carries
+  `extensions["xippios_cache_stored_at"]`, the entry's time in epoch seconds, from which
+  a task sets `retrieved_at` (conventions §4); `xippios.core.client.decode_json` is
+  `get_json`'s decoding for a wrapper that calls `get` to read it.
+  `ClientConfig.cache_filter` decides which GETs the cache takes, so one endpoint can be
+  cached without a second client. `WIRE_HEADERS` and `strip_wire_headers` name the
+  headers dropped from cache entries and fixtures (`content-length`,
+  `content-encoding`, `transfer-encoding`, `connection`).
+- **A shared pace** (sdk-usda-psd): `limiter=` for `AsyncClient` and `Client` takes a
+  `TokenBucket` instead of building one from `config.rate_limit`, and
+  `AsyncClient.limiter` returns the bucket in use, so two clients can share one pace.
+- **Form bodies and retried writes** (ADR-0011, sdk-cashctrl): `data=` on
+  `AsyncClient.request`, `Client.request`, `record` and `record_sync` sends a
+  form-encoded body (passing `json=` too raises `ValueError`); `RetryPolicy`'s
+  `retry_non_idempotent` (default `False`) retries a 5xx and a transport failure for
+  POST, PUT, PATCH and DELETE too.
+- **`AsyncClient.derive(retry=..., timeouts=...)`** (sdk-comtrade): a client with only
+  those replaced, sharing auth, transport, sleep, rate limiter and cache. Closing it
+  closes its own pools and leaves the borrowed transport open for its parent, as
+  `record` needs after a recording with `retry=` or `timeouts=`; a transport a caller
+  passed to a client is still closed with that client. `record` and `record_sync` take
+  `headers=`, `scrub=`, `retry=` and `timeouts=`, overrides going through `derive`.
+- **Upstream totals** (ADR-0012, sdk-cashctrl): `ResultMeta.total`, upstream's count of
+  the records matching the request, `None` when it reports none. A paginated task sets
+  it from upstream's count whether it returns one page or all, never from
+  `len(data)`; a negative count is refused; `cap_result` and HTTP responses keep it.
+- **Multi-tenant sources** (ADR-0014, sdk-cashctrl). `ResultMeta.tenant`, the tenant by
+  name, never a value (`"tenant": null` for a single-tenant source).
+  `xippios.core.Tenants(source, *, list_var, fields, reserved=(), validate=None,
+  hints=None)` reads the tenants from the environment, names listed in `list_var` and
+  values in `<SOURCE>_<NAME>_<FIELD>`, which `var(name, field)` names, a reserved tenant
+  (`demo`) present when its variables are set; `names()`, `require(name)`,
+  `field(name, field)` through `validate`, with `hints` text for a refused value,
+  `client_for(name, build)`, one client per tenant rebuilt when a value changes,
+  `reset()`. `xippios.core.tenants.list_task` is the task behind a
+  `<source>_list_<tenants>` tool, names only. `TenantLock(param, value)`, as
+  `tenant_lock=` for `build_server` and `register_tasks`, refuses without running the
+  tool a call that names another tenant or leaves the tenant out, and names the tenant
+  in the instructions; the list tool lists that tenant alone, and a locked server
+  refuses a task whose tenant parameter has a default. `main(..., add_options=,
+  apply_options=)` and `build_parser(prog, *, add_options=)` put a source's options on
+  core's parser, parsed once, a `XippiosError` from `apply_options` exiting with status
+  2; `is_write_server(server)` serves the loopback rule. Generalises sdk-cashctrl's
+  organisation registry and `--org` lock.
+- **Per-tool result caps** (ADR-0016, sdk-comtrade, sdk-usda-psd): `caps=` on
+  `register_tasks` and `build_server` maps a task function's `__name__`
+  (`list_partners`, not the tool name) to a `ResultCap` replacing `cap` for that tool;
+  an unknown name is refused before anything is registered. A source keeps it as
+  `MCP_CAPS` in `tasks.py`, passed by its `mcp.py` as
+  `caps=getattr(tasks, "MCP_CAPS", None)`. `ResultCap(note=...)` replaces the text after
+  the counts. The default, 200 rows or 65,536 bytes, cut `comtrade_list_reporters` (255
+  rows, 69,011 bytes) and `comtrade_list_partners` (310 rows, 83,270 bytes) at 200
+  rows, and `usda_psd_list_countries` (251 rows) before the United States.
+- **Integer-id enums** (ADR-0008 amendment, sdk-usda-psd):
+  `xippios.core.reference.render_int_enums` renders one `IntEnum` per list of
+  `(id, name)` pairs, values the ids in upstream order, so a member equals the id in
+  upstream's data; member names come from the names, `_<id>` appended to a name several
+  ids share (`TOTAL_DISAPPEARANCE_126`); layout, `member_names=` and refusals as in
+  `render_str_enums`, and an id listed twice is refused. `id_name_pairs(records, *,
+  id_field, name_field)` builds the pairs, refusing a bad record by field and position,
+  never by content. Replaces sdk-usda-psd's `render_id_enums`.
+- **Scrubbed recording** (ADR-0013, sdk-cashctrl): `xippios.core.testing.Scrub(host=,
+  secrets=, rewrite=, allow_binary=)`, as `scrub=` on `write_fixture`, `record` and
+  `fixture_from_response` (now exported from `xippios.core.testing`), removes in memory,
+  before the one write, what credential scrubbing does not: the request's host, replaced
+  by a placeholder in every form (letter case, IDNA, percent-encoded), named values made
+  `REDACTED`, and a text hook for bodies and response headers, for signed URLs. The
+  scrubbed exchange is then verified, a JSON body also decoded; a host or value left
+  raises `ValueError` saying where, never what, and nothing is written. A placeholder
+  that would write what it hides is refused; one that contains the original host
+  (`demo.example.test` for `example.test`) is allowed. `Scrub`'s `repr` leaves `secrets`
+  out. `FixtureRequest.body`, `body_base64` and `content_type` keep the scrubbed request
+  body for a write test to assert; fixtures from 0.1.0 still load. Ports the recorder
+  sdk-cashctrl kept locally.
+- **Replay by query parameter** (ADR-0013, sdk-comtrade): `match_params=` on
+  `mount_fixture`, `replay` and the plugin's `replay_fixture` names recorded query
+  parameters a request must carry too, so a count call (`countOnly=true`) and the data
+  call on one path are told apart; a name not recorded, or recorded as `REDACTED`, is
+  refused. Absence cannot be matched: the more specific fixture is mounted first.
+  `ReplayFixture` types the fixture.
+- **`xippios.core.testing.sent_urls(route)`** (sdk-usda-nass): the URLs a `respx` route
+  received, through `scrub_url`, for a test to compare instead of keeping a request,
+  key included, in its frame, which a failing assertion or `pytest -l` prints.
+- **Offline-test names** (ADR-0013): `xippios.core.testing.PLACEHOLDER_KEY`
+  (`"placeholder-for-fixture-replay"`), the ini option `xippios_placeholder_key_envs`
+  and the markers `network` and `rate_limited`, described under Breaking changes.
+- **Write-server checks** (sdk-cashctrl): `xippios.core.testing.assert_write_tools(
+  write_server, write_tasks, *, source, read_server=None, router=None)` fails a test,
+  naming the tool, unless the server is a write server whose tools are exactly the write
+  tasks, each with `confirm: bool = False`, and no write tool is on the read server or
+  the router. `mcp_call_text(server, name, arguments)` returns a tool's text through
+  the same in-process client as `mcp_call`, for asserting an `error:` text.
+- **ADR-0009 and ADR-0010** (sdk-usda-psd, sdk-comtrade): one key variable per issuer
+  when one key serves several sources (`DATA_GOV_API_KEY`), and the rate-limit policy:
+  a fast pace within a documented limit or a stated self-imposed one, longer-window
+  quotas spent rather than rationed, the answer to a spent limit interpreted in
+  `classify`, no request fired into a spent quota, pauses stated.
+- **ADR-0018, core versioning and source adoption**: a source depends on one core minor
+  (`xippios-core~=X.Y.0`) and adopts each new minor in one adoption PR against
+  conventions §15, the definition of done's "Adoption PR" block. Adoption
+  (`chore/template-update*`) and `chore/release-*` PRs are auto-merged after the
+  reviewer's `ready`.
 
 ### Changed
 
-- **Breaking:** the pytest plugin keeps the default run offline and free of real keys
-  on its own (ADR-0013). A source's tests that hit the network, assert a rate
-  limiter's waits or test how a key is resolved must mark or override accordingly:
-  mark them `network`, mark them `rate_limited`, or override `placeholder_api_key` in
-  their module with a fixture that pins nothing. A `live` test needs nothing.
-  - Network: from configuration on, httpx's default transports and httpcore's
-    connection pools raise `RuntimeError` naming the request's method and path, never
-    its host or query, during collection, in a fixture of any scope and in a test. The
-    refusal is lifted while a test marked `network` or `live` is set up, run and torn
-    down; ADR-0013 states the edges (a conftest's import, wider-scoped fixtures).
-    Requests `respx` answers, replayed fixtures included, and transports a test passes
-    itself (`httpx.MockTransport`, FastAPI's `TestClient`) are unaffected; a `respx`
-    route that passes through is refused unless the test is marked `network`. Nothing
-    enforced the definition of done's "no network in the default test run"
-    (sdk-cashctrl).
-  - Rate limiter: in a test not marked `live`, `TokenBucket.acquire` returns at once
-    and takes no token, so a limiter a source shares across its tests holds no debt
-    from the replays when a live test in the same run uses it; the marker
-    `rate_limited` keeps the limiter. A source paced at one request a second waited a
-    second per replayed request (sdk-comtrade, sdk-usda-psd).
-  - Placeholder pin: the autouse fixture `placeholder_api_key` makes every test not
-    marked `live` send `PLACEHOLDER_KEY`: it sets the variables
-    `xippios_placeholder_key_envs` names and pins `EnvKeyAuth.key` on the class, so
-    every auth object of every tenant sends the placeholder even after a live test
-    cached the real key on it. It returns the placeholder, or `None` in a live test. A
-    source's own fixture of the same name overrides it; with this release a source
-    deletes the one sdk-template 0.1.5 had it carry by hand, which pinned one
-    module-level `auth` and could not reach a source with one auth object per tenant
-    (sdk-comtrade, sdk-cashctrl).
-  - Logger levels: the `httpx` and `httpcore` loggers get their levels back after
-    every test, live ones included. Building an MCP server sets both to `WARNING`, and
-    only core's own `tests/conftest.py` restored them, so a source test that built a
-    server left httpx at `WARNING` for the rest of the run (sdk-cashctrl).
-- The `testing` extra declares `httpcore>=1.0`: the plugin patches httpcore's
-  connection pools and imports it, which only httpx's own dependency provided before.
-- **Breaking:** a 5xx and a transport failure are retried for GET, HEAD and OPTIONS
-  only. A POST, PUT, PATCH or DELETE answered with a 5xx is returned after one attempt
-  and raised as `UpstreamError`; a 429 is still retried for every method. Before, every
-  5xx was retried for every method, so a POST that upstream had applied before
-  answering 502, 503 or 504 was sent again and could duplicate a booking
-  (sdk-cashctrl). `RetryPolicy(retry_non_idempotent=True)` retries writes again
-  (ADR-0011; conventions 1.6, §6).
-- Error messages from `error_from_response` name the method and path, never the host:
-  `404 from GET /v1/series: ...`, no longer `404 from GET api.example.org/v1/series: ...`.
-  For a multi-tenant source the host names the tenant, which sdk-cashctrl had to mask in
-  its own `classify` (ADR-0005 amendment; conventions 1.6, §5). The query string was
-  left out before already. `error_from_exception` replaces the request's host with
-  `<host>` in a `TransportError` message, since a transport failure's text can quote it
-  (a TLS hostname mismatch does).
-- Conventions 1.6: §5 and §6 as above; ADR-0011 added.
-- Conventions 1.7: §4 lists `ResultMeta.total` with its paginated-task semantics;
-  ADR-0012 added.
-- **Breaking:** recording a request or response body that is not UTF-8 text raises
-  `ValueError` ("binary body cannot be scrubbed") and writes nothing, unless
-  `Scrub(allow_binary=True)` is passed; then it is stored base64 with
-  `body_base64: true`, unscrubbed, as 0.1.0 stored every such body without asking. No
-  scrub can read a binary body (sdk-cashctrl refused them locally).
-- **Breaking:** `EnvKeyAuth.apply(self, request)` reads the key itself through
-  `self.key()` and no longer takes it as an argument; `auth_flow` calls
-  `self.apply(request)`. `QueryKeyAuth`, `HeaderKeyAuth`, `BearerAuth` and
-  `BasicKeyAuth` keep the key in no argument and no local variable. As an argument the
-  key was part of every traceback frame through `apply`, and pytest's long tracebacks
-  print a frame's arguments, so a failing test could print the shell's key
-  (sdk-usda-nass). A subclass outside core that implements `apply(request, key)` drops
-  the parameter and calls `self.key()` where it attaches the key; none is known.
-- Conventions 1.8: §6 names form bodies next to JSON ones; §10 states the recorder's
-  rules (scrub in memory before the one write, a placeholder host for a multi-tenant
-  source, no binary body unless flagged) and the plugin's offline guarantees with the
-  markers `network` and `rate_limited`; ADR-0013 added.
-- **Breaking:** `register_tasks(..., read_only=False)`, and so
-  `build_server(..., read_only=False)`, refuses a task without a parameter `confirm`
-  annotated `bool` (resolved with `typing.get_type_hints`, so `Annotated[bool, ...]`
-  counts and `bool | None` does not) with the default `False`: it raises `ValueError`
-  naming the tool and the rule before any task is registered. A write server could
-  register a task that writes on its first call, which conventions §8 forbids and only
-  `assert_write_tools` caught, in a test (sdk-cashctrl). `assert_write_tools` uses the
-  same check. Read-only servers are unaffected.
-- **Breaking:** `main` serves a write server over `--http` on a loopback `--host` only
-  (`127.0.0.1`, `localhost`, `::1`) and otherwise exits with status 2, unless
-  `--allow-remote` is passed. A write server carries no authentication; beyond loopback
-  a gateway in front of it has to provide it (ADR-0014). Read-only servers and stdio
-  are unaffected.
-- `xippios.core.testing.mcp_call` calls the tool through `mcp.Client(server)` connected
-  in-process instead of `MCPServer.call_tool`, so the server's middleware runs, a tenant
-  lock included; `MCPServer.call_tool` bypasses it (sdk-cashctrl drove `mcp.Client` by
-  hand). It returns the decoded JSON as before and fails on `error:` text as before. A
-  call the server answers with an MCP error, arguments the tool's schema refuses or an
-  unknown tool, now fails with `AssertionError` instead of raising the SDK's
-  `ToolError`, and the server must be one `mcp.Client` connects to (an `MCPServer` or
-  a low-level `Server`).
-- `main` quiets the httpx and httpcore loggers right before the server runs, after
-  `apply_options`, instead of first thing.
-- Conventions 1.9: §1 names the per-tenant variables, §4 lists `ResultMeta.tenant`, §7
-  states the tenant scheme and the error split, §8 the `confirm` check at
-  registration, the loopback rule, the tenant list tool, the tenant lock and the option
-  hooks; §10 states that a placeholder host that contains the original host is allowed
-  and written as such. ADR-0014 added.
-- A 429 or 5xx that `ClientConfig.classify` maps to an error other than an
-  `UpstreamError` for a 5xx is no longer retried blindly (ADR-0015). Before each retry
-  the loop asks `classify`, at most once per attempt and also with
-  `raise_on_error=False`: a `RateLimitError` sets the wait from its `retry_after` (else
-  the `Retry-After` header's), so a wait beyond `RetryPolicy.backoff_max` is raised
-  after one attempt; an `UpstreamError` for a 5xx and `None` keep the status rule, so a
-  5xx is retried when the method allows; any other error, an `AuthError` or an
-  `InvalidRequestError` say, stops the retries. `send_with_retries` takes the mapping as
-  `classify=`. A 429 without `Retry-After`, api.data.gov's answer to a spent hourly
-  quota, was retried three more times into the spent quota before `classify` could say
-  "one hour" (sdk-usda-psd). sdk-cashctrl, which maps every 5xx to `UpstreamError` to
-  keep its tenant host out of the message, keeps its retries.
-- Conventions 1.10: §4 names `xippios_cache_stored_at` as the `retrieved_at` of a cache
-  hit; §6 states the `before_request` and `observe` hooks, `QuotaPolicy` as the
-  implementation of ADR-0010's quota rules, `classify`'s part in retries, and `auth=`
-  per request; §10 the plugin's quota guarantee. ADR-0015 added; ADR-0013 gains its
-  decision 4.
-- The note of a capped MCP result promises no filter: "showing {shown} of {total} rows
-  (cap: {max_rows} rows or {max_bytes} bytes); narrow the query to see the rest", and
-  for a non-list result over the byte cap "result is {n} bytes, over the cap of
-  {max_bytes}; narrow the query to see the rest". It read "narrow the query, for example
-  with more filters or a shorter date range, to see the rest", which sent an agent
-  looking for filters a reference list does not have (sdk-comtrade). A cap's `note`
-  replaces the text after the counts.
-- Conventions 1.11: §8 states that the byte cap counts the UTF-8 bytes of the compact
-  JSON text, the per-tool cap, rows and bytes, for a reference tool whose whole list an
-  agent needs, with the default kept for every other tool; that a source keeps its caps
-  as `MCP_CAPS` in its `tasks.py`, which its `mcp.py` passes as
-  `caps=getattr(tasks, "MCP_CAPS", None)`; and that the note never promises a filter
-  the tool lacks. §10 points to the edges of the quota guarantee. ADR-0016 added.
-- ADR-0013's edges, ADR-0015's consequences, the plugin's docstring and `QuotaPolicy`'s
-  `before_request` and `install` docstrings name three more edges of the plugin's quota
-  guarantee: consecutive live tests share every policy's snapshot, so a quota one
-  spends makes the next wait or refuses its request without sending; a policy spent
-  while a fixture of wider scope is set up is forgotten in the setup of the first test
-  not marked `live` from then on, before its body; and a `QuotaPolicy` subclass's
-  override of `before_request` is not called through the hook `install` sets, and a
-  wait or refusal of its own is not neutralised. ADR-0013 and ADR-0015 are marked as
-  amended by ADR-0016.
-- `render_str_enums` writes an ASCII-only module that ruff leaves as it is: each value
-  as `ascii()` writes it, so a `"`, a `\` or a control character no longer breaks the
-  file and every character outside ASCII is an escape (`"C\xf4te d\u2019Ivoire"`), in
-  double quotes unless single quotes need fewer escapes, the value unchanged at runtime;
-  readable accents are traded for stability across ruff versions, since no version finds
-  an ambiguous character (RUF001) in ASCII. A member too long for 100 columns is laid
-  out as ruff formats it, the value in parentheses on a line of its own and, too long
-  even there, split into implicitly concatenated parts; `__all__` is sorted in ruff's
-  order (RUF022, natural order with zero-padded digit runs as ruff compares them:
-  `Code05` before `Code1`), one name per line, the classes still in the order given. The
-  module docstring wraps at 100 columns, so a long `generator` no longer overflows, and
-  reads "conventions, section 3"; a class docstring whose fetch date would pass 100
-  columns puts the date in a paragraph of its own. The collision error names only the
-  colliding members, with their positions, and a member name an enum refuses is named
-  with its value and position. The result passes `ruff format --check` and `ruff check`
-  under the family's configuration. sdk-comtrade formatted the file after every refresh
-  and sorted its lists itself. A source that diffs its generated `enums.py` sees a
-  one-time change on its next refresh: the module docstring's first line, `__all__`
-  sorted, one name per line, long members wrapped, non-ASCII characters escaped
-  (sdk-usda-nass's file changes in its first line only).
-- **Breaking:** `render_str_enums` refuses with `ValueError` what it rendered into a
-  file ruff rejects: a member name longer than 92 columns, which fits no line of 100
-  (`NAME = (` alone, indented, is too long), naming the key, the position, the name's
-  length and the limit; a key longer than the 75 characters its class docstring has room
-  for; and caller text the module could not hold as printable ASCII: a `generator`,
-  `fetched` text or key that is not printable ASCII or holds a backslash or three double
-  quotes, which made a non-ASCII module that fails RUF002 (an en dash in `fetched`), and
-  a class name that is no ASCII identifier, is a keyword or is longer than 84
-  characters, each error naming the argument and the key's position, never the text. A
-  value with nothing to derive a member name from (an empty string, a Greek, Cyrillic or
-  CJK label) still raises `ValueError`, now naming the key and the position. The new
-  keyword `member_names` (key to `{value: member name}`) names such a member by hand,
-  once, in the source's refresh script, and is taken before any name is derived; it also
-  resolves a collision. A name set there must be an ASCII identifier an enum takes as a
-  member (no keyword, not `mro`, no `__` anywhere, no `_sunder_` name), unique in its
-  list, and for a key and a value the lists hold, else `ValueError`.
-- Conventions 1.12: §3 states that an upstream enum of integer ids becomes an `IntEnum`
-  and that the generated enums module is ASCII-only and passes `ruff check` and
-  `ruff format --check` as rendered. ADR-0008 gains an amendment.
-- Conventions 1.13: §3 states `Fetched` as a UTC time in ISO 8601 with `Z`, tables a
-  pipe table cannot hold kept as HTML, vendor snapshots (ADR-0003 amendment) and
-  personal identifiers kept out of task projections (ADR-0017), to which §4 points; §5
-  that `InvalidRequestError` also covers upstream's own refusal, mapped in `classify`
-  (ADR-0007 amendment; its docstring and the README follow); §11 and §12 one core minor
-  with an upper bound (`xippios-core~=0.2.0`), with no compatibility across minors while
-  core is 0.x; §15, new, how a source adopts a core or template release (ADR-0018),
-  mirrored by an "Adoption PR" block in the definition of done, whose fixture grep now
-  covers `tests/fixtures/` for key patterns and for those identifiers' values.
-- CI runs `uv run pre-commit run --all-files` after the tests, its hook environments
-  cached, so the definition of done's "Enforced by CI" block holds.
+- **Conventions 1.5 to 1.13**: 1.5 the key variable per issuer and the rate-limit
+  policy (§1, §5, §6, §7; ADR-0009, ADR-0010); 1.6 error messages without the host and
+  the retry rule (§5, §6; ADR-0011); 1.7 `ResultMeta.total` (§4; ADR-0012); 1.8 form
+  bodies, the recorder's rules and the plugin's guarantees (§6, §10; ADR-0013); 1.9
+  tenants, the `confirm` check, the loopback rule, the tenant lock and the option hooks
+  (§1, §4, §7, §8, §10; ADR-0014); 1.10 the hooks, `QuotaPolicy`, `classify` in retries,
+  `auth=` per call and a cache hit's `retrieved_at` (§4, §6, §10; ADR-0015); 1.11 the
+  UTF-8 byte cap, per-tool caps in `MCP_CAPS` and a note that promises no filter (§8;
+  ADR-0016); 1.12 `IntEnum` for integer ids and ASCII-only, ruff-clean enum modules
+  (§3; ADR-0008 amendment); 1.13 `Fetched` as a UTC time with `Z`, HTML for tables a
+  pipe table cannot hold, vendor snapshots (§3; ADR-0003 amendment), personal
+  identifiers out of task projections (§3, §4; ADR-0017), `InvalidRequestError` also
+  for upstream's own refusal mapped in `classify` (§5; ADR-0007 amendment, its
+  docstring and the README with it), the one-minor core bound and the 0.x rule (§11,
+  §12) and the adoption checklist (§15; ADR-0018). The definition of done gains the
+  "Adoption PR" block, and its fixture grep covers the identifiers' values.
+- **The edges of the plugin's quota guarantee are documented** (ADR-0013 and ADR-0015,
+  amended by ADR-0016): consecutive live tests share every policy's snapshot; a quota
+  spent while a fixture of wider scope is set up is forgotten before the body of the
+  next test not marked `live`; a `QuotaPolicy` subclass's `before_request` override is
+  neither called through `install`'s hook nor neutralised.
+- **The `testing` extra declares `httpcore>=1.0`**, which the plugin patches and which
+  only httpx's own dependency provided before.
+- **CI runs `uv run pre-commit run --all-files`** after the tests, so the definition of
+  done's "Enforced by CI" block holds.
 
 ### Fixed
 
-- `RateLimit.per_minute`'s docstring said the pace comes from upstream's documented
-  limit; it is the pace a source sets within that limit, or a self-imposed one
-  (ADR-0010).
-- `cap_result` measures `max_bytes` in UTF-8 bytes, as the convention says, not in
-  characters, which let non-ASCII text past the byte cap; the preview cuts no character.
-- `parse_retry_after` raised `ValueError` for a `Retry-After` of non-ASCII digits such
-  as `"²"`, which `str.isdigit` accepts and `float` refuses, so the retry loop raised it
-  out of a request; it reads ASCII digits only now and returns `None` for anything
-  else, and for a value too long to be a finite float, which made `retry_after`
-  infinite (the HTTP adapter's `int(retry_after)` then raised `OverflowError`). An
-  HTTP-date whose zone offset is a huge number made `parsedate_to_datetime` raise
-  `OverflowError` out of the retry loop; it is unparseable now, `None` like any other.
-- The live gate skipped every test under a directory named `live`, marked or not: it
-  matched the keyword `live`, which a directory's name adds. It follows the marker now.
-- A gzip answer replayed from the cache raised `httpx.DecodingError`: the client stored
-  the decoded body together with `content-encoding`, so the replay decoded it again.
-  Cache entries are stored without wire headers now, and entries a persistent backend
-  kept from 0.1.0 are stripped when replayed (sdk-usda-psd PR 3 live tests).
-- Taxonomy errors survive `copy.copy`, `copy.deepcopy` and `pickle`: `AuthError`,
-  `ValidationError`, `UpstreamError` and source subclasses with keyword-only arguments
-  raised `TypeError`, because `Exception` rebuilds with positional arguments only.
-  `XippiosError.__reduce__` restores every attribute without calling `__init__`
-  (sdk-cashctrl).
-- A client from `AsyncClient.derive` no longer closes a transport it did not create.
-  It shares the parent's transport, and closing the derived client, as `record` does
-  after a recording with `retry=` or `timeouts=`, closed that transport under the
-  parent, which still uses it. The derived client's pools are still
-  closed; the borrowed transport is left for the parent's `aclose`. A transport passed
-  to a client by its own caller is still closed with that client.
+- **A gzip answer replayed from the cache** raised `httpx.DecodingError`: the decoded
+  body was stored with `content-encoding`. Entries are stored without wire headers, and
+  those a persistent backend kept from 0.1.0 are stripped when replayed (sdk-usda-psd).
+- **`parse_retry_after`** let `ValueError` or `OverflowError` out of the retry loop for
+  non-ASCII digits (`"²"`) or an HTTP-date with a huge zone offset, and returned an
+  infinite `retry_after` for a value too long for a finite float. It reads ASCII digits
+  only and returns `None` for what it cannot read.
+- **The live gate** skipped every test under a directory named `live`, marked or not;
+  it follows the marker now.
+- **Taxonomy errors survive `copy.copy`, `copy.deepcopy` and `pickle`**: errors with
+  keyword-only arguments raised `TypeError`; `XippiosError.__reduce__` restores every
+  attribute (sdk-cashctrl).
+- **`RateLimit.per_minute`'s docstring**: the pace is the one a source sets within
+  upstream's limit, or a self-imposed one (ADR-0010), not upstream's limit.
 
 ### Security
 
-- The MCP servers no longer log request URLs. Constructing an `MCPServer` (`mcp` SDK
-  2.x) configures root logging at `INFO` on stderr, and httpx logs every request at
-  `INFO` with its full URL, so every `xippios-<source>-mcp` entry point wrote each
-  upstream URL to stderr, which MCP clients keep in their logs. For a source that sends
-  its key as a query parameter (`QueryKeyAuth`; usda-nass sends `key=`) that put the
-  API key into the client's logs; for a multi-tenant source (cashctrl) it put the tenant
-  host there. `build_server` now sets the `httpx` and `httpcore` loggers to `WARNING`
-  right after constructing the server, and `main` does so again before running it
-  (ADR-0005). A consumer who wants the request log raises the level after building the
-  server and runs it without `main`.
-- `.gitignore` also ignores `.env.*` and `.envrc.*` (sdk-comtrade).
-- The secret scan no longer skips paths containing "swagger": detect-secrets'
-  `is_swagger_file` filter is dropped from `.secrets.baseline`, because it exempted
-  every such path, a verbatim upstream Swagger snapshot included (sdk-usda-psd).
-  `.secrets.baseline` and the detect-secrets hook exclude `.copier-answers.yml` with
-  sdk-template's pattern, so the template can copy both files verbatim again
-  (sdk-comtrade).
+- **The MCP servers no longer log request URLs** (ADR-0005). Constructing an `MCPServer`
+  configures root logging at `INFO`, and httpx logs every request URL at `INFO`, so
+  every `xippios-<source>-mcp` wrote upstream URLs into its MCP client's logs:
+  sdk-usda-nass's key, sent as `key=`, and sdk-cashctrl's tenant host.
+  `xippios.core.mcp.quiet_request_logging()` sets the `httpx` and `httpcore` loggers to
+  `WARNING`; `build_server` calls it after constructing the server, and `main` again
+  right before running it, after `apply_options`. A consumer who wants the log raises
+  the level and runs the server without `main`.
+- **`.gitignore`** also ignores `.env.*` and `.envrc.*` (sdk-comtrade).
+- **The secret scan no longer skips paths containing "swagger"**: detect-secrets'
+  `is_swagger_file` filter, which exempted a verbatim upstream Swagger snapshot, is
+  dropped (sdk-usda-psd); `.secrets.baseline` and the detect-secrets hook exclude
+  `.copier-answers.yml` with sdk-template's pattern, so the template copies both files
+  verbatim again (sdk-comtrade).
 
 ## [0.1.0] - 2026-10-22
 

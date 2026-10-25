@@ -1,6 +1,6 @@
 [project]
 name = "xippios-core"
-version = "0.1.0"
+version = "0.2.0"
 description = "Shared core for the xippios Python SDK family: HTTP client, models, errors, MCP/HTTP adapters"
 readme = "README.md"
 license = "Apache-2.0"
@@ -53,6 +53,7 @@ packages = ["src/xippios"]
 
 [tool.hatch.build.targets.sdist]
 include = ["src", "tests", "docs", "README.md", "CHANGELOG.md", "LICENSE"]
+exclude = ["docs/handover.md"]
 
 [tool.ruff]
 line-length = 100

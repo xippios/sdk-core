@@ -164,6 +164,9 @@ client.
 - Any source adopting the policy first checks that the `x-ratelimit-*` headers it lets
   the policy read describe the long-window quota, not a per-second or per-minute pace;
   otherwise it sets those header names to `None`.
+- A source whose 429 is a pace refusal and that has no long-window quota sets `window`
+  to the documented pause or installs no policy; the default window is an hourly
+  quota's.
 - A GET cached by a keyed call answers the same GET sent with `auth=None`, and the
   other way round. A source whose keyed and keyless answers differ for one URL keeps
   them apart with `cache_filter`; one that sends another identity's credentials passes
