@@ -103,8 +103,11 @@ the source as it is then.
   `["src", "tests"]` today.
 - Item 8, conventions 1.13, among the rest: no request into a spent quota, through one
   `QuotaPolicy` (§6, ADR-0015), after checking that any `x-ratelimit-*` header it reads
-  describes the long-window quota, not a pace; caps kept as `MCP_CAPS` in `tasks.py`
-  (§8, ADR-0016); `Fetched` in `docs/upstream/FETCHED.md` as the UTC time with `Z`
+  describes the long-window quota, not a pace, and a source whose 429 is a pace refusal
+  without a long-window quota sets a short `window` (the documented pause) or installs
+  no policy, since the default `window=3600` would turn one 429 without `Retry-After`
+  into an hour of refusals; caps kept as `MCP_CAPS` in `tasks.py` (§8, ADR-0016);
+  `Fetched` in `docs/upstream/FETCHED.md` as the UTC time with `Z`
   (`2026-10-24T09:15:00Z`, §3), where all four record a date today.
 - Item 9: `CHANGELOG.md` has a line under Unreleased naming core 0.2.0, the template
   release and conventions 1.13.
@@ -132,10 +135,12 @@ the source as it is then.
   one-hour `retry_after`, so `test_core_retries_a_429_only_within_its_backoff` expects
   1 attempt for it, not 4 (ADR-0015, `classify` shapes retries).
 - Declares and marks (item 5): `xippios_placeholder_key_envs = ["DATA_GOV_API_KEY"]`;
-  the tests that assert the pause or the refusal without sending (today
+  the tests that assert what a spent quota does, a pause or a refusal without sending
+  (today `test_the_wrapper_raises_once_on_the_recorded_429_and_refuses_the_next`,
   `test_a_spent_quota_beyond_backoff_max_is_refused_without_sending`,
   `test_a_spent_quota_within_backoff_max_is_waited_out`,
-  `test_the_bound_is_the_clients_backoff_max`) are marked `rate_limited`.
+  `test_the_bound_is_the_clients_backoff_max` and
+  `test_a_cache_hit_is_served_while_the_quota_is_spent`) are marked `rate_limited`.
 - Item 6: `AttributeId` and `UnitId` re-rendered through `render_int_enums`.
 - Item 8: `MCP_CAPS = {"list_countries": ResultCap(max_rows=300)}` in `tasks.py`, so all
   251 countries reach an agent, the United States included (ADR-0016); `Fetched` as a
@@ -186,10 +191,13 @@ the source as it is then.
   that asserts the policy's pause or refusal is marked `rate_limited`.
 - Item 6: `enums.py` re-rendered once through `scripts/refresh_reference.py`; its first
   line changes, nothing else.
-- Item 8: a `QuotaPolicy` installed on `config`, as ADR-0015 says for usda-nass among
-  the sources that adopt ADR-0010's decision 4 this way. Quick Stats sends no
-  `x-ratelimit-*` header in the recorded fixtures, so the policy acts on a 429 alone,
-  its `window` the wait when no `Retry-After` comes. `Fetched` as a UTC time where
+- Item 8: ADR-0015 lists usda-nass among the sources that adopt ADR-0010's decision 4 by
+  installing a `QuotaPolicy` on `config`. Quick Stats sends no `x-ratelimit-*` header in
+  the recorded fixtures and documents no long-window quota, so its 429 is a pace refusal
+  and a policy would act on it alone. A source in that position sets a short `window`,
+  the documented pause (60 s, say), or installs no `QuotaPolicy` at all, because the
+  default `window=3600` would turn one 429 without `Retry-After` into an hour of
+  refusals once a call's retries are exhausted (ADR-0015). `Fetched` as a UTC time where
   `/refresh-upstream` writes the date.
 - `sent_urls(route)`, which sdk-usda-nass asked for, is there for the tests that read
   the sent query, key included, from `route.calls`.
@@ -209,18 +217,22 @@ the source as it is then.
   ["CASHCTRL_DEMO_API_KEY"]` is set already; a test that asserts the policy's pause or
   refusal is marked `rate_limited`.
 - Item 6: `enums.py` re-rendered once.
-- Item 8, what came after its pin (core PRs D to G): one `QuotaPolicy` per organisation
-  client, installed in `_build`, as ADR-0015 says for cashctrl, whose CLAUDE.md has
-  ADR-0010's decision 4 waiting for this helper. CashCtrl sends no `x-ratelimit-*`
-  header and `x-cashctrl-requests-left` has no documented window, so the policy acts on
-  a 429 alone. Its `classify` maps every 5xx to `UpstreamError` through
-  `error_from_response`, so its read retries stay (ADR-0015). `MCP_CAPS` only for a
-  reference list an agent needs whole; none is known. The projections its tasks return
-  leave out `ssn` and `iban`, and `create_person` and `update_person`, which take
-  `ssn`, do not echo it in `meta.request`; the fixture grep covers their values
-  (ADR-0017). `Fetched` as a UTC time where it records the UTC date. New since the pin
-  and optional: `Tenants(..., hints=...)` tells the operator what a refused
-  `CASHCTRL_<NAME>_SUBDOMAIN` should hold.
+- Item 8, what came after its pin (core PRs D to G): ADR-0015 lists cashctrl among the
+  sources that adopt ADR-0010's decision 4 by installing a `QuotaPolicy`, one per
+  organisation client in `_build`, and its CLAUDE.md has decision 4 waiting for this
+  helper. CashCtrl sends no `x-ratelimit-*` header, `x-cashctrl-requests-left` has no
+  documented window, and its documented 429 asks only to "add delays": a pace refusal
+  with no long-window quota behind it. A source in that position sets a short `window`,
+  the documented pause (60 s, say), or installs no `QuotaPolicy` at all, because the
+  default `window=3600` would turn one 429 without `Retry-After` into an hour of
+  refusals once a call's retries are exhausted (ADR-0015). Its `classify` maps every 5xx
+  to `UpstreamError` through `error_from_response`, so its read retries stay (ADR-0015).
+  `MCP_CAPS` only for a reference list an agent needs whole; none is known. The
+  projections its tasks return leave out `ssn` and `iban`, and `create_person` and
+  `update_person`, which take `ssn`, do not echo it in `meta.request`; the fixture grep
+  covers their values (ADR-0017). `Fetched` as a UTC time where it records the UTC date.
+  New since the pin and optional: `Tenants(..., hints=...)` tells the operator what a
+  refused `CASHCTRL_<NAME>_SUBDOMAIN` should hold.
 
 ### sdk-usda-esr and sdk-usda-gats
 
