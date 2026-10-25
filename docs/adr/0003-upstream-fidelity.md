@@ -38,5 +38,16 @@ text is reproduced as the package's reference under this ADR; sdk-cashctrl's sec
 "Attribution and vendor examples" has the form. A vendor's objection is honoured by
 replacing the snapshot with a summary in the package's own words, by PR like any
 refresh, that keeps the URL and the names and semantics the wrappers rely on. Raised in
-the review of sdk-cashctrl's snapshot and agreed with its session; conventions §3 states
-it from 1.13 on.
+the review of sdk-cashctrl's snapshot.
+
+Two rules make snapshots alike across sources. `Fetched` in `FETCHED.md` is the UTC time
+of the run in ISO 8601 with an explicit `Z` (`2026-10-24T09:15:00Z`): sdk-comtrade
+recorded the local calendar date of its run, sdk-usda-psd and sdk-cashctrl the UTC date,
+and nothing said which. A table that a Markdown pipe table cannot hold, one with merged
+cells (`rowspan`, `colspan`) or with a table nested in it, is kept as its HTML in the
+Markdown snapshot, and one line in `FETCHED.md` says so, as sdk-comtrade's Help Center
+articles and sdk-cashctrl's nested parameter tables already do; a pipe table would lose
+the cells' structure. Raised by sdk-comtrade.
+
+Johannes decided the three rules of this amendment on 2026-10-23; conventions §3 states
+them from 1.13 on.

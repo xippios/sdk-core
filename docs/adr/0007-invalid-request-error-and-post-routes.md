@@ -50,4 +50,5 @@ to a request it refuses. Either way the caller has to change the request, so age
 HTTP 422 treat both alike. A subclass for the refusals detected after the call was
 considered and not added: no caller would handle it differently. Source packages still
 subclass for their documented refusals, and the adapters still answer with text (MCP)
-and 422 (HTTP). Raised by sdk-comtrade; conventions §5 states the wording from 1.13 on.
+and 422 (HTTP). Raised by sdk-comtrade; Johannes decided on 2026-10-23, wording over a
+subclass; conventions §5 states the wording from 1.13 on.
