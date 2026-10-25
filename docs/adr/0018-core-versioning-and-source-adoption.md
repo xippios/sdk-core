@@ -43,7 +43,8 @@ Johannes decided on 2026-10-23 that a source depends on one core minor, and on
    else, and no new endpoints, tasks or fixtures ride along.
 3. **Adoption PRs auto-merge.** An adoption PR is a `chore/template-update*` PR: after
    the reviewer's `ready` the session enables auto-merge, and GitHub merges it once `ci`
-   is green.
+   is green. The release PR of a core minor (`chore/release-*`) auto-merges the same way
+   after the reviewer's `ready`; the tag stays Johannes's.
 4. **The template walks the list.** sdk-template's `/adopt-release` command takes a
    source through §15 step by step.
 5. **CI runs pre-commit.** Core's `ci.yml` runs `uv run pre-commit run --all-files` after
