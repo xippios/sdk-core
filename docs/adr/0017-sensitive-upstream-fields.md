@@ -28,9 +28,10 @@ record's columns under their upstream names. Johannes decided the rule on 2026-1
   envelope rule of conventions §4 applies to echoes as to data.
 - The source's Python read models, those of its endpoint wrappers, stay faithful
   (ADR-0003): they carry these fields under their upstream names, with their values.
-- Fixtures never carry the values: the recording names them in `Scrub(secrets=...)`,
-  which scrubs them before the one write (conventions §10), and the definition of done's
-  fixture grep looks for them in `tests/fixtures/`.
+- Fixtures never carry the values: before the one write (conventions §10) the recording
+  names them in `Scrub(secrets=...)` or, since the values are not always known in
+  advance, rewrites them by key (`Scrub(rewrite=...)`); the definition of done's fixture
+  grep looks for them in `tests/fixtures/`.
 
 ## Consequences
 

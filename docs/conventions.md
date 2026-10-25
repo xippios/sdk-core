@@ -82,7 +82,7 @@ plus a loader), `_client.py` (the configured `xippios.core.client` instance).
   so in its docstring; a write task that takes one as a parameter does not echo it in
   `meta.request` either (§4). The endpoint wrappers' read models stay faithful and carry
   them. Fixtures never carry their values: the recording names them in
-  `Scrub(secrets=...)`.
+  `Scrub(secrets=...)` or rewrites them by key (`Scrub(rewrite=...)`).
 - **No cross-source normalization.** A USDA `marketing_year` stays a USDA concept.
   Mapping between sources is business logic and lives outside this family.
 - Reference data (commodity codes, country codes, report calendars) ships inside the
