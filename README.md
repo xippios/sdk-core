@@ -476,8 +476,9 @@ refused unless `Scrub(allow_binary=True)` stores it base64, flagged.
 
 ## Status
 
-Release 0.2.0, alpha. [CHANGELOG.md](CHANGELOG.md) lists what changed, breaking changes
-first.
+Release 0.2.0, alpha.
+[CHANGELOG.md](https://github.com/xippios/sdk-core/blob/main/CHANGELOG.md) lists what
+changed, breaking changes first.
 
 | Module | What | Status |
 | --- | --- | --- |
