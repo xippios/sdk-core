@@ -16,7 +16,8 @@ particular upstream API.
    0010 rate-limit policy, 0011 retries and non-idempotent methods,
    0012 upstream totals in the result envelope, 0013 offline tests guaranteed by the
    plugin, 0014 multi-tenant sources, 0015 client request hooks and quota policy,
-   0016 per-tool result caps, 0017 sensitive upstream fields)
+   0016 per-tool result caps, 0017 sensitive upstream fields, 0018 core versioning and
+   source adoption)
 3. `docs/definition-of-done.md` — what a PR must satisfy before it is opened
 
 The family file `../CLAUDE.md` applies as well.
