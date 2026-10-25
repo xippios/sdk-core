@@ -79,8 +79,10 @@ plus a loader), `_client.py` (the configured `xippios.core.client` instance).
 - Documented personal identifiers stay out of the projections tasks return (ADR-0017):
   `ssn`, `iban` and what the source judges equivalent (a national identification number,
   a bank account number, a tax number), unless a task fetches them deliberately and says
-  so in its docstring. The endpoint wrappers' read models stay faithful and carry them.
-  Fixtures never carry their values: the recording names them in `Scrub(secrets=...)`.
+  so in its docstring; a write task that takes one as a parameter does not echo it in
+  `meta.request` either (§4). The endpoint wrappers' read models stay faithful and carry
+  them. Fixtures never carry their values: the recording names them in
+  `Scrub(secrets=...)`.
 - **No cross-source normalization.** A USDA `marketing_year` stays a USDA concept.
   Mapping between sources is business logic and lives outside this family.
 - Reference data (commodity codes, country codes, report calendars) ships inside the

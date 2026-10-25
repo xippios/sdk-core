@@ -23,7 +23,9 @@ record's columns under their upstream names. Johannes decided the rule on 2026-1
 - A source keeps documented personal identifiers out of its agent-facing projections,
   the models its tasks return: `ssn`, `iban` and what the source judges equivalent (a
   national identification number, a bank account number, a tax number). A task that
-  fetches them deliberately may return them, and says so in its docstring.
+  fetches them deliberately may return them, and says so in its docstring. A write task
+  that takes an identifier as a parameter does not echo it in `meta.request` either: the
+  envelope rule of conventions §4 applies to echoes as to data.
 - The source's Python read models, those of its endpoint wrappers, stay faithful
   (ADR-0003): they carry these fields under their upstream names, with their values.
 - Fixtures never carry the values: the recording names them in `Scrub(secrets=...)`,
