@@ -58,8 +58,8 @@ Johannes decided on 2026-10-23 that a source depends on one core minor, and on
   new minor before its next release, and a consumer that installs several sources waits
   until they share one.
 - The template renders the bound as `~=X.Y.0` from its core version answer.
-- The org ruleset keeps no required approving review on these repositories: one would
-  hold every auto-merge.
+- Auto-merge waits for every required approving review, so the org ruleset must require
+  none for these PRs to merge on `ci` alone.
 - A breaking core change reaches a source only through an adoption PR, so the release's
   ADRs and CHANGELOG name, per source, what the adoption deletes.
 - Conventions 1.13: §11 and §12 state the bound and the 0.x rule, §15 the checklist; the
