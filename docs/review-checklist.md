@@ -28,7 +28,7 @@ repository it reviews.
 4. **Fixtures**: recorded, never hand-written; scrubbed; free of key patterns and of
    production tenant names; the fixture files this PR adds or changes under 256 KiB, a
    truncated one marked `truncated: true` (ADR-0019; binds from the source's 0.3.0
-   adoption).
+   adoption, or from its first PR when it starts on a git pin of core 0.3.0).
 5. **Checks green**: the local reviewer runs `uv run ruff check . && uv run ruff format
    --check . && uv run mypy && uv run pytest && uv run pre-commit run --all-files`
    itself; the `family-review` workflow runs nothing and reads the PR's `ci` check from
