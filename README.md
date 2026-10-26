@@ -42,8 +42,8 @@ It gives a source package the things that should be identical across the family:
   routes (`xippios.core.http`) without any logic of their own.
 - **Test support**: a live-test gate, offline guarantees for every other test (no
   network, no rate-limit wait, a placeholder key), fixture recording with secrets
-  scrubbed, replay through `respx`, and a check for write servers
-  (`xippios.core.testing`).
+  scrubbed, replay through `respx`, a check for write servers, and the family
+  conformance check every source runs (`xippios.core.testing`).
 
 ## Install
 
@@ -405,13 +405,29 @@ RFC 9457 problem details (`application/problem+json`), `InvalidRequestError` as 
 pytest_plugins = ["xippios.core.testing.plugin"]
 ```
 
+```python
+# tests/test_family.py, rendered by sdk-template
+from xippios.core.testing.family import *  # noqa: F403
+```
+
+The second file collects the family conformance check: the tests of what every source
+shares, kept once in core. The namespace levels stay empty and `py.typed` ships; `mcp.py`
+and `http.py` serve exactly `tasks.__all__` minus `BULK_TASKS`, the write server exactly
+`tasks_write.__all__`; every task is synchronous, returns `Result[T]` and has an agent
+docstring; the README's status table lists exactly the tasks; `.copier-answers.yml` names
+a template tag; `pyproject.toml` bounds `xippios-core` with `~=`. A source whose adapters
+drop a task, or whose README table is stale, fails CI before a reviewer looks. The
+package under test is the one `tasks.py` under `src/xippios/`, or the ini option
+`xippios_package`.
+
 ```toml
 # pyproject.toml: the variables that hold the placeholder key in offline tests
 [tool.pytest.ini_options]
 xippios_placeholder_key_envs = ["EXAMPLE_API_KEY"]
 ```
 
-- `@pytest.mark.live` tests are skipped unless `XIPPIOS_LIVE_TESTS=1`.
+- `@pytest.mark.live` tests are skipped unless `XIPPIOS_LIVE_TESTS=1`, and `anyio`
+  tests run on asyncio (the plugin's `anyio_backend`).
 - The whole run is offline (ADR-0013). From `pytest_configure` on, during collection, in
   fixtures and in tests, a request through httpx's default transports raises
   `RuntimeError` naming its method and path unless `respx` answers it, a `respx` route
@@ -429,8 +445,16 @@ xippios_placeholder_key_envs = ["EXAMPLE_API_KEY"]
   fixtures share a path, mount the one with `match_params` first, since `respx` tries
   routes in order. The request body is never matched: assert it from the route's calls
   against `fixture.request.body`. `sent_urls(route)` gives the URLs the route received
-  as scrubbed strings, so no request has to sit in the test's frame. Annotate the
-  fixture as `ReplayFixture`.
+  as scrubbed strings, so no request has to sit in the test's frame, and
+  `sent_query(route)` the last one's query as a mapping, to compare with
+  `recorded_query(fixture)`. `url=` serves a recorded answer at another URL, such as an
+  empty 404 recorded for one year standing in for another. Annotate the fixture as
+  `ReplayFixture`.
+- `response_from_fixture(load_fixture(path))` is a recorded answer as an
+  `httpx.Response`, its request attached, for calling a source's `classify` directly.
+- `assert_time_between(result.meta.retrieved_at, before, after)` brackets a time with
+  two readings around the call and `CLOCK_SLACK` (five seconds) either side, for a host
+  whose clock steps back.
 - `record(client, "/v1/series", fixture_path(...), params=...)` records a live response
   with credentials scrubbed. Never hand-write a fixture. `json=` or `data=` (a form) send
   a body, recorded with its content type; `retry=` and `timeouts=` override the
@@ -491,7 +515,7 @@ changed, breaking changes first.
 | `xippios.core.tenants` | `Tenants`, `list_task`: tenants from the environment, one client each | alpha |
 | `xippios.core.mcp` | tool registration, result caps, error text, CLI, quiet request log | alpha |
 | `xippios.core.http` | router factory, problem details | alpha |
-| `xippios.core.testing` | live gate, offline run, record, replay, scrub, write checks | alpha |
+| `xippios.core.testing` | live gate, offline run, record, replay, scrub, write checks, family check | alpha |
 
 Alpha: while core is 0.x, a new minor version may change the public surface, with no
 backward compatibility across minors; patch releases stay compatible. A source depends
