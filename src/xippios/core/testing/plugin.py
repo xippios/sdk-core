@@ -420,17 +420,26 @@ def fixtures_dir(request: pytest.FixtureRequest) -> Path:
 def replay_fixture(respx_mock: respx.MockRouter, fixtures_dir: Path) -> ReplayFixture:
     """Mount ``tests/fixtures/<endpoint>/<case>.json`` and return the route.
 
-    Called as ``replay_fixture(endpoint, case, match_params=None)``, ``match_params`` by
-    keyword; it names recorded query parameters a request must carry too, e.g.
-    ``["countOnly"]`` (see ``xippios.core.testing.mount_fixture``). A test annotates the
-    fixture as ``xippios.core.testing.ReplayFixture``.
+    Called as ``replay_fixture(endpoint, case, match_params=None, url=None)``, the last
+    two by keyword: ``match_params`` names recorded query parameters a request must carry
+    too, e.g. ``["countOnly"]``, and ``url`` serves the recorded answer at another URL,
+    e.g. a recorded empty 404 at the path of another year (see
+    ``xippios.core.testing.mount_fixture``). A test annotates the fixture as
+    ``xippios.core.testing.ReplayFixture``.
     """
 
     def _replay(
-        endpoint: str, case: str, *, match_params: Iterable[str] | None = None
+        endpoint: str,
+        case: str,
+        *,
+        match_params: Iterable[str] | None = None,
+        url: str | None = None,
     ) -> respx.Route:
         return replay(
-            respx_mock, fixture_path(fixtures_dir, endpoint, case), match_params=match_params
+            respx_mock,
+            fixture_path(fixtures_dir, endpoint, case),
+            match_params=match_params,
+            url=url,
         )
 
     return _replay
