@@ -1,10 +1,14 @@
 """Test support shared by every source repo (conventions §10).
 
-Four things live here: the pytest plugin, which gates live tests and keeps the run
+Five things live here: the pytest plugin, which gates live tests and keeps the run
 offline (no network for the session; no rate-limit wait and a placeholder key in every
-test not marked live; ADR-0013), fixture recording with secrets scrubbed in memory and
-verified before the write (``Scrub``), fixture replay through ``respx``, and checks for
-adapters (``mcp_call``, ``mcp_call_text``, ``assert_write_tools``).
+test not marked live; ADR-0013); fixture recording with secrets scrubbed in memory and
+verified before the write (``Scrub``); fixture replay through ``respx``, with what was
+sent and recorded as plain values (``sent_urls``, ``sent_query``, ``recorded_query``,
+``response_from_fixture``); checks for adapters (``mcp_call``, ``mcp_call_text``,
+``assert_write_tools``) and for times read around a call (``assert_time_between``); and
+the family conformance check, ``xippios.core.testing.family``, which a source collects
+by importing it into ``tests/test_family.py`` and which is not imported here.
 Enable the plugin in a repo's ``tests/conftest.py``::
 
     pytest_plugins = ["xippios.core.testing.plugin"]

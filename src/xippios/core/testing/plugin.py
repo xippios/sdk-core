@@ -37,6 +37,8 @@ LIVE_ENV = "XIPPIOS_LIVE_TESTS"
 PLACEHOLDER_KEY = "placeholder-for-fixture-replay"
 """The key every ``EnvKeyAuth`` sends in a test not marked ``live``."""
 _KEY_ENVS = "xippios_placeholder_key_envs"
+PACKAGE_INI = "xippios_package"
+"""The ini option naming the package the family check tests (``xippios.core.testing.family``)."""
 _REQUEST_LOGGERS = ("httpx", "httpcore")
 _MARKERS = (
     "live: hits the real upstream; skipped unless XIPPIOS_LIVE_TESTS=1",
@@ -194,13 +196,21 @@ def _transport_guard_async(
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
-    """Register the ini option ``xippios_placeholder_key_envs``."""
+    """Register the ini options ``xippios_placeholder_key_envs`` and ``xippios_package``."""
     parser.addini(
         _KEY_ENVS,
         "environment variables set to the placeholder key in every test not marked live, "
         "e.g. COMTRADE_API_KEY",
         type="args",
         default=[],
+    )
+    parser.addini(
+        PACKAGE_INI,
+        "import path of the source package the family check tests, e.g. xippios.usda.psd; "
+        "unset, the one package with a tasks.py under src/xippios/ "
+        "(xippios.core.testing.family)",
+        type="string",
+        default="",
     )
 
 
