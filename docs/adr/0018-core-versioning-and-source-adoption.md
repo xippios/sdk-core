@@ -96,3 +96,13 @@ from 1.14 on.
 adoption PR may delete the fixtures, mounts and tests that the adoption itself makes
 dead, and nothing else rides along (queue row 36 g). Conventions §15 and the definition
 of done's Adoption PR block state it from 1.14 on.
+
+(e) Decision 3's auto-merge, of an adoption PR and of a release PR after the reviewer's
+`ready`, applies only to a pull request whose merge class is `auto`. A `human` adoption
+or release (a source-owned workflow, a changed template answer, a protected path, a
+build or install route) waits for Johannes. The classes are defined in the README of the
+`xippios/.github` repository, whose `merge-class` check computes them for every pull
+request. This rests on Johannes's merge-class decision of 2026-10-26: a pull request
+merges automatically after CI, the merge-class check and the review, unless its class is
+`human`. Conventions §15 and the definition of done's Adoption PR intro state it from
+1.15 on.

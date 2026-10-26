@@ -420,7 +420,7 @@ to settle, not yet a decision.
 Every `pypi` approval (a merged release PR tags itself through `publish.yml`; until a
 repository's workflow does, its tag comes from Johannes, conventions §12); the merge of
 every PR except an adoption (`chore/template-update*`) or `chore/release-*` PR of merge
-class `auto`, which a session sets to auto-merge after the reviewer's `ready` (ADR-0018
-decision 3); new API keys and org secrets; changes to `docs/conventions.md`; repository
+class `auto`, which a session sets to auto-merge after the reviewer's `ready` (ADR-0018,
+amendment (e)); new API keys and org secrets; changes to `docs/conventions.md`; repository
 creation (approved at the prompt); the decisions asked as an interview before each work
 package.

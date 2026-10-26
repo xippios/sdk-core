@@ -520,8 +520,9 @@ the items it touches. sdk-template's `/adopt-release` command walks the list ste
 step. An adoption PR is a `chore/template-update*` PR: when its merge class is `auto` the
 session enables auto-merge after the reviewer's `ready`, and GitHub merges it once `ci` is
 green and review threads are resolved; a `human` adoption (a source-owned workflow, a
-changed template answer, a protected path) waits for Johannes (ADR-0018 decision 3; the
-merge classes are in the README of the organisation's `.github` repository).
+changed template answer, a protected path, a build or install route) waits for Johannes
+(ADR-0018, amendment (e); the merge classes are in the README of the organisation's
+`.github` repository).
 
 1. The core floor is raised: `xippios-core` and each of its extras name the new minor
    with the bound of §12 (`xippios-core~=0.2.0`), and, where the source depends on

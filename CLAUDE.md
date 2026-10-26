@@ -100,7 +100,7 @@ uv run pre-commit run --all-files
   which tags `vX.Y.Z` from `pyproject.toml` on the merge commit, and Johannes approves the
   run in the environment `pypi`. A session's one merge action is enabling GitHub
   auto-merge, after the reviewer's `ready`, on an adoption (`chore/template-update*`) or
-  `chore/release-*` PR whose merge class is `auto` (ADR-0018 decision 3).
+  `chore/release-*` PR whose merge class is `auto` (ADR-0018, amendment (e)).
 - Never read or print `.envrc`, `.env`, or any variable ending in `_API_KEY`.
 - `ruff` is configured to leave `docs/` alone; never reformat code blocks in the
   governing documents.
