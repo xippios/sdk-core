@@ -24,8 +24,9 @@ review changes nothing in the repository it reviews.
 3. **Errors**: mapped through the taxonomy (conventions §5) and the `classify` hook
    (§6).
 4. **Fixtures**: recorded, never hand-written; scrubbed; free of key patterns and of
-   production tenant names; no file under `tests/fixtures/` over 256 KiB, a truncated
-   one marked `truncated: true` (ADR-0019).
+   production tenant names; the fixture files this PR adds or changes under 256 KiB, a
+   truncated one marked `truncated: true` (ADR-0019; binds from the source's 0.3.0
+   adoption).
 5. **Checks green**: `uv run ruff check . && uv run ruff format --check . && uv run mypy
    && uv run pytest && uv run pre-commit run --all-files`, run by the reviewer where it
    has a shell, else read from the PR's `ci` check.

@@ -27,7 +27,7 @@ with the Enforced by CI and Process blocks and deletes Code, Tests and Docs.
 - [ ] each new task function has a fixture-backed unit test (`tests/fixtures/...` recorded, not hand-written)
 - [ ] each new task function has a `@pytest.mark.live` smoke test
 - [ ] fixtures contain no credentials: grep `tests/fixtures/` for key patterns and for the values of fields the source keeps out of its projections (ADR-0017) before committing
-- [ ] no file under `tests/fixtures/` over 256 KiB; a truncated fixture is marked `truncated: true` with the full count or byte size and sha256 (ADR-0019)
+- [ ] the fixture files this PR adds or changes stay under 256 KiB; a truncated one is marked `truncated: true` with the full count or byte size and sha256 (ADR-0019; binds from the source's 0.3.0 adoption)
 - [ ] a file-distributed source: each file kind has a sample under `tests/fixtures/files/<file_kind>/` with its provenance line and one live parser test (ADR-0020)
 
 ### Docs

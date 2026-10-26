@@ -2,10 +2,12 @@
 
 Version 1.14 · 2026-10-26 · applies to every `sdk-*` repository under github.com/xippios.
 Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
-Rules that name code core ships in 0.3.0 (`download`, `decode_text`, `decode_csv`,
-`cache_max_bytes`, `BULK_TASKS`, `published_at_naive`, `PackagedList`, the recorder's
-truncation, the spared `key`; ADR-0019, ADR-0022) bind a source from its adoption of that
-minor (§15).
+The rules of ADR-0019 and ADR-0022, all of them (the download and decode calls, the
+cache bound, `BULK_TASKS`, the fixture cap and the `truncated` marker, the file-fixture
+rules, the spared `key`, the packaged-answer rule, `published_at_naive`, the
+`None`-filter rule), bind a source from its 0.3.0 adoption (§15), since the code that
+serves them ships in core 0.3.0; until then a source records what its upstream answers
+and names a fixture over the cap in the PR description.
 
 ## 1. Naming
 
