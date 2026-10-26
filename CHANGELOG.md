@@ -18,9 +18,13 @@ All notable changes to this project are documented here. The format follows
   `vX.Y.Z` on the merge commit with the CHANGELOG section as its message, the build
   checked against that tag, and the `pypi` environment that Johannes approves. A
   session never pushes a tag; sdk-usda-psd's v0.2.0 tag on the wrong commit, caught by
-  the old workflow, was the case. One run per ref at a time, none cancelled; the
+  the old workflow, was the case. `publish.yml` has no `concurrency` group, whose one
+  pending run would lose a release run queued behind a run waiting at `pypi`. The
   workflow's header and `docs/handover.md` give the recovery path ("Re-run failed jobs"
-  once the tag exists; a build that fails for good after the tag needs a patch release).
+  once the tag exists; a build that fails for good after the tag needs a patch release)
+  and the race of two pushes to `main` close together (the second run's tag push fails
+  red, or tags a later commit when the first run's `ci` failed; "Re-run failed jobs" on
+  the right run; a release is not merged while another release run is waiting).
 - **The family conformance check** (plan WP6; Johannes's decision D12 of 2026-10-26),
   `xippios.core.testing.family`: what every source shares, tested once, collected with
   one line, `from xippios.core.testing.family import *  # noqa: F403`, in a

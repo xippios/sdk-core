@@ -20,6 +20,13 @@
 # which finds the tag. If the `pypi` environment's deployment-branch policy rejects main
 # on the first run, Johannes sets the policy to `main` and re-runs the failed jobs. If
 # `ci` fails before the tag, re-run the failed jobs rather than pushing a fix.
+#
+# Race. Runs are not serialised: GitHub's run groups keep one pending run and cancel it
+# for the next, so a release run queued behind a run waiting at `pypi` would be lost.
+# Two pushes to main close together can therefore both see an untagged version: the
+# second run's tag push then fails red, or, if the first run's `ci` failed, the second
+# tags a later commit. The fix is "Re-run failed jobs" on the right run, and a release
+# is not merged while another release run is waiting.
 name: Publish to PyPI
 
 on:
@@ -29,11 +36,6 @@ on:
 
 permissions:
   contents: read
-
-# One run per ref at a time, none cancelled, so two releases never tag at once.
-concurrency:
-  group: publish-${{ github.ref }}
-  cancel-in-progress: false
 
 jobs:
   release-check:

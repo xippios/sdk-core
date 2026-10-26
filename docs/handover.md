@@ -277,7 +277,12 @@ re-runs the failed jobs. Once the tag exists, only "Re-run failed jobs" finishes
 release: a dispatch or "Re-run all jobs" stops at `release-check`, which finds the tag.
 The tag precedes the build, so a build that fails for good leaves a tag without a
 release; the fix is a patch release. If `ci` fails before the tag, re-run the failed jobs
-rather than pushing a fix.
+rather than pushing a fix. `publish.yml` has no `concurrency` group: GitHub keeps one
+pending run per group and cancels it for the next, so a release run queued behind a run
+waiting at `pypi` would be lost. Two pushes to `main` close together can therefore both
+see an untagged version: the second run's tag push then fails red, or, if the first
+run's `ci` failed, the second tags a later commit. The fix is "Re-run failed jobs" on
+the right run, and a release is not merged while another release run is waiting.
 `gates.yml` stays off until Johannes sets the repository variable `GATES_CALLER` to `1`,
 which he does only if the ruleset editor offers no "Require workflows" rule.
 
