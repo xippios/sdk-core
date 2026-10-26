@@ -414,11 +414,11 @@ The second file collects the family conformance check: the tests of what every s
 shares, kept once in core. The namespace levels stay empty and `py.typed` ships; `mcp.py`
 and `http.py` serve exactly `tasks.__all__` minus `BULK_TASKS`, the write server exactly
 `tasks_write.__all__`; every task is synchronous, returns `Result[T]` and has an agent
-docstring; the README's status table lists exactly the tasks; `.copier-answers.yml` names
-a template tag; `pyproject.toml` bounds `xippios-core` with `~=`. A source whose adapters
-drop a task, or whose README table is stale, fails CI before a reviewer looks. The
-package under test is the one `tasks.py` under `src/xippios/`, or the ini option
-`xippios_package`.
+docstring; the README's status table lists exactly the read and the write tasks;
+`.copier-answers.yml` names a template tag; `pyproject.toml` bounds `xippios-core` with
+`~=`. A source whose adapters drop a task, or whose README table is stale, fails CI
+before a reviewer looks. The package under test is the one `tasks.py` under
+`src/xippios/`, or the ini option `xippios_package`.
 
 ```toml
 # pyproject.toml: the variables that hold the placeholder key in offline tests
