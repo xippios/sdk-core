@@ -409,13 +409,13 @@ route: `router_from_tasks` skips it, and no route returns a file path (ADR-0019)
   The scrub spares a parameter named `key` when the client's auth is not a query key
   (`api_key_location != query`), as `ResultMeta` does (§4, ADR-0019).
 - Live tests are marked `@pytest.mark.live`, skipped unless `XIPPIOS_LIVE_TESTS=1`,
-  and run in CI only in the one live workflow the template renders
-  (`.github/workflows/live.yml`): one job, `contents: read`, on a nightly schedule and on
-  `workflow_dispatch`, never on a pull request. The key reaches only that job's
-  `uv run pytest -m live` step, from the org secret; checkout, setup-uv and `uv sync`
-  never see it. Sources that share a key stagger their nightly start, so that they do not
-  draw on the shared quota together; the template derives the time from the slug
-  (ADR-0009, amendment 2026-10-26).
+  and run in CI only in the one live workflow, `.github/workflows/live.yml`, in the shape
+  the template renders (a source whose secrets differ keeps that shape): one job,
+  `contents: read`, on a nightly schedule and on `workflow_dispatch`, never on a pull
+  request. The key reaches only that job's `uv run pytest -m live` step, from the org
+  secret; checkout, setup-uv and `uv sync` never see it. Sources that share a key stagger
+  their nightly start, so that they do not draw on the shared quota together; the
+  template derives the time from the slug (ADR-0009, amendment 2026-10-26).
 - The pytest plugin (`pytest_plugins = ["xippios.core.testing.plugin"]`) keeps the
   default run offline and free of real keys (ADR-0013):
   - No network, from `pytest_configure` on: while test modules are collected, in a
@@ -448,6 +448,17 @@ route: `router_from_tasks` skips it, and no route returns a file path (ADR-0019)
   - Logger levels: the `httpx` and `httpcore` logger levels are restored after every
     test, live ones included. They are saved per test, after fixtures of wider scope
     are set up, so one of those that changes a level leaves it behind.
+- The family conformance check, `xippios.core.testing.family`, tests once, in core, what
+  every source shares: the empty namespace levels, `py.typed` and `__version__`; the
+  tasks `mcp.py` and `http.py` serve (`tasks.__all__` minus `BULK_TASKS`) and those the
+  write server serves (`tasks_write.__all__`); every task synchronous, returning
+  `Result[T]`, with an agent docstring; the README status table listing exactly the
+  tasks; the template tag in `.copier-answers.yml`; the core bound of §12. The template
+  renders `tests/test_family.py`, which collects it with one line
+  (`from xippios.core.testing.family import *  # noqa: F403`), so it runs in every
+  source's CI, and a source keeps no copy of its checks. The plugin's ini option
+  `xippios_package` names the package under test where `src/xippios/` holds more than
+  one `tasks.py` (ADR-0013, amendment 2026-10-26).
 - Every task function has at least one fixture-backed test and one live smoke test.
 - Coverage is reported, not gated; mypy strict and ruff are gated.
 
