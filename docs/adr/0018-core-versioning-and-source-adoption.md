@@ -65,3 +65,20 @@ Johannes decided on 2026-10-23 that a source depends on one core minor, and on
   ADRs and CHANGELOG name, per source, what the adoption deletes.
 - Conventions 1.13: §11 and §12 state the bound and the 0.x rule, §15 the checklist; the
   definition of done gains the "Adoption PR" block.
+
+## Amendment 2026-10-26
+
+Decision 3 applies to sdk-template's release PRs as well as to core's and a source's: a
+`chore/release-*` PR of the template auto-merges the same way after the reviewer's
+`ready`, once `ci` is green and review threads are resolved, as sdk-template#12
+(`chore/release-0.2.0`) did on Johannes's instruction of 2026-10-25. The decision named
+core's and a source's release PRs only; raised by sdk-template on 2026-10-25.
+
+The last clause of decision 3, which left the tag to Johannes, is superseded by the
+release train of conventions §12 (1.14). The release PR's merge on `main` runs
+`publish.yml`, which tags `vX.Y.Z` from `pyproject.toml` on the merge commit; the human
+gate is the approval of the `pypi` environment run, and a tag ruleset admits no other
+`v*` tag. Until a repository's `publish.yml` tags itself (core 0.2.1, template v0.2.1,
+then each source through its adoption of v0.2.1), its tag is pushed by Johannes from his
+own account. Johannes decided the release train on 2026-10-26; conventions §12 states it
+from 1.14 on.

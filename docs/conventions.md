@@ -440,15 +440,16 @@ which §12 bounds to one minor.
 - SemVer. Pre-1.0: breaking changes bump minor. Post-1.0: breaking changes bump major.
 - An upstream API change that changes our public surface is a breaking change.
 - A source depends on one core minor with an upper bound, `xippios-core~=0.2.0`, and its
-  extras likewise (`xippios-core[mcp]~=0.2.0`); the template renders it as `~=X.Y.0`
+  extras likewise (`xippios-core[mcp]~=0.2.0`); the template renders it as `~=X.Y.0`,
+  or `~=X.Y.Z` when patch Z shipped what the source adopts, still one minor
   (ADR-0018). Core patch releases stay compatible. While core is 0.x it keeps no backward
   compatibility across minors: a new core minor may break, and a source adopts it
   through §15 before its next release. From 1.0 a breaking change bumps the major
   (SemVer), and the `~=` bound stays. A source already published with an open bound
   stays as published and gets the bound with its next release.
 - `CHANGELOG.md` in Keep a Changelog format; every PR adds an entry under Unreleased.
-- The release train (Johannes, 2026-10-26): the reference-data refresh, where a source
-  has one, is its own PR before the release PR, and a release PR changes only
+- The release train (ADR-0018, amendment 2026-10-26): the reference-data refresh, where
+  a source has one, is its own PR before the release PR, and a release PR changes only
   `pyproject.toml`, `uv.lock`, `CHANGELOG.md`, `README.md`, `CLAUDE.md` and
   `docs/handover.md` (and `scripts/check-siblings.sh` until the siblings check is
   template-owned). Release = the release PR merges on `main` → `publish.yml` tags
