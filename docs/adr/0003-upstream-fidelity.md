@@ -55,7 +55,7 @@ Conventions §3 states the three rules from 1.13 on.
 
 ## Amendment 2026-10-26
 
-Two rules from the queue. Several FAS APIs are described in one shared OpenAPI
+Three rules from the queue. Several FAS APIs are described in one shared OpenAPI
 document. A source whose API is one part of a shared upstream document snapshots its own
 part and records the full document's byte size and sha256 in `FETCHED.md`, so a refresh
 can tell a change in its part from a change elsewhere in the whole (queue row 35 d).
@@ -66,4 +66,11 @@ projected without its `iban` (`bankAccounts[].iban`). Such an override is still 
 only" in the sense of conventions §3, since nothing is renamed or computed; ADR-0017's
 rule reaches nested fields (queue row 37 a).
 
-Conventions §3 states both rules from 1.14 on.
+An adoption PR (conventions §15), which fetches nothing, leaves
+`docs/upstream/FETCHED.md` to the next `/refresh-upstream` and ports only the capture
+script's changes (`scripts/refresh_upstream.py`, where the source keeps one).
+`FETCHED.md` records a fetch, so a rule that changes what it records (`Fetched` as a
+UTC time, amendment 2026-10-24) reaches it with the next run that fetches (queue row
+37 b).
+
+Conventions §3 states the first two rules from 1.14 on, §15 the third.

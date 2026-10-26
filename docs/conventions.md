@@ -21,8 +21,9 @@ and names a fixture over the cap in the PR description.
 | Env var for a key | `<SOURCE>_API_KEY`, or the issuer's variable when one key serves several sources (ADR-0009); per tenant of a multi-tenant source `<SOURCE>_<NAME>_API_KEY`, its other values `<SOURCE>_<NAME>_<FIELD>` (ADR-0014, §7) | `COMTRADE_API_KEY`, `DATA_GOV_API_KEY`, `CASHCTRL_ACME_API_KEY` |
 
 `<source>` names the data provider and, where one provider has several APIs, the API:
-`usda-nass`, `usda-psd`, `usda-esr`, `usda-gats`, `usda-esmis`, `usda-wasde`, `comtrade`,
-`eurostat`, `faostat`, `cashctrl`.
+`usda-nass`, `usda-psd`, `usda-esr`, `usda-gats`, `usda-esmis`, `usda-wasde` (a parser
+package that depends on `usda-esmis`; ADR-0020, ADR-0021), `comtrade`, `eurostat`,
+`faostat`, `cashctrl`.
 No domain prefixes (`ag`, `agri`): sources are domain-neutral; grouping happens via
 GitHub topics (`xippios-sdk`) and the org README.
 
@@ -64,7 +65,7 @@ or through the retrieval package the source depends on (§12, ADR-0021); `parse/
 one module per file kind, `parse/<file_kind>.py`, with one function,
 `parse_<file_kind>(path) -> list[Model]`. A parser's library (a spreadsheet reader,
 `pypdf`) is the source's dependency, never core's. A PDF is read for its narrative text
-only, never for numbers: a figure a task returns comes from the XLS, CSV or TXT the
+only, never for numbers: a figure a task returns comes from the XLS, XML, CSV or TXT the
 release carries, or is not returned (ADR-0020). A bulk task, which returns
 `Result[Downloaded]` or `Result[list[T]]` read from a file, lives in `tasks.py` like
 every task and is named in `BULK_TASKS`, a frozenset beside `MCP_CAPS`; the adapters
@@ -538,5 +539,5 @@ An adoption PR changes nothing else: no new endpoints, tasks or fixtures ride al
 may delete the fixtures, mounts and tests that the adoption itself makes dead, and
 nothing more (ADR-0018, amendment 2026-10-26). An adoption PR, which fetches nothing,
 leaves `docs/upstream/FETCHED.md` to the next `/refresh-upstream` and ports only the
-capture script's changes. The reviewer judges it against this list and nothing else
-(definition of done, block "Adoption PR").
+capture script's changes (ADR-0003, amendment 2026-10-26). The reviewer judges it
+against this list and nothing else (definition of done, block "Adoption PR").

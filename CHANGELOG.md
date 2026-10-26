@@ -32,7 +32,9 @@ All notable changes to this project are documented here. The format follows
 - **ADR-0003, amendment 2026-10-26**: a source whose API is one part of a shared
   upstream document snapshots its part and records the full document's byte size and
   sha256; a `project` override that drops a personal identifier inside a kept list field
-  (`bankAccounts[].iban`) is still parsing only.
+  (`bankAccounts[].iban`) is still parsing only; an adoption PR, which fetches nothing,
+  leaves `FETCHED.md` to the next `/refresh-upstream` and ports only the capture
+  script's changes.
 - **ADR-0018, amendment 2026-10-26**: (a) decision 3 covers sdk-template's release
   PRs, which auto-merge after the reviewer's `ready` like core's and a source's; (b) the
   release train replaces the human tag: the release PR's merge runs `publish.yml`, which
@@ -47,18 +49,20 @@ All notable changes to this project are documented here. The format follows
   by a login bearer token (probed 2026-10-26), and wasde's tables come from the
   release's XLS or XML, decided at its first interview.
 - **Conventions 1.14**: the rules of ADR-0019 and ADR-0022 bind a source from its 0.3.0
-  adoption; `usda-wasde` among the source names (§1); files and bulk tasks (§2, §3, §6,
-  §8, §9, §10; ADR-0019, ADR-0020); a snapshot of one part of a shared upstream
-  document and personal identifiers inside a kept list field (§3; ADR-0003 amendment);
-  packaged answers, naive release times and the spared `key` (§4; ADR-0019, ADR-0022);
-  source dependencies (§11, §12, §15; ADR-0021); the release train and the patch case
-  of the core bound (§12; ADR-0018 amendment); copies of a helper (§15; ADR-0023); dead
-  fixtures an adoption PR may delete (§15; ADR-0018 amendment); an adoption PR leaves
-  `FETCHED.md` to the next `/refresh-upstream` (§15).
+  adoption; `usda-wasde` among the source names (§1; ADR-0020, ADR-0021); files and bulk
+  tasks (§2, §3, §6, §8, §9, §10; ADR-0019, ADR-0020); a snapshot of one part of a
+  shared upstream document and personal identifiers inside a kept list field (§3;
+  ADR-0003 amendment); packaged answers, naive release times and the spared `key` (§4;
+  ADR-0019, ADR-0022); source dependencies (§11, §12, §15; ADR-0021); the release train
+  and the patch case of the core bound (§12; ADR-0018 amendment); copies of a helper
+  (§15; ADR-0023); dead fixtures an adoption PR may delete (§15; ADR-0018 amendment); an
+  adoption PR leaves `FETCHED.md` to the next `/refresh-upstream` (§15; ADR-0003
+  amendment).
 - **Definition of done**: the fixture cap on the files a PR adds or changes and the
   `truncated` marker, file samples, a core PR's consumer statement in its ADR or
   description, the adoption line per ADR-0023 and the patch case of the bound, the
-  live-call count, the `Decisions taken` block and the release subset.
+  live-call count, the `Decisions taken` block with what backs each line (as in the
+  review checklist) and the release subset.
 - **`docs/review-checklist.md`**: the checklist a reviewer applies to any `sdk-*` PR:
   `main`'s documents for every PR and the branch's own for a PR that changes them, a
   release PR's own tag allowed, a decision backed by a convention, an ADR, a

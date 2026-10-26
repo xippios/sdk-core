@@ -28,15 +28,16 @@ PDF is ever read.
    prints them; units and footnote markers stay as text. Nothing is renamed, converted
    or joined across files. `docs/upstream/` snapshots the file-format documentation
    (layout notes, a dataset's README) the way it snapshots API documentation.
-3. **Formats.** CSV/TSV, gzip and zip through the stdlib. XLS/XLSX through a library the
-   source declares itself: a plain dependency when its tasks cannot work without it, an
-   extra (`xippios-usda-wasde[xls]`) when only some can. Core keeps its footprint
-   (httpx, pydantic; ADR-0002) and never ships a spreadsheet, XML or PDF parser.
+3. **Formats.** CSV/TSV, gzip and zip through the stdlib. XLS/XLSX and XML through a
+   library the source declares itself: a plain dependency when its tasks cannot work
+   without it, an extra (`xippios-usda-wasde[xls]`) when only some can. Core keeps its
+   footprint (httpx, pydantic; ADR-0002) and never ships a spreadsheet, XML or PDF
+   parser.
 4. **PDF: narrative only.** A source may extract the text of a PDF release (the
    report's narrative, for an agent to read under the cap) with a library it declares
    (`pypdf`). It never reads numbers from a PDF: a figure a task returns comes from the
-   XLS, CSV or TXT the release carries, or is not returned. A reconstructed table is not
-   upstream fidelity; a release that carries only a PDF yields text.
+   XLS, XML, CSV or TXT the release carries, or is not returned. A reconstructed table
+   is not upstream fidelity; a release that carries only a PDF yields text.
 5. **Envelope.** `meta.endpoint` names the file kind as upstream names it (`wasde.xls`,
    `qs.crops`); `meta.vintage` the release identifier (ESMIS release id, the report
    date as printed); `meta.published_at` the catalog's release time (ADR-0022);
