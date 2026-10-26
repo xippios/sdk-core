@@ -58,7 +58,7 @@ template answer, a protected path, a build or install route) waits for Johannes
 
 ### Process
 - [ ] branch named `feature/`, `fix/`, `chore/`, or `docs/`; Conventional Commits
-- [ ] no tag, release, merge, or secret operation performed by the session; the one exception is enabling auto-merge on an adoption or `chore/release-*` PR after the reviewer's `ready`, ADR-0018
+- [ ] no tag, release, merge, or secret operation performed by the session; the one exception is enabling auto-merge on an adoption or `chore/release-*` PR when its merge class is `auto`, after the reviewer's `ready`, ADR-0018, amendment (e)
 - [ ] assumptions and open questions listed in the PR description
 - [ ] live calls spent by this PR are counted in the description (keyed calls by number; `none` is a count)
 - [ ] the description carries, after this checklist, a `## Decisions taken` block: one line per decision the session made, each backed by a convention, an ADR, a coordination rule, a decision of Johannes's with its date, or `gap, row N`; a line backed by none of these is a blocking finding

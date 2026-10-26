@@ -163,7 +163,9 @@ All notable changes to this project are documented here. The format follows
   and the definition of done's Adoption PR intro: the session enables auto-merge on an
   adoption PR only when its merge class is `auto`, and a `human` adoption waits for
   Johannes (ADR-0018, amendment (e); the merge classes of the `.github` repository's
-  README). `.github/PULL_REQUEST_TEMPLATE.md` mirrors the intro.
+  README), and the definition of done's Process line allows the session's one merge
+  action, auto-merge on an adoption or `chore/release-*` PR, only when its merge class is
+  `auto` (ADR-0018, amendment (e)). `.github/PULL_REQUEST_TEMPLATE.md` mirrors both.
 - **ADR-0009, amendment 2026-10-26**: the live workflow's shape is the rule for every
   source, since the nightly live tests spend a shared key too.
 - **ADR-0013, amendment 2026-10-26**: the plugin's guarantees extend to the family
