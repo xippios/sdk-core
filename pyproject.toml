@@ -52,8 +52,9 @@ build-backend = "hatchling.build"
 packages = ["src/xippios"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src", "tests", "docs", "README.md", "CHANGELOG.md", "LICENSE"]
-exclude = ["docs/handover.md"]
+# Anchored at the root: an unanchored "README.md" or "LICENSE" matches one at any depth.
+include = ["/src", "/tests", "/docs", "/README.md", "/CHANGELOG.md", "/LICENSE"]
+exclude = ["/docs/handover.md"]
 
 [tool.ruff]
 line-length = 100
