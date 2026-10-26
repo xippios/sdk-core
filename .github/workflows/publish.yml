@@ -3,11 +3,14 @@
 # `pypi` → Johannes approves the run → trusted publishing uploads. No session and no human
 # pushes the tag, and no token is stored anywhere.
 #
-# Every push to main runs it. `release-check` lets a push through only when it changed
-# pyproject.toml, its version has no tag yet and CHANGELOG.md has that version's
-# `## [X.Y.Z] - ` heading; anything else ends there, quietly, except a version without its
-# CHANGELOG section, which leaves a notice. CI runs here, once, for a release: ci.yml has no
-# push trigger of its own (the strict up-to-date policy tests every tree before it merges).
+# Every push to main runs it. `release-check` looks only at a push that changed
+# pyproject.toml or CHANGELOG.md (every dispatch): a new source's first release PR changes
+# no version, since the scaffold already says 0.1.0, only the CHANGELOG. It lets the push
+# through when pyproject.toml's version has no tag yet and CHANGELOG.md has that version's
+# `## [X.Y.Z] - ` heading. Anything else ends there quietly (an Unreleased entry on an
+# ordinary PR among it), except a changed pyproject.toml whose version has no CHANGELOG
+# section, which leaves a notice. CI runs here, once, for a release: ci.yml has no push
+# trigger of its own (the strict up-to-date policy tests every tree before it merges).
 # One workflow, because a tag pushed with GITHUB_TOKEN starts no other workflow. The file
 # name stays publish.yml: PyPI's trusted publisher names it.
 name: Publish to PyPI
@@ -45,9 +48,16 @@ jobs:
             echo "::notice title=release-check::runs on main only, not on $REF; no tag"
             exit 0
           fi
+          # A dispatch, or a push whose range cannot be read (a new or rewritten branch),
+          # counts as a changed pyproject.toml.
+          pyproject_changed=1
           if [ "$EVENT" = "push" ] && git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
-            if ! git diff --name-only "$BEFORE" "$SHA" | grep -qx 'pyproject.toml'; then
-              exit 0
+            changed="$(git diff --name-only "$BEFORE" "$SHA")"
+            if ! grep -qx 'pyproject.toml' <<<"$changed"; then
+              pyproject_changed=0
+              if ! grep -qx 'CHANGELOG.md' <<<"$changed"; then
+                exit 0
+              fi
             fi
           fi
           version="$(uv version --short)"
@@ -59,7 +69,9 @@ jobs:
           fi
           heading="## [${version}] - "
           if ! awk -v h="$heading" 'index($0, h) == 1 { found = 1 } END { exit !found }' CHANGELOG.md; then
-            echo "::notice title=release-check::pyproject.toml names ${version}, but CHANGELOG.md has no '${heading}' heading; no tag"
+            if [ "$pyproject_changed" = 1 ]; then
+              echo "::notice title=release-check::pyproject.toml names ${version}, but CHANGELOG.md has no '${heading}' heading; no tag"
+            fi
             exit 0
           fi
           echo "version=${version}" >> "$GITHUB_OUTPUT"
