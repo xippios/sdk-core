@@ -1469,7 +1469,7 @@ requires-dist = [
     { name = "httpcore", marker = "extra == 'testing'", specifier = ">=1.0" },
     { name = "httpx", specifier = ">=0.28" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=2.0" },
-    { name = "packaging", marker = "extra == 'testing'", specifier = ">=24" },
+    { name = "packaging", marker = "extra == 'testing'", specifier = ">=22" },
     { name = "pydantic", specifier = ">=2.11" },
     { name = "pydantic-settings", specifier = ">=2.7" },
     { name = "pytest", marker = "extra == 'testing'", specifier = ">=8" },

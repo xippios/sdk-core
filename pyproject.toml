@@ -26,7 +26,7 @@ dependencies = [
 [project.optional-dependencies]
 mcp = ["mcp>=2.0"]
 http = ["fastapi>=0.115"]
-testing = ["pytest>=8", "respx>=0.22", "anyio>=4", "httpcore>=1.0", "packaging>=24"]
+testing = ["pytest>=8", "respx>=0.22", "anyio>=4", "httpcore>=1.0", "packaging>=22"]
 
 [project.urls]
 Homepage = "https://github.com/xippios/sdk-core"
