@@ -26,6 +26,7 @@ from xippios.core.testing.adapters import (
     mcp_call,
     mcp_call_text,
 )
+from xippios.core.testing.clock import CLOCK_SLACK, assert_time_between
 from xippios.core.testing.fixtures import (
     Fixture,
     FixtureRequest,
@@ -49,6 +50,7 @@ from xippios.core.testing.replay import (
 from xippios.core.testing.scrub import REDACTED, Scrub, scrub_headers, scrub_params, scrub_url
 
 __all__ = [
+    "CLOCK_SLACK",
     "LIVE_ENV",
     "PLACEHOLDER_KEY",
     "REDACTED",
@@ -58,6 +60,7 @@ __all__ = [
     "ReplayFixture",
     "Scrub",
     "assert_projection",
+    "assert_time_between",
     "assert_write_tools",
     "fixture_from_response",
     "fixture_path",
