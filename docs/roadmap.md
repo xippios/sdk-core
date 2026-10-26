@@ -6,9 +6,8 @@ PR 0 from the coordination review of the same day)
 The order in which `sdk-core`, `sdk-template` and the next source packages are built.
 The conventions and the ADRs bind; this file only sequences them, and it changes by PR
 when Johannes decides a new order. It supersedes nothing published; within the family it
-replaces the roadmap in §7 of the family review of 2026-10-25. The C- and T-labels name
-that review's items for core and for the template; each is said in words where it
-appears.
+replaces the order set by the review of 2026-10-25. The C- and T-labels are that review's
+item labels for core and for the template; each is said in words where it appears.
 
 ## 1. Close what is in flight
 
@@ -49,7 +48,7 @@ Before 0.3.0, one patch release of core and one of the template:
 
 ## 3. Core 0.3.0 and template v0.3.0
 
-The family review's full scope in one minor, one lock, one PR at a time, in this order.
+The review's full scope in one minor, one lock, one PR at a time, in this order.
 The numbers stay as decided; item 4 is empty.
 
 0. **PR 0, deletions with no consumer, before C14.**
@@ -88,7 +87,7 @@ The numbers stay as decided; item 4 is empty.
 
 Every 0.3.0 PR deletes its own surplus tests (per module a happy path, each documented
 refusal, one test per ADR rule); the release PR states the test-line count against the
-family review's target of about 4,500 to 5,000 lines, down from 7,546.
+review's target of about 4,500 to 5,000 lines, down from 7,546.
 
 Pin rule for this period: a new source session may start on a git pin of the core SHA
 that merged C14 and C15 (`core_git_ref`) and swaps to `~=0.3.0` in its release PR.
@@ -102,7 +101,7 @@ that pin, with `core_git_ref` and `core_version` set, and adopt template v0.3.0 
 | 1 | `sdk-usda-esmis` | C14 + C15 merged | catalog + download, no parsers (ADR-0019, ADR-0020) |
 | 1 | `sdk-eurostat` | C15 merged; its design round | keyless, flat; JSON-stat cubes, SDMX-CSV; codelists as packaged tables |
 | 2 | `sdk-usda-wasde` | esmis 0.1.0 on PyPI | parser package depending on esmis (ADR-0020, ADR-0021) |
-| 2 | `sdk-faostat` | Eurostat's CSV/bulk pattern settled | keyless (verify), JSON data plus bulk ZIP/CSV |
+| 2 | `sdk-faostat` | Eurostat's CSV/bulk pattern settled | keyed (a login bearer token), JSON data plus open bulk ZIP/CSV |
 | 3 | `sdk-usda-nass` 0.3.0 | nass 0.2.0 released; core 0.3.0 | the bulk datasets as `parse/` modules and bulk tasks |
 
 Per package:
@@ -114,11 +113,13 @@ Per package:
   identifiers as a packaged table. The catalog, never a parser (2,000+ publications).
 - **eurostat.** Design round before the briefing (open decision); C10 needed; the
   keyless flat template variant (T11) proven first.
-- **wasde.** Tables from the release's XLS (verify whether a CSV ships); the narrative
-  from the PDF as text only; tasks per table and report month; `vintage` = the report
-  date as printed; no re-exposure of PSD's world balance sheets (ADR-0003). The first
-  table set: its briefing interview.
-- **faostat.** Verify authentication and paging before the briefing (the family review
-  of 2026-10-25, §6).
+- **wasde.** Tables from the release's XLS or XML, decided at its first interview from
+  the samples; a CSV to verify; the narrative from the PDF as text only; tasks per table
+  and report month; `vintage` = the report date as printed; no re-exposure of PSD's
+  world balance sheets (ADR-0003). The first table set: its briefing interview.
+- **faostat.** The API is keyed: a bearer token from `POST /api/v1/auth/login` with a
+  username and password (probed 2026-10-26: the old keyless host is down; the bulk
+  catalogue and ZIPs are open). Its live run needs a FAO account; paging and limits are
+  verified with a credential before its briefing.
 - **nass 0.3.0.** The datasets at nass.usda.gov/datasets as `parse/` modules sharing the
   Quick Stats models; last.
