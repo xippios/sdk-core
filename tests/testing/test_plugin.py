@@ -26,14 +26,6 @@ POOL_SEND_ASYNC = httpcore.AsyncConnectionPool.handle_async_request
 ACQUIRE = TokenBucket.acquire
 PAUSE = QuotaPolicy._pause
 KEY = EnvKeyAuth.key
-ANYIO_CONFTEST = """
-import pytest
-
-@pytest.fixture
-def anyio_backend():
-    return "asyncio"
-"""
-
 TEST_FILE = """
 import pytest
 
@@ -282,7 +274,6 @@ def test_offline_tests_cannot_reach_the_network(
 ) -> None:
     # Row 7 (sdk-cashctrl): nothing enforced "no network in the default test run".
     monkeypatch.setenv(LIVE_ENV, "1")
-    pytester.makeconftest(ANYIO_CONFTEST)
     pytester.makepyfile(OFFLINE_TESTS)
     result = pytester.runpytest("-p", "xippios.core.testing.plugin", "--strict-markers")
     result.assert_outcomes(passed=13)
@@ -373,7 +364,6 @@ def test_offline_tests_never_wait_on_the_rate_limiter(
     # Rows 12 and 18 (sdk-comtrade, sdk-usda-psd): a burst=1 source waited 1 s per replay.
     monkeypatch.setenv(LIVE_ENV, "1")
     write_ep_case(pytester)
-    pytester.makeconftest(ANYIO_CONFTEST)
     pytester.makepyfile(LIMITER_TESTS)
     result = pytester.runpytest("-p", "xippios.core.testing.plugin", "--strict-markers")
     result.assert_outcomes(passed=5)
@@ -463,7 +453,6 @@ def test_a_replayed_429_leaves_no_quota_spent_for_later_tests(
 ) -> None:
     # A source's module-level QuotaPolicy would refuse every test after a replayed 429.
     monkeypatch.setenv(LIVE_ENV, "1")
-    pytester.makeconftest(ANYIO_CONFTEST)
     pytester.makepyfile(QUOTA_TESTS)
     result = pytester.runpytest("-p", "xippios.core.testing.plugin", "--strict-markers")
     result.assert_outcomes(passed=5)
@@ -645,3 +634,48 @@ def test_request_logger_levels_are_restored_after_every_test(
     result = pytester.runpytest("-p", "xippios.core.testing.plugin", "--strict-markers")
     result.assert_outcomes(passed=4)
     assert [logging.getLogger(name).level for name in ("httpx", "httpcore")] == [0, 0]
+
+
+PLUGIN_CONFTEST = """
+import pytest
+
+pytest_plugins = ["xippios.core.testing.plugin"]
+"""
+
+ANYIO_TESTS = """
+import asyncio
+
+import pytest
+
+
+@pytest.mark.anyio
+async def test_runs_on_asyncio(anyio_backend):
+    assert anyio_backend == "asyncio"
+    assert asyncio.get_running_loop()
+"""
+
+
+def test_anyio_tests_run_on_asyncio_without_a_fixture_of_the_source(
+    pytester: pytest.Pytester,
+) -> None:
+    # Every source's conftest.py carried this fixture (C12); the plugin has it now. Enabled
+    # through pytest_plugins, as a source does, it is registered after anyio's own, which
+    # is parametrised by installed backend and would give the test id a suffix.
+    pytester.makeconftest(PLUGIN_CONFTEST)
+    pytester.makepyfile(ANYIO_TESTS)
+    result = pytester.runpytest("-v")
+    result.assert_outcomes(passed=1)
+    result.stdout.fnmatch_lines(["*::test_runs_on_asyncio PASSED*"])
+
+
+def test_a_conftest_anyio_backend_overrides_the_plugin(pytester: pytest.Pytester) -> None:
+    pytester.makeconftest(
+        PLUGIN_CONFTEST
+        + "\n\n@pytest.fixture(params=['asyncio'], ids=['own'])\n"
+        + "def anyio_backend(request):\n"
+        + "    return request.param\n"
+    )
+    pytester.makepyfile(ANYIO_TESTS)
+    result = pytester.runpytest("-v")
+    result.assert_outcomes(passed=1)
+    result.stdout.fnmatch_lines(["*::test_runs_on_asyncio[[]own[]] PASSED*"])

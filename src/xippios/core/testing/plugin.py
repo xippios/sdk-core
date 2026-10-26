@@ -11,7 +11,7 @@ unless it is marked ``rate_limited``, quota snapshots reset before and after it,
 every ``EnvKeyAuth`` sending ``PLACEHOLDER_KEY`` (``placeholder_api_key``). A ``live``
 test is skipped unless ``XIPPIOS_LIVE_TESTS=1``.
 Every test, ``live`` or not, gets the ``httpx`` and ``httpcore`` logger levels back
-when it ends.
+when it ends, and ``anyio`` tests run on asyncio (``anyio_backend``).
 """
 
 import asyncio
@@ -392,6 +392,22 @@ def _restore_request_logger_levels() -> Iterator[None]:
     yield
     for name, level in saved.items():
         logging.getLogger(name).setLevel(level)
+
+
+@pytest.fixture(scope="module")
+def anyio_backend() -> str:
+    """Run every ``anyio`` test on asyncio, the backend the family's client runs on.
+
+    anyio's own fixture runs each test once per installed backend, trio included where
+    it is installed; every source's ``conftest.py`` pinned asyncio with a fixture of its
+    own. Module-scoped, as anyio's is, so a module-scoped async fixture can use it. A
+    ``conftest.py`` or a test module that defines ``anyio_backend`` overrides this one.
+
+    It wins over anyio's when the plugin is enabled as every source enables it, through
+    ``pytest_plugins`` in ``tests/conftest.py``, which registers it after anyio's. Loaded
+    earlier, with ``-p xippios.core.testing.plugin``, anyio's comes last and decides.
+    """
+    return "asyncio"
 
 
 @pytest.fixture
