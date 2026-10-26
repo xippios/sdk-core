@@ -1,16 +1,18 @@
 # Review checklist
 
-The checklist a reviewer applies to a PR in any `sdk-*` repository, read from `sdk-core`
-`main` by the local `reviewer` subagent and by the `family-review` workflow alike. A
-review changes nothing in the repository it reviews.
+The checklist a reviewer applies to a PR in any `sdk-*` repository, the local `reviewer`
+subagent and the `family-review` workflow alike. A review changes nothing in the
+repository it reviews.
 
 ## Before judging
 
 - Read the diff (`git diff origin/main...HEAD`) and the history
   (`git log --oneline origin/main..HEAD`), and the PR description.
-- Read the family documents from `sdk-core` `main`: `docs/conventions.md`, the ADRs
-  under `docs/adr/`, `docs/definition-of-done.md`. Read the repository's `CLAUDE.md`,
-  and its `docs/upstream/` for every claim about the upstream API.
+- Read the family documents: `docs/conventions.md`, the ADRs under `docs/adr/`,
+  `docs/definition-of-done.md` and this checklist. `sdk-core` `main`'s apply to every PR;
+  a PR that changes one of them is judged against its branch's own version of it. Read
+  the repository's `CLAUDE.md`, and its `docs/upstream/` for every claim about the
+  upstream API.
 - Never read or print `.envrc`, `.env` or a variable ending in `_API_KEY`; a leak check
   greps the files for key patterns, it never compares against a key.
 
@@ -31,28 +33,37 @@ review changes nothing in the repository it reviews.
    && uv run pytest && uv run pre-commit run --all-files`, run by the reviewer where it
    has a shell, else read from the PR's `ci` check.
 6. **Definition of done**: the checklist is in the description and ticked honestly; an
-   unticked item carries a one-line reason.
+   unticked item carries a one-line reason. A reviewer without a shell checks that the
+   checklist is present and reads the PR's `ci` check.
 7. **CHANGELOG**: an entry under Unreleased.
-8. **Nothing forbidden**: nothing committed to `main`, no secrets, no tag.
+8. **Nothing forbidden**: nothing committed to `main`, no secrets, no tag pushed by the
+   session; the tag a merged release PR gets from its workflow, from 0.2.1 on, is
+   legitimate (conventions §12).
 9. **Decisions taken**: the description carries a `## Decisions taken` block after the
-   checklist, and every line names the convention or ADR it rests on, or `gap, row N`.
-   A line backed by neither is a blocking finding.
+   checklist, and every line is backed by a convention, an ADR, a coordination rule, a
+   decision of Johannes's with its date, or `gap, row N`. A reviewer without the queue
+   accepts a named row; the local reviewer verifies it. A line backed by none of these
+   is a blocking finding.
 10. **Live calls**: the description counts the live calls the PR spent, keyed calls by
-    number (`none` is a count).
-11. **Core PR** (`sdk-core`, code added): its ADR names the two consumers of what it
-    adds, or states the one-consumer reason under ADR-0023 decision 3.
+    number (`none` is a count). A reviewer without a shell checks that the count is
+    present and reads the PR's `ci` check.
+11. **Core PR** (`sdk-core`, code added): its ADR, or its description when it has none,
+    names the two consumers of what it adds, or the one-consumer reason (ADR-0023
+    decision 3).
 12. **Adoption PR** (`chore/template-update*`): judged against conventions §15 and
     nothing else, that is the definition of done's Adoption PR block with its Enforced by
     CI and Process blocks; it deletes only what the adoption itself makes dead
     (ADR-0018, amendment 2026-10-26).
-13. **Release PR** (`chore/release-*`, the version in `pyproject.toml` changed): it
-    changes only the subset of conventions §12 (`pyproject.toml`, `uv.lock`,
-    `CHANGELOG.md`, `README.md`, `CLAUDE.md`, `docs/handover.md`, and
-    `scripts/check-siblings.sh` until the siblings check is template-owned); the
-    reference-data refresh was its own PR.
+13. **Release PR** (`chore/release-*`; the version in `pyproject.toml` changed, or for
+    sdk-template the top heading of `CHANGELOG.md`): it changes only the subset of
+    conventions §12 (`pyproject.toml`, `uv.lock`, `CHANGELOG.md`, `README.md`,
+    `CLAUDE.md`, `docs/handover.md`, and `scripts/check-siblings.sh` until the siblings
+    check is template-owned); the reference-data refresh was its own PR.
 14. **Stale sentences**: no sentence in a changed `README.md`, `CLAUDE.md`, docstring or
     document contradicts the state after the change (a version, a count, a file name, a
     rule the PR replaced).
+15. **Conventions** (`sdk-core`): a change to `docs/conventions.md` carries an ADR or an
+    ADR amendment, and the conventions version bumps once per PR.
 
 ## Report
 
