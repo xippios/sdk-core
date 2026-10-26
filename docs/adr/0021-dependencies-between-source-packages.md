@@ -6,8 +6,8 @@ interview)
 ## Context
 
 `sdk-usda-wasde` needs what `sdk-usda-esmis` provides: find the release, download the
-file. Either wasde copies the catalog client and the download, the third-copy pattern
-§15 item 4 forbids, or it depends on the esmis package. The family has no rule for a
+file. Either wasde copies the catalog client and the download, a further copy of the
+kind §15 item 4 limits, or it depends on the esmis package. The family has no rule for a
 source depending on another source; §12 covers core only.
 
 ## Decision

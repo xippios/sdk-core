@@ -9,10 +9,10 @@ ADR-0001's three layers assume an upstream that answers HTTP requests with recor
 Three USDA sources distribute files. ESMIS publishes every USDA report series as release
 files (PDF, TXT, ZIP, XLS) behind a JSON catalog, since 2025-10-01 at
 esmis.nal.usda.gov (moved there from Cornell's Mann Library). WASDE is one of those
-series, its tables in XLS. NASS offers the Quick Stats database as gzipped TSV files.
-Eurostat and FAOSTAT ship bulk files beside their APIs. Nothing says what layer 1 is
-for a file, which formats are in scope, where a parser's dependency lives, or whether a
-PDF is ever read.
+series, its tables in XLS and XML. NASS offers the Quick Stats database as gzipped TSV
+files. Eurostat and FAOSTAT ship bulk files beside their APIs. Nothing says what layer 1
+is for a file, which formats are in scope, where a parser's dependency lives, or whether
+a PDF is ever read.
 
 ## Decision
 
@@ -28,7 +28,8 @@ PDF is ever read.
    prints them; units and footnote markers stay as text. Nothing is renamed, converted
    or joined across files. `docs/upstream/` snapshots the file-format documentation
    (layout notes, a dataset's README) the way it snapshots API documentation.
-3. **Formats.** CSV/TSV, gzip and zip through the stdlib. XLS/XLSX and XML through a
+3. **Formats.** CSV/TSV, XML (`xml.etree.ElementTree`), gzip and zip through the
+   standard library; XLS/XLSX, or a hardened XML library the source prefers, through a
    library the source declares itself: a plain dependency when its tasks cannot work
    without it, an extra (`xippios-usda-wasde[xls]`) when only some can. Core keeps its
    footprint (httpx, pydantic; ADR-0002) and never ships a spreadsheet, XML or PDF
@@ -42,10 +43,11 @@ PDF is ever read.
    `qs.crops`); `meta.vintage` the release identifier (ESMIS release id, the report
    date as printed); `meta.published_at` the catalog's release time (ADR-0022);
    `meta.request` the file's URL or release id and the filters applied in Python.
-6. **Fixtures and live tests.** A sample of each file kind (truncated per ADR-0019)
-   lives under `tests/fixtures/files/<file_kind>/<case>.*` with a provenance line
-   (release id, URL, sha256 and bytes of the full file, fetched time with `Z`); parser
-   tests run on it. The two formats serve two reads: the recorded exchange of a download
+6. **Fixtures and live tests.** A sample of each file kind (a small real file, or one
+   truncated as ADR-0019 decision 5 allows) lives under
+   `tests/fixtures/files/<file_kind>/<case>.*` with a provenance line (release id, URL,
+   sha256 and bytes of the full file, fetched time with `Z`); parser tests run on it.
+   The two formats serve two reads: the recorded exchange of a download
    (ADR-0019 decision 5, the recorder's envelope with `truncated`) is what the plugin
    replays for the download call; the sample file under
    `tests/fixtures/files/<file_kind>/` is what the parser tests read, a small real or

@@ -9,11 +9,12 @@ briefings review of the same day)
 Core's client decodes JSON (`decode_json`), stores every answer in the response cache
 without a size bound, replays fixtures that hold one JSON exchange, and the adapters
 register every task in `tasks.py`. That fits the released sources. The next five do not:
-ESMIS (a JSON catalog whose payload is file links; PDF, TXT, ZIP, XLS), WASDE (XLS
-tables, a CSV to verify, through ESMIS), NASS bulk datasets (gzipped TSV of hundreds of
-MB with Quick Stats' columns), Eurostat (JSON-stat 2.0 cubes and SDMX-CSV; datasets of
-tens of MB; the SDMX series parameter `key` would be redacted as a credential, ADR-0005,
-review C10), FAOSTAT (JSON plus bulk ZIP/CSV; authentication and paging unverified).
+ESMIS (a JSON catalog whose payload is file links; PDF, TXT, ZIP, XLS), WASDE (XLS or
+XML tables, a CSV to verify, through ESMIS), NASS bulk datasets (gzipped TSV of hundreds
+of MB with Quick Stats' columns), Eurostat (JSON-stat 2.0 cubes and SDMX-CSV; datasets
+of tens of MB; the SDMX series parameter `key` would be redacted as a credential,
+ADR-0005, review C10), FAOSTAT (JSON plus bulk ZIP/CSV; the API keyed by a login token,
+probed 2026-10-26; paging unverified).
 
 The family review of 2026-10-25 named what is missing and asked for the shape before
 those sessions start. Without it each session writes its own download-and-parse, as
@@ -46,19 +47,23 @@ three sources wrote the api.data.gov gateway client (ADR-0015, review C14).
 5. **Fixtures for files.** A download fixture holds either a small real answer (a short
    date range, one commodity) or the first N rows or bytes of the file: the recorder
    truncates on request (`max_bytes=`), marks the envelope `truncated: true` and keeps
-   `original_bytes` and the sha256 of the full file. An XML or ZIP fixture is a small
-   real sample (a short query, one file of the archive), never a byte-truncated file. A
-   JSON array is truncated by elements: the recorder keeps the first N, marks it
-   `truncated: true` and records the full count and the sha256. Tests assert the
-   parser's shape on the sample, never a size. A fixture file stays under 256 KiB
-   (definition of done).
+   `original_bytes` and the sha256 of the full file. An XML, ZIP, gzip, XLS or XLSX
+   fixture is a small real sample (a short query, one member of the archive, a few
+   rows), never a byte-truncated file, since a cut-off binary or compressed file cannot
+   be parsed; byte truncation (`max_bytes=`) applies to text bodies, and the recorder
+   refuses it for those formats; a JSON array is truncated by elements: the recorder
+   keeps the first N, marks it `truncated: true` and records the full count and the
+   sha256. Tests assert the parser's shape on the sample, never a size. A fixture file
+   a PR adds or changes stays under 256 KiB (definition of done); a fixture over the
+   cap recorded before the rule bound stays until a PR re-records it.
 6. **C10.** The credential redaction in `ResultMeta.request` and in the recorder's scrub
    spares a parameter named `key` when the client's auth is not a query key
    (`api_key_location != query`); Eurostat's SDMX `key` is data.
 
 ## Consequences
 
-- Core 0.3.0, about +250 lines (review C15), with C10. ESR and GATS are unaffected.
+- Core 0.3.0, about +250 lines (review C15), with C10. ESR is unaffected; GATS's
+  oversized list fixtures wait for the recorder's element truncation (queue row 43).
 - Conventions: §6 gains download, decode and the cache bound; §8 and §9 the
   `BULK_TASKS` rule; §10 the fixture rule; §2 says bulk tasks live in `tasks.py` and are
   marked. The definition of done gains the fixture size and the `truncated` marker.

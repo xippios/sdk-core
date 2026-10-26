@@ -7,7 +7,8 @@ cache bound, `BULK_TASKS`, the fixture cap and the `truncated` marker, the file-
 rules, the spared `key`, the packaged-answer rule, `published_at_naive`, the
 `None`-filter rule), bind a source from its 0.3.0 adoption (§15), since the code that
 serves them ships in core 0.3.0; until then a source records what its upstream answers
-and names a fixture over the cap in the PR description.
+and names a fixture over the cap in the PR description; a source that starts on a git
+pin of core 0.3.0 (the roadmap's pin rule) is bound from its first PR.
 
 ## 1. Naming
 
@@ -366,14 +367,18 @@ route: `router_from_tasks` skips it, and no route returns a file path (ADR-0019)
 - Unit tests run offline against recorded fixtures (`respx`); fixtures live in
   `tests/fixtures/<endpoint>/<case>.json` and are recorded by the `record-fixture`
   command, never hand-written.
-- A fixture file stays under 256 KiB (ADR-0019). A download fixture holds a small real
-  answer (a short date range, one commodity) or the first N rows or bytes of the file:
-  the recorder truncates on request (`max_bytes=`), marks the fixture `truncated: true`
-  and keeps `original_bytes` and the sha256 of the full file. An XML or ZIP fixture is a
-  small real sample (a short query, one file of the archive), never a byte-truncated
-  file. A JSON array is truncated by elements: the recorder keeps the first N, marks
-  `truncated: true` and records the full count and the sha256. A test on a sample or a
-  truncated fixture asserts the parser's shape, never a size.
+- A fixture file a PR adds or changes stays under 256 KiB (ADR-0019); a fixture over the
+  cap recorded before the rule bound stays until a PR re-records it. A download fixture
+  holds a small real answer (a short date range, one commodity) or the first N rows or
+  bytes of the file: the recorder truncates on request (`max_bytes=`), marks the fixture
+  `truncated: true` and keeps `original_bytes` and the sha256 of the full file. An XML,
+  ZIP, gzip, XLS or XLSX fixture is a small real sample (a short query, one member of
+  the archive, a few rows), never a byte-truncated file, since a cut-off binary or
+  compressed file cannot be parsed; byte truncation (`max_bytes=`) applies to text
+  bodies, and the recorder refuses it for those formats; a JSON array is truncated by
+  elements: the recorder keeps the first N, marks `truncated: true` and records the full
+  count and the sha256. A test on a sample or a truncated fixture asserts the parser's
+  shape, never a size.
 - A file-distributed source keeps a sample of each file kind under
   `tests/fixtures/files/<file_kind>/<case>.*` with a provenance line: the release id, the
   URL, the sha256 and bytes of the full file, and the fetched time in UTC with `Z`

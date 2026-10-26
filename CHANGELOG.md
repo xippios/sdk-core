@@ -10,15 +10,18 @@ All notable changes to this project are documented here. The format follows
 
 - **ADR-0019, bulk downloads and non-JSON payloads**: a streaming `download` that never
   touches the cache, `decode_text` and `decode_csv`, a byte bound on the cache, bulk
-  tasks named in `BULK_TASKS` and skipped by the adapters, file fixtures under 256 KiB
-  (small real samples for XML and ZIP, JSON arrays truncated by elements and marked),
-  and a `key` parameter that is data when the key is not sent in the query. The code
-  ships in 0.3.0.
+  tasks named in `BULK_TASKS` and skipped by the adapters, the fixture files a PR adds
+  or changes under 256 KiB (a fixture over the cap recorded before the rule stays until
+  re-recorded; small real samples for XML, ZIP, gzip, XLS and XLSX, never
+  byte-truncated, byte truncation for text bodies only; JSON arrays truncated by
+  elements and marked), and a `key` parameter that is data when the key is not sent in
+  the query. The code ships in 0.3.0.
 - **ADR-0020, file-distributed sources**: layer 1 is fetch plus `parse/`, one parser per
-  file kind; fidelity applies to files; parser libraries are the source's dependency;
-  a PDF yields narrative text only, never numbers; the download's recorded exchange is
-  replayed for the download call and the sample file is what the parser tests read, its
-  provenance one row in `tests/fixtures/files/README.md`.
+  file kind; fidelity applies to files; CSV/TSV, XML, gzip and zip are read with the
+  standard library, XLS/XLSX or a hardened XML library through the source's own
+  dependency; a PDF yields narrative text only, never numbers; the download's recorded
+  exchange is replayed for the download call and the sample file is what the parser
+  tests read, its provenance one row in `tests/fixtures/files/README.md`.
 - **ADR-0021, dependencies between source packages**: a source may consume another
   source's task layer, bound to one minor, sharing one core minor, the dependency
   tagged first.
@@ -49,15 +52,15 @@ All notable changes to this project are documented here. The format follows
   by a login bearer token (probed 2026-10-26), and wasde's tables come from the
   release's XLS or XML, decided at its first interview.
 - **Conventions 1.14**: the rules of ADR-0019 and ADR-0022 bind a source from its 0.3.0
-  adoption; `usda-wasde` among the source names (§1; ADR-0020, ADR-0021); files and bulk
-  tasks (§2, §3, §6, §8, §9, §10; ADR-0019, ADR-0020); a snapshot of one part of a
-  shared upstream document and personal identifiers inside a kept list field (§3;
-  ADR-0003 amendment); packaged answers, naive release times and the spared `key` (§4;
-  ADR-0019, ADR-0022); source dependencies (§11, §12, §15; ADR-0021); the release train
-  and the patch case of the core bound (§12; ADR-0018 amendment); copies of a helper
-  (§15; ADR-0023); dead fixtures an adoption PR may delete (§15; ADR-0018 amendment); an
-  adoption PR leaves `FETCHED.md` to the next `/refresh-upstream` (§15; ADR-0003
-  amendment).
+  adoption, or from its first PR when it starts on a git pin of core 0.3.0; `usda-wasde`
+  among the source names (§1; ADR-0020, ADR-0021); files and bulk tasks (§2, §3, §6, §8,
+  §9, §10; ADR-0019, ADR-0020); a snapshot of one part of a shared upstream document and
+  personal identifiers inside a kept list field (§3; ADR-0003 amendment); packaged
+  answers, naive release times and the spared `key` (§4; ADR-0019, ADR-0022); source
+  dependencies (§11, §12, §15; ADR-0021); the release train and the patch case of the
+  core bound (§12; ADR-0018 amendment); copies of a helper (§15; ADR-0023); dead
+  fixtures an adoption PR may delete (§15; ADR-0018 amendment); an adoption PR leaves
+  `FETCHED.md` to the next `/refresh-upstream` (§15; ADR-0003 amendment).
 - **Definition of done**: the fixture cap on the files a PR adds or changes and the
   `truncated` marker, file samples, a core PR's consumer statement in its ADR or
   description, the adoption line per ADR-0023 and the patch case of the bound, the
