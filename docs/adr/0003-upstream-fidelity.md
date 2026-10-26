@@ -52,3 +52,18 @@ the cells' structure. Raised by sdk-comtrade; Johannes decided both on 2026-10-2
 the interview before core PR G.
 
 Conventions §3 states the three rules from 1.13 on.
+
+## Amendment 2026-10-26
+
+Two rules from the queue. Several FAS APIs are described in one shared OpenAPI
+document. A source whose API is one part of a shared upstream document snapshots its own
+part and records the full document's byte size and sha256 in `FETCHED.md`, so a refresh
+can tell a change in its part from a change elsewhere in the whole (queue row 35 d).
+
+A `project` override that drops a documented personal identifier (ADR-0017) applies
+inside a kept list field too: a person's `bankAccounts` is kept and each account is
+projected without its `iban` (`bankAccounts[].iban`). Such an override is still "parsing
+only" in the sense of conventions §3, since nothing is renamed or computed; ADR-0017's
+rule reaches nested fields (queue row 37 a).
+
+Conventions §3 states both rules from 1.14 on.

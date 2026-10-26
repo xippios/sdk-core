@@ -89,7 +89,7 @@ skip it (§8, §9; ADR-0019).
 - A source whose API is one part of a shared upstream document (several FAS APIs
   described in one OpenAPI document) snapshots its own part and records the full
   document's byte size and sha256 in `FETCHED.md`, so a refresh can tell the part from
-  the whole (ADR-0003).
+  the whole (ADR-0003, amendment 2026-10-26).
 - Within-source hygiene is required: dates → `datetime.date`/`datetime`, numbers →
   `int`/`Decimal`/`float` as appropriate, upstream enums → `StrEnum`, pagination
   resolved, errors typed. An upstream enum of integer ids becomes an `IntEnum` instead,
@@ -109,9 +109,12 @@ skip it (§8, §9; ADR-0019).
   `ssn`, `iban` and what the source judges equivalent (a national identification number,
   a bank account number, a tax number), unless a task fetches them deliberately and says
   so in its docstring; a write task that takes one as a parameter does not echo it in
-  `meta.request` either (§4). The endpoint wrappers' read models stay faithful and carry
-  them. Fixtures never carry their values: the recording names them in
-  `Scrub(secrets=...)` or rewrites them by key (`Scrub(rewrite=...)`).
+  `meta.request` either (§4). The rule reaches nested fields: a `project` override that
+  drops an identifier inside a kept list field (`bankAccounts[].iban`) is still parsing
+  only in the sense of the projection rule above (ADR-0003, amendment 2026-10-26). The
+  endpoint wrappers' read models stay faithful and carry them. Fixtures never carry their
+  values: the recording names them in `Scrub(secrets=...)` or rewrites them by key
+  (`Scrub(rewrite=...)`).
 - **No cross-source normalization.** A USDA `marketing_year` stays a USDA concept.
   Mapping between sources is business logic and lives outside this family.
 - Reference data (commodity codes, country codes, report calendars) ships inside the
