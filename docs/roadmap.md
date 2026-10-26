@@ -90,7 +90,8 @@ refusal, one test per ADR rule); the release PR states the test-line count again
 review's target of about 4,500 to 5,000 lines, down from 7,546.
 
 Pin rule for this period: a new source session may start on a git pin of the core SHA
-that merged C14 and C15 (`core_git_ref`) and swaps to `~=0.3.0` in its release PR.
+that merged C14 and C15 (`core_git_ref`) and swaps to `~=0.3.0` in its single v0.3.0
+adoption PR, not in a release PR, which changes only the subset of conventions §12.
 Existing sources wait for the tag. esmis and eurostat scaffold from template v0.2.1 on
 that pin, with `core_git_ref` and `core_version` set, and adopt template v0.3.0 once.
 
@@ -111,15 +112,16 @@ Per package:
   Tasks: agencies, publications, releases, the release calendar, the latest release of
   a series, the files of a release; `download_release_file` as a bulk task. Publication
   identifiers as a packaged table. The catalog, never a parser (2,000+ publications).
-- **eurostat.** Design round before the briefing (open decision); C10 needed; the
-  keyless flat template variant (T11) proven first.
+- **eurostat.** The design round is the session's first interview (open decision); C10
+  needed; the keyless flat template variant (T11) proven first.
 - **wasde.** Tables from the release's XLS or XML, decided at its first interview from
   the samples; a CSV to verify; the narrative from the PDF as text only; tasks per table
   and report month; `vintage` = the report date as printed; no re-exposure of PSD's
   world balance sheets (ADR-0003). The first table set: its briefing interview.
 - **faostat.** The API is keyed: a bearer token from `POST /api/v1/auth/login` with a
   username and password (probed 2026-10-26: the old keyless host is down; the bulk
-  catalogue and ZIPs are open). Its live run needs a FAO account; paging and limits are
-  verified with a credential before its briefing.
+  catalogue and ZIPs are open). Its live run needs a FAO account, which Johannes
+  provides when he approves the package (G1); paging and limits are verified with that
+  credential at the session's step 0.
 - **nass 0.3.0.** The datasets at nass.usda.gov/datasets as `parse/` modules sharing the
   Quick Stats models; last.
