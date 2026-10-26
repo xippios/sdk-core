@@ -24,10 +24,12 @@ before its own release.
 Before 0.3.0, one patch release of core and one of the template:
 
 - **The release train** (conventions §12). `publish.yml` keeps its name and runs on
-  every push to `main`; when the push changes the version in `pyproject.toml`, that
-  version has no tag yet and `CHANGELOG.md` has its section, it tags `vX.Y.Z` on the
-  release PR's merge commit, builds, and waits at environment `pypi` for a human's
-  approval. `ci.yml` drops its own push trigger, so CI runs once per push to `main`.
+  every push to `main`; when the push changes the version in `pyproject.toml` or changes
+  `CHANGELOG.md`, that version has no tag yet and `CHANGELOG.md` has its section, it tags
+  `vX.Y.Z` on the release PR's merge commit, builds, and waits at environment `pypi` for
+  a human's approval. So a first release, whose version the scaffold already names,
+  tags itself from its `CHANGELOG.md` change. `ci.yml` drops its own push trigger, so CI
+  runs once per push to `main`.
   Core 0.2.1's release PR is the first that tags itself; the template carries the same
   workflows for generated repositories.
 - **The family conformance check.** `xippios.core.testing.family` holds the tests every
@@ -92,8 +94,11 @@ review's target of about 4,500 to 5,000 lines, down from 7,546.
 Pin rule for this period: a new source session may start on a git pin of the core SHA
 that merged C14 and C15 (`core_git_ref`) and swaps to `~=0.3.0` in its single v0.3.0
 adoption PR, not in a release PR, which changes only the subset of conventions §12.
-Existing sources wait for the tag. esmis and eurostat scaffold from template v0.2.1 on
-that pin, with `core_git_ref` and `core_version` set, and adopt template v0.3.0 once.
+Existing sources wait for the tag. The snapshot and design-round PRs of esmis and
+eurostat start on template v0.2.1 and core 0.2.1 without a pin. Their scaffold carries
+`core_git_ref` (a full SHA on `main`) only when the C14+C15 SHA exists at their start;
+otherwise a re-pin PR follows before the first tasks PR. Before the reference-data PR
+they re-pin to a SHA that carries ADR-0022's code. Both adopt template v0.3.0 once.
 
 ## 4. New sources, in order
 
@@ -113,7 +118,8 @@ Per package:
   a series, the files of a release; `download_release_file` as a bulk task. Publication
   identifiers as a packaged table. The catalog, never a parser (2,000+ publications).
 - **eurostat.** The design round is the session's first interview (open decision); C10
-  needed; the keyless flat template variant (T11) proven first.
+  needed; a keyless render of template v0.2.1 is proven with `new-source.sh --local-only`
+  before anything is created (v0.2.1's template tests carry a keyless case).
 - **wasde.** Tables from the release's XLS or XML, decided at its first interview from
   the samples; a CSV to verify; the narrative from the PDF as text only; tasks per table
   and report month; `vintage` = the report date as printed; no re-exposure of PSD's
@@ -122,6 +128,8 @@ Per package:
   username and password (probed 2026-10-26: the old keyless host is down; the bulk
   catalogue and ZIPs are open). Its live run needs a FAO account, which Johannes
   provides when he approves the package (G1); paging and limits are verified with that
-  credential at the session's step 0.
+  credential at the session's step 0. The login-keyed case is not a template variant:
+  core has no login auth (ADR-0023, one consumer), and ADR-0008 forbids source-specific
+  scaffolding, so faostat carries its login auth until a second consumer.
 - **nass 0.3.0.** The datasets at nass.usda.gov/datasets as `parse/` modules sharing the
   Quick Stats models; last.
