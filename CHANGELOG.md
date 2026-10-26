@@ -27,16 +27,25 @@ All notable changes to this project are documented here. The format follows
 - **ADR-0023, core scope**: code enters `xippios-core` with two consumers, or one
   consumer for a stated reason from a closed list; a helper is copied to a second
   source at most; a public name with no consumer for two minors is removed.
+- **ADR-0018, amendment 2026-10-26**: decision 3 covers sdk-template's release PRs,
+  which auto-merge after the reviewer's `ready` like core's and a source's; the release
+  train replaces the human tag: the release PR's merge runs `publish.yml`, which tags
+  `vX.Y.Z` on the merge commit, and the approval of the `pypi` environment run is the
+  human gate. Until a repository's `publish.yml` tags itself, Johannes pushes its tag.
 - **`docs/roadmap.md`**: core 0.2.1 and template v0.2.1 as step 0, core 0.3.0 opening
   with the deletions of PR 0, and the order of the next sources.
 - **Conventions 1.14**: files and bulk tasks (§2, §3, §6, §8, §9, §10; ADR-0019,
-  ADR-0020), packaged answers, naive release times and the spared `key` (§4; ADR-0019,
-  ADR-0022), source dependencies (§11, §12, §15; ADR-0021), the release train (§12),
-  copies of a helper and dead fixtures in an adoption PR (§15; ADR-0023).
+  ADR-0020), a snapshot of one part of a shared upstream document (§3; ADR-0003),
+  packaged answers, naive release times and the spared `key` (§4; ADR-0019, ADR-0022),
+  source dependencies (§11, §12, §15; ADR-0021), the release train and the patch case
+  of the core bound (§12; ADR-0018), copies of a helper and dead fixtures in an
+  adoption PR (§15; ADR-0023).
 - **Definition of done**: the fixture cap and the `truncated` marker, file samples, a
   core PR's consumer statement, the adoption line per ADR-0023, the live-call count,
   the `Decisions taken` block and the release subset.
 - **`docs/review-checklist.md`**: the checklist a reviewer applies to any `sdk-*` PR.
+- **`.github/PULL_REQUEST_TEMPLATE.md`** mirrors the definition of done, its Adoption PR
+  block included, with the Assumptions, Open questions and Decisions taken headings.
 
 ## [0.2.0] - 2026-10-25
 
