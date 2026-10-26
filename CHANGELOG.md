@@ -6,6 +6,38 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Documentation
+
+- **ADR-0019, bulk downloads and non-JSON payloads**: a streaming `download` that never
+  touches the cache, `decode_text` and `decode_csv`, a byte bound on the cache, bulk
+  tasks named in `BULK_TASKS` and skipped by the adapters, file fixtures under 256 KiB
+  (small real samples for XML and ZIP, JSON arrays truncated by elements and marked),
+  and a `key` parameter that is data when the key is not sent in the query. The code
+  ships in 0.3.0.
+- **ADR-0020, file-distributed sources**: layer 1 is fetch plus `parse/`, one parser per
+  file kind; fidelity applies to files; parser libraries are the source's dependency;
+  a PDF yields narrative text only, never numbers.
+- **ADR-0021, dependencies between source packages**: a source may consume another
+  source's task layer, bound to one minor, sharing one core minor, the dependency
+  tagged first.
+- **ADR-0022, packaged answers and release times**: `meta` of a packaged list carries
+  the upstream's fetch time, operation and release identifier; `published_at_naive`
+  admits a release time printed without a zone; `None` filters are left out of
+  `meta.request`. The code ships in 0.3.0.
+- **ADR-0023, core scope**: code enters `xippios-core` with two consumers, or one
+  consumer for a stated reason from a closed list; a helper is copied to a second
+  source at most; a public name with no consumer for two minors is removed.
+- **`docs/roadmap.md`**: core 0.2.1 and template v0.2.1 as step 0, core 0.3.0 opening
+  with the deletions of PR 0, and the order of the next sources.
+- **Conventions 1.14**: files and bulk tasks (§2, §3, §6, §8, §9, §10; ADR-0019,
+  ADR-0020), packaged answers, naive release times and the spared `key` (§4; ADR-0019,
+  ADR-0022), source dependencies (§11, §12, §15; ADR-0021), the release train (§12),
+  copies of a helper and dead fixtures in an adoption PR (§15; ADR-0023).
+- **Definition of done**: the fixture cap and the `truncated` marker, file samples, a
+  core PR's consumer statement, the adoption line per ADR-0023, the live-call count,
+  the `Decisions taken` block and the release subset.
+- **`docs/review-checklist.md`**: the checklist a reviewer applies to any `sdk-*` PR.
+
 ## [0.2.0] - 2026-10-25
 
 What the first four sources, sdk-usda-nass, sdk-comtrade, sdk-usda-psd and sdk-cashctrl,
