@@ -29,11 +29,12 @@ repository it reviews.
    production tenant names; the fixture files this PR adds or changes under 256 KiB, a
    truncated one marked `truncated: true` (ADR-0019; binds from the source's 0.3.0
    adoption).
-5. **Checks green**: `uv run ruff check . && uv run ruff format --check . && uv run mypy
-   && uv run pytest && uv run pre-commit run --all-files`, run by the reviewer where it
-   has a shell, else read from the PR's `ci` check.
+5. **Checks green**: the local reviewer runs `uv run ruff check . && uv run ruff format
+   --check . && uv run mypy && uv run pytest && uv run pre-commit run --all-files`
+   itself; the `family-review` workflow runs nothing and reads the PR's `ci` check from
+   the material the workflow prepares for it.
 6. **Definition of done**: the checklist is in the description and ticked honestly; an
-   unticked item carries a one-line reason. A reviewer without a shell checks that the
+   unticked item carries a one-line reason. The `family-review` workflow checks that the
    checklist is present and reads the PR's `ci` check.
 7. **CHANGELOG**: an entry under Unreleased.
 8. **Nothing forbidden**: nothing committed to `main`, no secrets, no tag pushed by the
@@ -45,7 +46,7 @@ repository it reviews.
    accepts a named row; the local reviewer verifies it. A line backed by none of these
    is a blocking finding.
 10. **Live calls**: the description counts the live calls the PR spent, keyed calls by
-    number (`none` is a count). A reviewer without a shell checks that the count is
+    number (`none` is a count). The `family-review` workflow checks that the count is
     present and reads the PR's `ci` check.
 11. **Core PR** (`sdk-core`, code added): its ADR, or its description when it has none,
     names the two consumers of what it adds, or the one-consumer reason (ADR-0023
