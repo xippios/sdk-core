@@ -44,13 +44,18 @@ src/xippios/core/
   client/            httpx client: config, retry, ratelimit, cache, quota, auth (env-key helpers), _core, Client
   mcp/               MCP server helpers: server, results (caps), errors (to text), cli   [extra: mcp]
   http/              FastAPI helpers: router (from tasks), problems (RFC 9457)          [extra: http]
-  testing/           pytest plugin (live gate, offline guarantees), fixtures, record, replay, scrub, adapters [extra: testing]
+  testing/           pytest plugin (live gate, offline guarantees, anyio_backend), fixtures, record, replay, scrub,
+                     adapters, clock (slack for wall-clock reads), family (the conformance check)   [extra: testing]
 tests/               mirrors the tree: tests/client/, tests/mcp/, tests/http/, tests/testing/
 docs/
   conventions.md  adr/  definition-of-done.md  handover.md  roadmap.md  review-checklist.md
 .github/workflows/
-  ci.yml             job name MUST be `ci` (the org ruleset requires that check)
-  publish.yml        runs in environment `pypi`; triggered by tags v*
+  ci.yml             job name MUST be `ci` (the org ruleset requires that check); pull requests, and
+                     called by publish.yml; no push trigger of its own
+  publish.yml        every push to main: tags vX.Y.Z from pyproject.toml when a release PR merged,
+                     builds, waits in environment `pypi` for Johannes's approval (the release train)
+  gates.yml          calls the merge-class and family-review workflows of xippios/.github; runs only
+                     when the repository variable GATES_CALLER is "1"
 ```
 
 `src/xippios/` has **no** `__init__.py` — it is a PEP 420 namespace package shared
@@ -90,9 +95,12 @@ uv run pre-commit run --all-files
   Never commit to `main`.
 - Commit small, with Conventional Commits messages (`feat(client): add retry budget`).
 - Open the PR with `gh pr create`, body = the definition-of-done checklist, ticked honestly.
-- Never tag, merge, release, force-push, or touch `gh secret`. Those are human actions,
-  except enabling GitHub auto-merge on an adoption (`chore/template-update*`) or
-  `chore/release-*` PR after the reviewer's `ready` (ADR-0018).
+- A session never tags, merges, releases, force-pushes, or touches `gh secret`. Releases
+  run on the release train (conventions §12): the release PR's merge runs `publish.yml`,
+  which tags `vX.Y.Z` from `pyproject.toml` on the merge commit, and Johannes approves the
+  run in the environment `pypi`. A session's one merge action is enabling GitHub
+  auto-merge, after the reviewer's `ready`, on an adoption (`chore/template-update*`) or
+  `chore/release-*` PR whose merge class is `auto` (ADR-0018 decision 3).
 - Never read or print `.envrc`, `.env`, or any variable ending in `_API_KEY`.
 - `ruff` is configured to leave `docs/` alone; never reformat code blocks in the
   governing documents.
