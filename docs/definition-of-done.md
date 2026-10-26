@@ -55,5 +55,5 @@ auto-merge, and GitHub merges it once `ci` is green and review threads are resol
 - [ ] no tag, release, merge, or secret operation performed by the session; the one exception is enabling auto-merge on an adoption or `chore/release-*` PR after the reviewer's `ready`, ADR-0018
 - [ ] assumptions and open questions listed in the PR description
 - [ ] live calls spent by this PR are counted in the description (keyed calls by number; `none` is a count)
-- [ ] the description carries, after this checklist, a `## Decisions taken` block: one line per decision the session made, each naming the convention or ADR it rests on, or `gap, row N`; a line backed by neither is a blocking finding
+- [ ] the description carries, after this checklist, a `## Decisions taken` block: one line per decision the session made, each backed by a convention, an ADR, a coordination rule, a decision of Johannes's with its date, or `gap, row N`; a line backed by none of these is a blocking finding
 - [ ] a release PR changes only the subset of conventions §12; the reference refresh is its own PR
