@@ -17,7 +17,12 @@ particular upstream API.
    0012 upstream totals in the result envelope, 0013 offline tests guaranteed by the
    plugin, 0014 multi-tenant sources, 0015 client request hooks and quota policy,
    0016 per-tool result caps, 0017 sensitive upstream fields, 0018 core versioning and
-   source adoption)
+   source adoption,
+   0019 bulk downloads and non-JSON payloads,
+   0020 file-distributed sources,
+   0021 dependencies between source packages,
+   0022 packaged answers and release times,
+   0023 core scope: code enters core with two consumers)
 3. `docs/definition-of-done.md` — what a PR must satisfy before it is opened
 
 The family file `../CLAUDE.md` applies as well.
@@ -42,7 +47,7 @@ src/xippios/core/
   testing/           pytest plugin (live gate, offline guarantees), fixtures, record, replay, scrub, adapters [extra: testing]
 tests/               mirrors the tree: tests/client/, tests/mcp/, tests/http/, tests/testing/
 docs/
-  conventions.md  adr/  definition-of-done.md  handover.md
+  conventions.md  adr/  definition-of-done.md  handover.md  roadmap.md  review-checklist.md
 .github/workflows/
   ci.yml             job name MUST be `ci` (the org ruleset requires that check)
   publish.yml        runs in environment `pypi`; triggered by tags v*

@@ -6,6 +6,75 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Documentation
+
+- **ADR-0019, bulk downloads and non-JSON payloads**: a streaming `download` that never
+  touches the cache, `decode_text` and `decode_csv`, a byte bound on the cache, bulk
+  tasks named in `BULK_TASKS` and skipped by the adapters, the fixture files a PR adds
+  or changes under 256 KiB (a fixture over the cap recorded before the rule stays until
+  re-recorded; small real samples for XML, ZIP, gzip, XLS and XLSX, never
+  byte-truncated, byte truncation for text bodies only; JSON arrays truncated by
+  elements and marked), and a `key` parameter that is data when the key is not sent in
+  the query. The code ships in 0.3.0.
+- **ADR-0020, file-distributed sources**: layer 1 is fetch plus `parse/`, one parser per
+  file kind; fidelity applies to files; CSV/TSV, XML, gzip and zip are read with the
+  standard library, XLS/XLSX or a hardened XML library through the source's own
+  dependency; a PDF yields narrative text only, never numbers; the download's recorded
+  exchange is replayed for the download call and the sample file is what the parser
+  tests read, its provenance one row in `tests/fixtures/files/README.md`.
+- **ADR-0021, dependencies between source packages**: a source may consume another
+  source's task layer, bound to one minor, sharing one core minor, the dependency
+  tagged first.
+- **ADR-0022, packaged answers and release times**: `meta` of a packaged list carries
+  the upstream's fetch time, operation and release identifier; `published_at_naive`
+  admits a release time printed without a zone; `None` filters are left out of
+  `meta.request`. The code ships in 0.3.0.
+- **ADR-0023, core scope**: code enters `xippios-core` with two consumers, or one
+  consumer for a stated reason from a closed list; a helper is copied to a second
+  source at most; a public name with no consumer for two minors is removed.
+- **ADR-0003, amendment 2026-10-26**: a source whose API is one part of a shared
+  upstream document snapshots its part and records the full document's byte size and
+  sha256; a `project` override that drops a personal identifier inside a kept list field
+  (`bankAccounts[].iban`) is still parsing only; an adoption PR, which fetches nothing,
+  leaves `FETCHED.md` to the next `/refresh-upstream` and ports only the capture
+  script's changes.
+- **ADR-0018, amendment 2026-10-26**: (a) decision 3 covers sdk-template's release
+  PRs, which auto-merge after the reviewer's `ready` like core's and a source's; (b) the
+  release train replaces the human tag: the release PR's merge runs `publish.yml`, which
+  tags `vX.Y.Z` on the merge commit, and the approval of the `pypi` environment run is
+  the human gate; sdk-template tags from its CHANGELOG's top heading with its own
+  `release.yml`; until a repository's workflow tags itself, Johannes pushes its tag;
+  (c) the core bound may read `~=X.Y.Z` when patch Z shipped what the source adopts,
+  still one minor; (d) an adoption PR may delete the fixtures, mounts and tests the adoption
+  itself makes dead, and nothing else rides along.
+- **`docs/roadmap.md`**: core 0.2.1 and template v0.2.1 as step 0, core 0.3.0 opening
+  with the deletions of PR 0, and the order of the next sources; faostat's API is keyed
+  by a login bearer token (probed 2026-10-26), and wasde's tables come from the
+  release's XLS or XML, decided at its first interview.
+- **Conventions 1.14**: the rules of ADR-0019 and ADR-0022 bind a source from its 0.3.0
+  adoption, or, when it starts on a git pin of core 0.3.0, each rule from its first PR
+  on a pin that carries the rule's code; `usda-wasde` among the source names (§1;
+  ADR-0020, ADR-0021); files and bulk tasks (§2, §3, §6, §8, §9, §10; ADR-0019,
+  ADR-0020); a snapshot of one part of a shared upstream document and personal
+  identifiers inside a kept list field (§3; ADR-0003 amendment); packaged answers, naive
+  release times and the spared `key` (§4; ADR-0019, ADR-0022); source dependencies (§11,
+  §12, §15; ADR-0021); the release train and the patch case of the core bound (§12;
+  ADR-0018 amendment); copies of a helper (§15; ADR-0023); dead fixtures an adoption PR
+  may delete (§15; ADR-0018 amendment); an adoption PR leaves `FETCHED.md` to the next
+  `/refresh-upstream` (§15; ADR-0003 amendment).
+- **Definition of done**: the fixture cap on the files a PR adds or changes and the
+  `truncated` marker, file samples, a core PR's consumer statement in its ADR or
+  description, the adoption line per ADR-0023 and the patch case of the bound, the
+  live-call count, the `Decisions taken` block with what backs each line (as in the
+  review checklist) and the release subset.
+- **`docs/review-checklist.md`**: the checklist a reviewer applies to any `sdk-*` PR:
+  `main`'s documents for every PR and the branch's own for a PR that changes them, a
+  release PR's own tag allowed, a decision backed by a convention, an ADR, a
+  coordination rule, a dated decision of Johannes's or a row, and a conventions change
+  carrying an ADR or an amendment.
+- **`.github/PULL_REQUEST_TEMPLATE.md`** mirrors the definition of done, its Adoption PR
+  block included, with the Assumptions, Open questions and Decisions taken headings.
+
 ## [0.2.0] - 2026-10-25
 
 What the first four sources, sdk-usda-nass, sdk-comtrade, sdk-usda-psd and sdk-cashctrl,

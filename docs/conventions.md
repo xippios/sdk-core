@@ -1,7 +1,15 @@
 # xippios SDK family — conventions
 
-Version 1.13 · 2026-10-25 · applies to every `sdk-*` repository under github.com/xippios.
+Version 1.14 · 2026-10-26 · applies to every `sdk-*` repository under github.com/xippios.
 Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
+The rules of ADR-0019 and ADR-0022, all of them (the download and decode calls, the
+cache bound, `BULK_TASKS`, the fixture cap and the `truncated` marker, the file-fixture
+rules, the spared `key`, the packaged-answer rule, `published_at_naive`, the
+`None`-filter rule), bind a source from its 0.3.0 adoption (§15), since the code that
+serves them ships in core 0.3.0; until then a source records what its upstream answers
+and names a fixture over the cap in the PR description; a source that starts on a git
+pin of core 0.3.0 (the roadmap's pin rule) is bound by each rule from its first PR on a
+pin that carries the rule's code.
 
 ## 1. Naming
 
@@ -15,7 +23,8 @@ Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 | Env var for a key | `<SOURCE>_API_KEY`, or the issuer's variable when one key serves several sources (ADR-0009); per tenant of a multi-tenant source `<SOURCE>_<NAME>_API_KEY`, its other values `<SOURCE>_<NAME>_<FIELD>` (ADR-0014, §7) | `COMTRADE_API_KEY`, `DATA_GOV_API_KEY`, `CASHCTRL_ACME_API_KEY` |
 
 `<source>` names the data provider and, where one provider has several APIs, the API:
-`usda-nass`, `usda-psd`, `usda-esr`, `usda-gats`, `usda-esmis`, `comtrade`, `eurostat`,
+`usda-nass`, `usda-psd`, `usda-esr`, `usda-gats`, `usda-esmis`, `usda-wasde` (a parser
+package that depends on `usda-esmis`; ADR-0020, ADR-0021), `comtrade`, `eurostat`,
 `faostat`, `cashctrl`.
 No domain prefixes (`ag`, `agri`): sources are domain-neutral; grouping happens via
 GitHub topics (`xippios-sdk`) and the org README.
@@ -51,6 +60,19 @@ Every source package has three layers, top to bottom, and nothing skips a layer.
 Supporting modules: `models.py` (pydantic models), `reference/` (packaged data files
 plus a loader), `_client.py` (the configured `xippios.core.client` instance).
 
+A file-distributed source, whose upstream publishes files rather than answering with
+records, keeps the three layers (ADR-0020). Its layer 1 has two parts: `api/` wraps the
+HTTP endpoints it has (a catalog), and the download goes through core's `download` (§6)
+or through the retrieval package the source depends on (§12, ADR-0021); `parse/` holds
+one module per file kind, `parse/<file_kind>.py`, with one function,
+`parse_<file_kind>(path) -> list[Model]`. A parser's library (a spreadsheet reader,
+`pypdf`) is the source's dependency, never core's. A PDF is read for its narrative text
+only, never for numbers: a figure a task returns comes from the XLS, XML, CSV or TXT the
+release carries, or is not returned (ADR-0020). A bulk task, which returns
+`Result[Downloaded]` or `Result[list[T]]` read from a file, lives in `tasks.py` like
+every task and is named in `BULK_TASKS`, a frozenset beside `MCP_CAPS`; the adapters
+skip it (§8, §9; ADR-0019).
+
 ## 3. Upstream fidelity (ADR-0003)
 
 - Names and semantics come from the upstream documentation, which is snapshotted in
@@ -67,6 +89,10 @@ plus a loader), `_client.py` (the configured `xippios.core.client` instance).
   states it (`© 2026 CashCtrl Ltd.`) and the URL the text was fetched from. A vendor's
   objection is honoured by replacing the snapshot with a summary that keeps the names and
   semantics the wrappers rely on.
+- A source whose API is one part of a shared upstream document (several FAS APIs
+  described in one OpenAPI document) snapshots its own part and records the full
+  document's byte size and sha256 in `FETCHED.md`, so a refresh can tell the part from
+  the whole (ADR-0003, amendment 2026-10-26).
 - Within-source hygiene is required: dates → `datetime.date`/`datetime`, numbers →
   `int`/`Decimal`/`float` as appropriate, upstream enums → `StrEnum`, pagination
   resolved, errors typed. An upstream enum of integer ids becomes an `IntEnum` instead,
@@ -76,13 +102,22 @@ plus a loader), `_client.py` (the configured `xippios.core.client` instance).
 - Task-shaped functions may return a *projection* of an upstream record: a subset of
   its columns under their upstream names, typed, built with `UpstreamModel.project`.
   Nothing is renamed or computed; parsing a value is the only permitted override.
+- Fidelity, the hygiene above included, applies to files (ADR-0020): a model mirrors the
+  file, its field names the column headers snake_cased, sheet and table names kept on the
+  record as upstream prints them, units and footnote markers kept as text; nothing is
+  renamed, converted or joined across files. `docs/upstream/` snapshots the file-format
+  documentation (layout notes, a dataset's README) the way it snapshots API
+  documentation.
 - Documented personal identifiers stay out of the projections tasks return (ADR-0017):
   `ssn`, `iban` and what the source judges equivalent (a national identification number,
   a bank account number, a tax number), unless a task fetches them deliberately and says
   so in its docstring; a write task that takes one as a parameter does not echo it in
-  `meta.request` either (§4). The endpoint wrappers' read models stay faithful and carry
-  them. Fixtures never carry their values: the recording names them in
-  `Scrub(secrets=...)` or rewrites them by key (`Scrub(rewrite=...)`).
+  `meta.request` either (§4). The rule reaches nested fields: a `project` override that
+  drops an identifier inside a kept list field (`bankAccounts[].iban`) is still parsing
+  only in the sense of the projection rule above (ADR-0003, amendment 2026-10-26). The
+  endpoint wrappers' read models stay faithful and carry them. Fixtures never carry their
+  values: the recording names them in `Scrub(secrets=...)` or rewrites them by key
+  (`Scrub(rewrite=...)`).
 - **No cross-source normalization.** A USDA `marketing_year` stays a USDA concept.
   Mapping between sources is business logic and lives outside this family.
 - Reference data (commodity codes, country codes, report calendars) ships inside the
@@ -98,14 +133,15 @@ Every task function returns `xippios.core.models.Result[T]`:
 
 ```python
 class ResultMeta(BaseModel):
-    source: str                   # "usda-nass"
-    endpoint: str                 # upstream operation name
-    retrieved_at: datetime        # UTC, when we fetched it
-    published_at: datetime | None # upstream publication/release time if known
-    vintage: str | None           # upstream release identifier if the source has one
-    request: dict[str, Any]       # the parameters used, for reproducibility
-    total: int | None             # upstream's record count, if it reports one
-    tenant: str | None            # the tenant the data came from, by name (§7)
+    source: str                       # "usda-nass"
+    endpoint: str                     # upstream operation name, or a file kind (ADR-0020)
+    retrieved_at: datetime            # UTC, when we fetched it
+    published_at: datetime | None     # upstream publication/release time if known
+    published_at_naive: bool = False  # True when upstream printed it without a zone
+    vintage: str | None               # upstream release identifier if the source has one
+    request: dict[str, Any]           # the parameters used, for reproducibility
+    total: int | None                 # upstream's record count, if it reports one
+    tenant: str | None                # the tenant the data came from, by name (§7)
 
 class Result(BaseModel, Generic[T]):
     data: T
@@ -117,12 +153,36 @@ On a cache hit, `retrieved_at` is the time the entry was stored, which the clien
 on the response as `extensions["xippios_cache_stored_at"]` (ADR-0015); a wrapper reads
 it with `get()` and `decode_json()` (§6).
 
-`request` never carries credentials (ADR-0005). `ResultMeta` redacts the value of any
-key that looks like one (`key`, `api_key`, `token`, `secret`, `password`, `auth`,
+`published_at` carries a zone. A naive value, a time upstream printed without one (FAS:
+`2026-10-06T08:00:00`), is accepted only with `published_at_naive=True` and is stored as
+given, no zone attached; a naive value without the flag is refused. The flag says the
+time is upstream's text, not comparable across sources; a consumer that knows the
+publisher's zone assigns it outside the family (ADR-0003, ADR-0022). `vintage` keeps the
+release identifier as upstream names it; where that identifier is the timestamp text,
+`vintage` holds the text and `published_at` its parsed value with the flag.
+
+A task that answers from packaged reference data (§3) fills `meta` by ADR-0022:
+`retrieved_at` is the time the packaged list was fetched from upstream (the file's
+`fetched` value, as a cache hit uses the entry's stored time); `endpoint` names the
+upstream operation the list came from (operationId or path), never "reference" or a
+file path; `vintage` is an upstream release identifier, or `None` when upstream has
+none, since a fetch date is not a vintage; `total` is `None` unless upstream reports a
+count (ADR-0012). `PackagedList` builds this meta, so no source writes it by hand.
+
+A task that reads a file (§2) sets `endpoint` to the file kind as upstream names it
+(`wasde.xls`, `qs.crops`), `vintage` to the release identifier (an ESMIS release id, a
+report date as printed), `published_at` to the catalog's release time, and `request` to
+the file's URL or release id plus the filters applied in Python (ADR-0020).
+
+`request` records what was sent: a parameter the caller left `None` is omitted
+(ADR-0022). It never carries credentials (ADR-0005). `ResultMeta` redacts the value of
+any key that looks like one (`key`, `api_key`, `token`, `secret`, `password`, `auth`,
 `signature`, `credential`) to `"REDACTED"` at construction, so an envelope is safe to
 hand to an agent, return over HTTP, or write to a store; personal identifiers in
-upstream data stay out of it by §3's rule for projections (ADR-0017). A task that wants
-the credential's provenance records the variable name, never the value.
+upstream data stay out of it by §3's rule for projections (ADR-0017). A parameter named
+`key` is spared when the client's auth is not a query key (`api_key_location !=
+query`): then it is data, as Eurostat's SDMX series `key` is (ADR-0019). A task that
+wants the credential's provenance records the variable name, never the value.
 
 `tenant` is the name of the tenant a multi-tenant source served the data for (§7),
 never a credential, a host or another of the tenant's values; `None` for a
@@ -202,6 +262,21 @@ the query can carry a key (ADR-0005).
   `classify`: a `RateLimitError` sets the wait from its `retry_after`; an
   `UpstreamError` for a 5xx changes nothing; any other error ends the retries.
 - Optional response cache (in-memory by default, pluggable) keyed on method+URL+params.
+  A body larger than `ClientConfig.cache_max_bytes` (default 8 MiB) passes through and
+  is not stored; `cache_filter` stays for finer rules. A source that wants a larger
+  answer cached raises the bound and says why in its `CLAUDE.md` (ADR-0019).
+- A file is downloaded, never held in memory (ADR-0019): `download(url, dest, *,
+  auth=...) -> Downloaded` streams the body to `dest` under a temporary name, renames it
+  when complete and removes it on failure, and never touches the response cache. The
+  limiter, the hooks (`before_request`, `observe`), `classify` and the retry rule apply
+  as they do to `get()`, and `auth` works as it does there; a retry restarts the file.
+  `Downloaded` carries `path`, `bytes`, `content_type`, the file name from
+  `Content-Disposition` when sent, `etag`, `last_modified` and `retrieved_at`.
+- `decode_text(response)` (charset from `Content-Type`, UTF-8 by default, a BOM
+  stripped) and `decode_csv(source, *, delimiter=",")` (the stdlib's `csv.DictReader`,
+  headers as upstream prints them) sit beside `decode_json`. The source opens gzip and
+  zip with the stdlib; core ships no XML, spreadsheet or PDF parser (ADR-0019,
+  ADR-0020).
 - Credentials come from the client's `auth`. A call to a keyless endpoint on the same
   host passes `auth=None` and is sent without them; another `httpx.Auth` replaces them
   for one call; no second client is needed to leave the key off (ADR-0015). `auth=None`
@@ -258,6 +333,11 @@ Messages and results name tenants and variables, never a value.
   names a task's filters, a source keeps its caps with its tasks, as `MCP_CAPS:
   Mapping[str, ResultCap]` in `tasks.py` next to `__all__`, and its `mcp.py` passes them
   through as `caps=getattr(tasks, "MCP_CAPS", None)`.
+- A task named in `BULK_TASKS` (a frozenset in `tasks.py` beside `MCP_CAPS`) is not a
+  tool: `register_tasks` skips it (ADR-0019). No tool returns a file path to an agent.
+  The MCP surface of a bulk source is its catalog tasks (which files exist, with sizes
+  and release identifiers) and, where the slice fits the result cap, a filtered read of
+  the file.
 - Reference lookups are tools too: `<source>_list_<thing>` (commodities, countries,
   attributes). Agents need them to form valid calls. A multi-tenant source lists its
   tenants the same way, names only (`list_task`, `cashctrl_list_organisations`).
@@ -280,13 +360,34 @@ one tag per source; responses are the `Result[T]` envelope; errors as RFC 9457
 problem details. A task whose parameters are all scalars is a `GET` with query
 parameters; a task with any non-scalar parameter (a mapping, a list, a model) is a
 `POST` whose JSON body is an object keyed by parameter name (ADR-0007). Mounted by the
-consumer, never served standalone from the package.
+consumer, never served standalone from the package. A task named in `BULK_TASKS` gets no
+route: `router_from_tasks` skips it, and no route returns a file path (ADR-0019).
 
 ## 10. Testing
 
 - Unit tests run offline against recorded fixtures (`respx`); fixtures live in
   `tests/fixtures/<endpoint>/<case>.json` and are recorded by the `record-fixture`
   command, never hand-written.
+- A fixture file a PR adds or changes stays under 256 KiB (ADR-0019); a fixture over the
+  cap recorded before the rule bound stays until a PR re-records it. A download fixture
+  holds a small real answer (a short date range, one commodity) or the first N rows or
+  bytes of the file: the recorder truncates on request (`max_bytes=`), marks the fixture
+  `truncated: true` and keeps `original_bytes` and the sha256 of the full file. An XML,
+  ZIP, gzip, XLS or XLSX fixture is a small real sample (a short query, one member of
+  the archive, a few rows), never a byte-truncated file, since a cut-off binary or
+  compressed file cannot be parsed; byte truncation (`max_bytes=`) applies to text
+  bodies, and the recorder refuses it for those formats; a JSON array is truncated by
+  elements: the recorder keeps the first N, marks `truncated: true` and records the full
+  count and the sha256. A test on a sample or a truncated fixture asserts the parser's
+  shape, never a size.
+- A file-distributed source keeps a sample of each file kind under
+  `tests/fixtures/files/<file_kind>/<case>.*` with a provenance line: the release id, the
+  URL, the sha256 and bytes of the full file, and the fetched time in UTC with `Z`
+  (ADR-0020). A binary file carries no comment, so the lines are one row per file in
+  `tests/fixtures/files/README.md`. Its parser tests read the sample; the download call
+  replays the recorded exchange of the bullet above. One live test per file kind fetches
+  the current release and checks that the parser still reads it: shape, headers and
+  sheet names, never values.
 - Replay matches a fixture on method, host and path, and on the recorded query
   parameters a test names (`match_params`); a parameter whose recorded value holds
   `REDACTED` cannot be matched and is refused by name. A parameter's absence cannot be
@@ -305,6 +406,8 @@ consumer, never served standalone from the package.
   of the definition of done.
   A body that is not UTF-8 text cannot be scrubbed and is refused unless the recording
   flags it (`allow_binary=True`, stored base64 with `body_base64`).
+  The scrub spares a parameter named `key` when the client's auth is not a query key
+  (`api_key_location != query`), as `ResultMeta` does (§4, ADR-0019).
 - Live tests are marked `@pytest.mark.live`, skipped unless `XIPPIOS_LIVE_TESTS=1`,
   and run in CI only on a nightly schedule with org secrets.
 - The pytest plugin (`pytest_plugins = ["xippios.core.testing.plugin"]`) keeps the
@@ -347,22 +450,41 @@ consumer, never served standalone from the package.
 `uv` for everything (lock, sync, build, publish). Python ≥ 3.12. `ruff` (lint +
 format, line length 100), `mypy --strict`, `pre-commit` with those two plus
 `detect-secrets`. Dependencies pinned by `uv.lock`; runtime deps declared with
-lower bounds only, except `xippios-core`, which §12 bounds to one minor.
+lower bounds only, except `xippios-core` and a source package the source depends on,
+which §12 bounds to one minor.
 
 ## 12. Versioning and releases
 
 - SemVer. Pre-1.0: breaking changes bump minor. Post-1.0: breaking changes bump major.
 - An upstream API change that changes our public surface is a breaking change.
 - A source depends on one core minor with an upper bound, `xippios-core~=0.2.0`, and its
-  extras likewise (`xippios-core[mcp]~=0.2.0`); the template renders it as `~=X.Y.0`
-  (ADR-0018). Core patch releases stay compatible. While core is 0.x it keeps no backward
-  compatibility across minors: a new core minor may break, and a source adopts it
-  through §15 before its next release. From 1.0 a breaking change bumps the major
-  (SemVer), and the `~=` bound stays. A source already published with an open bound
-  stays as published and gets the bound with its next release.
+  extras likewise (`xippios-core[mcp]~=0.2.0`); the template renders it as `~=X.Y.0`,
+  or `~=X.Y.Z` when patch Z shipped what the source adopts, still one minor
+  (ADR-0018, amendment 2026-10-26). Core patch releases stay compatible. While core is
+  0.x it keeps no backward compatibility across minors: a new core minor may break, and
+  a source adopts it through §15 before its next release. From 1.0 a breaking change
+  bumps the major (SemVer), and the `~=` bound stays. A source already published with an
+  open bound stays as published and gets the bound with its next release.
 - `CHANGELOG.md` in Keep a Changelog format; every PR adds an entry under Unreleased.
-- Release = human tags `vX.Y.Z` on `main` → `publish.yml` → environment `pypi` →
-  human approves → trusted publisher uploads. No tokens anywhere.
+- The release train (ADR-0018, amendment 2026-10-26): the reference-data refresh, where
+  a source has one, is its own PR before the release PR, and a release PR changes only
+  `pyproject.toml`, `uv.lock`, `CHANGELOG.md`, `README.md`, `CLAUDE.md` and
+  `docs/handover.md` (and `scripts/check-siblings.sh` until the siblings check is
+  template-owned). Release = the release PR merges on `main` → `publish.yml` tags
+  `vX.Y.Z` from `pyproject.toml` on the merge commit → environment `pypi` → a human
+  approves → the trusted publisher uploads. A tag ruleset admits no other `v*` tag.
+  sdk-template, which publishes nothing to PyPI, tags from the top `## [X.Y.Z] - `
+  heading of its `CHANGELOG.md` with its own `release.yml`, under the same ruleset.
+  Until a repository's workflow tags itself (core 0.2.1 and template v0.2.1 ship it),
+  its tag is pushed by Johannes from his own account. Yanks are a human action. No
+  tokens anywhere.
+- A source may depend on another source package, consuming its task layer only: it
+  imports `xippios.<dep>.tasks` and its models, never `api/` or `_client`, and declares
+  `xippios-<dep>~=X.Y.0`, one minor, like core (ADR-0021). Both share one core minor:
+  the dependent adopts a core minor only after the dependency has released on it, and a
+  new minor of the dependency reaches it through an adoption PR (§15). The dependency
+  tags first; the dependent's release PR pins the published version. The dependent's
+  servers register its own tasks only; no cycles, one level only.
 
 ## 13. Repository hygiene
 
@@ -394,16 +516,19 @@ session enables auto-merge, and GitHub merges it once `ci` is green and review t
 are resolved.
 
 1. The core floor is raised: `xippios-core` and each of its extras name the new minor
-   with the bound of §12 (`xippios-core~=0.2.0`), resolved from PyPI with no git pin left
-   in `[tool.uv.sources]`, and `uv.lock` is updated.
+   with the bound of §12 (`xippios-core~=0.2.0`), and, where the source depends on
+   another source package, that package's minor likewise (ADR-0021); resolved from PyPI
+   with no git pin left in `[tool.uv.sources]`, and `uv.lock` is updated.
 2. `copier update` brings the repository to the template release, its conflicts
    resolved.
 3. Every local workaround that a core change replaced is deleted, its tests with it, and
    the PR description names the core change for each (`QuotaAwareClient` → `QuotaPolicy`,
    ADR-0015); the release's ADRs and CHANGELOG list them per source.
 4. Logic duplicated across sources is moved into core or dropped: what core now provides
-   is dropped here; what it does not provide yet is proposed to sdk-core and named in
-   the PR description, never copied further.
+   is dropped here; what it does not provide yet is carried by the source, named in the
+   PR description and in a queue row; a second source may carry the same helper when
+   the row names both; a third never: core takes it in that minor (ADR-0023). A core row
+   names its consumers (ADR-0023).
 5. Every test that asserted a limiter wait, a quota pause or key resolution is marked or
    overridden: a limiter wait or a quota pause marked `rate_limited` (ADR-0013,
    ADR-0015), key resolution given a module-level `placeholder_api_key` override that
@@ -416,6 +541,9 @@ are resolved.
 9. `CHANGELOG.md` has a line under Unreleased naming the core, template and conventions
    versions adopted.
 
-An adoption PR changes nothing else: no new endpoints, tasks or fixtures ride along. The
-reviewer judges it against this list and nothing else (definition of done, block
-"Adoption PR").
+An adoption PR changes nothing else: no new endpoints, tasks or fixtures ride along. It
+may delete the fixtures, mounts and tests that the adoption itself makes dead, and
+nothing more (ADR-0018, amendment 2026-10-26). An adoption PR, which fetches nothing,
+leaves `docs/upstream/FETCHED.md` to the next `/refresh-upstream` and ports only the
+capture script's changes (ADR-0003, amendment 2026-10-26). The reviewer judges it
+against this list and nothing else (definition of done, block "Adoption PR").
