@@ -266,13 +266,18 @@ Step 0 of the roadmap, before 0.3.0: one feature PR and its release PR.
 
 | PR | sdk-core | What | ADR | Conventions |
 | --- | --- | --- | --- | --- |
-| | `feature/release-train-and-family-tests` | the release train (`publish.yml` tags from `pyproject.toml`, `ci.yml` without its push trigger, actions pinned by SHA), `gates.yml` switched off, `xippios.core.testing.family`, the shared test helpers (C12), anchored sdist patterns, the live workflow in §10, adoption auto-merge by merge class in §15, three roadmap sentences | ADR-0009 amendment; ADR-0018 amendments (b), (c) | 1.15 |
+| | `feature/release-train-and-family-tests` | the release train (`publish.yml` tags from `pyproject.toml`, `ci.yml` without its push trigger, actions pinned by SHA), `gates.yml` switched off, `xippios.core.testing.family`, the shared test helpers (C12), anchored sdist patterns, the live workflow and the family check in §10, adoption auto-merge by merge class in §15, the roadmap sentences | ADR-0009 amendment; ADR-0013 amendment; ADR-0018 amendments (b), (c), (e) | 1.15 |
 | Release | `chore/release-0.2.1` | version 0.2.1; the CHANGELOG's `[0.2.1]` section; README install lines `~=0.2.1`; the first release PR that tags itself | — | — |
 
 The release PR changes only the subset of conventions §12. Its merge runs `publish.yml`,
 which tags `v0.2.1` on the merge commit and waits at `pypi`; the first run also shows
 whether the environment's deployment-branch policy "protected branches only" admits a
-ruleset-protected `main`, and if it does not, Johannes sets the policy to `main`.
+ruleset-protected `main`, and if it does not, Johannes sets the policy to `main` and
+re-runs the failed jobs. Once the tag exists, only "Re-run failed jobs" finishes the
+release: a dispatch or "Re-run all jobs" stops at `release-check`, which finds the tag.
+The tag precedes the build, so a build that fails for good leaves a tag without a
+release; the fix is a patch release. If `ci` fails before the tag, re-run the failed jobs
+rather than pushing a fix.
 `gates.yml` stays off until Johannes sets the repository variable `GATES_CALLER` to `1`,
 which he does only if the ruleset editor offers no "Require workflows" rule.
 
@@ -304,7 +309,9 @@ adoption PR confirms every item against the source as it is then.
   under `src/xippios/`. The ini option `xippios_package` names it where there are
   several, which none of the six sources has.
 - Item 8, conventions 1.15: the live workflow of §10 is the template's `live.yml`, which
-  every source renders already.
+  every source but comtrade renders already; comtrade renders it only with its v0.2.0
+  adoption (`chore/template-update-v0.2.0`). §10's family check is the
+  `tests/test_family.py` of item 2.
 - Item 9: `CHANGELOG.md` has a line under Unreleased naming core 0.2.1, template v0.2.1
   and conventions 1.15.
 
@@ -378,7 +385,12 @@ Two family checks read the pull request, not the package, so they are steps of t
 template's `ci.yml`, not tests; the checkout needs the history (`fetch-depth: 0`):
 
 ```yaml
-      # Conventions §12: every PR but a release or an adoption adds a CHANGELOG entry.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # both steps below diff against origin/<base>
+          persist-credentials: false
+      # Conventions §12: every PR but a release, an adoption or Dependabot's (which writes
+      # no entry) adds a CHANGELOG entry.
       - name: CHANGELOG.md has an entry
         if: >-
           github.event_name == 'pull_request'
@@ -392,28 +404,34 @@ template's `ci.yml`, not tests; the checkout needs the history (`fetch-depth: 0`
             echo "::error::CHANGELOG.md has no entry under Unreleased (conventions §12)"
             exit 1
           fi
-      # ADR-0019: the fixture files a PR adds or changes stay under 256 KiB.
+      # ADR-0019: the fixture files a PR adds or changes stay under 256 KiB. --no-renames
+      # lists a moved fixture as added, so one moved and grown is seen. LEVEL is warning in
+      # template v0.2.1 and error from v0.3.0, when the cap binds a source.
       - name: Fixture files under 256 KiB
         if: github.event_name == 'pull_request'
         env:
           BASE: ${{ github.base_ref }}
+          LEVEL: warning
         run: |
           over=0
           while IFS= read -r -d '' path; do
             size="$(stat -c %s "$path")"
             if [ "$size" -ge 262144 ]; then
-              echo "::error file=${path}::${size} bytes, over the 256 KiB cap (ADR-0019)"
+              echo "::${LEVEL} file=${path}::${size} bytes, over the 256 KiB cap (ADR-0019)"
               over=1
             fi
-          done < <(git diff -z --name-only --diff-filter=AM "origin/${BASE}...HEAD" -- tests/fixtures/)
-          exit "$over"
+          done < <(git diff -z --name-only --no-renames --diff-filter=AM "origin/${BASE}...HEAD" -- tests/fixtures/)
+          if [ "$LEVEL" = error ]; then
+            exit "$over"
+          fi
 ```
 
 The cap binds a source from its 0.3.0 adoption (conventions, header of 1.14), so
-template v0.2.1 renders the second step as a warning (`::warning` and no failing exit)
-and template v0.3.0 as the error above. Leaving Dependabot's branches out of the first
-step, since Dependabot writes no CHANGELOG entry, is a proposal for the template release
-to settle, not yet a decision.
+template v0.2.1 renders the second step with `LEVEL: warning`, a warning and no failing
+exit, and template v0.3.0 with `LEVEL: error`. Without `--no-renames`, git would report a
+moved fixture as a rename, which `--diff-filter=AM` leaves out. Dependabot's branches
+(`dependabot/`) are exempt from the first step, since Dependabot writes no CHANGELOG
+entry (Johannes's decision of 2026-10-26).
 
 ## Standing human gates
 
