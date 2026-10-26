@@ -44,8 +44,14 @@ PDF is ever read.
 6. **Fixtures and live tests.** A sample of each file kind (truncated per ADR-0019)
    lives under `tests/fixtures/files/<file_kind>/<case>.*` with a provenance line
    (release id, URL, sha256 and bytes of the full file, fetched time with `Z`); parser
-   tests run on it. One live test per file kind fetches the current release and checks
-   the parser still reads it: shape, headers and sheet names, never values.
+   tests run on it. The two formats serve two reads: the recorded exchange of a download
+   (ADR-0019 decision 5, the recorder's envelope with `truncated`) is what the plugin
+   replays for the download call; the sample file under
+   `tests/fixtures/files/<file_kind>/` is what the parser tests read, a small real or
+   truncated file, and since a binary file carries no comment, the samples' provenance
+   lives as one row per file in `tests/fixtures/files/README.md`. One live test per file
+   kind fetches the current release and checks the parser still reads it: shape, headers
+   and sheet names, never values.
 
 ## Consequences
 

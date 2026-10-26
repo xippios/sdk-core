@@ -376,9 +376,11 @@ route: `router_from_tasks` skips it, and no route returns a file path (ADR-0019)
 - A file-distributed source keeps a sample of each file kind under
   `tests/fixtures/files/<file_kind>/<case>.*` with a provenance line: the release id, the
   URL, the sha256 and bytes of the full file, and the fetched time in UTC with `Z`
-  (ADR-0020). Its parser tests run on the sample. One live test per file kind fetches the
-  current release and checks that the parser still reads it: shape, headers and sheet
-  names, never values.
+  (ADR-0020). A binary file carries no comment, so the lines are one row per file in
+  `tests/fixtures/files/README.md`. Its parser tests read the sample; the download call
+  replays the recorded exchange of the bullet above. One live test per file kind fetches
+  the current release and checks that the parser still reads it: shape, headers and
+  sheet names, never values.
 - Replay matches a fixture on method, host and path, and on the recorded query
   parameters a test names (`match_params`); a parameter whose recorded value holds
   `REDACTED` cannot be matched and is refused by name. A parameter's absence cannot be
