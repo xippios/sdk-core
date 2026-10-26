@@ -21,7 +21,7 @@ with the Enforced by CI and Process blocks and deletes Code, Tests and Docs.
 - [ ] every new endpoint wrapper matches `docs/upstream/` — names, parameters, semantics
 - [ ] errors raised are from the taxonomy in `docs/conventions.md` §5
 - [ ] public surface changes are reflected in `__init__.py` exports and the README status table
-- [ ] a core PR's ADR, or its description when it has none, names the two consumers of what it adds, or the one-consumer reason (ADR-0023 decision 3)
+- [ ] a core PR names the two consumers of what it adds (in its ADR, or in its description when it has none), or, in its ADR, the one-consumer reason of ADR-0023 decision 3
 
 ### Tests
 - [ ] each new task function has a fixture-backed unit test (`tests/fixtures/...` recorded, not hand-written)

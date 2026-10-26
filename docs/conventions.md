@@ -8,7 +8,8 @@ rules, the spared `key`, the packaged-answer rule, `published_at_naive`, the
 `None`-filter rule), bind a source from its 0.3.0 adoption (§15), since the code that
 serves them ships in core 0.3.0; until then a source records what its upstream answers
 and names a fixture over the cap in the PR description; a source that starts on a git
-pin of core 0.3.0 (the roadmap's pin rule) is bound from its first PR.
+pin of core 0.3.0 (the roadmap's pin rule) is bound by each rule from its first PR on a
+pin that carries the rule's code.
 
 ## 1. Naming
 

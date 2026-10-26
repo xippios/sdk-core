@@ -48,9 +48,9 @@ repository it reviews.
 10. **Live calls**: the description counts the live calls the PR spent, keyed calls by
     number (`none` is a count). The `family-review` workflow checks that the count is
     present and reads the PR's `ci` check.
-11. **Core PR** (`sdk-core`, code added): its ADR, or its description when it has none,
-    names the two consumers of what it adds, or the one-consumer reason (ADR-0023
-    decision 3).
+11. **Core PR** (`sdk-core`, code added): it names the two consumers of what it adds (in
+    its ADR, or in its description when it has none), or, in its ADR, the one-consumer
+    reason of ADR-0023 decision 3.
 12. **Adoption PR** (`chore/template-update*`): judged against conventions §15 and
     nothing else, that is the definition of done's Adoption PR block with its Enforced by
     CI and Process blocks; it deletes only what the adoption itself makes dead
