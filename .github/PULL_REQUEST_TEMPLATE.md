@@ -40,9 +40,11 @@ with the Enforced by CI and Process blocks and deletes Code, Tests and Docs.
 The reviewer judges an adoption PR against this list and nothing else: no new endpoints,
 tasks or fixtures ride along, and it deletes only the fixtures, mounts and tests the
 adoption itself makes dead (ADR-0018, amendment 2026-10-26). An adoption PR is a
-`chore/template-update*` PR: after the reviewer's `ready` the session enables
-auto-merge, and GitHub merges it once `ci` is green and review threads are resolved
-(ADR-0018).
+`chore/template-update*` PR: when its merge class is `auto` the session enables
+auto-merge after the reviewer's `ready`, and GitHub merges it once `ci` is green and
+review threads are resolved; a `human` adoption (a source-owned workflow, a changed
+template answer, a protected path) waits for Johannes (ADR-0018 decision 3; the merge
+classes are in the README of the organisation's `.github` repository).
 - [ ] core floor raised: `xippios-core~=X.Y.0`, or `~=X.Y.Z` when patch Z shipped what the source adopts (§12), and its extras likewise; a source package the source depends on bound to its own minor the same way (ADR-0021); from PyPI, no git pin, `uv.lock` updated
 - [ ] `copier update` to the template release, conflicts resolved
 - [ ] every local workaround a core change replaced is deleted, its tests with it, the core change named for each in the PR description
