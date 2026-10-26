@@ -51,3 +51,16 @@ APIs.
 - Docs only. Core reads whatever variable a source names (`resolve_api_key`, the
   `EnvKeyAuth` helpers) and the template accepts any `*_API_KEY` answer, so nothing in
   code waits.
+
+## Amendment 2026-10-26
+
+The nightly live tests spend a shared key too, so the shape of the live workflow that
+sdk-template renders becomes the rule for every source, stated in conventions §10 from
+1.15 on (queue row 29 d). A source runs its live tests in that one workflow,
+`.github/workflows/live.yml`: one job, `contents: read`, nightly and on
+`workflow_dispatch`, never on a pull request. The org secret named by `api_key_env`
+reaches only that job's `uv run pytest -m live` step, so checkout, setup-uv and `uv sync`
+never see it. Its start time is derived from the slug and folded onto 01:00 to 05:59 UTC,
+so the sources that read one key (`usda-psd`, `usda-esr` and `usda-gats` on
+`DATA_GOV_API_KEY`) start at different times and do not draw on the shared hourly quota
+together.
