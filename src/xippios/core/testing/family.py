@@ -31,8 +31,10 @@ than one fails every test here, naming the option. The repository's files (``REA
   ``tasks_write.__all__``, as ``assert_write_tools`` checks (conventions §8, ADR-0014);
 - every task, read and write, is a synchronous function returning ``Result[T]``
   (conventions §2, §6) whose docstring is a one-sentence first line and, when it takes
-  parameters, an ``Args:`` block (conventions §8);
-- ``README.md``'s status table lists exactly the tasks (conventions §13), in the format
+  parameters, an ``Args:`` block (conventions §8); no ``async_fn`` is required, since
+  conventions §6 makes the async variant optional;
+- ``README.md``'s status table lists exactly ``tasks.__all__`` plus
+  ``tasks_write.__all__``, a source's write tasks included (conventions §13), in the format
   of sdk-template's ``README.md.jinja``: the tables under the ``## Status`` heading whose
   header row has a ``Task function`` column; that cell starts with the task's name in
   backticks, alone, with its call (``get_data(commodity_code, market_year)``) or as
@@ -44,11 +46,13 @@ than one fails every test here, naming the option. The repository's files (``REA
 
 **Two family checks are CI steps, not tests**, since they read the pull request rather
 than the package; sdk-template's ``ci.yml`` carries them, on ``pull_request`` with the
-base fetched (``git diff --name-only origin/<base>...HEAD``): a pull request that is
-neither a release (``chore/release-*``) nor an adoption (``chore/template-update*``)
+whole history checked out (``fetch-depth: 0``, for ``git diff origin/<base>...HEAD``): a
+pull request that is neither a release (``chore/release-*``), an adoption
+(``chore/template-update*``) nor Dependabot's (``dependabot/``, which writes no entry)
 changes ``CHANGELOG.md`` (conventions §12, the definition of done); and the fixture files
-it adds or changes under ``tests/fixtures/`` stay under 256 KiB (ADR-0019), a rule that
-binds a source from its 0.3.0 adoption (conventions, header of 1.14).
+it adds or changes under ``tests/fixtures/``, a moved one included, stay under 256 KiB
+(ADR-0019). The cap binds a source from its 0.3.0 adoption (conventions, header of 1.14),
+so the step warns in template v0.2.1 and fails from v0.3.0.
 """
 
 import importlib
@@ -316,7 +320,8 @@ def test_family_tasks_return_results(family_source: FamilySource) -> None:
     """Every task is a synchronous function annotated to return ``Result[T]``.
 
     Sources expose sync functions (conventions §6); every task returns the envelope with
-    its metadata (conventions §2, §4).
+    its metadata (conventions §2, §4). An ``async_fn`` is not required: conventions §6
+    makes the async variant optional, and core's ``list_task`` has none.
     """
     problems = []
     for name, fn in _every_task(family_source).items():
@@ -413,9 +418,10 @@ def _status_table_tasks(readme: str) -> list[str] | None:
 def test_family_readme_status_table_lists_the_tasks(family_source: FamilySource) -> None:
     """``README.md``'s status table lists exactly ``tasks.__all__`` and ``tasks_write.__all__``.
 
-    The format is sdk-template's ``README.md.jinja``: the tables under ``## Status`` with
-    a ``Task function`` column, the task's name first in that cell, in backticks (the
-    module docstring has the details; conventions §13).
+    A source with write tasks lists them in its table too, so the read and the write
+    tasks together are expected. The format is sdk-template's ``README.md.jinja``: the
+    tables under ``## Status`` with a ``Task function`` column, the task's name first in
+    that cell, in backticks (the module docstring has the details; conventions §13).
     """
     readme = family_source.root / "README.md"
     if not readme.is_file():
