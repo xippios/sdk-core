@@ -502,7 +502,10 @@ on one minor (`xippios-core~=0.2.0`) and adopts the next through conventions §1
 
 The rules this package implements live in [docs/conventions.md](docs/conventions.md)
 and the decisions behind them in [docs/adr/](docs/adr/). Changes to a convention are
-their own PR plus an ADR.
+their own PR plus an ADR. [docs/roadmap.md](docs/roadmap.md) gives the order of the next
+core, template and source releases, and
+[docs/review-checklist.md](docs/review-checklist.md) the checklist every `sdk-*` PR is
+reviewed against.
 
 ## Licence
 
