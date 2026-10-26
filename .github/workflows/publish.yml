@@ -13,6 +13,13 @@
 # trigger of its own (the strict up-to-date policy tests every tree before it merges).
 # One workflow, because a tag pushed with GITHUB_TOKEN starts no other workflow. The file
 # name stays publish.yml: PyPI's trusted publisher names it.
+#
+# Recovery. The tag precedes the build, so a build that fails for good leaves a tag
+# without a release; the fix is a patch release. Once the tag exists, only "Re-run failed
+# jobs" finishes the release: a dispatch or "Re-run all jobs" stops at release-check,
+# which finds the tag. If the `pypi` environment's deployment-branch policy rejects main
+# on the first run, Johannes sets the policy to `main` and re-runs the failed jobs. If
+# `ci` fails before the tag, re-run the failed jobs rather than pushing a fix.
 name: Publish to PyPI
 
 on:
@@ -22,6 +29,11 @@ on:
 
 permissions:
   contents: read
+
+# One run per ref at a time, none cancelled, so two releases never tag at once.
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   release-check:
