@@ -110,6 +110,10 @@ they re-pin to a SHA that carries ADR-0022's code. Both adopt template v0.3.0 on
 | 2 | `sdk-faostat` | Eurostat's CSV/bulk pattern settled | keyed (a login bearer token), JSON data plus open bulk ZIP/CSV |
 | 3 | `sdk-usda-nass` 0.3.0 | nass 0.2.0 released; core 0.3.0 | the bulk datasets as `parse/` modules and bulk tasks |
 
+The "Starts after" column marks the start of a package's tasks work; the snapshot and
+design-round PRs of esmis and eurostat start earlier, on core 0.2.1 and template v0.2.1
+without a pin (§3).
+
 Per package:
 
 - **esmis.** Host `https://esmis.nal.usda.gov`. Precondition check: fetch the OpenAPI
