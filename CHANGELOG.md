@@ -18,15 +18,18 @@ All notable changes to this project are documented here. The format follows
   `vX.Y.Z` on the merge commit with the CHANGELOG section as its message, the build
   checked against that tag, and the `pypi` environment that Johannes approves. A
   session never pushes a tag; sdk-usda-psd's v0.2.0 tag on the wrong commit, caught by
-  the old workflow, was the case.
+  the old workflow, was the case. One run per ref at a time, none cancelled; the
+  workflow's header and `docs/handover.md` give the recovery path ("Re-run failed jobs"
+  once the tag exists; a build that fails for good after the tag needs a patch release).
 - **The family conformance check** (plan WP6; Johannes's decision D12 of 2026-10-26),
   `xippios.core.testing.family`: what every source shares, tested once, collected with
   one line, `from xippios.core.testing.family import *  # noqa: F403`, in a
   template-rendered `tests/test_family.py`. Empty namespace levels, `py.typed`,
   `__version__`; `mcp.py` and `http.py` serve exactly `tasks.__all__` minus
-  `BULK_TASKS`, the write server exactly `tasks_write.__all__`; every task synchronous,
-  returning `Result[T]`, with an agent docstring; the README status table, in the format
-  of sdk-template's `README.md.jinja`, lists exactly the tasks; `.copier-answers.yml`
+  `BULK_TASKS`, the write server exactly `tasks_write.__all__`; every task synchronous
+  (no `async_fn` required, conventions §6), returning `Result[T]`, with an agent
+  docstring; the README status table, in the format of sdk-template's
+  `README.md.jinja`, lists exactly the read and the write tasks; `.copier-answers.yml`
   names a template tag; `pyproject.toml` bounds `xippios-core` and its extras with
   `~=X.Y.Z`. The package under test is the ini option `xippios_package`, which the
   plugin registers, or the one `tasks.py` under `src/xippios/`. It replaces the three
@@ -34,8 +37,9 @@ All notable changes to this project are documented here. The format follows
   `tests/test_adapters.py` and the structural part of `tests/test_tasks.py`
   (sdk-usda-psd, sdk-usda-nass, sdk-usda-esr, sdk-usda-gats, sdk-comtrade,
   sdk-cashctrl). Two family checks are CI steps instead, documented for the template in
-  `docs/handover.md`: a CHANGELOG entry on every PR but a release or an adoption, and the
-  256 KiB cap on the fixture files a PR adds or changes (ADR-0019).
+  `docs/handover.md`: a CHANGELOG entry on every PR but a release, an adoption or
+  Dependabot's, and the 256 KiB cap on the fixture files a PR adds or changes, a moved
+  one included (ADR-0019), a warning in template v0.2.1 and an error from v0.3.0.
 - **Shared test helpers** (C12, moved from 0.3.0 to 0.2.1; ADR-0023 decision 2, each
   carried by two sources or more):
   - the plugin's `anyio_backend`, asyncio, which the conftest of all six sources and of
@@ -70,11 +74,12 @@ All notable changes to this project are documented here. The format follows
   merges.
 - **Every action in the three workflows is pinned by commit SHA**, its version in a
   comment, as in the `xippios/.github` repository.
-- **The sdist's include and exclude patterns are anchored at the root** (row 29 c):
-  unanchored, `README.md` and `LICENSE` match a file of that name at any depth. The
-  sdist's file list is unchanged.
-- **The `testing` extra declares `packaging`**, which the family check reads the core
-  bound with and which pytest already required.
+- **The sdist's include and exclude patterns are anchored at the root** (row 29 c,
+  found in sdk-template's T1 fix round): unanchored, `README.md` and `LICENSE` match a
+  file of that name at any depth. The sdist's file list is unchanged.
+- **The `testing` extra declares `packaging>=22`**, which the family check reads the
+  core bound with and which pytest already required; 22.0 is the first release whose
+  versions and specifiers are PEP 440 only.
 
 ### Documentation
 
@@ -144,27 +149,47 @@ All notable changes to this project are documented here. The format follows
   carrying an ADR or an amendment.
 - **`.github/PULL_REQUEST_TEMPLATE.md`** mirrors the definition of done, its Adoption PR
   block included, with the Assumptions, Open questions and Decisions taken headings.
-- **Conventions 1.15**: §10 states the live workflow the template renders, one job,
+- **Conventions 1.15**: §10 states the one live workflow, `.github/workflows/live.yml`,
+  in the shape the template renders, which a source whose secrets differ keeps: one job,
   `contents: read`, nightly and on `workflow_dispatch`, the key reaching only its pytest
-  step, sources that share a key staggering their start (ADR-0009 amendment; row 29 d);
-  §15 and the definition of done's Adoption PR intro: the session enables auto-merge on
-  an adoption PR only when its merge class is `auto`, and a `human` adoption waits for
-  Johannes (ADR-0018 decision 3; the merge classes of the `.github` repository's
+  step, sources that share a key staggering their start (ADR-0009 amendment; row 29 d,
+  found by sdk-template's T1 review); §10 names the family conformance check,
+  `xippios.core.testing.family`, which the rendered `tests/test_family.py` collects and
+  every source's CI runs (ADR-0013 amendment; Johannes's decision of 2026-10-26); §15
+  and the definition of done's Adoption PR intro: the session enables auto-merge on an
+  adoption PR only when its merge class is `auto`, and a `human` adoption waits for
+  Johannes (ADR-0018, amendment (e); the merge classes of the `.github` repository's
   README). `.github/PULL_REQUEST_TEMPLATE.md` mirrors the intro.
 - **ADR-0009, amendment 2026-10-26**: the live workflow's shape is the rule for every
   source, since the nightly live tests spend a shared key too.
+- **ADR-0013, amendment 2026-10-26**: the plugin's guarantees extend to the family
+  invariants the template-rendered `tests/test_family.py` collects.
+- **ADR-0018, amendment (e)**: decision 3's auto-merge of adoption and release PRs after
+  the reviewer's `ready` applies only to a PR whose merge class is `auto`; a `human`
+  adoption or release (a source-owned workflow, a changed template answer, a protected
+  path, a build or install route) waits for Johannes (his merge-class decision of
+  2026-10-26).
 - **`docs/roadmap.md`**: a pinned new source swaps to `~=0.3.0` in its single v0.3.0
   adoption PR, since a release PR changes only the §12 subset; eurostat's design round
   is the session's first interview; faostat's paging and limits are verified with the
-  credential at the session's step 0, once Johannes provides the FAO account at its G1.
+  credential at the session's step 0, once Johannes provides the FAO account at its G1;
+  the release check fires on a change of the version or of `CHANGELOG.md`, so a first
+  release tags itself; the snapshot and design-round PRs of esmis and eurostat start on
+  template v0.2.1 and core 0.2.1 without a pin, the scaffold carries `core_git_ref` only
+  when the C14+C15 SHA exists, else a re-pin PR precedes the first tasks PR, and a
+  re-pin to a SHA with ADR-0022's code precedes the reference-data PR; eurostat proves a
+  keyless render of template v0.2.1 with `new-source.sh --local-only`, and the
+  login-keyed case (faostat) is not a template variant (ADR-0023, ADR-0008).
 - **`CLAUDE.md` and `docs/handover.md`** describe the release train: a session never
   tags, the release PR's merge tags, Johannes approves `pypi`. `docs/handover.md` gains
-  "Core 0.2.1" and "Adopting core 0.2.1", per source, with the template's two CI steps.
+  "Core 0.2.1", with the release's recovery path, and "Adopting core 0.2.1", per source,
+  with the template's two CI steps.
 
 ### Hand-apply for sources
 
-What a source's adoption of 0.2.1 changes by hand, in files the template does not
-update; `docs/handover.md`, "Adopting core 0.2.1", names them per source.
+What a source's adoption of 0.2.1 changes by hand: files the template does not update,
+and the values `copier update` takes from the answers; `docs/handover.md`, "Adopting core
+0.2.1", names them per source.
 
 - `pyproject.toml` — `xippios-core~=0.2.1` and its extras likewise, from
   `core_version=0.2.1` — `tests/test_family.py` imports what 0.2.0 lacks (ADR-0018,
