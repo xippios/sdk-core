@@ -104,5 +104,6 @@ build or install route) waits for Johannes. The classes are defined in the READM
 `xippios/.github` repository, whose `merge-class` check computes them for every pull
 request. This rests on Johannes's merge-class decision of 2026-10-26: a pull request
 merges automatically after CI, the merge-class check and the review, unless its class is
-`human`. Conventions §15 and the definition of done's Adoption PR intro state it from
-1.15 on, citing "ADR-0018, amendment (e)".
+`human`. Conventions §15, the definition of done's Adoption PR intro and its Process
+line (and the Process line's copy in the PR template) state it from 1.15 on, citing
+"ADR-0018, amendment (e)".

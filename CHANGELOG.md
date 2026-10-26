@@ -23,8 +23,10 @@ All notable changes to this project are documented here. The format follows
   workflow's header and `docs/handover.md` give the recovery path ("Re-run failed jobs"
   once the tag exists; a build that fails for good after the tag needs a patch release)
   and the race of two pushes to `main` close together (the second run's tag push fails
-  red, or tags a later commit when the first run's `ci` failed; "Re-run failed jobs" on
-  the right run; a release is not merged while another release run is waiting).
+  red, or tags a later commit when the first run's `ci` failed; re-run the failed jobs
+  of the run whose commit is the release, and if the other run already tagged a later
+  commit, Johannes rejects its `pypi` deployment and the release is re-done as a patch;
+  a release is not merged while another release run is waiting).
 - **The family conformance check** (plan WP6; Johannes's decision D12 of 2026-10-26),
   `xippios.core.testing.family`: what every source shares, tested once, collected with
   one line, `from xippios.core.testing.family import *  # noqa: F403`, in a
@@ -159,13 +161,14 @@ All notable changes to this project are documented here. The format follows
   step, sources that share a key staggering their start (ADR-0009 amendment; row 29 d,
   found by sdk-template's T1 review); §10 names the family conformance check,
   `xippios.core.testing.family`, which the rendered `tests/test_family.py` collects and
-  every source's CI runs (ADR-0013 amendment; Johannes's decision of 2026-10-26); §15
-  and the definition of done's Adoption PR intro: the session enables auto-merge on an
-  adoption PR only when its merge class is `auto`, and a `human` adoption waits for
-  Johannes (ADR-0018, amendment (e); the merge classes of the `.github` repository's
-  README), and the definition of done's Process line allows the session's one merge
-  action, auto-merge on an adoption or `chore/release-*` PR, only when its merge class is
-  `auto` (ADR-0018, amendment (e)). `.github/PULL_REQUEST_TEMPLATE.md` mirrors both.
+  every source's CI runs (ADR-0013 amendment; the family session, 2026-10-26, confirmed
+  at the merge); §15 and the definition of done's Adoption PR intro: the session enables
+  auto-merge on an adoption PR only when its merge class is `auto`, and a `human`
+  adoption waits for Johannes (ADR-0018, amendment (e); the merge classes of the
+  `.github` repository's README), and the definition of done's Process line allows the
+  session's one merge action, auto-merge on an adoption or `chore/release-*` PR, only
+  when its merge class is `auto` (ADR-0018, amendment (e)).
+  `.github/PULL_REQUEST_TEMPLATE.md` mirrors both.
 - **ADR-0009, amendment 2026-10-26**: the live workflow's shape is the rule for every
   source, since the nightly live tests spend a shared key too.
 - **ADR-0013, amendment 2026-10-26**: the plugin's guarantees extend to the family

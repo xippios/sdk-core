@@ -25,8 +25,10 @@
 # for the next, so a release run queued behind a run waiting at `pypi` would be lost.
 # Two pushes to main close together can therefore both see an untagged version: the
 # second run's tag push then fails red, or, if the first run's `ci` failed, the second
-# tags a later commit. The fix is "Re-run failed jobs" on the right run, and a release
-# is not merged while another release run is waiting.
+# tags a later commit. The fix: re-run the failed jobs of the run whose commit is the
+# release; if the other run already tagged a later commit, Johannes rejects its `pypi`
+# deployment and the release is re-done as a patch. A release is not merged while
+# another release run is waiting.
 name: Publish to PyPI
 
 on:

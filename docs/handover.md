@@ -281,8 +281,10 @@ rather than pushing a fix. `publish.yml` has no `concurrency` group: GitHub keep
 pending run per group and cancels it for the next, so a release run queued behind a run
 waiting at `pypi` would be lost. Two pushes to `main` close together can therefore both
 see an untagged version: the second run's tag push then fails red, or, if the first
-run's `ci` failed, the second tags a later commit. The fix is "Re-run failed jobs" on
-the right run, and a release is not merged while another release run is waiting.
+run's `ci` failed, the second tags a later commit. The fix: re-run the failed jobs of
+the run whose commit is the release; if the other run already tagged a later commit,
+Johannes rejects its `pypi` deployment and the release is re-done as a patch. A release
+is not merged while another release run is waiting.
 `gates.yml` stays off until Johannes sets the repository variable `GATES_CALLER` to `1`,
 which he does only if the ruleset editor offers no "Require workflows" rule.
 
@@ -436,7 +438,8 @@ template v0.2.1 renders the second step with `LEVEL: warning`, a warning and no 
 exit, and template v0.3.0 with `LEVEL: error`. Without `--no-renames`, git would report a
 moved fixture as a rename, which `--diff-filter=AM` leaves out. Dependabot's branches
 (`dependabot/`) are exempt from the first step, since Dependabot writes no CHANGELOG
-entry (Johannes's decision of 2026-10-26).
+entry (the family session, 2026-10-26, confirmed at the merge; the merge gates'
+Dependabot rule).
 
 ## Standing human gates
 
