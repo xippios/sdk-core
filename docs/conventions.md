@@ -84,6 +84,10 @@ skip it (§8, §9; ADR-0019).
   states it (`© 2026 CashCtrl Ltd.`) and the URL the text was fetched from. A vendor's
   objection is honoured by replacing the snapshot with a summary that keeps the names and
   semantics the wrappers rely on.
+- A source whose API is one part of a shared upstream document (several FAS APIs
+  described in one OpenAPI document) snapshots its own part and records the full
+  document's byte size and sha256 in `FETCHED.md`, so a refresh can tell the part from
+  the whole (ADR-0003).
 - Within-source hygiene is required: dates → `datetime.date`/`datetime`, numbers →
   `int`/`Decimal`/`float` as appropriate, upstream enums → `StrEnum`, pagination
   resolved, errors typed. An upstream enum of integer ids becomes an `IntEnum` instead,
