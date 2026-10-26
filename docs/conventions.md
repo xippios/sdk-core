@@ -448,11 +448,11 @@ which §12 bounds to one minor.
 - A source depends on one core minor with an upper bound, `xippios-core~=0.2.0`, and its
   extras likewise (`xippios-core[mcp]~=0.2.0`); the template renders it as `~=X.Y.0`,
   or `~=X.Y.Z` when patch Z shipped what the source adopts, still one minor
-  (ADR-0018). Core patch releases stay compatible. While core is 0.x it keeps no backward
-  compatibility across minors: a new core minor may break, and a source adopts it
-  through §15 before its next release. From 1.0 a breaking change bumps the major
-  (SemVer), and the `~=` bound stays. A source already published with an open bound
-  stays as published and gets the bound with its next release.
+  (ADR-0018, amendment 2026-10-26). Core patch releases stay compatible. While core is
+  0.x it keeps no backward compatibility across minors: a new core minor may break, and
+  a source adopts it through §15 before its next release. From 1.0 a breaking change
+  bumps the major (SemVer), and the `~=` bound stays. A source already published with an
+  open bound stays as published and gets the bound with its next release.
 - `CHANGELOG.md` in Keep a Changelog format; every PR adds an entry under Unreleased.
 - The release train (ADR-0018, amendment 2026-10-26): the reference-data refresh, where
   a source has one, is its own PR before the release PR, and a release PR changes only
@@ -461,9 +461,11 @@ which §12 bounds to one minor.
   template-owned). Release = the release PR merges on `main` → `publish.yml` tags
   `vX.Y.Z` from `pyproject.toml` on the merge commit → environment `pypi` → a human
   approves → the trusted publisher uploads. A tag ruleset admits no other `v*` tag.
-  Until a repository's `publish.yml` tags itself (core 0.2.1 and template v0.2.1 ship
-  that workflow), its tag is pushed by Johannes from his own account. Yanks are a human
-  action. No tokens anywhere.
+  sdk-template, which publishes nothing to PyPI, tags from the top `## [X.Y.Z] - `
+  heading of its `CHANGELOG.md` with its own `release.yml`, under the same ruleset.
+  Until a repository's workflow tags itself (core 0.2.1 and template v0.2.1 ship it),
+  its tag is pushed by Johannes from his own account. Yanks are a human action. No
+  tokens anywhere.
 - A source may depend on another source package, consuming its task layer only: it
   imports `xippios.<dep>.tasks` and its models, never `api/` or `_client`, and declares
   `xippios-<dep>~=X.Y.0`, one minor, like core (ADR-0021). Both share one core minor:
@@ -528,6 +530,6 @@ are resolved.
    versions adopted.
 
 An adoption PR changes nothing else: no new endpoints, tasks or fixtures ride along. It
-may delete fixtures, mounts and tests that the adoption itself makes dead, and nothing
-more. The reviewer judges it against this list and nothing else (definition of done,
-block "Adoption PR").
+may delete the fixtures, mounts and tests that the adoption itself makes dead, and
+nothing more (ADR-0018, amendment 2026-10-26). The reviewer judges it against this list
+and nothing else (definition of done, block "Adoption PR").

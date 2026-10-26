@@ -38,10 +38,12 @@ with the Enforced by CI and Process blocks and deletes Code, Tests and Docs.
 
 ### Adoption PR (conventions §15)
 The reviewer judges an adoption PR against this list and nothing else: no new endpoints,
-tasks or fixtures ride along. An adoption PR is a `chore/template-update*` PR: after the
-reviewer's `ready` the session enables auto-merge, and GitHub merges it once `ci` is
-green and review threads are resolved (ADR-0018).
-- [ ] core floor raised: `xippios-core~=X.Y.0` (e.g. `~=0.2.0`, §12) and its extras likewise; a source package the source depends on bound to its own minor the same way (ADR-0021); from PyPI, no git pin, `uv.lock` updated
+tasks or fixtures ride along, and it deletes only the fixtures, mounts and tests the
+adoption itself makes dead (ADR-0018, amendment 2026-10-26). An adoption PR is a
+`chore/template-update*` PR: after the reviewer's `ready` the session enables
+auto-merge, and GitHub merges it once `ci` is green and review threads are resolved
+(ADR-0018).
+- [ ] core floor raised: `xippios-core~=X.Y.0`, or `~=X.Y.Z` when patch Z shipped what the source adopts (§12), and its extras likewise; a source package the source depends on bound to its own minor the same way (ADR-0021); from PyPI, no git pin, `uv.lock` updated
 - [ ] `copier update` to the template release, conflicts resolved
 - [ ] every local workaround a core change replaced is deleted, its tests with it, the core change named for each in the PR description
 - [ ] logic duplicated across sources moved into core or dropped; what core lacks is carried by the source and named in a queue row, a second copy only when the row names both sources, never a third (ADR-0023)

@@ -43,7 +43,8 @@ review changes nothing in the repository it reviews.
     adds, or states the one-consumer reason under ADR-0023 decision 3.
 12. **Adoption PR** (`chore/template-update*`): judged against conventions §15 and
     nothing else, that is the definition of done's Adoption PR block with its Enforced by
-    CI and Process blocks; it deletes only what the adoption itself makes dead.
+    CI and Process blocks; it deletes only what the adoption itself makes dead
+    (ADR-0018, amendment 2026-10-26).
 13. **Release PR** (`chore/release-*`, the version in `pyproject.toml` changed): it
     changes only the subset of conventions §12 (`pyproject.toml`, `uv.lock`,
     `CHANGELOG.md`, `README.md`, `CLAUDE.md`, `docs/handover.md`, and
