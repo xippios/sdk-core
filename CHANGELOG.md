@@ -79,10 +79,11 @@ below lists what that PR changes by hand.
     sdk-usda-psd and sdk-usda-esr).
   A query parameter sent or recorded more than once fails the two query helpers rather
   than losing a value.
-- **`.github/workflows/gates.yml`** (Johannes's decision of 2026-10-26, as a fallback):
-  calls the `merge-class` and `family-review` workflows of `xippios/.github` as jobs,
-  each only when the repository variable `GATES_CALLER` is `1`, which Johannes sets per
-  repository if the ruleset editor offers no "Require workflows" rule. It ships off.
+- **`.github/workflows/gates.yml`** (Johannes's decision of 2026-10-26, as a fallback;
+  ADR-0018, amendment (e): the merge classes its check posts): calls the `merge-class`
+  and `family-review` workflows of `xippios/.github` as jobs, each only when the
+  repository variable `GATES_CALLER` is `1`, which Johannes sets per repository if the
+  ruleset editor offers no "Require workflows" rule. It ships off.
 
 ### Changed
 
@@ -130,15 +131,15 @@ below lists what that PR changes by hand.
   (`bankAccounts[].iban`) is still parsing only; an adoption PR, which fetches nothing,
   leaves `FETCHED.md` to the next `/refresh-upstream` and ports only the capture
   script's changes.
-- **ADR-0018, amendment 2026-10-26**: (a) decision 3 covers sdk-template's release
-  PRs, which auto-merge after the reviewer's `ready` like core's and a source's; (b) the
+- **ADR-0018, amendment 2026-10-26**: (a) decision 3 covers sdk-template's release PRs,
+  which auto-merge after the reviewer's `ready` like core's and a source's; (b) the
   release train replaces the human tag: the release PR's merge runs `publish.yml`, which
   tags `vX.Y.Z` on the merge commit, and the approval of the `pypi` environment run is
   the human gate; sdk-template tags from its CHANGELOG's top heading with its own
   `release.yml`; until a repository's workflow tags itself, Johannes pushes its tag;
   (c) the core bound may read `~=X.Y.Z` when patch Z shipped what the source adopts,
-  still one minor; (d) an adoption PR may delete the fixtures, mounts and tests the adoption
-  itself makes dead, and nothing else rides along.
+  still one minor; (d) an adoption PR may delete the fixtures, mounts and tests the
+  adoption itself makes dead, and nothing else rides along.
 - **`docs/roadmap.md`**: core 0.2.1 and template v0.2.1 as the first step, core 0.3.0
   opening with a PR that deletes what has no consumer, and the order of the next
   sources; faostat's API is keyed by a login bearer token (probed 2026-10-26), and
@@ -214,7 +215,7 @@ and the values `copier update` takes from the answers; `docs/handover.md`, "Adop
 
 - `pyproject.toml` — `xippios-core~=0.2.1` and its extras likewise, from
   `core_version=0.2.1` — `tests/test_family.py` imports what 0.2.0 lacks (ADR-0018,
-  amendment c).
+  amendment (c)).
 - `tests/test_tasks.py` — delete `test_package_has_a_version` and
   `test_task_is_a_sync_facade_with_an_agent_docstring` — the family check makes them.
 - `tests/test_client.py` (sdk-usda-psd, sdk-usda-esr, sdk-usda-gats),
