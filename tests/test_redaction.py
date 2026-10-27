@@ -24,7 +24,8 @@ def test_one_redacted_everywhere() -> None:
 @pytest.mark.parametrize(
     "name",
     ["api_key", "apikey", "API_KEY", "x-api-key", "api-key", "access_token", "client_secret",
-     "password", "passwd", "auth", "Authorization", "signature", "credential", "credentials"],
+     "password", "passwd", "pwd", "auth", "Authorization", "sig", "X-Amz-Signature",
+     "credential", "credentials"],
 )  # fmt: skip
 def test_a_credential_word_is_always_a_credential(name: str) -> None:
     assert is_credential_name(name)

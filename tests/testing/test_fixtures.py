@@ -162,15 +162,34 @@ def test_max_bytes_cuts_a_text_at_a_character_boundary(tmp_path: Path) -> None:
     assert load_fixture(path) == fixture
 
 
-def test_max_bytes_keeps_the_first_whole_elements_of_a_json_array() -> None:
-    # Row 43 (sdk-usda-gats): list fixtures over the 256 KiB cap.
-    rows = [{"id": i, "name": "Côte d'Ivoire"} for i in range(100)]
-    body = json.dumps(rows, indent=2).encode()
-    fixture = fixture_from_response(_answer(body, "application/json"), max_bytes=100)
-    assert json.loads(fixture.response.body) == rows[:3]  # 2 brackets, 3 x 32 bytes, 2 commas
-    compact = json.dumps(rows[:3], ensure_ascii=False, separators=(",", ":"))
-    assert fixture.response.body == compact
-    assert (fixture.response.truncated, fixture.response.original_count) == (True, 100)
+def test_max_bytes_cuts_a_json_array_at_an_element_boundary_of_its_text() -> None:
+    # Row 43 (sdk-usda-gats): list fixtures over the 256 KiB cap. Upstream's text is kept:
+    # 1.50 stays 1.50 and a long figure keeps its digits, as a Decimal parser needs.
+    body = '\ufeff[\n  {"id": 0, "v": 1.50},\n  {"id": 1, "v": 12345678901234567890.1},\n'
+    body += "".join(f'  {{"id": {i}, "v": 2.00}},\n' for i in range(2, 50)) + '  {"id": 50}\n]'
+    fixture = fixture_from_response(_answer(body.encode(), "application/json"), max_bytes=80)
+    kept = '\ufeff[\n  {"id": 0, "v": 1.50},\n  {"id": 1, "v": 12345678901234567890.1}]'
+    assert fixture.response.body == kept  # 75 bytes; the third element would end at 101
+    assert (fixture.response.truncated, fixture.response.original_count) == (True, 51)
+    assert httpx.Response(200, content=kept.encode()).json()[1]["v"] == 12345678901234567890.1
+    with pytest.raises(ValueError, match=r"^max_bytes: the JSON array's first element alone"):
+        fixture_from_response(_answer(body.encode(), "application/json"), max_bytes=20)
+
+
+def test_max_bytes_never_keeps_part_of_a_secret_or_of_the_host() -> None:
+    request = httpx.Request("GET", f"https://{TENANT}/v1/export")
+    text = "name\nacme-tenant\n" + f"https://{TENANT}/x\n" * 20
+    answer = httpx.Response(200, content=text.encode(), request=request)
+    scrub = Scrub(host=PLACEHOLDER, secrets=["acme-tenant"])
+    fixture = fixture_from_response(answer, scrub=scrub, max_bytes=13)  # "...\nacme-ten"
+    assert fixture.response.body == "name\n"
+    fixture = fixture_from_response(answer, scrub=scrub, max_bytes=30)  # "...https://acme.exa"
+    assert fixture.response.body == f"name\n{REDACTED}\nhttps://"
+    first = httpx.Response(200, content=b"acme-tenant\n" * 20, request=request)
+    with pytest.raises(ValueError, match=r"^max_bytes: a cut at 5 bytes keeps nothing"):
+        fixture_from_response(first, scrub=scrub, max_bytes=5)
+    with pytest.raises(ValueError, match=r"^max_bytes: a cut at 1 bytes keeps nothing"):
+        fixture_from_response(_answer("Île".encode() * 10, "text/plain"), max_bytes=1)
 
 
 @pytest.mark.parametrize(
@@ -181,6 +200,7 @@ def test_max_bytes_keeps_the_first_whole_elements_of_a_json_array() -> None:
             "application/json",
             "a JSON body that is not an array",
         ),
+        (b"[1, 2, 3" + b", 4" * 20, "application/json", "the body is declared application/json"),
         (b"<data>" + b"<row/>" * 20 + b"</data>", "application/xml", "an XML body"),
         (b"<?xml version='1.0'?><data/>" + b" " * 50, "text/plain", "an XML body"),
         (b"PK\x03\x04" + b"\x00" * 60, "application/zip", "a ZIP body"),

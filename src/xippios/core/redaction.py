@@ -6,10 +6,11 @@ all ask this module, so a name is a credential in all of them or in none.
 
 A parameter name is a credential when one of these words stands in it as a whole word,
 between ``_``, ``-`` or the ends of the name, in any letter case: ``api_key`` (also
-``apikey``, ``api-key``), ``token``, ``secret``, ``password``, ``passwd``, ``auth``,
-``authorization``, ``signature``, ``credential``, ``credentials``. ``x-api-key``,
-``access_token`` and ``client_secret`` are credentials; ``keyword``, ``author``,
-``tokens_used`` and ``sort_key`` are data. A bare ``key`` is not on the list: Eurostat's
+``apikey``, ``api-key``), ``token``, ``secret``, ``password``, ``passwd``, ``pwd``,
+``auth``, ``authorization``, ``sig``, ``signature``, ``credential``, ``credentials``.
+``x-api-key``, ``access_token``, ``client_secret`` and the ``sig`` of a pre-signed
+storage URL (Azure SAS) are credentials; ``keyword``, ``author``, ``tokens_used``,
+``design`` and ``sort_key`` are data. A bare ``key`` is not on the list: Eurostat's
 SDMX series ``key`` is data (ADR-0019, decision 6).
 
 A name a ``QueryKeyAuth`` sends its key under is registered when that auth object is
@@ -44,7 +45,8 @@ REDACTED: Final = "REDACTED"
 
 _CREDENTIAL_WORD = re.compile(
     r"(?i)(?:^|[_-])"
-    r"(?:api[_-]?key|token|secret|password|passwd|auth|authorization|signature|credentials?)"
+    r"(?:api[_-]?key|token|secret|password|passwd|pwd|auth|authorization|sig|signature"
+    r"|credentials?)"
     r"(?:[_-]|$)"
 )
 _SENSITIVE_HEADERS = frozenset(
@@ -81,8 +83,11 @@ def register_credential_name(name: str) -> None:
 def is_credential_name(name: str) -> bool:
     """True when the value of a parameter called ``name`` must never be kept or shown.
 
-    A whole word of the module's list (``api_key``, ``token``, ``secret``, ...), or a name
-    a ``QueryKeyAuth`` registered (``key`` for USDA NASS).
+    A whole word of the module's list (``api_key``, ``token``, ``secret``, ``sig``, ...),
+    or a name a ``QueryKeyAuth`` registered (``key`` for USDA NASS).
+
+    Args:
+        name: A parameter or mapping key name, e.g. ``"access_token"``.
     """
     return name.lower() in _registered or _CREDENTIAL_WORD.search(name) is not None
 
@@ -99,6 +104,9 @@ def redact_credentials(mapping: Mapping[str, Any]) -> dict[str, Any]:
     """A copy of ``mapping`` with every credential's value ``REDACTED``, at any depth.
 
     Nested mappings and lists are copied too; ``mapping`` itself is not changed.
+
+    Args:
+        mapping: Request parameters, e.g. ``{"key": "...", "year": 2024}``.
     """
     return {
         key: REDACTED if isinstance(key, str) and is_credential_name(key) else _redact_value(value)
@@ -107,12 +115,20 @@ def redact_credentials(mapping: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def scrub_params(items: Iterable[tuple[str, str]]) -> list[tuple[str, str]]:
-    """The query parameters ``items`` with every credential's value ``REDACTED``, in order."""
+    """The query parameters ``items`` with every credential's value ``REDACTED``, in order.
+
+    Args:
+        items: ``(name, value)`` pairs, e.g. ``url.params.multi_items()``.
+    """
     return [(name, REDACTED if is_credential_name(name) else value) for name, value in items]
 
 
 def scrub_url(url: httpx.URL | str) -> str:
-    """The URL as text, every credential's query value and the userinfo ``REDACTED``."""
+    """The URL as text, every credential's query value and the userinfo ``REDACTED``.
+
+    Args:
+        url: A URL, e.g. ``"https://api.example.test/v1/x?api_key=...&year=2024"``.
+    """
     parsed = httpx.URL(url)
     params = httpx.QueryParams(tuple(scrub_params(parsed.params.multi_items())))
     cleaned = parsed.copy_with(params=params)
@@ -126,6 +142,9 @@ def scrub_headers(items: Iterable[tuple[str, str]]) -> list[tuple[str, str]]:
 
     ``Authorization``, ``Proxy-Authorization``, ``Cookie``, ``Set-Cookie``,
     ``X-Api-Key``, ``Api-Key`` and ``X-Auth-Token``, in any letter case.
+
+    Args:
+        items: ``(name, value)`` pairs, e.g. ``response.headers.multi_items()``.
     """
     return [
         (name, REDACTED if name.lower() in _SENSITIVE_HEADERS else value) for name, value in items

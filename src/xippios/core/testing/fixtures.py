@@ -14,6 +14,7 @@ loads.
 import base64
 import hashlib
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -133,14 +134,18 @@ def fixture_from_response(
     on what is kept, as the verify does (ADR-0019, decision 5; conventions §10):
 
     - a JSON array (a ``Content-Type`` of ``application/json`` or ``...+json``, or a
-      body that parses as JSON) keeps its first whole elements whose compact JSON text
-      (``json.dumps`` with ``separators=(",", ":")`` and ``ensure_ascii=False``, so a
-      number reads as Python writes it, ``1.50`` as ``1.5``) fits in ``max_bytes``
-      bytes of UTF-8, with ``original_count`` the array's length;
+      body that parses as JSON, a byte order mark allowed) is cut at an element
+      boundary in its original text, numbers and spacing as upstream wrote them: the
+      first whole elements that fit in ``max_bytes`` bytes of UTF-8 with a closing
+      ``]``, ``original_count`` the array's length; an array whose first element alone
+      does not fit is refused;
     - any other text is cut at ``max_bytes`` bytes, back to the last whole UTF-8
-      character;
-    - a JSON object is refused: record a small real answer instead (a short date range,
-      one commodity), since its parts are no list to take the first of;
+      character and back to the start of a secret value or of the request host
+      (``scrub``) that the cut would split, so no part of one is kept; a cut that keeps
+      nothing is refused;
+    - a JSON object, and a body declared JSON that does not parse, are refused: record
+      a small real answer instead (a short date range, one commodity), since an
+      object's parts are no list to take the first of;
     - XML (``text/xml``, ``application/xml``, ``...+xml``, or a body starting with
       ``<?xml``), ZIP, XLSX, gzip and XLS bodies, and a body that is not UTF-8 text, are
       refused: record a small real sample (a short query, one member of the archive, a
@@ -155,8 +160,10 @@ def fixture_from_response(
         response: The response, with the request that produced it.
         scrub: What else to remove before anything is kept, e.g.
             ``Scrub(host="demo.example.test", secrets=[tenant])``.
-        max_bytes: The most bytes of the response body to keep, e.g. ``200_000`` to stay
-            under the 256 KiB fixture cap; ``None`` keeps it whole.
+        max_bytes: The most bytes of the response body to keep, e.g. ``80_000``. It
+            bounds the body, not the fixture file, which writes the body as a JSON
+            string: escaping makes text outside ASCII up to three times as long, so
+            ``80_000`` keeps a file under the 256 KiB cap. ``None`` keeps it whole.
 
     Raises:
         ValueError: The request or response body is not UTF-8 text and ``scrub`` does
@@ -174,7 +181,7 @@ def fixture_from_response(
     if request.content:
         request_body, request_base64 = scrubber.body(request.content)
     content_type = request.headers.get("content-type")
-    content, cut = _cut(response, max_bytes)
+    content, cut = _cut(response, max_bytes, scrubber)
     body, is_base64 = scrubber.body(content)
     fixture = Fixture(
         recorded_at=utcnow(),
@@ -216,7 +223,9 @@ _XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml"
 _TRUNCATION_FIELDS = ("truncated", "original_bytes", "original_count", "sha256")
 
 
-def _cut(response: httpx.Response, max_bytes: int | None) -> tuple[bytes, dict[str, Any]]:
+def _cut(
+    response: httpx.Response, max_bytes: int | None, scrubber: _Scrubber
+) -> tuple[bytes, dict[str, Any]]:
     """The body to keep and the ``FixtureResponse`` fields that mark a cut; see above."""
     content = response.content
     if max_bytes is None or len(content) <= max_bytes:
@@ -234,8 +243,9 @@ def _cut(response: httpx.Response, max_bytes: int | None) -> tuple[bytes, dict[s
         raise ValueError(
             f"max_bytes: a body that is not UTF-8 text cannot be cut, {_CUT_FILE}; {_SAMPLE}"
         ) from None
+    unmarked = text.removeprefix("\ufeff")  # a byte order mark, which httpx's json() skips
     xml = media in ("text/xml", "application/xml") or media.endswith("+xml")
-    if xml or text.removeprefix("\ufeff").lstrip().startswith("<?xml"):
+    if xml or unmarked.lstrip().startswith("<?xml"):
         raise ValueError(
             "max_bytes: an XML body cannot be cut, since a cut-off XML document is not "
             f"well-formed; {_SAMPLE}"
@@ -247,7 +257,7 @@ def _cut(response: httpx.Response, max_bytes: int | None) -> tuple[bytes, dict[s
     }
     declared_json = media == "application/json" or media.endswith("+json")
     try:
-        payload = json.loads(text)
+        payload = json.loads(unmarked)
     except ValueError:
         if declared_json:
             raise ValueError(
@@ -255,39 +265,62 @@ def _cut(response: httpx.Response, max_bytes: int | None) -> tuple[bytes, dict[s
                 "real answer instead (a short date range, one commodity)"
             ) from None
     else:
-        return _first_elements(payload, max_bytes), marks | {"original_count": _count(payload)}
+        if not isinstance(payload, list):
+            raise ValueError(
+                "max_bytes: a JSON body that is not an array cannot be cut by elements; "
+                "record a small real answer instead (a short date range, one commodity)"
+            )
+        kept = _first_elements(text, len(payload), max_bytes)
+        return kept.encode(), marks | {"original_count": len(payload)}
     end = max_bytes
     while end > 0 and content[end] & 0xC0 == 0x80:  # a UTF-8 continuation byte
         end -= 1
-    return content[:end], marks
-
-
-def _count(payload: Any) -> int:
-    if not isinstance(payload, list):
+    kept = text[: scrubber.spared_end(text, len(content[:end].decode("utf-8")))]
+    if not kept:
         raise ValueError(
-            "max_bytes: a JSON body that is not an array cannot be cut by elements; record "
-            "a small real answer instead (a short date range, one commodity)"
+            f"max_bytes: a cut at {max_bytes} bytes keeps nothing of the body, not one whole "
+            "character, or splits a secret value or the request host at its start; raise "
+            "max_bytes or record a smaller answer"
         )
-    return len(payload)
+    return kept.encode(), marks
 
 
-def _first_elements(payload: Any, max_bytes: int) -> bytes:
-    """The compact JSON text of the first whole elements of ``payload`` within ``max_bytes``."""
-    _count(payload)
-    parts: list[bytes] = []
-    size = 2  # the brackets
-    for element in payload:
-        part = json.dumps(element, ensure_ascii=False, separators=(",", ":")).encode()
-        size += len(part) + (1 if parts else 0)
-        if size > max_bytes:
+_SPACE = re.compile(r"[ \t\n\r]*")
+
+
+def _after_space(text: str, position: int) -> int:
+    """The offset of the first character at or after ``position`` that is not JSON space."""
+    match = _SPACE.match(text, position)
+    return position if match is None else match.end()
+
+
+def _first_elements(text: str, count: int, max_bytes: int) -> str:
+    """``text``, a JSON array of ``count`` elements, cut after its last whole element that fits.
+
+    The original text is kept as it is, numbers and spacing included, up to the end of
+    the last element whose text with a closing ``]`` fits in ``max_bytes`` bytes of
+    UTF-8; then the ``]``. Each element's end is found with ``json.JSONDecoder.raw_decode``.
+    """
+    decoder = json.JSONDecoder()
+    cursor = text.index("[") + 1
+    cursor_bytes = len(text[:cursor].encode())
+    position = cursor
+    kept = 0
+    for _ in range(count):
+        position = _after_space(text, position)
+        if text[position] == ",":
+            position = _after_space(text, position + 1)
+        _, position = decoder.raw_decode(text, position)
+        size = cursor_bytes + len(text[cursor:position].encode())
+        if size + 1 > max_bytes:
             break
-        parts.append(part)
-    if not parts:
+        cursor, cursor_bytes, kept = position, size, kept + 1
+    if not kept:
         raise ValueError(
             f"max_bytes: the JSON array's first element alone is over {max_bytes} bytes; "
             "raise max_bytes or record a smaller answer"
         )
-    return b"[" + b",".join(parts) + b"]"
+    return text[:cursor] + "]"
 
 
 def write_fixture(response: httpx.Response, path: Path, *, scrub: Scrub | None = None) -> Fixture:

@@ -3,6 +3,7 @@ from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from pathlib import Path
 
+import anyio
 import httpx
 import pytest
 import respx
@@ -17,7 +18,13 @@ from xippios.core.client import (
     decode_csv,
     decode_text,
 )
-from xippios.core.errors import AuthError, NotFoundError, UpstreamError, ValidationError
+from xippios.core.errors import (
+    AuthError,
+    NotFoundError,
+    TransportError,
+    UpstreamError,
+    ValidationError,
+)
 from xippios.core.testing import REDACTED, sent_urls
 
 BASE = "https://api.example.test"
@@ -134,7 +141,7 @@ async def test_an_error_reads_a_bounded_head_and_leaves_dest_untouched(tmp_path:
 
 
 @pytest.mark.anyio
-async def test_classify_sees_a_success_s_headers_only(
+async def test_the_hooks_see_a_success_s_headers_only(
     respx_mock: respx.MockRouter, tmp_path: Path
 ) -> None:
     def classify(response: httpx.Response) -> AuthError | None:
@@ -143,9 +150,12 @@ async def test_classify_sees_a_success_s_headers_only(
         response.json()  # reads the body: unread on a download's success, so None
         return None
 
+    def observe(response: httpx.Response) -> None:
+        response.json()  # likewise: nothing observed, and nothing raised
+
     respx_mock.get(f"{BASE}/a.csv").respond(200, text="a\n1\n")
     respx_mock.get(f"{BASE}/b.csv").respond(200, text="<html/>", headers={"X-Login": "required"})
-    client = make_client(classify=classify)
+    client = make_client(classify=classify, observe=observe)
     assert (await client.download("/a.csv", tmp_path / "a.csv")).bytes == 4
     with pytest.raises(AuthError, match="needs a login"):
         await client.download("/b.csv", tmp_path / "b.csv")
@@ -162,7 +172,35 @@ async def test_a_redirect_or_a_directory_is_refused(
         await client.download("/moved.csv", tmp_path / "moved.csv")
     with pytest.raises(ValueError, match="dest is a directory"):
         await client.download("/moved.csv", tmp_path)
+    with pytest.raises(ValueError, match="dest's directory does not exist"):
+        await client.download("/moved.csv", tmp_path / "missing" / "moved.csv")
     assert route.call_count == 1
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.anyio
+async def test_a_final_transport_failure_or_a_cancel_leaves_no_partial_file(
+    tmp_path: Path,
+) -> None:
+    def refuse(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("refused", request=request)
+
+    client = make_client(transport=httpx.MockTransport(refuse))
+    with pytest.raises(TransportError, match=r"^ConnectError"):
+        await client.download("/files/x.bin", tmp_path / "x.bin")
+    assert list(tmp_path.iterdir()) == []
+
+    class Stalls(httpx.AsyncByteStream):
+        async def __aiter__(self) -> AsyncIterator[bytes]:
+            yield b"x" * 1024
+            await anyio.sleep(30)
+
+    stalling = make_client(
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, stream=Stalls()))
+    )
+    with anyio.move_on_after(0.2) as scope:
+        await stalling.download("/files/x.bin", tmp_path / "x.bin")
+    assert scope.cancelled_caught
     assert list(tmp_path.iterdir()) == []
 
 
@@ -189,3 +227,7 @@ def test_decode_csv_reads_a_file_row_by_row(tmp_path: Path) -> None:
     (tmp_path / "latin.csv").write_bytes("a\nC\xf4te\n".encode("latin-1"))
     with pytest.raises(ValidationError, match=r"^latin.csv is not UTF-8 text"):
         list(decode_csv(tmp_path / "latin.csv"))
+    (tmp_path / "wide.csv").write_text("a\n" + "x" * 200_000 + "\n")  # over csv's field limit
+    with pytest.raises(ValidationError, match=r"^usda-nass: wide.csv is not CSV the csv") as info:
+        list(decode_csv(str(tmp_path / "wide.csv"), source="usda-nass"))  # a str path too
+    assert info.value.source == "usda-nass"
