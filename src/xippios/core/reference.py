@@ -3,6 +3,12 @@
 Files live in ``<package>/reference/`` as CSV or JSON and ship inside the wheel. File
 contents are cached per process; callers get fresh objects on every call.
 
+A packaged list, the records of one upstream operation as the refresh script fetched
+them, is a ``PackagedList``: it loads the file, builds the ``ResultMeta`` of an answer
+from it (ADR-0022), parses its records and writes the file. ``matches`` is the ``search``
+filter of the ``list_*`` tasks, ``closest`` finds the known codes near a value that
+``UnknownCode`` refuses.
+
 The renderers write a source's generated ``enums.py``: ``StrEnum`` for value lists,
 ``IntEnum`` for lists of integer ids and names (conventions §3, ADR-0008). Their output is
 ASCII, what ``ruff format`` would write, and passes ``ruff check`` under the family's
@@ -10,25 +16,34 @@ configuration; a member name too long for any line is refused, not rendered.
 """
 
 import csv
+import difflib
 import functools
 import io
 import json
 import keyword
+import os
 import re
 import textwrap
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
+from datetime import UTC, date, datetime, time
 from importlib import resources
-from typing import Any, cast
+from pathlib import Path
+from typing import Any, Self, cast
 
-from pydantic import TypeAdapter
+from pydantic import BaseModel, ConfigDict, TypeAdapter, field_validator
+
+from xippios.core.models import ResultMeta, parse
 
 __all__ = [
+    "PackagedList",
+    "closest",
     "enum_member_name",
     "id_name_pairs",
     "load_csv",
     "load_json",
     "load_table",
+    "matches",
     "render_int_enums",
     "render_str_enums",
 ]
@@ -82,6 +97,193 @@ def load_table[T](package: str, name: str, model: type[T]) -> list[T]:
     """
     raw = load_csv(package, name) if name.endswith(".csv") else load_json(package, name)
     return TypeAdapter(list[model]).validate_python(raw)  # type: ignore[valid-type]
+
+
+class PackagedList(BaseModel):
+    """One packaged list, ``reference/<name>.json``: upstream's records as fetched.
+
+    The file holds ``{"param", "endpoint", "fetched", "records"}`` and, where the source
+    has one, ``"note"``. ``<name>`` is usually ``param``; two lists derived from one
+    upstream parameter keep it as ``param`` in files of their own names. A list of
+    values is records of one field named by the upstream parameter,
+    ``[{"state_alpha": "AK"}, ...]``; a table is records of its columns. Any other key
+    is refused (ADR-0022, amendment 2026-10-27). Instances are frozen.
+
+    Attributes:
+        param: The list, as upstream names it, e.g. ``"commodities"`` or
+            ``"state_alpha"``.
+        endpoint: The upstream operation the list was fetched from, an operationId or a
+            URL path, e.g. ``"PSDData_GetCommodities"`` or
+            ``"files/v1/app/reference/Reporters.json"``; never ``"reference"`` or a
+            file of the package (ADR-0022, rule 1).
+        fetched: When the refresh script fetched the list, timezone-aware UTC; ``write``
+            writes it to the second (``"2026-10-27T09:15:00Z"``). A bare date, as
+            refresh scripts wrote it before template v0.3.0 (``"2026-10-23"``), reads as
+            00:00 UTC of that day, the start of the day the old scripts truncated the
+            time to; the source's next refresh writes the full time. A time without a
+            zone is refused.
+        note: Free-text provenance the source keeps with the list, e.g. what a derived
+            list is derived from or how a list was reconciled with upstream's
+            documentation; ``None`` when there is none. Core reads nothing from it.
+        records: Upstream's records verbatim, under upstream's field names, in
+            upstream order, e.g. ``{"commodityCode": "0410000", "commodityName":
+            "Wheat"}``.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    param: str
+    endpoint: str
+    fetched: datetime
+    note: str | None = None
+    records: list[dict[str, Any]]
+
+    @field_validator("fetched", mode="before")
+    @classmethod
+    def _a_day_is_its_start(cls, value: Any) -> Any:
+        if isinstance(value, str) and len(value) == len("2026-10-23"):
+            try:
+                value = date.fromisoformat(value)
+            except ValueError:
+                return value
+        if isinstance(value, date) and not isinstance(value, datetime):
+            return datetime.combine(value, time(), UTC)
+        return value
+
+    @field_validator("fetched")
+    @classmethod
+    def _utc(cls, value: datetime) -> datetime:
+        if value.tzinfo is None:
+            raise ValueError(
+                "fetched must carry a zone (the refresh script writes datetime.now(UTC)) "
+                "or be a bare date"
+            )
+        return value.astimezone(UTC)
+
+    @classmethod
+    def load(cls, package: str, name: str) -> Self:
+        """The packaged list ``reference/<name>.json`` of ``package``, validated.
+
+        Read through ``load_json``, so the file's text is cached per process; each call
+        returns a new instance.
+
+        Args:
+            package: Import path of the source package, e.g. ``"xippios.usda.psd"``.
+            name: The file, with or without ``.json``, e.g. ``"commodities"``.
+
+        Raises:
+            FileNotFoundError: The package ships no such file.
+            pydantic.ValidationError: The file is not a packaged list.
+        """
+        file = name if name.endswith(".json") else f"{name}.json"
+        return cls.model_validate(load_json(package, file))
+
+    def meta(
+        self,
+        source: str,
+        *,
+        request: Mapping[str, Any] | None = None,
+        vintage: str | None = None,
+        published_at: datetime | None = None,
+        published_at_naive: bool = False,
+    ) -> ResultMeta:
+        """The ``ResultMeta`` of an answer from this list (ADR-0022, rule 1).
+
+        ``endpoint`` is the list's upstream operation and ``retrieved_at`` its
+        ``fetched``, as a cache hit's is the time its entry was stored; ``total`` stays
+        ``None``, since the list carries no count of upstream's.
+
+        Args:
+            source: Source slug, e.g. ``"usda-psd"``.
+            request: The task's parameters, e.g. ``{"search": "wheat"}``; a ``None``
+                is dropped, as for every ``ResultMeta``.
+            vintage: Upstream's release identifier of the list, when upstream has one;
+                never the fetch date, which is not a vintage.
+            published_at: Upstream's release time of the list, when it states one.
+            published_at_naive: ``True`` when upstream printed that time without a zone.
+        """
+        return ResultMeta(
+            source=source,
+            endpoint=self.endpoint,
+            retrieved_at=self.fetched,
+            published_at=published_at,
+            published_at_naive=published_at_naive,
+            vintage=vintage,
+            request=dict(request or {}),
+        )
+
+    def parse[M](self, model: type[M], *, source: str) -> list[M]:
+        """The records validated into ``model`` instances, in upstream order.
+
+        Args:
+            model: The record model, e.g. a ``UpstreamModel`` subclass ``Commodity``.
+            source: Source slug for the error, e.g. ``"usda-psd"``.
+
+        Raises:
+            ValidationError: A record does not fit ``model``; the message names the
+                list's ``endpoint``.
+        """
+        return parse(list[model], self.records, source=source, endpoint=self.endpoint)  # type: ignore[valid-type]
+
+    def write(self, path: str | os.PathLike[str]) -> None:
+        """Write the list to ``path`` as its packaged file, for the refresh script.
+
+        JSON with the keys ``param``, ``endpoint``, ``fetched``, ``note`` when it is set,
+        and ``records``, in that order, indented by two spaces, non-ASCII text as it is,
+        UTF-8, a newline at the end. ``fetched`` is written to the second, as ISO 8601
+        UTC with ``Z``: a fraction of a second is dropped, so the refresh script may
+        pass ``datetime.now(UTC)`` as it is. ``PackagedList.load`` reads the file back.
+
+        Args:
+            path: The file, e.g. ``REFERENCE / "commodities.json"``.
+        """
+        written = self.model_copy(update={"fetched": self.fetched.replace(microsecond=0)})
+        payload = written.model_dump(mode="json", exclude={"note"} if self.note is None else None)
+        text = json.dumps(payload, indent=2, ensure_ascii=False)
+        Path(path).write_text(text + "\n", encoding="utf-8")
+
+
+def matches(search: str | None, *fields: object) -> bool:
+    """Whether ``search`` occurs in any of ``fields``, ignoring case: a list task's filter.
+
+    Each field is matched on its own, as text (``str(field)``, so an id matches by its
+    digits), never joined with another. A field that is ``None`` (a country without a
+    GENC code) matches nothing.
+
+    Args:
+        search: The text to look for, e.g. ``"wheat"``; ``None`` matches every record.
+        *fields: The record's fields to look in, e.g. its code and its name.
+    """
+    if search is None:
+        return True
+    needle = search.casefold()
+    return any(needle in str(field).casefold() for field in fields if field is not None)
+
+
+def closest(value: str, codes: Mapping[str, str], *, n: int = 3) -> list[tuple[str, str]]:
+    """Up to ``n`` known codes close to ``value``: by code first, then by upstream name.
+
+    Two ``difflib.get_close_matches`` passes: ``value`` upper-cased against the codes,
+    then ``value`` lower-cased against the lower-cased names, each code named once, best
+    match first. An agent that passes ``"us"`` for ``"US"`` or ``"wheat"`` for
+    ``"0410000"`` is led to the code. For ``UnknownCode``'s ``closest``.
+
+    Args:
+        value: The value given, e.g. ``"wheat"``.
+        codes: Upstream's code to its name, e.g. ``{"0410000": "Wheat"}``.
+        n: The most pairs returned.
+
+    Returns:
+        ``(code, name)`` pairs, e.g. ``[("0410000", "Wheat")]``; empty when none is close.
+    """
+    found = difflib.get_close_matches(value.upper(), list(codes), n=n)
+    by_name = {name.lower(): code for code, name in codes.items()}
+    found += [
+        by_name[name]
+        for name in difflib.get_close_matches(value.lower(), list(by_name), n=n)
+        if by_name[name] not in found
+    ]
+    return [(code, codes[code]) for code in found[:n]]
 
 
 def enum_member_name(value: str) -> str:

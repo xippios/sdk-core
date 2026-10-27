@@ -58,3 +58,8 @@ module at the bottom beside `errors`, imported by `models`, `client` and `testin
 importing nothing of core's; `_tasks`, a private module at the bottom, reads a source's
 `BULK_TASKS` for the adapters; `client/download.py` holds `Downloaded` and the streaming
 `AsyncClient.download` is built from.
+
+Amended 2026-10-27 (core 0.3.0, ADR-0022 and ADR-0012's amendments of that date):
+`ResultMeta` stays a `BaseModel` but refuses unknown fields, where `UpstreamModel`
+ignores them; `reference` holds `PackagedList`, `matches` and `closest`, and imports
+`models`, below it.

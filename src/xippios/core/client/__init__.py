@@ -7,7 +7,7 @@ package exports what consumers import; the helpers the client calls itself
 ``xippios.core.client.auth``, ``.cache``, ``.quota``, ``.ratelimit``, ``.retry``.
 """
 
-from xippios.core.client._core import AsyncClient, decode_csv, decode_json, decode_text
+from xippios.core.client._core import Answer, AsyncClient, decode_csv, decode_json, decode_text
 from xippios.core.client.auth import BasicKeyAuth, BearerAuth, HeaderKeyAuth, QueryKeyAuth
 from xippios.core.client.cache import CachedResponse, MemoryCache, cache_key
 from xippios.core.client.config import ClientConfig, RateLimit, RetryPolicy, Timeouts
@@ -15,6 +15,7 @@ from xippios.core.client.download import Downloaded
 from xippios.core.client.quota import QuotaPolicy
 
 __all__ = [
+    "Answer",
     "AsyncClient",
     "BasicKeyAuth",
     "BearerAuth",

@@ -1,7 +1,7 @@
 import sys
 import types
 from collections.abc import Mapping
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
 from typing import Annotated, Any, Literal
@@ -219,6 +219,23 @@ async def priced_async(name: str) -> Result[list[Priced]]:
         data=[Priced(name=name, price=Decimal("4.61"))],
         meta=ResultMeta(source="example", endpoint="p"),
     )
+
+
+async def latest_release_async() -> Result[list[str]]:
+    """The newest release, at the time upstream printed it, without a zone."""
+    printed = datetime(2026, 10, 6, 8, 0)
+    meta = ResultMeta(
+        source="example", endpoint="releases", published_at=printed, published_at_naive=True
+    )
+    return Result[list[str]](data=["202608"], meta=meta)
+
+
+def test_http_responses_carry_a_naive_release_time_with_its_flag() -> None:
+    # ADR-0022, rule 2: the HTTP envelope carries the flag.
+    app = FastAPI()
+    app.include_router(router_from_tasks("example", [sync(latest_release_async)]))
+    meta = TestClient(app).get("/example/latest_release").json()["meta"]
+    assert (meta["published_at"], meta["published_at_naive"]) == ("2026-10-06T08:00:00", True)
 
 
 def test_http_responses_carry_decimals_as_numbers() -> None:

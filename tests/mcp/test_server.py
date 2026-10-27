@@ -2,6 +2,7 @@ import logging
 import sys
 import types
 from collections.abc import Callable
+from datetime import datetime
 from typing import Annotated, Any
 
 import httpx
@@ -71,6 +72,23 @@ async def test_tools_keep_signature_and_docstring() -> None:
     assert series.annotations is not None
     assert series.annotations.read_only_hint is True
     assert series.annotations.destructive_hint is False
+
+
+async def latest_release_async() -> Result[list[str]]:
+    """The newest release, at the time upstream printed it, without a zone."""
+    printed = datetime(2026, 10, 6, 8, 0)
+    meta = ResultMeta(
+        source="example", endpoint="releases", published_at=printed, published_at_naive=True
+    )
+    return Result[list[str]](data=["202608"], meta=meta)
+
+
+@pytest.mark.anyio
+async def test_a_naive_release_time_reaches_the_agent_with_its_flag() -> None:
+    # ADR-0022, rule 2: the MCP text carries the flag.
+    server = build_server("example", [sync(latest_release_async)])
+    meta = (await mcp_call(server, "example_latest_release", {}))["meta"]
+    assert (meta["published_at"], meta["published_at_naive"]) == ("2026-10-06T08:00:00", True)
 
 
 @pytest.mark.anyio

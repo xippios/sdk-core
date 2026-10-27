@@ -1,12 +1,15 @@
 import asyncio
+import dataclasses
 import gzip
 import time
+from datetime import UTC, datetime
 
 import httpx
 import pytest
 import respx
 
 from xippios.core.client import (
+    Answer,
     AsyncClient,
     ClientConfig,
     HeaderKeyAuth,
@@ -27,7 +30,7 @@ from xippios.core.errors import (
     ValidationError,
     XippiosError,
 )
-from xippios.core.testing import REDACTED, sent_urls
+from xippios.core.testing import REDACTED, assert_time_between, sent_urls
 
 BASE = "https://api.example.test"
 
@@ -312,6 +315,26 @@ async def test_a_cache_hit_carries_the_time_its_entry_was_stored(
     assert hit.extensions["xippios_cache_stored_at"] == stored.stored_at
     assert before <= stored.stored_at <= after
     assert decode_json(hit, source="example") == {"n": 1}  # get, then decode_json
+
+
+@pytest.mark.anyio
+async def test_get_answer_is_retrieved_when_it_arrived_or_when_its_entry_was_stored(
+    respx_mock: respx.MockRouter,
+) -> None:
+    # Queue row 39 a, sdk-usda-gats: its wrappers returned (records, stored_at) tuples.
+    respx_mock.get(f"{BASE}/v1/x").respond(200, json={"n": 1})
+    cache = MemoryCache(ttl=None)
+    client = AsyncClient(ClientConfig(source="example", version="1", base_url=BASE, cache=cache))
+    before = datetime.now(UTC)
+    miss = await client.get_answer("/v1/x")
+    assert miss.payload == {"n": 1}
+    assert_time_between(miss.retrieved_at, before, datetime.now(UTC))
+    key = cache_key("GET", httpx.URL(f"{BASE}/v1/x"))
+    stored = cache.get(key)
+    assert stored is not None
+    cache.set(key, dataclasses.replace(stored, stored_at=1_792_400_000.0))  # stored on 2026-10-19
+    hit = await client.get_answer("/v1/x")
+    assert hit == Answer({"n": 1}, datetime(2026, 10, 19, 8, 53, 20, tzinfo=UTC))
 
 
 @pytest.mark.anyio

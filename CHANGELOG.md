@@ -123,6 +123,23 @@ All notable changes to this project are documented here. The format follows
 - `gates.yml` calls the gates repository under its new name `xippios/sdk-gates` (renamed
   from `.github` on 2026-10-27).
 
+- **`ResultMeta` refuses a field it does not define** (queue row 21 a, found by
+  sdk-cashctrl; ADR-0012, amendment 2026-10-27): `extra="forbid"`, so a misspelt
+  `totl=3` raises pydantic's `ValidationError` ("Extra inputs are not permitted")
+  instead of losing the count without a word. The model is otherwise as it was, not
+  frozen.
+- **`meta.request` omits a parameter left `None`** (ADR-0022, rule 3; queue row 28 b,
+  found by sdk-usda-psd): `ResultMeta` drops a top-level `None` at construction, before
+  the credential rule, so a task passes its parameters as they are and a credential left
+  `None` is not recorded as sent; a `None` inside a nested mapping is kept as given.
+- **A packaged answer's `retrieved_at` is the list's fetch time, read from `fetched`**
+  (ADR-0022, rule 1 and amendment 2026-10-27; row 28 a, found by sdk-usda-psd):
+  `PackagedList.fetched` is a timezone-aware UTC time, and a file whose `fetched` is a
+  bare date, every packaged file so far, reads as 00:00 UTC of that day, the start of
+  the day the refresh scripts truncated the time to; a source's next refresh writes the
+  full time. The sources answered with the time of the call and put the fetch date into
+  `vintage`, which now holds an upstream release identifier only.
+
 ### Added
 
 - **`BODY_LIMIT`, `error_from_response` and `parse_retry_after` exported from
@@ -193,6 +210,63 @@ All notable changes to this project are documented here. The format follows
   `register_credential_name`, `redact_credentials` and the three `scrub_*` functions, at
   the bottom of the package. Imported from its module; not re-exported.
 
+- **`ResultMeta.published_at_naive`** (ADR-0022, rule 2; queue row 39 d, found by
+  sdk-usda-gats): a naive `published_at`, a release time upstream printed without a zone
+  (FAS: `2026-10-06T08:00:00`), is kept as given with the flag set; without the flag it
+  is refused as before, and the flag with an aware `published_at` or with none is
+  refused too. The HTTP envelope and the MCP text carry it. A family invariant
+  (ADR-0023, decision 3 (a)); sdk-usda-esr and sdk-usda-gats fill it at adoption.
+- **`PackagedList`** (the family review's C13; ADR-0022, rule 1 and amendment
+  2026-10-27; queue rows 28 a and d and 34 a, found by sdk-usda-psd, 38 b, the template's
+  scaffold, found by sdk-usda-esr, and 39 g, found by sdk-usda-gats), in
+  `xippios.core.reference` and exported from `xippios.core`: one frozen model,
+  `PackagedList(param, endpoint, fetched, records)` with an optional free-text `note`,
+  for a list fetched from one upstream operation, upstream's records under upstream's
+  field names, a list of values being records of one field named by the upstream
+  parameter; any other key of a file is refused. `PackagedList.load(package,
+  name)` reads `reference/<name>.json` through `load_json` (`name` with or without
+  `.json`); `.meta(source, *, request, vintage, published_at, published_at_naive)` builds
+  rule 1's `ResultMeta` (`endpoint` the list's operation, `retrieved_at` its `fetched`,
+  `vintage` only what the caller passes, `total` `None`); `.parse(model, *, source)`
+  validates the records through `parse`; `.write(path)` writes the file
+  (`{"param", "endpoint", "fetched", "records"}` and `note` when it is set, indented,
+  non-ASCII text kept, `fetched` to the second as `...Z`) for the refresh scripts.
+  Consumers: sdk-usda-psd, sdk-usda-esr and sdk-usda-gats, which carry copies,
+  sdk-usda-nass and sdk-comtrade, whose value files and tables it reads after their
+  adoption, and the template's refresh script.
+- **`matches` and `closest`** (C13; rows 28 d, 39 g and 39 j), in
+  `xippios.core.reference` and exported from `xippios.core`: `matches(search, *fields)`,
+  the `search` filter of the `list_*` tasks (`None` matches everything; otherwise a
+  case-folded substring test of each field that is not `None`, as text, never joined),
+  and `closest(value, codes, *, n=3)`, sdk-usda-psd's two `difflib` passes, by code and
+  then by name, at most `n` `(code, name)` pairs. Consumers: sdk-usda-psd,
+  sdk-usda-esr, sdk-usda-gats and sdk-comtrade (`matches`); sdk-usda-psd and
+  sdk-usda-gats, the latter behind its three-letter pass (`closest`; sdk-usda-esr's is
+  integer-nearest and stays its own).
+- **`UnknownCode`** (row 39 j, found by sdk-usda-gats; ADR-0022, amendment 2026-10-27),
+  an `InvalidRequestError` in `xippios.core.errors`, exported from `xippios.core`:
+  `UnknownCode(param, value, *, list_name, fetched, closest=(), hint=None, reason=None,
+  source=None)` refuses a code a packaged list lacks with the copies' common message:
+  the value, the parameter, the list and the day it was fetched, "Did you mean A (name),
+  B (name)?" from `closest` unless `hint` is given, the `reason`, and that a code
+  upstream added since needs a refresh (`/refresh-reference-data`). Attributes `param`,
+  `value`, `list_name`, `fetched`, `closest`. No strategy protocol: a source passes the
+  closest codes it found. Consumers: sdk-usda-psd, sdk-usda-esr and sdk-usda-gats.
+- **`AsyncClient.get_answer(path, *, params, headers, auth)` and `Answer`** (row 39 a,
+  found by sdk-usda-gats; ADR-0015, decision 5, amended 2026-10-27): the payload as
+  `get_json` decodes it and `retrieved_at`, a cache hit's stored time from
+  `xippios_cache_stored_at` as an aware UTC datetime, else the time the answer arrived.
+  `Answer(payload, retrieved_at)` is a frozen dataclass, exported from `xippios.core`
+  and `xippios.core.client`; `get_json` stays. Consumers: sdk-usda-gats's five cached
+  wrappers and sdk-comtrade's cached `list_commodities`.
+- **`UpstreamModel.dump_upstream()`** (row 32 a, found by sdk-template; ADR-0003): a
+  record as `model_dump(mode="json")` under upstream's field names, the
+  `serialization_alias`, else a string `validation_alias`, else the first choice of an
+  `AliasChoices`, else the field name; a nested `UpstreamModel`, alone or in a list,
+  likewise; a computed field, which is the package's, left out. Consumers: the refresh
+  scripts of sdk-usda-psd, sdk-usda-esr, sdk-usda-gats and the template
+  (`upstream_record`), and sdk-comtrade's tables (`_columns`).
+
 ### Documentation
 
 - **ADR-0002, amendment 2026-10-27**: `pydantic-settings` and `xippios.core.config` are
@@ -224,6 +298,24 @@ All notable changes to this project are documented here. The format follows
   3xx raises, and `decode_csv`'s signature; §10 the scrub's rule, the JSON-object
   refusal, the XML reason, the cut at element boundaries, `original_count`, and that
   `max_bytes` bounds the body, not the file.
+
+- **ADR-0022, amendment 2026-10-27**: the five decisions on the code (the `fetched`
+  time and its bare-date reading; one `PackagedList` with value lists as one-field
+  records and a URL path as `endpoint`; the helpers; `get_answer`; frozen series), the
+  flag's refusals, the order of the `None` rule and the credential rule, and three more
+  from the review of the code: the period series of queue row 39 i (the ceiling is the
+  most periods one call fetches; an unreleased period is skipped where upstream's empty
+  answer can be told from data, else the range is refused), its refusal as
+  `NotFoundError` naming the latest released period, and the packaged file's optional
+  `note` with every other key refused. **ADR-0015** (decision 5's `get_answer`),
+  **ADR-0012** (`ResultMeta` refuses unknown fields) and **ADR-0004** (`reference` above
+  `models`) get a dated line each.
+- **Conventions 1.19**: §3 the packaged-list file, `reference/<name>.json` with its
+  optional `note`; §4 the refusal of unknown fields, `get_answer` for a hit's
+  `retrieved_at`, the flag's refusals, `PackagedList`'s methods and the bare-date
+  reading, `matches`, the frozen series (row 39 h) and the period series (row 39 i);
+  §5 `UnknownCode`, in the taxonomy tree under `InvalidRequestError`; §6 `get_answer`.
+  The preamble lists these among the rules that bind a source from its 0.3.0 adoption.
 
 ### Hand-apply for sources
 
@@ -295,6 +387,76 @@ listed here.
   whole. Template v0.3.0 renders the `BULK_TASKS = frozenset()` scaffold — C15.
 - A source that caches an answer over 8 MiB (none known) — raise
   `ClientConfig(cache_max_bytes=...)` and say why in `CLAUDE.md` — ADR-0019, decision 3.
+
+- `src/xippios/usda/psd/params.py`, `src/xippios/usda/esr/params.py`,
+  `src/xippios/usda/gats/params.py` — the `PackagedList` class and `packaged_values` →
+  `PackagedList.load(PACKAGE, name)` from `xippios.core`; `_codes` reads
+  `packaged.records` as before and keeps `packaged.fetched` (a datetime now, not ISO
+  text); psd's `_closest` → `closest(value, codes)`; gats keeps its three-letter pass in
+  front of `closest` and its `_nearest` and `_sharing_digits`; esr keeps its
+  integer-nearest `_closest` — C13, rows 39 g and j, ADR-0023 decision 4.
+- `src/xippios/usda/psd/errors.py`, `src/xippios/usda/esr/errors.py`,
+  `src/xippios/usda/gats/errors.py` — `UnknownCode` → `xippios.core.UnknownCode`, with
+  `reason=` and `source=SOURCE` at each raise (or a subclass that fills them in); the
+  message reads "... in the packaged commodities list (fetched 2026-10-23). ..." and
+  ends "If upstream added it since, the packaged list needs a refresh
+  (/refresh-reference-data).", so a test that matched "in PSD's commodities list
+  (packaged, fetched ...)" or "If PSD added the code since" matches the new text; gats
+  passes its example codes as `hint=` only when `closest` is empty, since a `hint` wins
+  over `closest` — row 39 j.
+- `src/xippios/usda/psd/tasks.py`, `src/xippios/usda/esr/tasks.py`,
+  `src/xippios/usda/gats/tasks.py`, `src/xippios/comtrade/tasks.py` — `_packaged`,
+  `_packaged_meta` and `_matches` (comtrade: `_packaged_meta` and `_matches`) →
+  `packaged.parse(Model, source=SOURCE)`, `packaged.meta(SOURCE, request=...)` and
+  `matches`; `meta.vintage` becomes `None` and `meta.retrieved_at` the list's `fetched`,
+  so the list tasks' docstrings that say "``meta.vintage`` is the day the package
+  fetched the list, ``meta.retrieved_at`` when this task answered" and the tests that
+  assert it change — ADR-0022, rule 1.
+- `src/xippios/usda/nass/tasks.py`, `src/xippios/comtrade/tasks.py`, their
+  `reference/*.json` value files and comtrade's CSV tables with `reference/tables.json`
+  — converted, without network, to packaged-list files (`{"param", "endpoint",
+  "fetched", "records"}` and an optional `note`, a value list as records of one field
+  named by the parameter, `fetched` kept as the date it is), `endpoint` the upstream
+  operation (nass's `get_param_values`, comtrade's `files/v1/app/reference/<file>.json`)
+  where nass wrote "reference" and comtrade a file path; any other key is refused, so
+  nass writes its `derived_from` into `note` as text, and its two lists derived from
+  `api_GET` records, `condition_categories` and `progress_stages`, keep
+  `param: "unit_desc"` and `endpoint: "api_GET"` in files of their own names, which
+  `PackagedList.load(package, name)` takes; comtrade writes its `note` and its
+  `exceptions` into `note` as text, and its `origin` becomes `endpoint`. The list tasks
+  read the files with `PackagedList.load` and still return strings — ADR-0022, rule 1
+  and amendment (2) and (8).
+- `src/xippios/usda/gats/api/` — the five wrappers that return `(records, stored_at)` →
+  `client.get_answer(path)`, its `retrieved_at` the task's `meta.retrieved_at` on a hit
+  and a miss alike; `_client.stored_at` goes — row 39 a.
+- `src/xippios/comtrade/tasks.py` — the cached `list_commodities` reads its answer with
+  `client.get_answer(...)` for `retrieved_at` instead of `get()` and `decode_json()` —
+  row 39 a.
+- `src/xippios/usda/esr/tasks.py`, `src/xippios/usda/gats/tasks.py` — `published_at`
+  from their naive release times with `published_at_naive=published_at is not None`,
+  since the flag without a time is refused; `vintage` keeps the release text as
+  upstream prints it — ADR-0022, rule 2.
+- `src/xippios/usda/psd/tasks.py`, `get_time_series` — nothing; its docstring already
+  states its ceiling and that a market year answering PSD's empty 404 is skipped —
+  ADR-0022, amendment (6), conventions §4.
+- `src/xippios/usda/gats/tasks.py`, `get_census_export_series`,
+  `get_census_import_series` and `get_census_reexport_series` — nothing: they already
+  refuse a range with an unreleased month with `NotFoundError` naming the released
+  months, and their docstrings say so — ADR-0022, amendment (6) and (7).
+- `src/xippios/usda/psd/tasks.py` — nothing for its `None` filters: `meta.request` leaves
+  them out by itself; a test that asserted `{"search": None}` sees `{}` — rule 3.
+- `scripts/refresh_reference.py` (psd, esr, gats, comtrade; the template renders it in
+  v0.3.0) — `upstream_record(record)` → `record.dump_upstream()`; psd's `write(...)` and
+  comtrade's `_columns` and `_write_table` → `PackagedList(param=..., endpoint=...,
+  fetched=..., records=...).write(path)`, `fetched` = `datetime.now(UTC)` to the second;
+  the renderers still take the fetch day as text (`f"{fetched:%Y-%m-%d}"`) — rows 32 a,
+  34 a.
+- `tests/` (psd, comtrade) — the snapshot counts of packaged lists (psd's 42, comtrade's
+  38) → structure checks (each record carries the list's fields; `endpoint` and
+  `fetched` set) — a list's size changes with every refresh, and the next one rewrites
+  every file with the full `fetched` time.
+- Every source, `tests/` — a `ResultMeta(...)` given a field it does not define now
+  raises: name the field right — row 21 a.
 
 sdk-comtrade's planned `QuotaPolicy(limit_header=None, remaining_header=None,
 window=86400, spent=...)` is unaffected: `spent=` stays.

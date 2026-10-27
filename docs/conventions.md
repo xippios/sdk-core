@@ -1,15 +1,16 @@
 # xippios SDK family — conventions
 
-Version 1.18 · 2026-10-27 · applies to every `sdk-*` repository under github.com/xippios.
+Version 1.19 · 2026-10-27 · applies to every `sdk-*` repository under github.com/xippios.
 Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 The rules of ADR-0019 and ADR-0022, all of them (the download and decode calls, the
 cache bound, `BULK_TASKS`, the fixture cap and the `truncated` marker, the file-fixture
-rules, the spared `key`, the packaged-answer rule, `published_at_naive`, the
-`None`-filter rule), bind a source from its 0.3.0 adoption (§15), since the code that
-serves them ships in core 0.3.0; until then a source records what its upstream answers
-and names a fixture over the cap in the PR description; a source that starts on a git
-pin of core 0.3.0 (the roadmap's pin rule) is bound by each rule from its first PR on a
-pin that carries the rule's code.
+rules, the spared `key`, the packaged-answer rule and the packaged-list file,
+`published_at_naive`, the `None`-filter rule, `get_answer`, `matches` (§4), `UnknownCode`
+(§5), the frozen series and the period series (§4)), bind a source from its 0.3.0
+adoption (§15), since the code that serves them ships in core 0.3.0; until then a source
+records what its upstream answers and names a fixture over the cap in the PR
+description; a source that starts on a git pin of core 0.3.0 (the roadmap's pin rule) is
+bound by each rule from its first PR on a pin that carries the rule's code.
 
 ## 1. Naming
 
@@ -121,11 +122,20 @@ skip it (§8, §9; ADR-0019).
 - **No cross-source normalization.** A USDA `marketing_year` stays a USDA concept.
   Mapping between sources is business logic and lives outside this family.
 - Reference data (commodity codes, country codes, report calendars) ships inside the
-  package under `reference/` as CSV or JSON, loaded via `xippios.core.reference`, and
-  is versioned with the package. Enums are generated from it with
-  `xippios.core.reference` (`render_str_enums`, `render_int_enums`), and the whole
-  generated module, docstrings included, is ASCII-only and passes `ruff check` and
-  `ruff format --check` as rendered (ADR-0008).
+  package under `reference/` as CSV or JSON, loaded via `xippios.core.reference`, and is
+  versioned with the package. A list fetched from one upstream operation is a packaged
+  list, `reference/<name>.json` with `{"param", "endpoint", "fetched", "records"}` and
+  an optional `"note"`, free-text provenance (what a derived list is derived from, how a
+  list was reconciled with upstream's documentation), and no other key: upstream's
+  records under upstream's field names (`UpstreamModel.dump_upstream`), a list of values
+  as records of one field named by the upstream parameter, a table as records of its
+  columns. `<name>` is the parameter, or a name of the list's own where two lists derive
+  from one parameter. The refresh script writes it with `PackagedList.write`, `fetched`
+  the UTC time of the fetch to the second; the package reads it with
+  `PackagedList.load(package, name)` (ADR-0022, amendment 2026-10-27). Enums are
+  generated from it with `xippios.core.reference` (`render_str_enums`,
+  `render_int_enums`), and the whole generated module, docstrings included, is
+  ASCII-only and passes `ruff check` and `ruff format --check` as rendered (ADR-0008).
 
 ## 4. Result envelope and metadata
 
@@ -149,17 +159,20 @@ class Result(BaseModel, Generic[T]):
 ```
 
 `meta` is never optional. It is what makes a later as-of/vintage store possible.
-On a cache hit, `retrieved_at` is the time the entry was stored, which the client puts
-on the response as `extensions["xippios_cache_stored_at"]` (ADR-0015); a wrapper reads
-it with `get()` and `decode_json()` (§6).
+`ResultMeta` refuses a field it does not define, so a misspelt one is an error, never
+dropped (ADR-0012, amendment 2026-10-27). On a cache hit, `retrieved_at` is the time the
+entry was stored, which the client puts on the response as
+`extensions["xippios_cache_stored_at"]` (ADR-0015); a wrapper reads it with
+`get_answer()`, whose `Answer` carries the payload and that `retrieved_at` (§6).
 
 `published_at` carries a zone. A naive value, a time upstream printed without one (FAS:
 `2026-10-06T08:00:00`), is accepted only with `published_at_naive=True` and is stored as
-given, no zone attached; a naive value without the flag is refused. The flag says the
-time is upstream's text, not comparable across sources; a consumer that knows the
-publisher's zone assigns it outside the family (ADR-0003, ADR-0022). `vintage` keeps the
-release identifier as upstream names it; where that identifier is the timestamp text,
-`vintage` holds the text and `published_at` its parsed value with the flag.
+given, no zone attached; a naive value without the flag is refused, and so is the flag
+with an aware value or with none. The flag says the time is upstream's text, not
+comparable across sources; a consumer that knows the publisher's zone assigns it outside
+the family (ADR-0003, ADR-0022). `vintage` keeps the release identifier as upstream
+names it; where that identifier is the timestamp text, `vintage` holds the text and
+`published_at` its parsed value with the flag.
 
 A task that answers from packaged reference data (§3) fills `meta` by ADR-0022:
 `retrieved_at` is the time the packaged list was fetched from upstream (the file's
@@ -167,7 +180,32 @@ A task that answers from packaged reference data (§3) fills `meta` by ADR-0022:
 upstream operation the list came from (operationId or path), never "reference" or a
 file path; `vintage` is an upstream release identifier, or `None` when upstream has
 none, since a fetch date is not a vintage; `total` is `None` unless upstream reports a
-count (ADR-0012). `PackagedList` builds this meta, so no source writes it by hand.
+count (ADR-0012). `PackagedList` builds this meta, so no source writes it by hand:
+`PackagedList.load(package, name)` reads the file (§3), `.meta(source, request=...,
+vintage=...)` builds the meta and `.parse(Model, source=...)` the records. A `fetched`
+that is a bare date, as refresh scripts wrote it before template v0.3.0, reads as 00:00
+UTC of that day, the start of the day the old scripts truncated the time to, until the
+source's next refresh writes the full time (ADR-0022, amendment 2026-10-27). A `list_*`
+task's `search` keeps a record when the text occurs in one of its fields, ignoring case
+(`xippios.core.matches`).
+
+A frozen series, one upstream no longer updates (a discontinued report, a dataset
+upstream stopped publishing), is marked where agents and readers look: its task's row in
+the README status table carries a status that names the last release (`frozen, last
+release 2024-09`), the task's docstring says so, and `vintage` holds that release's
+identifier. `ResultMeta` has no field for it (ADR-0022, amendment 2026-10-27).
+
+A task that assembles a period series from one upstream call per period (a month, a
+marketing year) states its ceiling, the most periods one call fetches (the MCP tool's,
+where it is smaller: sdk-usda-gats fetches at most 60 months, 24 on the MCP server), and
+sets `vintage` to the newest release among the periods returned. Its docstring says what
+a period inside the range that upstream has not released answers: the period is skipped
+where upstream's empty answer can be told from data (sdk-usda-psd's empty 404), and the
+whole range is refused, naming the latest released period, where it cannot (an
+unreleased month answers sdk-usda-gats with `[]`, as a month without trade does). The
+refusal is `NotFoundError` naming the latest released period; `InvalidRequestError`
+stays for a malformed request (ADR-0007). An empty answer that cannot be told from no
+data is never passed off as data (ADR-0022, amendment 2026-10-27).
 
 A task that reads a file (§2) sets `endpoint` to the file kind as upstream names it
 (`wasde.xls`, `qs.crops`), `vintage` to the release identifier (an ESMIS release id, a
@@ -175,17 +213,19 @@ report date as printed), `published_at` to the catalog's release time, and `requ
 the file's URL or release id plus the filters applied in Python (ADR-0020).
 
 `request` records what was sent: a parameter the caller left `None` is omitted
-(ADR-0022). It never carries credentials (ADR-0005). `ResultMeta` redacts the value of
-any key that names one, at any depth, to `"REDACTED"` at construction, by the one rule
-of `xippios.core.redaction` (a whole word `api_key`, `apikey`, `api-key`, `token`,
+(ADR-0022, rule 3). `ResultMeta` drops a top-level `None` at construction, so a task
+passes its parameters as they are; a `None` inside a nested mapping is kept as given. It
+never carries credentials (ADR-0005). `ResultMeta` redacts the value of any key that
+names one, at any depth, to `"REDACTED"` at construction, by the one rule of
+`xippios.core.redaction` (a whole word `api_key`, `apikey`, `api-key`, `token`,
 `secret`, `password`, `passwd`, `pwd`, `auth`, `authorization`, `sig`, `signature`,
-`credential` or `credentials`, between `_`, `-` or the ends of the name), so an
-envelope is safe to hand to an agent, return over HTTP, or write to a store; personal
-identifiers in upstream data stay out of it by §3's rule for projections (ADR-0017). A
-bare `key` is not on the list: it is a credential in a process where a `QueryKeyAuth`
-sends the key under that name (USDA NASS), which registers it when built, and data
-elsewhere, as Eurostat's SDMX series `key` is (ADR-0019, amendment 2026-10-27). A task
-that wants the credential's provenance records the variable name, never the value.
+`credential` or `credentials`, between `_`, `-` or the ends of the name), so an envelope
+is safe to hand to an agent, return over HTTP, or write to a store; personal identifiers
+in upstream data stay out of it by §3's rule for projections (ADR-0017). A bare `key` is
+not on the list: it is a credential in a process where a `QueryKeyAuth` sends the key
+under that name (USDA NASS), which registers it when built, and data elsewhere, as
+Eurostat's SDMX series `key` is (ADR-0019, amendment 2026-10-27). A task that wants the
+credential's provenance records the variable name, never the value.
 
 `tenant` is the name of the tenant a multi-tenant source served the data for (§7),
 never a credential, a host or another of the tenant's values; `None` for a
@@ -215,13 +255,19 @@ XippiosError
 ├── UpstreamError        other 4xx/5xx (carries status, body)
 ├── TransportError       network, timeout
 └── InvalidRequestError  the request as given cannot be served: a bad argument or a
-                         documented refusal, detected before the call or by upstream's
-                         own refusal of the query (ADR-0007)
+    │                    documented refusal, detected before the call or by upstream's
+    │                    own refusal of the query (ADR-0007)
+    └── UnknownCode      a code the packaged list lacks, refused before the call
+                         (ADR-0022)
 ```
 
 Source packages subclass only when upstream has a distinct, documented failure mode;
 a refusal the package makes itself, such as a query over a documented record limit or
-an unknown filter name, subclasses `InvalidRequestError`. Upstream's own refusal of
+an unknown filter name, subclasses `InvalidRequestError`. A code the packaged list lacks,
+where upstream answers an unknown code with an empty result, is refused before the call
+with core's `UnknownCode`, naming the list, its fetch date and the closest known codes
+(`xippios.core.closest`, or a strategy of the source's own) (ADR-0022, amendment
+2026-10-27). Upstream's own refusal of
 the query as given is mapped to `InvalidRequestError`, or a subclass, in `classify` (§6):
 usda-nass's HTTP 413 over the record limit, comtrade's HTTP 400, cashctrl's
 `RequestRejected`. Agents and HTTP 422 treat both alike: the caller has to change the
@@ -241,8 +287,10 @@ the query can carry a key (ADR-0005).
 - A source maps its documented error shapes once, in `ClientConfig.classify`, which
   sees every response before the default status mapping (ADR-0008); endpoint
   wrappers then use `get_json` and never inspect status codes themselves. A wrapper
-  that needs provenance from the response, a cache hit's `xippios_cache_stored_at`,
-  calls `get()`, then `decode_json()`, and reads `response.extensions`.
+  whose answer may come from the cache calls `get_answer()`: its `Answer(payload,
+  retrieved_at)` carries a hit's stored time, from `xippios_cache_stored_at`, or else
+  the arrival time, for `meta.retrieved_at` (ADR-0015, amendment 2026-10-27); one that
+  needs more of the response calls `get()`, then `decode_json()`.
 - A per-source rate limiter sets a fast pace within the source's documented per-second
   or per-minute limit or, where none is documented, a self-imposed pace that the
   package's CLAUDE.md names as such; longer-window quotas (hourly, daily) may be

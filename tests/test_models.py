@@ -1,9 +1,9 @@
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import pytest
-from pydantic import Field, computed_field
+from pydantic import AliasChoices, Field, computed_field
 
 from xippios.core.errors import ValidationError
 from xippios.core.models import (
@@ -34,6 +34,7 @@ def test_result_meta_defaults() -> None:
     meta = ResultMeta(source="example", endpoint="get_thing")
     assert meta.retrieved_at.tzinfo is not None
     assert meta.published_at is None
+    assert meta.published_at_naive is False
     assert meta.vintage is None
     assert meta.request == {}
     assert meta.total is None
@@ -43,22 +44,54 @@ def test_result_meta_defaults() -> None:
 def test_result_meta_rejects_naive_datetimes() -> None:
     with pytest.raises(ValueError, match="timezone-aware"):
         ResultMeta(source="x", endpoint="y", retrieved_at=datetime(2026, 1, 1))
-    with pytest.raises(ValueError, match="timezone-aware"):
+    with pytest.raises(ValueError, match="timezone-aware: published_at is naive"):
         ResultMeta(source="x", endpoint="y", published_at=datetime(2026, 1, 1))
 
 
-def test_result_meta_tenant_round_trips_by_name() -> None:
-    meta = ResultMeta(source="example", endpoint="account/list.json", tenant="acme")
-    assert meta.tenant == "acme"
+def test_a_naive_release_time_is_kept_as_printed_with_the_flag() -> None:
+    # ADR-0022, rule 2: FAS prints release times without a zone (sdk-usda-gats).
+    printed = datetime(2026, 10, 6, 8, 0)
+    meta = ResultMeta(
+        source="usda-gats",
+        endpoint="GATSData_GetCensusExportDataReleaseInfo",
+        published_at=printed,
+        published_at_naive=True,
+        vintage="2026-10-06T08:00:00",
+    )
+    assert meta.published_at == printed
+    assert meta.published_at is not None
+    assert meta.published_at.tzinfo is None
     dumped = meta.model_dump(mode="json")
-    assert dumped["tenant"] == "acme"
-    assert json.loads(meta.model_dump_json())["tenant"] == "acme"
-    assert ResultMeta.model_validate(dumped) == meta
+    assert (dumped["published_at"], dumped["published_at_naive"]) == ("2026-10-06T08:00:00", True)
     assert ResultMeta.model_validate_json(meta.model_dump_json()) == meta
-    assert ResultMeta(source="s", endpoint="e").model_dump(mode="json")["tenant"] is None
-    rows = [Series(series_id="a", value=1)]
-    result = Result[list[Series]](data=rows, meta=meta)
-    assert Result[list[Series]].model_validate(result.model_dump(mode="json")) == result
+
+
+@pytest.mark.parametrize(
+    ("published_at", "states"),
+    [(datetime(2026, 10, 6, 8, 0, tzinfo=UTC), "published_at carries one"),
+     (None, "published_at is None")],
+)  # fmt: skip
+def test_the_flag_without_a_naive_release_time_is_refused(
+    published_at: datetime | None, states: str
+) -> None:
+    with pytest.raises(ValueError, match=f"printed published_at without a zone, but {states}"):
+        ResultMeta(source="s", endpoint="e", published_at=published_at, published_at_naive=True)
+
+
+def test_result_meta_refuses_a_field_it_does_not_define() -> None:
+    # Queue row 21 a (sdk-cashctrl): an unknown field used to be dropped without a word.
+    with pytest.raises(ValueError, match=r"totl\n  Extra inputs are not permitted"):
+        ResultMeta(source="s", endpoint="e", totl=3)  # type: ignore[call-arg]
+
+
+def test_request_omits_what_the_caller_left_none() -> None:
+    # ADR-0022, rule 3 (sdk-usda-psd): request records what was sent.
+    meta = ResultMeta(
+        source="s",
+        endpoint="e",
+        request={"search": None, "year": 2024, "filters": {"state": None}, "token": None},
+    )
+    assert meta.request == {"year": 2024, "filters": {"state": None}}
 
 
 def test_result_meta_rejects_a_negative_total() -> None:
@@ -66,28 +99,21 @@ def test_result_meta_rejects_a_negative_total() -> None:
         ResultMeta(source="s", endpoint="e", total=-1)
 
 
-def test_result_meta_total_is_never_computed_from_data() -> None:
-    rows = [Series(series_id=str(i), value=i) for i in range(3)]
-    result = Result[list[Series]](data=rows, meta=ResultMeta(source="s", endpoint="e"))
-    assert result.meta.total is None
-    page = Result[list[Series]](data=rows, meta=ResultMeta(source="s", endpoint="e", total=40))
-    assert page.meta.total == 40
-    assert Result[list[Series]].model_validate(page.model_dump(mode="json")) == page
-
-
 def test_result_envelope_round_trips() -> None:
     meta = ResultMeta(
         source="example",
-        endpoint="get_thing",
+        endpoint="account/list.json",
         retrieved_at=datetime(2026, 10, 20, tzinfo=UTC),
         request={"id": 7},
+        total=40,  # upstream's count, never len(data) (ADR-0012)
+        tenant="acme",
     )
     result = Result[list[Series]](data=[Series(series_id="a", value=1)], meta=meta)
     dumped = result.model_dump(mode="json")
-    assert dumped["meta"]["source"] == "example"
+    assert (dumped["meta"]["total"], dumped["meta"]["tenant"]) == (40, "acme")
     assert dumped["data"][0]["series_id"] == "a"
-    again = Result[list[Series]].model_validate(dumped)
-    assert again == result
+    assert Result[list[Series]].model_validate(dumped) == result
+    assert Result[list[Series]].model_validate_json(result.model_dump_json()) == result
 
 
 def test_parse_model_and_generic() -> None:
@@ -148,6 +174,50 @@ def test_project_copies_same_named_fields_and_applies_overrides() -> None:
 def test_project_names_the_missing_field() -> None:
     with pytest.raises(TypeError, match=r"Row\.project: Wide has no field amounts"):
         Row.project(Wide(label="x", amount=None, extra=1))
+
+
+class Unit(UpstreamModel):
+    unit_id: int = Field(validation_alias="unitId")
+    unit_description: str = Field(serialization_alias="unitDescription")
+
+
+class Country(UpstreamModel):
+    country_code: str = Field(alias="countryCode")
+    region_code: str = Field(validation_alias=AliasChoices("regionCode", "region_code"))
+    genc_code: str | None = Field(default=None, validation_alias="gencCode")
+    released: date
+    share: Decimal
+    unit: Unit
+    units: list[Unit]
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def label(self) -> str:
+        return f"{self.country_code} ({self.region_code})"
+
+
+def test_dump_upstream_restores_upstream_names_at_every_level() -> None:
+    # Queue row 32 a: psd's, esr's, gats's and the template's upstream_record.
+    record = {
+        "countryCode": "US",
+        "regionCode": "R01",
+        "gencCode": None,
+        "released": "2026-10-23",
+        "share": "0.25",
+        "unit": {"unitId": 8, "unit_description": "(1000 MT)"},
+        "units": [{"unitId": 4, "unit_description": "(1000 HA)"}],
+    }
+    country = Country.model_validate(record)
+    assert country.dump_upstream() == {
+        "countryCode": "US",
+        "regionCode": "R01",
+        "gencCode": None,
+        "released": "2026-10-23",
+        "share": 0.25,
+        "unit": {"unitId": 8, "unitDescription": "(1000 MT)"},
+        "units": [{"unitId": 4, "unitDescription": "(1000 HA)"}],
+    }
+    assert list(country.dump_upstream()) == list(record)  # field order, no computed label
 
 
 class Priced(UpstreamModel):

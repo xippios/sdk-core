@@ -60,3 +60,9 @@ Amended by ADR-0023, decision 5 (2026-10-27, core 0.3.0): of core's paginators o
 `paginate_offset` remains, `paginate_pages` and `paginate_cursor` deleted for want of a
 consumer; a page-numbered source maps the offset to its page in its `fetch`, and a
 cursor-paginated source drives its own loop, both setting `total` as above.
+
+Amended 2026-10-27 (core 0.3.0; queue row 21 a, found by sdk-cashctrl, decided by
+Johannes on 2026-10-27): the context's "a plain pydantic model that drops unknown fields"
+no longer holds. `ResultMeta` refuses a field it does not define (`extra="forbid"`), so
+a misspelt field is an error at construction, never a value lost without a word;
+conventions 1.19 §4 says so.

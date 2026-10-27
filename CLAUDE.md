@@ -36,18 +36,21 @@ src/xippios/core/
   _version.py        __version__ from distribution metadata
   _loop.py           one background event loop; sync() derives sync functions from async
   _tasks.py          is_bulk_task: what the adapters read from a source's tasks.py (BULK_TASKS)
-  errors.py          error taxonomy, response/exception classifiers
+  errors.py          error taxonomy (UnknownCode: a code a packaged list lacks), response/exception
+                     classifiers
   redaction.py       the one credential rule (REDACTED, the names QueryKeyAuth registers),
                      scrub_params/url/headers; imports nothing of core's
-  models.py          UpstreamModel, ResultMeta (request redacted by redaction), Result[T],
-                     ResultCap, parse(); re-exports REDACTED
+  models.py          UpstreamModel (dump_upstream), ResultMeta (unknown fields refused,
+                     published_at_naive, request without None and redacted by redaction),
+                     Result[T], ResultCap, parse(); re-exports REDACTED
   pagination.py      paginate_offset (page numbers map onto offsets), collect()
-  reference.py       loader for packaged reference data (CSV, JSON); StrEnum/IntEnum renderers
+  reference.py       loader for packaged reference data (CSV, JSON); PackagedList (load, meta, parse,
+                     write), matches, closest; StrEnum/IntEnum renderers
   tenants.py         Tenants (tenants declared in the environment, one client each), list_task
   data_gov.py        the api.data.gov gateway: Gateway (key, classify, one QuotaPolicy per process)
   client/            httpx client: config, retry, ratelimit, cache, quota, auth (env-key helpers),
-                     download (Downloaded, streaming), _core (AsyncClient with download,
-                     decode_json/decode_text/decode_csv)
+                     download (Downloaded, streaming), _core (AsyncClient with download and
+                     get_answer, Answer, decode_json/decode_text/decode_csv)
   mcp/               MCP server helpers: server, results (caps), errors (to text), cli   [extra: mcp]
   http/              FastAPI helpers: router (from tasks), problems (RFC 9457)          [extra: http]
   testing/           pytest plugin (live gate, offline guarantees, anyio_backend), fixtures (max_bytes
