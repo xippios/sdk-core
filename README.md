@@ -42,8 +42,6 @@ It gives a source package the things that should be identical across the family:
   in both adapters; `UpstreamModel.project` builds a projection of a record under
   upstream names, `dump_upstream` gives a record back under upstream's field names,
   `parse_decimal` reads a published figure.
-- **Tenants** for a source that serves several tenants from the environment: declared
-  names, per-tenant variables, one client per tenant (`Tenants`).
 - **Reference data**: loaders for code lists shipped inside a package, `PackagedList`
   for a list fetched from one upstream operation (its file, the meta of an answer from
   it, its writer), `matches` and `closest` for the list tasks and their refusals, and
@@ -52,8 +50,8 @@ It gives a source package the things that should be identical across the family:
   routes (`xippios.core.http`) without any logic of their own.
 - **Test support**: a live-test gate, offline guarantees for every other test (no
   network, no rate-limit wait, a placeholder key), fixture recording with secrets
-  scrubbed, replay through `respx`, a check for write servers, and the family
-  conformance check every source runs (`xippios.core.testing`).
+  scrubbed, replay through `respx`, and the family conformance check every source runs
+  (`xippios.core.testing`).
 
 ## Install
 
@@ -302,53 +300,11 @@ over `ClientConfig.cache_max_bytes` (8 MiB by default) is returned and not cache
 
 ## Multi-tenant sources
 
-An upstream that serves each tenant from a host or under a key of its own gets its
-tenants from the environment through `Tenants`: one variable lists the names, each
-tenant's values sit in `<SOURCE>_<NAME>_<FIELD>`, and a reserved test tenant exists when
-its own variables are set and is never listed. Every tenant gets one client, built on
-first use and rebuilt when one of its values changes. Errors name tenants and variables,
-never a value.
-
-```python
-import re
-
-from xippios.core import AsyncClient, BasicKeyAuth, ClientConfig, Tenants
-from xippios.core.tenants import list_task
-
-
-def check_subdomain(value: str) -> str:
-    if not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", value):
-        raise ValueError("not a subdomain")  # never the value: it names the tenant
-    return value
-
-
-# EXAMPLE_TENANTS=acme,acme_test
-# EXAMPLE_ACME_SUBDOMAIN=acme-books   EXAMPLE_ACME_API_KEY=...
-# EXAMPLE_DEMO_SUBDOMAIN=demo         EXAMPLE_DEMO_API_KEY=...   (reserved, never listed)
-tenants = Tenants(
-    "example",
-    list_var="EXAMPLE_TENANTS",
-    fields=("SUBDOMAIN", "API_KEY"),
-    reserved=("demo",),
-    validate={"SUBDOMAIN": check_subdomain},
-)
-
-
-def build(name: str) -> AsyncClient:
-    subdomain = tenants.field(name, "SUBDOMAIN")
-    config = ClientConfig(
-        source="example", version="0.1.0", base_url=f"https://{subdomain}.example.org/api"
-    )
-    return AsyncClient(config, auth=BasicKeyAuth(tenants.var(name, "API_KEY")))
-
-
-tenants.names()  # ("acme", "acme_test", "demo")
-client = tenants.client_for("acme", build)  # the same client until a value changes
-list_tenants = list_task(tenants, name="list_tenants")  # a reference tool: names only
-```
-
-A task takes the tenant's name and sets `ResultMeta(tenant=name, ...)`. The key is read
-on the first request, so a declared tenant without one fails then, with `ConfigError`.
+An upstream that serves each tenant from a host or under a key of its own (CashCtrl's
+organisations) is served by a source that carries its tenant registry itself (ADR-0024).
+Its tasks take the tenant's name and set `ResultMeta(tenant=name, ...)`; its messages and
+results name tenants and variables, never a value, and core's error messages leave the
+host out, since it names the tenant.
 
 ## Reference data and generated enums
 
@@ -506,44 +462,10 @@ Request URLs are not logged: `build_server` and `main` set the `httpx` and `http
 loggers to `WARNING` (`quiet_request_logging`), because a URL can carry an API key or a
 tenant host.
 
-A multi-tenant source locks a server to one tenant with an option of its own, added
-through `main`'s hooks so the command line is parsed once:
-
-```python
-import argparse
-
-from mcp.server.mcpserver import MCPServer
-from xippios.core.mcp import TenantLock, build_server, main
-from xippios.core.tenants import list_task
-from xippios.example import tasks
-from xippios.example._client import tenants
-
-TASKS = [tasks.get_account, list_task(tenants, name="list_tenants")]
-server = build_server("example", TASKS)
-
-
-def lock(args: argparse.Namespace, server: MCPServer) -> MCPServer:
-    if args.tenant is None:
-        return server
-    tenant = tenants.require(args.tenant)  # an undeclared name: exit status 2
-    tenants.field(tenant, "SUBDOMAIN")  # a missing or malformed subdomain: exit status 2
-    return build_server("example", TASKS, tenant_lock=TenantLock("tenant", tenant))
-
-
-def run() -> None:  # xippios-example-mcp --tenant acme
-    main(
-        server,
-        add_options=lambda parser: parser.add_argument("--tenant", help="serve one tenant"),
-        apply_options=lock,
-    )
-```
-
-A locked server answers a call naming another tenant with
-`error: InvalidRequestError: this server is locked to tenant=acme; the call named
-another tenant` before the tool runs, and a call that leaves the tenant out of a tool
-that takes it with `...; the call did not name the tenant`; a task may not give the
-tenant parameter a default. The server names the tenant in its instructions, and its
-`example_list_tenants` tool lists that tenant alone.
+A source's own options go through `main`'s hooks, so the command line is parsed once:
+`add_options` puts them on core's parser, so `--help` lists them; `apply_options(namespace,
+server)` returns the server to run; and a `XippiosError` it raises, a missing variable
+say, stops the process with exit status 2 and the message, before anything is served.
 
 Client configuration, for Claude Desktop or any MCP client:
 
@@ -586,11 +508,11 @@ from xippios.core.testing.family import *  # noqa: F403
 
 The second file collects the family conformance check: the tests of what every source
 shares, kept once in core. The namespace levels stay empty and `py.typed` ships; `mcp.py`
-and `http.py` serve exactly `tasks.__all__` minus `BULK_TASKS`, the write server exactly
-`tasks_write.__all__`; every task is synchronous, returns `Result[T]` and has an agent
-docstring; the README's status table lists exactly the read and the write tasks;
-`.copier-answers.yml` names a template tag; `pyproject.toml` bounds `xippios-core` with
-`~=`. A source whose adapters drop a task, or whose README table is stale, fails CI
+and `http.py` serve exactly `tasks.__all__` minus `BULK_TASKS`; every task, read and
+write, is synchronous, returns `Result[T]` and has an agent docstring; the README's status
+table lists exactly the read and the write tasks; `.copier-answers.yml` names a template
+tag; `pyproject.toml` bounds `xippios-core` with `~=`. A write server is its source's to
+test. A source whose adapters drop a task, or whose README table is stale, fails CI
 before a reviewer looks. The package under test is the one `tasks.py` under
 `src/xippios/`, or the ini option `xippios_package`.
 
@@ -639,7 +561,7 @@ xippios_placeholder_key_envs = ["EXAMPLE_API_KEY"]
   is configured; one that must not retry a 5xx goes through a client whose config says
   `RetryPolicy(max_attempts=1)`. `max_bytes=80_000` cuts a large answer's body: a JSON
   array after its first whole elements, in upstream's own text, a text after its first
-  bytes, never inside a secret or the host, and the fixture is marked `truncated` with
+  bytes, never inside a secret, and the fixture is marked `truncated` with
   the whole body's size and sha256 (and an array's length); a JSON object, XML, ZIP,
   XLSX, gzip, XLS or a body that is not UTF-8 text is refused: record a small real
   answer or sample instead. It bounds the body, not the file, which escapes the body as
@@ -647,22 +569,11 @@ xippios_placeholder_key_envs = ["EXAMPLE_API_KEY"]
   under the 256 KiB cap.
 
 `mcp_call(server, "example_get_series", {...})` calls a tool through an in-process MCP
-client, so the server's middleware, a tenant lock included, runs as for a real client;
+client, so the server's middleware, the argument check included, runs as for a real client;
 it returns the decoded JSON and fails the test on `error:` text. `mcp_call_text` returns
 the text, to assert a refusal.
 
-A source with a write server checks it against its write tasks: exactly those tools,
-each taking `confirm: bool = False`, none of them on the read server or the HTTP router.
-
-```python
-from xippios.core.testing import assert_write_tools
-
-assert_write_tools(
-    write_server, [tasks.create_account], source="example", read_server=server, router=router
-)
-```
-
-A multi-tenant source tells the recorder what else must never be written:
+A recording names the values that must never be written:
 
 ```python
 from xippios.core.testing import Scrub, fixture_path, record_sync
@@ -671,18 +582,17 @@ record_sync(
     client,
     "/account/list.json",
     fixture_path(FIXTURES, "account_list", "one"),
-    scrub=Scrub(
-        host="demo.example.test",  # placeholder for the tenant's host, used everywhere it appeared
-        secrets=[tenant_name],  # REDACTED wherever it appears, plain or percent-encoded
-        rewrite=strip_signatures,  # text hook for bodies and header values (Location)
-    ),
+    scrub=Scrub(secrets=[tenant_name]),  # REDACTED wherever it appears as given
 )
 ```
 
-The fixture is scrubbed in memory, verified and written once: if the tenant's host or a
-named value is still anywhere, a JSON body decoded included, nothing is written and the
-error says where, never what. A body that is not UTF-8 text cannot be scrubbed and is
-refused unless `Scrub(allow_binary=True)` stores it base64, flagged.
+The fixture is scrubbed in memory, verified and written once: if a named value is still
+in the URL, a header value or a text body, nothing is written and the error says where,
+never what. A form a value takes that differs from it (percent-encoded, behind a JSON
+escape), or a tenant's host, the source rewrites itself, on the `Fixture` that
+`fixture_from_response` returns, before it writes the file. A body that is not UTF-8 text
+cannot be scrubbed and is refused unless `Scrub(allow_binary=True)` stores it base64,
+flagged.
 
 ## Status
 
@@ -699,10 +609,9 @@ changed, breaking changes first.
 | `xippios.core.models` | `UpstreamModel` with `dump_upstream`, `Result`, `ResultMeta` with `published_at_naive`, `ResultCap`, `parse` | alpha |
 | `xippios.core.reference` | packaged CSV/JSON loaders, `PackagedList`, `matches`, `closest`, generated `StrEnum`/`IntEnum` modules | alpha |
 | `xippios.core.pagination` | `paginate_offset` (a page-numbered endpoint maps the offset to its page), `collect` | alpha |
-| `xippios.core.tenants` | `Tenants`, `list_task`: tenants from the environment, one client each | alpha |
-| `xippios.core.mcp` | tool registration, result caps, error text, CLI, quiet request log | alpha |
+| `xippios.core.mcp` | tool registration with the argument check and the write server's `confirm` rule, result caps, error text, CLI with option hooks and the loopback rule, quiet request log | alpha |
 | `xippios.core.http` | router factory, problem details | alpha |
-| `xippios.core.testing` | live gate, offline run, record (with `max_bytes=`), replay, scrub, write checks, family check | alpha |
+| `xippios.core.testing` | live gate, offline run, record (with `max_bytes=`), replay, scrub of named secrets with a plain verify, `mcp_call`, family check | alpha |
 
 Alpha: while core is 0.x, a new minor version may change the public surface, with no
 backward compatibility across minors; patch releases stay compatible. A source depends
