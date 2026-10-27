@@ -10,7 +10,6 @@ from xippios.core.client import (
     AsyncClient,
     BasicKeyAuth,
     BearerAuth,
-    Client,
     ClientConfig,
     EnvKeyAuth,
     HeaderKeyAuth,
@@ -75,29 +74,36 @@ async def test_basic_key_as_user_name(respx_mock: respx.MockRouter, config: Clie
     assert route.calls.last.request.headers["authorization"] == f"Basic {expected}"
 
 
-def test_key_is_lazy_and_missing_key_is_a_config_error(
+@pytest.mark.anyio
+async def test_key_is_lazy_and_a_missing_or_empty_key_is_a_config_error(
     respx_mock: respx.MockRouter, config: ClientConfig, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.delenv(ENV, raising=False)
-    respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
+    route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
     auth = QueryKeyAuth("key", ENV, source="example")  # constructing never touches the environment
-    client = Client(config, auth=auth)
+    client = AsyncClient(config, auth=auth)
+    with pytest.raises(
+        ConfigError, match=f"^{ENV} is not set; export it or pass the key explicitly$"
+    ):
+        await client.get("/v1/x")
+    monkeypatch.setenv(ENV, "")
     with pytest.raises(ConfigError, match=ENV):
-        client.get("/v1/x")
+        await client.get("/v1/x")
+    assert not route.called
     monkeypatch.setenv(ENV, KEY)
-    assert client.get("/v1/x").status_code == 200
+    assert (await client.get("/v1/x")).status_code == 200
 
 
-def test_explicit_key_wins_and_is_resolved_once(
+@pytest.mark.anyio
+async def test_explicit_key_wins_and_is_resolved_once(
     respx_mock: respx.MockRouter, config: ClientConfig, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv(ENV, "from-environment")
     route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
-    auth = BearerAuth(ENV, key=SecretStr("explicit"))
-    client = Client(config, auth=auth)
-    client.get("/v1/x")
+    client = AsyncClient(config, auth=BearerAuth(ENV, key=SecretStr("explicit")))
+    await client.get("/v1/x")
     monkeypatch.setenv(ENV, "changed-later")
-    client.get("/v1/x")
+    await client.get("/v1/x")
     assert all(call.request.headers["authorization"] == "Bearer explicit" for call in route.calls)
 
 

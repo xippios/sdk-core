@@ -24,7 +24,6 @@ from xippios.core.client import (
     RetryPolicy,
     Timeouts,
 )
-from xippios.core.config import SourceSettings, resolve_api_key
 from xippios.core.errors import (
     AuthError,
     ConfigError,
@@ -63,7 +62,6 @@ __all__ = [
     "Result",
     "ResultMeta",
     "RetryPolicy",
-    "SourceSettings",
     "Tenants",
     "Timeouts",
     "TransportError",
@@ -81,6 +79,5 @@ __all__ = [
     "paginate_pages",
     "parse",
     "parse_decimal",
-    "resolve_api_key",
     "sync",
 ]
