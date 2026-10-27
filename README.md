@@ -353,9 +353,11 @@ on the first request, so a declared tenant without one fails then, with `ConfigE
 ## Reference data and generated enums
 
 A list a source fetches from one upstream operation and ships, so that its `list_*`
-tasks and its argument checks need no call, is a `PackagedList`: `reference/<param>.json`
-with `{"param", "endpoint", "fetched", "records"}`, upstream's records under upstream's
-field names. The refresh script writes it; the tasks read it:
+tasks and its argument checks need no call, is a `PackagedList`: `reference/<name>.json`
+with `{"param", "endpoint", "fetched", "records"}` and an optional free-text `"note"`,
+upstream's records under upstream's field names; any other key is refused. `<name>` is
+the parameter, or a name of the list's own where two lists derive from one parameter.
+The refresh script writes it; the tasks read it:
 
 ```python
 from datetime import UTC, datetime
@@ -363,11 +365,10 @@ from datetime import UTC, datetime
 from xippios.core import PackagedList, Result, UnknownCode, closest, matches
 
 # scripts/refresh_reference.py: the records as upstream named them, the time of the fetch
-fetched = datetime.now(UTC).replace(microsecond=0)
 records = [record.dump_upstream() for record in commodities]  # from the api/ wrapper
 PackagedList(
-    param="commodities", endpoint="GetCommodities", fetched=fetched, records=records
-).write(REFERENCE / "commodities.json")
+    param="commodities", endpoint="GetCommodities", fetched=datetime.now(UTC), records=records
+).write(REFERENCE / "commodities.json")  # fetched written to the second
 
 
 # tasks.py
@@ -403,8 +404,8 @@ The answer's `meta` follows ADR-0022: `endpoint` is the upstream operation the l
 from, `retrieved_at` the time it was fetched, `vintage` an upstream release identifier
 only when one is passed (a fetch date is not a vintage), `total` `None`. A file whose
 `fetched` is a bare date, as refresh scripts wrote it before template v0.3.0, reads as
-00:00 UTC of that day. A list of values is records of one field named by the upstream
-parameter (`[{"state_alpha": "AK"}, ...]`). `UnknownCode` names the value, the list and
+00:00 UTC of that day; `write` writes `fetched` to the second. A list of values is
+records of one field named by the upstream parameter (`[{"state_alpha": "AK"}, ...]`). `UnknownCode` names the value, the list and
 its fetch date, the closest codes (or a `hint=`), an optional `reason=`, and that a code
 upstream added since needs a refresh of the list.
 

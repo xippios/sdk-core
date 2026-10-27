@@ -5,9 +5,10 @@ Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 The rules of ADR-0019 and ADR-0022, all of them (the download and decode calls, the
 cache bound, `BULK_TASKS`, the fixture cap and the `truncated` marker, the file-fixture
 rules, the spared `key`, the packaged-answer rule and the packaged-list file,
-`published_at_naive`, the `None`-filter rule, `get_answer`), bind a source from its
-0.3.0 adoption (§15), since the code that serves them ships in core 0.3.0; until then a
-source records what its upstream answers and names a fixture over the cap in the PR
+`published_at_naive`, the `None`-filter rule, `get_answer`, `matches` (§4), `UnknownCode`
+(§5), the frozen series and the period series (§4)), bind a source from its 0.3.0
+adoption (§15), since the code that serves them ships in core 0.3.0; until then a source
+records what its upstream answers and names a fixture over the cap in the PR
 description; a source that starts on a git pin of core 0.3.0 (the roadmap's pin rule) is
 bound by each rule from its first PR on a pin that carries the rule's code.
 
@@ -123,12 +124,16 @@ skip it (§8, §9; ADR-0019).
 - Reference data (commodity codes, country codes, report calendars) ships inside the
   package under `reference/` as CSV or JSON, loaded via `xippios.core.reference`, and is
   versioned with the package. A list fetched from one upstream operation is a packaged
-  list, `reference/<param>.json` with `{"param", "endpoint", "fetched", "records"}`:
-  upstream's records under upstream's field names (`UpstreamModel.dump_upstream`), a
-  list of values as records of one field named by the upstream parameter, a table as
-  records of its columns. The refresh script writes it with `PackagedList.write`,
-  `fetched` the UTC time of the fetch to the second; the package reads it with
-  `PackagedList.load` (ADR-0022, amendment 2026-10-27). Enums are generated from it with
+  list, `reference/<name>.json` with `{"param", "endpoint", "fetched", "records"}` and an
+  optional `"note"`, free-text provenance (what a derived list is derived from, how a
+  list was reconciled with upstream's documentation), and no other key: upstream's
+  records under upstream's field names (`UpstreamModel.dump_upstream`), a list of values
+  as records of one field named by the upstream parameter, a table as records of its
+  columns. `<name>` is the parameter, or a name of the list's own where two lists derive
+  from one parameter. The refresh script writes it with `PackagedList.write`, `fetched`
+  the UTC time of the fetch to the second; the package reads it with
+  `PackagedList.load(package, name)` (ADR-0022, amendment 2026-10-27). Enums are
+  generated from it with
   `xippios.core.reference` (`render_str_enums`, `render_int_enums`), and the whole
   generated module, docstrings included, is ASCII-only and passes `ruff check` and
   `ruff format --check` as rendered (ADR-0008).
@@ -192,13 +197,16 @@ release 2024-09`), the task's docstring says so, and `vintage` holds that releas
 identifier. `ResultMeta` has no field for it (ADR-0022, amendment 2026-10-27).
 
 A task that assembles a period series from one upstream call per period (a month, a
-marketing year) states its ceiling, the newest period upstream has released, in its
-docstring with where it reads it from (a release calendar, a release-dates operation);
-`vintage` is the newest release among the periods returned. A period beyond the ceiling
-is refused with `InvalidRequestError` naming the ceiling. What a period inside the range
-that upstream has not released answers, a refusal or the period skipped, is stated in
-the task's docstring; an empty page is never passed off as no data (ADR-0022, amendment
-2026-10-27).
+marketing year) states its ceiling, the most periods one call fetches (the MCP tool's,
+where it is smaller: sdk-usda-gats fetches at most 60 months, 24 on the MCP server), and
+sets `vintage` to the newest release among the periods returned. Its docstring says what
+a period inside the range that upstream has not released answers: the period is skipped
+where upstream's empty answer can be told from data (sdk-usda-psd's empty 404), and the
+whole range is refused, naming the latest released period, where it cannot (an
+unreleased month answers sdk-usda-gats with `[]`, as a month without trade does). The
+refusal is `NotFoundError` naming the latest released period; `InvalidRequestError`
+stays for a malformed request (ADR-0007). An empty answer that cannot be told from no
+data is never passed off as data (ADR-0022, amendment 2026-10-27).
 
 A task that reads a file (§2) sets `endpoint` to the file kind as upstream names it
 (`wasde.xls`, `qs.crops`), `vintage` to the release identifier (an ESMIS release id, a
@@ -248,8 +256,10 @@ XippiosError
 ├── UpstreamError        other 4xx/5xx (carries status, body)
 ├── TransportError       network, timeout
 └── InvalidRequestError  the request as given cannot be served: a bad argument or a
-                         documented refusal, detected before the call or by upstream's
-                         own refusal of the query (ADR-0007)
+    │                    documented refusal, detected before the call or by upstream's
+    │                    own refusal of the query (ADR-0007)
+    └── UnknownCode      a code the packaged list lacks, refused before the call
+                         (ADR-0022)
 ```
 
 Source packages subclass only when upstream has a distinct, documented failure mode;
