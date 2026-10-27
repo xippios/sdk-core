@@ -136,6 +136,13 @@ class UpstreamModel(BaseModel):
         ``model_dump`` gives it. A computed field is the package's, not upstream's, and
         is left out, as is a field excluded from dumping.
 
+        The ``serialization_alias`` wins over the validation alias, and the model reads
+        by alias or by name: a field with a ``serialization_alias`` and no validation
+        alias of the same name writes a key the model cannot read back:
+        ``PackagedList.parse`` refuses the record, or the field takes its default. A
+        model whose records are packaged names the upstream field with
+        ``Field(alias=...)`` or a ``validation_alias``.
+
         Returns:
             E.g. ``{"seriesId": "CORN_YIELD", "value": 177.3}``.
         """

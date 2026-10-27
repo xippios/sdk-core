@@ -100,12 +100,14 @@ def load_table[T](package: str, name: str, model: type[T]) -> list[T]:
 
 
 class PackagedList(BaseModel):
-    """One packaged list, ``reference/<param>.json``: upstream's records as fetched.
+    """One packaged list, ``reference/<name>.json``: upstream's records as fetched.
 
-    The file holds ``{"param", "endpoint", "fetched", "records"}``. A list of values is
-    records of one field named by the upstream parameter, ``[{"state_alpha": "AK"},
-    ...]``; a table is records of its columns. Keys of the file beyond the four are
-    ignored and not written back. Instances are frozen.
+    The file holds ``{"param", "endpoint", "fetched", "records"}`` and, where the source
+    has one, ``"note"``. ``<name>`` is usually ``param``; two lists derived from one
+    upstream parameter keep it as ``param`` in files of their own names. A list of
+    values is records of one field named by the upstream parameter,
+    ``[{"state_alpha": "AK"}, ...]``; a table is records of its columns. Any other key
+    is refused (ADR-0022, amendment 2026-10-27). Instances are frozen.
 
     Attributes:
         param: The list, as upstream names it, e.g. ``"commodities"`` or
@@ -114,22 +116,26 @@ class PackagedList(BaseModel):
             URL path, e.g. ``"PSDData_GetCommodities"`` or
             ``"files/v1/app/reference/Reporters.json"``; never ``"reference"`` or a
             file of the package (ADR-0022, rule 1).
-        fetched: When the refresh script fetched the list, timezone-aware UTC, written to
-            the second (``"2026-10-27T09:15:00Z"``). A bare date, as refresh scripts
-            wrote it before template v0.3.0 (``"2026-10-23"``), reads as 00:00 UTC of
-            that day, the start of the day the old scripts truncated the time to; the
-            source's next refresh writes the full time. A time without a zone is
-            refused.
+        fetched: When the refresh script fetched the list, timezone-aware UTC; ``write``
+            writes it to the second (``"2026-10-27T09:15:00Z"``). A bare date, as
+            refresh scripts wrote it before template v0.3.0 (``"2026-10-23"``), reads as
+            00:00 UTC of that day, the start of the day the old scripts truncated the
+            time to; the source's next refresh writes the full time. A time without a
+            zone is refused.
+        note: Free-text provenance the source keeps with the list, e.g. what a derived
+            list is derived from or how a list was reconciled with upstream's
+            documentation; ``None`` when there is none. Core reads nothing from it.
         records: Upstream's records verbatim, under upstream's field names, in
             upstream order, e.g. ``{"commodityCode": "0410000", "commodityName":
             "Wheat"}``.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     param: str
     endpoint: str
     fetched: datetime
+    note: str | None = None
     records: list[dict[str, Any]]
 
     @field_validator("fetched", mode="before")
@@ -222,15 +228,18 @@ class PackagedList(BaseModel):
     def write(self, path: str | os.PathLike[str]) -> None:
         """Write the list to ``path`` as its packaged file, for the refresh script.
 
-        JSON with the keys ``param``, ``endpoint``, ``fetched`` and ``records`` in that
-        order, indented by two spaces, non-ASCII text as it is, UTF-8, a newline at the
-        end; ``fetched`` as ISO 8601 UTC with ``Z``. ``PackagedList.load`` reads it
-        back unchanged.
+        JSON with the keys ``param``, ``endpoint``, ``fetched``, ``note`` when it is set,
+        and ``records``, in that order, indented by two spaces, non-ASCII text as it is,
+        UTF-8, a newline at the end. ``fetched`` is written to the second, as ISO 8601
+        UTC with ``Z``: a fraction of a second is dropped, so the refresh script may
+        pass ``datetime.now(UTC)`` as it is. ``PackagedList.load`` reads the file back.
 
         Args:
             path: The file, e.g. ``REFERENCE / "commodities.json"``.
         """
-        text = json.dumps(self.model_dump(mode="json"), indent=2, ensure_ascii=False)
+        written = self.model_copy(update={"fetched": self.fetched.replace(microsecond=0)})
+        payload = written.model_dump(mode="json", exclude={"note"} if self.note is None else None)
+        text = json.dumps(payload, indent=2, ensure_ascii=False)
         Path(path).write_text(text + "\n", encoding="utf-8")
 
 
