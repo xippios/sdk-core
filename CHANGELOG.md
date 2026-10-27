@@ -382,9 +382,6 @@ listed here.
   test that matched the text "was recorded as REDACTED" for a credential named in
   `match_params` → "names a credential"; a parameter whose name has the whole word `sig`
   or `pwd` now reads `REDACTED` — C10.
-- Every source that calls `decode_csv` by keyword (none yet) — `source=` is now the slug
-  for its errors; the file or response is the positional `data` — ADR-0019, decision 2,
-  amended 2026-10-27.
 - `src/xippios/<pkg>/tasks.py` of a source with a bulk task — `BULK_TASKS =
   frozenset({...})` beside `MCP_CAPS`; `mcp.py` and `http.py` may pass `tasks.__all__`
   whole. Template v0.3.0 renders the `BULK_TASKS = frozenset()` scaffold — C15.
