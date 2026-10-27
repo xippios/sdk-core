@@ -1,10 +1,10 @@
 # The two merge gates in caller mode: `merge-class` (is this pull request `auto` or
 # `human`?) and `family-review` (the review against sdk-core's docs/review-checklist.md),
-# both reusable workflows of xippios/.github, called here as jobs. It exists because the
+# both reusable workflows of xippios/sdk-gates, called here as jobs. It exists because the
 # ruleset rule "Require workflows to pass before merging", which would run them from the
-# .github repository without any file here, may not be offered on the organisation's plan;
-# then the required check contexts become `merge-class / merge-class` and
-# `family-review / family-review` from this file (the .github repository's README,
+# sdk-gates repository without any file here, may not be offered on the organisation's
+# plan; then the required check contexts become `merge-class / merge-class` and
+# `family-review / family-review` from this file (the sdk-gates repository's README,
 # "Wiring and check contexts").
 #
 # It ships switched off: both jobs run only once the repository variable GATES_CALLER is
@@ -26,13 +26,13 @@ permissions:
 jobs:
   merge-class:
     if: vars.GATES_CALLER == '1'
-    uses: xippios/.github/.github/workflows/merge-class.yml@main
+    uses: xippios/sdk-gates/.github/workflows/merge-class.yml@main
     permissions:
       contents: read
 
   family-review:
     if: vars.GATES_CALLER == '1'
-    uses: xippios/.github/.github/workflows/family-review.yml@main
+    uses: xippios/sdk-gates/.github/workflows/family-review.yml@main
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
     permissions:
