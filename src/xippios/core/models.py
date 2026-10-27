@@ -321,8 +321,9 @@ def parse[T](type_: type[T], raw: object, *, source: str, endpoint: str) -> T:
     The error's text names the first failure's location, type and message and never a
     value; the payload stays on ``raw`` for a debugger, out of ``str()`` and ``repr()``.
     It is raised ``from None``, so no chained pydantic error quotes the values, and from a
-    private helper's frame, so a printed traceback, pytest's default included, shows this
-    function's frame short, without its arguments (queue row 42).
+    private helper's frame, so under pytest's default ``--tb=auto`` this function's frame
+    is printed short, without its arguments; ``--tb=long`` and ``--showlocals`` still
+    print them, which the live run's ``--tb=short`` avoids (queue row 42).
 
     Args:
         type_: The target type: a model class or a generic such as ``list[Series]``.
