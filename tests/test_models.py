@@ -124,7 +124,7 @@ def test_parse_model_and_generic() -> None:
     assert many[0].value == 1.0
 
 
-MARKER = "API:abcd-a-payload-value"
+MARKER = "payload-marker-of-row-42"
 """What a failing payload carries: it reaches ``raw``, never a printed traceback (row 42)."""
 
 
