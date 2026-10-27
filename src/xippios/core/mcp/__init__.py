@@ -10,17 +10,9 @@ A source's ``mcp.py`` is a handful of lines::
     def run() -> None:
         main(server)
 
-A multi-tenant source adds ``--org`` and locks the server to one tenant (ADR-0014)::
-
-    def lock(args: argparse.Namespace, server: MCPServer) -> MCPServer:
-        if args.org is None:
-            return server
-        org = tenants.require(args.org)  # undeclared: exit status 2
-        tenants.field(org, "SUBDOMAIN")  # missing or malformed: exit status 2
-        return build_server("cashctrl", TASKS, tenant_lock=TenantLock("org", org))
-
-    def run() -> None:
-        main(server, add_options=lambda parser: parser.add_argument("--org"), apply_options=lock)
+A source's own command-line options reach ``main`` through two hooks, parsed once with
+core's: ``add_options`` puts them on the parser, ``apply_options`` returns the server to
+run, and a ``XippiosError`` it raises stops the process with exit status 2 (ADR-0014).
 
 ``ResultCap`` is defined in ``xippios.core.models`` and exported from ``xippios.core``
 too, so a source's ``tasks.py`` declares its caps without this extra; it is re-exported
@@ -39,12 +31,11 @@ except ImportError as exc:  # pragma: no cover - exercised only without the extr
 from xippios.core.mcp.cli import build_parser, main
 from xippios.core.mcp.errors import error_to_text
 from xippios.core.mcp.results import cap_result
-from xippios.core.mcp.server import TenantLock, build_server, tool_name
+from xippios.core.mcp.server import build_server, tool_name
 from xippios.core.models import ResultCap
 
 __all__ = [
     "ResultCap",
-    "TenantLock",
     "build_parser",
     "build_server",
     "cap_result",

@@ -1,13 +1,12 @@
 import argparse
 import logging
-import os
 from typing import Any
 
 import pytest
 from mcp.server.mcpserver import MCPServer
 
-from xippios.core import ConfigError, InvalidRequestError, Tenants, XippiosError
-from xippios.core.mcp import TenantLock, build_parser, build_server, main
+from xippios.core import ConfigError, InvalidRequestError, XippiosError
+from xippios.core.mcp import build_parser, build_server, main
 
 
 def test_parser_defaults() -> None:
@@ -78,13 +77,13 @@ class Runs:
 def test_an_added_option_is_parsed_once_and_applied(monkeypatch: pytest.MonkeyPatch) -> None:
     runs = Runs(monkeypatch)
     server = runs.attach(build_server("example", []))
-    locked = runs.attach(build_server("example", [], tenant_lock=TenantLock("org", "acme")))
+    acme = runs.attach(build_server("example", [], name="xippios-example-acme"))
     seen: list[argparse.Namespace] = []
 
     def apply(args: argparse.Namespace, given: MCPServer) -> MCPServer:
         assert given is server
         seen.append(args)
-        return given if args.org is None else locked
+        return given if args.org is None else acme
 
     main(
         server,
@@ -95,7 +94,7 @@ def test_an_added_option_is_parsed_once_and_applied(monkeypatch: pytest.MonkeyPa
     main(server, ["--http"], add_options=add_org, apply_options=apply)
     assert [args.org for args in seen] == ["acme", None]
     assert runs.calls == [
-        (locked, "streamable-http", {"host": "127.0.0.1", "port": 9001}),
+        (acme, "streamable-http", {"host": "127.0.0.1", "port": 9001}),
         (server, "streamable-http", {"host": "127.0.0.1", "port": 8000}),
     ]
 
@@ -149,33 +148,6 @@ def test_an_error_from_apply_options_exits_2_without_a_traceback(
     assert f"xippios-example: error: {message}" in err
     assert "Traceback" not in err
     assert runs.calls == []
-
-
-def test_an_undeclared_tenant_from_tenants_require_stops_at_startup(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    for name in [name for name in os.environ if name.startswith("FICTIVE_CLI_")]:
-        monkeypatch.delenv(name, raising=False)
-    monkeypatch.setenv("FICTIVE_CLI_TENANTS", "acme")
-    tenants = Tenants("fictive-cli", list_var="FICTIVE_CLI_TENANTS", fields=["SUBDOMAIN"])
-    runs = Runs(monkeypatch)
-    server = runs.attach(build_server("fictive-cli", []))
-
-    def apply(args: argparse.Namespace, given: MCPServer) -> MCPServer:
-        lock = TenantLock("org", tenants.require(args.org))
-        return runs.attach(build_server("fictive-cli", [], tenant_lock=lock))
-
-    with pytest.raises(SystemExit) as info:
-        main(server, ["--org", "nope"], add_options=add_org, apply_options=apply)
-    assert info.value.code == 2
-    assert "unknown tenant 'nope'; declared tenants: acme" in capsys.readouterr().err
-    main(server, ["--org", "acme"], add_options=add_org, apply_options=apply)
-    [(served, transport, _)] = runs.calls
-    assert served is not server
-    assert transport == "stdio"
-    assert served.instructions == (
-        "This server is locked to org acme; every tool call that takes org must pass org=acme."
-    )
 
 
 def create_thing(name: str, confirm: bool = False) -> dict[str, str]:

@@ -36,8 +36,8 @@ EXPORTS = {
         "sent_urls",
     },
     "xippios.core.mcp": {
-        "ResultCap", "TenantLock", "build_parser", "build_server", "cap_result",
-        "error_to_text", "main", "tool_name",
+        "ResultCap", "build_parser", "build_server", "cap_result", "error_to_text", "main",
+        "tool_name",
     },
     "xippios.core.http": {"is_scalar", "router_from_tasks", "status_for"},
 }  # fmt: skip

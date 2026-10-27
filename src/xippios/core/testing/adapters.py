@@ -34,11 +34,10 @@ async def mcp_call_text(server: Any, name: str, arguments: dict[str, Any]) -> st
     """Call a tool on an ``MCPServer`` through an in-process client and return its text.
 
     The call goes through ``mcp.Client(server)``, as a real client's would, so the
-    server's middleware runs: a ``TenantLock`` refusal and arguments the tool's schema
-    refuses come back here as the family's ``error: InvalidRequestError: ...`` text,
-    which a test can assert. Fails the test when the server reports an MCP error
-    (``is_error``, e.g. an unknown tool or a task that crashed) or answers with anything
-    but text.
+    server's middleware runs: arguments the tool's schema refuses come back here as the
+    family's ``error: InvalidRequestError: ...`` text, which a test can assert. Fails the
+    test when the server reports an MCP error (``is_error``, e.g. an unknown tool or a
+    task that crashed) or answers with anything but text.
 
     Args:
         server: The ``MCPServer`` under test, e.g. from ``build_server``.

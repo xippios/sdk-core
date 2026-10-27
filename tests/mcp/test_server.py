@@ -11,7 +11,7 @@ import pytest
 
 from xippios.core import sync
 from xippios.core.errors import InvalidRequestError, NotFoundError
-from xippios.core.mcp import ResultCap, TenantLock, build_server, tool_name
+from xippios.core.mcp import ResultCap, build_server, tool_name
 from xippios.core.mcp.server import is_write_server, quiet_request_logging, register_tasks
 from xippios.core.models import Result, ResultMeta, UpstreamModel
 from xippios.core.testing import mcp_call, mcp_call_text
@@ -179,18 +179,11 @@ async def test_a_cap_for_a_name_that_is_no_task_is_refused() -> None:
         register_tasks(server, "example", iter([list_areas]), caps={"list_nothing": ResultCap()})
     with pytest.raises(ValueError, match=r"^caps names no task among the tasks: list_nothing;"):
         register_tasks(
-            server,
-            "example",
-            [create_thing],
-            caps={"list_nothing": ResultCap()},
-            read_only=False,
-            tenant_lock=TenantLock("org", "acme"),
+            server, "example", [create_thing], caps={"list_nothing": ResultCap()}, read_only=False
         )
     assert await server.list_tools() == []  # checked before anything is registered
     assert not is_write_server(server)  # nor marked a write server
-    assert server.middleware == middleware  # nor locked: another lock is still accepted
-    register_tasks(server, "example", [plain], tenant_lock=TenantLock("org", "other"))
-    assert len(server.middleware) == len(middleware) + 1
+    assert server.middleware == middleware  # nor a middleware installed
 
 
 @pytest.mark.anyio
@@ -333,8 +326,11 @@ def confirm_zero(confirm: int = 0) -> None:
 async def test_register_tasks_on_existing_server_and_write_flag() -> None:
     server = build_server("example", [], name="custom", instructions="Call list first.")
     assert server.name == "custom"
+    assert not is_write_server(server)
     names = register_tasks(server, "example", [create_thing, delete_thing], read_only=False)
     assert names == ["example_create_thing", "example_delete_thing"]
+    assert is_write_server(server)
+    assert is_write_server(build_server("example", [], read_only=False))
     tool = (await server.list_tools())[0]
     assert tool.annotations is not None
     assert tool.annotations.read_only_hint is False
