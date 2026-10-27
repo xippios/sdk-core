@@ -46,8 +46,8 @@ It gives a source package the things that should be identical across the family:
   names, per-tenant variables, one client per tenant (`Tenants`).
 - **Reference data**: loaders for code lists shipped inside a package, `PackagedList`
   for a list fetched from one upstream operation (its file, the meta of an answer from
-  it, its writer), `matches` and `closest` for the list tasks and their refusals, and the
-  renderers that generate `StrEnum` and `IntEnum` modules.
+  it, its writer), `matches` and `closest` for the list tasks and their refusals, and
+  `render_enums`, which generates one module of `StrEnum` and `IntEnum` classes.
 - **Adapters** that turn task functions into MCP tools (`xippios.core.mcp`) and FastAPI
   routes (`xippios.core.http`) without any logic of their own.
 - **Test support**: a live-test gate, offline guarantees for every other test (no
@@ -408,33 +408,31 @@ upstream added since needs a refresh of the list.
 
 Other code lists are read with `load_json` or `load_table` (`load_csv`, which
 `load_table` calls for a CSV file, stays in `xippios.core.reference`). The refresh
-script generates `enums.py` from them with `xippios.core.reference`, and the module is
-committed as rendered:
+script generates `enums.py` from the lists with one `render_enums` call, then runs
+`ruff format` and `ruff check --fix` on it, and the module is committed as formatted:
 
 ```python
-from xippios.core.reference import id_name_pairs, render_int_enums, render_str_enums
+from xippios.core.reference import id_name_pairs, render_enums
 
-# Value lists: one StrEnum each, member names derived from the values.
-enums = render_str_enums(
-    {"state_alpha": ["AK", "AL"], "sector_desc": ["ANIMALS & PRODUCTS", "CROPS"]},
-    class_names={"sector_desc": "Sector"},
-    fetched="2026-10-24",
-    generator="scripts/refresh_reference.py",
-)
-
-# Integer ids with names: one IntEnum each, values the ids, in upstream order.
 records = [
     {"attributeId": 4, "attributeName": "Area Harvested"},
     {"attributeId": 126, "attributeName": "Total Disappearance"},
     {"attributeId": 173, "attributeName": "Total Disappearance"},
 ]
-pairs = id_name_pairs(records, id_field="attributeId", name_field="attributeName")
-ids = render_int_enums(
-    {"attributeId": pairs},
-    class_names={"attributeId": "AttributeId"},
-    fetched="2026-10-24",
+source = render_enums(
+    {
+        # Strings: a StrEnum, member names derived from the values.
+        "sector_desc": ["ANIMALS & PRODUCTS", "CROPS"],
+        # (id, name) pairs: an IntEnum, values the ids, in upstream order.
+        "attributeId": id_name_pairs(records, id_field="attributeId", name_field="attributeName"),
+    },
+    fetched={"sector_desc": "2026-10-27", "attributeId": "2026-10-24"},  # or one date
+    class_names={"sector_desc": "Sector", "attributeId": "AttributeId"},
     generator="scripts/refresh_reference.py",
 )
+ENUMS.write_text(source, encoding="utf-8")
+# then: uv run ruff format src/xippios/example/enums.py
+#       uv run ruff check --fix src/xippios/example/enums.py
 ```
 
 ```python
@@ -447,21 +445,22 @@ class AttributeId(IntEnum):
 ```
 
 An upstream whose ids are integers gets `IntEnum` (conventions §3), so a member compares
-equal to the id in upstream's data; a name several ids share gets `_<id>`. Values are
+equal to the id in upstream's data; a name several ids share gets `_<id>`. Each class's
+docstring is one line naming the list and its fetch date, which an MCP tool's input
+schema shows the agent (conventions §8). The output is plain and ASCII-only: values are
 written as `ascii()` writes them, every character outside ASCII as an escape
-(`"C\xf4te d\u2019Ivoire"`), a member too long for its line is wrapped as ruff wraps it,
-and `__all__` is sorted as ruff sorts it, one name per line. The whole module is
-ASCII-only, so no ruff version can find an ambiguous character in it, and it passes
-`ruff check` and `ruff format --check` unchanged; a key, class name, fetch date or
-generator text that is not printable ASCII is refused. A member name too long for any
-line (over 92 columns), or a value with nothing to derive one from (an empty or a
-non-Latin label), is refused with `ValueError`; the refresh script names that member by
-hand, once:
+(`'C\xf4te d\u2019Ivoire'`), one member per line, `__all__` in the order of the lists, and
+a line over 100 columns carries `# noqa: E501`; ruff chooses the quotes, wraps what fits
+and sorts `__all__`. A key, class name, fetch date or generator text that is not
+printable ASCII is refused, and so is an empty list, a repeated id, and a value with
+nothing to derive a member name from (an empty or a non-Latin label) or whose name
+collides; the refresh script names that member by hand, once:
 
 ```python
-enums = render_str_enums(
+source = render_enums(
     {"short_desc": values},
-    member_names={"short_desc": {long_value: "CORN_GRAIN_IRRIGATED_ALL"}},
+    fetched="2026-10-27",
+    member_names={"short_desc": {"\u5317\u4eac": "BEIJING"}},
 )
 ```
 

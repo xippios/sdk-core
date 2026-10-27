@@ -45,7 +45,7 @@ src/xippios/core/
                      Result[T], ResultCap, parse(); re-exports REDACTED
   pagination.py      paginate_offset (page numbers map onto offsets), collect()
   reference.py       loader for packaged reference data (CSV, JSON); PackagedList (load, meta, parse,
-                     write), matches, closest; StrEnum/IntEnum renderers
+                     write), matches, closest; render_enums (StrEnum and IntEnum in one module)
   tenants.py         Tenants (tenants declared in the environment, one client each), list_task
   data_gov.py        the api.data.gov gateway: Gateway (key, classify, one QuotaPolicy per process)
   client/            httpx client: config, retry, ratelimit, cache, quota, auth (env-key helpers),
