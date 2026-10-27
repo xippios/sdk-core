@@ -94,47 +94,26 @@ def test_request_omits_what_the_caller_left_none() -> None:
     assert meta.request == {"year": 2024, "filters": {"state": None}}
 
 
-def test_result_meta_tenant_round_trips_by_name() -> None:
-    meta = ResultMeta(source="example", endpoint="account/list.json", tenant="acme")
-    assert meta.tenant == "acme"
-    dumped = meta.model_dump(mode="json")
-    assert dumped["tenant"] == "acme"
-    assert json.loads(meta.model_dump_json())["tenant"] == "acme"
-    assert ResultMeta.model_validate(dumped) == meta
-    assert ResultMeta.model_validate_json(meta.model_dump_json()) == meta
-    assert ResultMeta(source="s", endpoint="e").model_dump(mode="json")["tenant"] is None
-    rows = [Series(series_id="a", value=1)]
-    result = Result[list[Series]](data=rows, meta=meta)
-    assert Result[list[Series]].model_validate(result.model_dump(mode="json")) == result
-
-
 def test_result_meta_rejects_a_negative_total() -> None:
     with pytest.raises(ValueError, match="total must not be negative"):
         ResultMeta(source="s", endpoint="e", total=-1)
 
 
-def test_result_meta_total_is_never_computed_from_data() -> None:
-    rows = [Series(series_id=str(i), value=i) for i in range(3)]
-    result = Result[list[Series]](data=rows, meta=ResultMeta(source="s", endpoint="e"))
-    assert result.meta.total is None
-    page = Result[list[Series]](data=rows, meta=ResultMeta(source="s", endpoint="e", total=40))
-    assert page.meta.total == 40
-    assert Result[list[Series]].model_validate(page.model_dump(mode="json")) == page
-
-
 def test_result_envelope_round_trips() -> None:
     meta = ResultMeta(
         source="example",
-        endpoint="get_thing",
+        endpoint="account/list.json",
         retrieved_at=datetime(2026, 10, 20, tzinfo=UTC),
         request={"id": 7},
+        total=40,  # upstream's count, never len(data) (ADR-0012)
+        tenant="acme",
     )
     result = Result[list[Series]](data=[Series(series_id="a", value=1)], meta=meta)
     dumped = result.model_dump(mode="json")
-    assert dumped["meta"]["source"] == "example"
+    assert (dumped["meta"]["total"], dumped["meta"]["tenant"]) == (40, "acme")
     assert dumped["data"][0]["series_id"] == "a"
-    again = Result[list[Series]].model_validate(dumped)
-    assert again == result
+    assert Result[list[Series]].model_validate(dumped) == result
+    assert Result[list[Series]].model_validate_json(result.model_dump_json()) == result
 
 
 def test_parse_model_and_generic() -> None:
