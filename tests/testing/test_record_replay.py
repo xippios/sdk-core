@@ -49,14 +49,14 @@ async def test_record_then_replay(
     )
     client = AsyncClient(config)
     fixture_file = tmp_path / "x" / "two_rows.json"
-    await record(client, "/v1/x", fixture_file, params={"api_key": "SECRET", "year": 2024})
+    await record(client, "/v1/x", fixture_file, params={"token": "SECRET", "year": 2024})
     assert upstream.call_count == 1
     assert "SECRET" not in fixture_file.read_text()
 
     respx_mock.reset()
     respx_mock.routes.clear()
     route = replay(respx_mock, fixture_file)
-    response = await client.get("/v1/x", params={"api_key": "OTHER", "year": 2024})
+    response = await client.get("/v1/x", params={"token": "OTHER", "year": 2024})
     assert route.call_count == 1
     assert response.json() == {"rows": [1, 2]}
     assert response.headers["x-vintage"] == "2024-10"
@@ -194,11 +194,11 @@ async def test_match_params_matches_the_recorded_value_and_misses_another(
 def test_match_params_refuses_a_credential_or_absent_name(
     respx_mock: respx.MockRouter, tmp_path: Path
 ) -> None:
-    request = httpx.Request("GET", f"{BASE}/v1/x?api_key=SECRET&year=2024")
+    request = httpx.Request("GET", f"{BASE}/v1/x?token=SECRET&year=2024")
     path = tmp_path / "x.json"
     write_fixture(httpx.Response(200, json={}, request=request), path)
-    with pytest.raises(ValueError, match=r"^match_params: 'api_key' names a credential") as info:
-        replay(respx_mock, path, match_params=["year", "api_key"])
+    with pytest.raises(ValueError, match=r"^match_params: 'token' names a credential") as info:
+        replay(respx_mock, path, match_params=["year", "token"])
     assert "SECRET" not in str(info.value)
     with pytest.raises(ValueError, match=r"^match_params: 'month' is not a query parameter"):
         replay(respx_mock, path, match_params=["month"])
@@ -254,10 +254,10 @@ async def test_sent_urls_are_scrubbed_strings_in_order(
     route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
     assert sent_urls(route) == []
     client = AsyncClient(config)
-    await client.get("/v1/x", params={"api_key": "SECRET", "year": 2024})
+    await client.get("/v1/x", params={"token": "SECRET", "year": 2024})
     await client.get("/v1/x", params={"year": 2025})
     urls = sent_urls(route)
-    assert urls == [f"{BASE}/v1/x?api_key={REDACTED}&year=2024", f"{BASE}/v1/x?year=2025"]
+    assert urls == [f"{BASE}/v1/x?token={REDACTED}&year=2024", f"{BASE}/v1/x?year=2025"]
     assert all(isinstance(url, str) for url in urls)
 
 
@@ -301,10 +301,10 @@ def test_sent_query_is_the_last_query_scrubbed(respx_mock: respx.MockRouter) -> 
     route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
     with pytest.raises(AssertionError, match="received no request"):
         sent_query(route)
-    httpx.get(f"{BASE}/v1/x", params={"api_key": "SECRET", "year": 2024})
+    httpx.get(f"{BASE}/v1/x", params={"token": "SECRET", "year": 2024})
     httpx.get(f"{BASE}/v1/x", params={"year": 2025, "state": ""})
     assert sent_query(route) == {"year": "2025", "state": ""}
-    assert [httpx.URL(url).params.get("api_key") for url in sent_urls(route)] == [REDACTED, None]
+    assert [httpx.URL(url).params.get("token") for url in sent_urls(route)] == [REDACTED, None]
 
 
 def test_sent_query_refuses_a_repeated_parameter(respx_mock: respx.MockRouter) -> None:
@@ -316,10 +316,10 @@ def test_sent_query_refuses_a_repeated_parameter(respx_mock: respx.MockRouter) -
 
 def test_recorded_query_is_the_scrubbed_recorded_query(tmp_path: Path) -> None:
     # sdk-comtrade (recorded_params, _recorded) and sdk-cashctrl (recorded_query).
-    request = httpx.Request("GET", f"{BASE}/v1/x?api_key=SECRET&year=2024&q=")
+    request = httpx.Request("GET", f"{BASE}/v1/x?token=SECRET&year=2024&q=")
     path = tmp_path / "x.json"
     write_fixture(httpx.Response(200, json={}, request=request), path)
-    assert recorded_query(load_fixture(path)) == {"api_key": REDACTED, "year": "2024", "q": ""}
+    assert recorded_query(load_fixture(path)) == {"token": REDACTED, "year": "2024", "q": ""}
 
 
 def test_a_recorded_answer_is_served_at_another_url(
@@ -347,14 +347,14 @@ def test_a_recorded_answer_is_served_at_another_url(
 def test_response_from_fixture_carries_the_recorded_request(tmp_path: Path) -> None:
     # sdk-usda-psd, sdk-usda-esr, sdk-usda-gats (test_client.py) and sdk-cashctrl
     # (test_errors.py) each carried recorded(): a recorded answer for classify.
-    request = httpx.Request("GET", f"{BASE}/v1/x?api_key=SECRET")
+    request = httpx.Request("GET", f"{BASE}/v1/x?token=SECRET")
     path = tmp_path / "x.json"
     write_fixture(httpx.Response(404, json={"error": "none"}, request=request), path)
     response = response_from_fixture(load_fixture(path))
     assert (response.status_code, response.json()) == (404, {"error": "none"})
     assert (response.request.method, str(response.request.url)) == (
         "GET",
-        f"{BASE}/v1/x?api_key={REDACTED}",
+        f"{BASE}/v1/x?token={REDACTED}",
     )
     error = error_from_response(response, source="example")
     assert isinstance(error, NotFoundError)

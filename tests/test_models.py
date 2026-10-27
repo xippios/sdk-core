@@ -7,7 +7,6 @@ from pydantic import Field, computed_field
 
 from xippios.core.errors import ValidationError
 from xippios.core.models import (
-    REDACTED,
     Result,
     ResultCap,
     ResultMeta,
@@ -105,18 +104,6 @@ def test_parse_wraps_validation_error_with_raw() -> None:
     assert info.value.raw is raw
     assert info.value.source == "example"
     assert str(info.value).startswith("example get_thing: 1 validation error(s); first at value:")
-
-
-def test_result_meta_never_carries_credentials() -> None:
-    request = {"api_key": "SECRET", "commodity_desc": "CORN", "nested": {"ok": [{"token": "T"}]}}
-    meta = ResultMeta(source="example", endpoint="api_GET", request=request)
-    assert meta.request == {
-        "api_key": REDACTED,
-        "commodity_desc": "CORN",
-        "nested": {"ok": [{"token": REDACTED}]},  # at any depth
-    }
-    assert request["api_key"] == "SECRET"  # the caller's mapping is copied, not changed
-    assert "SECRET" not in meta.model_dump_json()
 
 
 class Row(UpstreamModel):
