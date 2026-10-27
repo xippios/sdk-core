@@ -14,6 +14,7 @@ from xippios.core.errors import (
     NotFoundError,
     RateLimitError,
     TransportError,
+    UnknownCode,
     UpstreamError,
     ValidationError,
     XippiosError,
@@ -199,6 +200,14 @@ ERRORS = [
     TransportError("ConnectError: nope", source="example"),
     InvalidRequestError("year must have four digits", source="example"),
     RequestRejected("rejected", fields=("amount",), upstream_message="Too big.", source="ex"),
+    UnknownCode(
+        "country_code",
+        "ZZ",
+        list_name="countries",
+        fetched=datetime(2026, 10, 23, tzinfo=UTC),
+        closest=[("ZA", "South Africa")],
+        source="example",
+    ),
 ]
 
 
@@ -226,7 +235,9 @@ def test_errors_survive_copy_and_pickle(
         assert clone.source == error.source
         assert clone.args == error.args
         assert vars(clone) == vars(error)
-        for name in ("status", "retry_after", "raw", "body", "fields", "upstream_message"):
+        for name in (
+            "status", "retry_after", "raw", "body", "fields", "upstream_message", "closest",
+        ):  # fmt: skip
             assert getattr(clone, name, None) == getattr(error, name, None)
 
 
@@ -236,5 +247,52 @@ def test_every_taxonomy_class_is_covered() -> None:
         for name in errors.__all__
         if isinstance(cls := getattr(errors, name), type) and issubclass(cls, XippiosError)
     }
-    assert len(taxonomy) == 9
+    assert len(taxonomy) == 10
     assert {type(error) for error in ERRORS} == taxonomy | {RequestRejected}
+
+
+FETCHED = datetime(2026, 10, 23, 9, 15, tzinfo=UTC)
+REFRESH = "If upstream added it since, the packaged list needs a refresh (/refresh-reference-data)."
+
+
+def test_unknown_code_names_the_closest_codes_and_the_refresh() -> None:
+    # The copies of sdk-usda-psd, sdk-usda-esr and sdk-usda-gats, one message (ADR-0022).
+    closest = [("0410000", "Wheat"), ("0440000", "Corn")]
+    error = UnknownCode(
+        "commodity_code",
+        "0410001",
+        list_name="commodities",
+        fetched=FETCHED,
+        closest=closest,
+        source="usda-psd",
+    )
+    assert isinstance(error, InvalidRequestError)
+    assert str(error) == (
+        "'0410001' is not a commodity_code in the packaged commodities list (fetched "
+        "2026-10-23). Did you mean 0410000 (Wheat), 0440000 (Corn)? " + REFRESH
+    )
+    assert (error.param, error.value, error.fetched) == ("commodity_code", "0410001", FETCHED)
+    assert (error.list_name, error.source) == ("commodities", "usda-psd")
+    assert error.closest == tuple(closest)
+
+
+def test_unknown_code_takes_a_hint_over_the_closest_and_a_reason() -> None:
+    error = UnknownCode(
+        "attribute_id",
+        999,
+        list_name="commodityAttributes",
+        fetched=FETCHED,
+        closest=[(99, "Other")],
+        hint="Omit attribute_id for every attribute.",
+        reason="An id the list lacks selects nothing, so the package refuses it.",
+    )
+    assert str(error) == (
+        "999 is not an attribute_id in the packaged commodityAttributes list (fetched "
+        "2026-10-23). Omit attribute_id for every attribute. An id the list lacks selects "
+        "nothing, so the package refuses it. " + REFRESH
+    )
+    bare = UnknownCode("partner_code", "ZZ", list_name="countries", fetched=FETCHED)
+    assert str(bare) == (
+        "'ZZ' is not a partner_code in the packaged countries list (fetched 2026-10-23). " + REFRESH
+    )
+    assert bare.closest == ()
