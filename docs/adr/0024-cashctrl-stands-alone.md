@@ -73,7 +73,12 @@ verify.
   `src/xippios/core/tenants.py` as a module of its own;
   `src/xippios/core/mcp/server.py` for the lock (`TenantLock` and the functions that
   served it), as a wrapper that binds `org` or as a middleware of its own, its choice,
-  since decision 7 of ADR-0014 binds it no longer; `src/xippios/core/testing/adapters.py`
+  since decision 7 of ADR-0014 binds it no longer. The `mcp` SDK runs middleware
+  outermost first, and `register_tasks` appends core's argument check, so a lock
+  middleware appended after `build_server` would run inside it and a call without `org`
+  would get "org: Field required"; inserted ahead of the check
+  (`server.middleware.insert(0, ...)`), as core inserted it, it keeps ADR-0014's texts
+  as they were. `src/xippios/core/testing/adapters.py`
   for `assert_write_tools`, which it extends with a check that `confirm` is the last
   parameter (queue row 26 f); `src/xippios/core/testing/scrub.py` for the host
   placeholder, the percent-encoded matching, the JSON-decoded verify and `rewrite`, into
