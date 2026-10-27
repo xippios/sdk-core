@@ -7,8 +7,8 @@ from pathlib import Path
 import httpx
 import pytest
 
-from xippios.core.testing import REDACTED, Scrub, fixture_path, load_fixture, write_fixture
-from xippios.core.testing.fixtures import fixture_from_response
+from xippios.core.testing import REDACTED, Scrub, fixture_path, load_fixture
+from xippios.core.testing.fixtures import fixture_from_response, write_fixture
 from xippios.core.testing.scrub import _Scrubber
 
 TENANT = "acme.example.test"

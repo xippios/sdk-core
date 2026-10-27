@@ -13,7 +13,8 @@ from typing import Any
 import httpx
 
 from xippios.core._loop import sync
-from xippios.core.client import AsyncClient, Params, RetryPolicy, Timeouts, UseClientDefault
+from xippios.core.client import AsyncClient
+from xippios.core.client._core import _CLIENT_AUTH, Params, _ClientAuth
 from xippios.core.testing.fixtures import Fixture, write_fixture
 from xippios.core.testing.scrub import Scrub
 
@@ -31,18 +32,13 @@ async def record(
     data: Mapping[str, Any] | None = None,
     headers: Mapping[str, str] | None = None,
     scrub: Scrub | None = None,
-    retry: RetryPolicy | None = None,
-    timeouts: Timeouts | None = None,
-    auth: httpx.Auth | UseClientDefault | None = httpx.USE_CLIENT_DEFAULT,
+    auth: httpx.Auth | _ClientAuth | None = _CLIENT_AUTH,
 ) -> Fixture:
-    """Perform one live request and write the scrubbed exchange to ``fixture``.
+    """Perform one live request through ``client`` and write the scrubbed exchange.
 
-    With ``retry`` or ``timeouts`` the request goes through ``client.derive(...)``,
-    which shares the client's auth, rate limiter, cache and transport and is closed
-    afterwards, leaving the client and its transport open; otherwise through ``client``
-    itself. ``derive`` returns a plain ``AsyncClient``: the request logic of a subclass
-    of ``AsyncClient`` is not carried over, so a source that overrides ``request``
-    records without ``retry`` and ``timeouts``.
+    The client's own retry policy and timeouts apply. A recording that should spend no
+    retry on a 5xx, or needs a longer read timeout, records through a client built for
+    it, e.g. on ``dataclasses.replace(config, retry=RetryPolicy(max_attempts=1))``.
 
     A refusal writes nothing. One raised after the request was sent (a binary body, or
     the verify step finding the original host or a secret value) comes after upstream
@@ -60,10 +56,6 @@ async def record(
         scrub: What to remove besides credentials, e.g.
             ``Scrub(host="demo.example.test", secrets=[tenant])``; ``None`` is
             ``Scrub()``.
-        retry: Retry policy for this recording, e.g. ``RetryPolicy(max_attempts=1)``;
-            ``None`` keeps the client's.
-        timeouts: Timeouts for this recording, e.g. ``Timeouts(read=300.0)``; ``None``
-            keeps the client's.
         auth: Credentials for this recording only, as for ``AsyncClient.request``:
             ``None`` records a keyless endpoint without the client's key, an
             ``httpx.Auth`` replaces it; the default sends the client's.
@@ -75,29 +67,16 @@ async def record(
             ("request host") or a secret value ("secret value") left by the scrub; a
             ``Scrub.host`` that is the request's own host.
     """
-    if retry is None and timeouts is None:
-        response = await client.request(
-            method,
-            path,
-            params=params,
-            json=json,
-            data=data,
-            headers=headers,
-            raise_on_error=False,
-            auth=auth,
-        )
-    else:
-        async with client.derive(retry=retry, timeouts=timeouts) as derived:
-            response = await derived.request(
-                method,
-                path,
-                params=params,
-                json=json,
-                data=data,
-                headers=headers,
-                raise_on_error=False,
-                auth=auth,
-            )
+    response = await client.request(
+        method,
+        path,
+        params=params,
+        json=json,
+        data=data,
+        headers=headers,
+        raise_on_error=False,
+        auth=auth,
+    )
     return write_fixture(response, fixture, scrub=scrub)
 
 

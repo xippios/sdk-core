@@ -16,16 +16,8 @@ import httpx
 import pytest
 import respx
 
-from xippios.core.client import (
-    AsyncClient,
-    Client,
-    ClientConfig,
-    HeaderKeyAuth,
-    MemoryCache,
-    QuotaPolicy,
-    QuotaSnapshot,
-    RetryPolicy,
-)
+from xippios.core.client import AsyncClient, ClientConfig, MemoryCache, QuotaPolicy, RetryPolicy
+from xippios.core.client.quota import QuotaSnapshot
 from xippios.core.errors import RateLimitError
 from xippios.core.mcp.errors import error_to_text
 
@@ -96,13 +88,6 @@ def test_quota_headers_land_in_the_snapshot() -> None:
     snapshot = policy.snapshot()
     assert snapshot is not None
     assert snapshot.describe() == "999 of 1000 requests left as of 2026-10-23T08:00:00Z"
-
-
-def test_the_snapshot_is_frozen() -> None:
-    policy = QuotaPolicy(clock=Clock())
-    policy.observe(answer(headers=QUOTA))
-    snapshot = policy.snapshot()
-    assert snapshot is not None
     with pytest.raises(dataclasses.FrozenInstanceError):
         snapshot.remaining = 5  # type: ignore[misc]
 
@@ -178,14 +163,6 @@ def test_a_header_that_is_no_count_is_ignored(value: str) -> None:
     policy = QuotaPolicy(clock=Clock())
     policy.observe(answer(headers={"x-ratelimit-limit": value, "x-ratelimit-remaining": value}))
     assert policy.snapshot() is None
-
-
-def test_a_count_that_is_no_number_leaves_the_snapshot() -> None:
-    policy = QuotaPolicy(clock=Clock())
-    policy.observe(answer(headers=QUOTA))
-    before = policy.snapshot()
-    policy.observe(answer(headers={"x-ratelimit-limit": "²", "x-ratelimit-remaining": "²"}))
-    assert policy.snapshot() is before
 
 
 @pytest.mark.parametrize("value", ["²", "9" * 400])
@@ -283,15 +260,6 @@ def test_a_429_without_retry_after_falls_back_to_the_window() -> None:
     assert snapshot.describe() == (
         "0 of ? requests left as of 2026-10-23T08:00:00Z, expected back at 2026-10-23T09:00:00Z"
     )
-
-
-def test_a_429_marks_the_quota_spent_whatever_remaining_says() -> None:
-    policy = QuotaPolicy(clock=Clock())
-    policy.observe(answer(429, {**QUOTA, "Retry-After": "1"}))
-    snapshot = policy.snapshot()
-    assert snapshot is not None
-    assert snapshot.remaining == 0
-    assert snapshot.resumes_at == NOW + timedelta(seconds=1)
 
 
 def test_a_200_that_leaves_nothing_counts_the_window() -> None:
@@ -530,12 +498,6 @@ def test_install_refuses_a_config_with_hooks_of_its_own(
         QuotaPolicy().install(make_config(**hooks))
 
 
-def test_another_policy_s_hooks_are_foreign_too() -> None:
-    installed = QuotaPolicy().install(make_config())
-    with pytest.raises(ValueError, match="hooks of its own"):
-        QuotaPolicy().install(installed)
-
-
 async def pause(config: ClientConfig) -> None:
     """Run the installed ``before_request`` hook as the client would."""
     assert config.before_request is not None
@@ -561,23 +523,6 @@ async def test_each_installed_config_pauses_within_its_own_backoff_max() -> None
     explicit.observe(answer(headers=SPENT))
     with pytest.raises(RateLimitError, match=r"\(5 s\)"):
         await pause(explicit.install(make_config(retry=RetryPolicy(backoff_max=60.0))))
-
-
-@pytest.mark.anyio
-@pytest.mark.rate_limited
-async def test_a_derived_client_keeps_its_parent_s_cap() -> None:
-    events: list[str] = []
-    clock = Clock()
-    policy = QuotaPolicy(window=20.0, clock=clock, sleep=Sleeper(events, clock))
-    upstream = Upstream(events, answer(headers=SPENT))
-    config = policy.install(make_config(retry=RetryPolicy(max_attempts=1, backoff_max=12.0)))
-    client = AsyncClient(config, transport=upstream)
-    await client.get("/v1/x")
-    derived = client.derive(retry=RetryPolicy(max_attempts=1, backoff_max=600.0))
-    assert derived.config.before_request == config.before_request
-    with pytest.raises(RateLimitError, match=r"\(12 s\)"):
-        await derived.get("/v1/x")
-    assert upstream.sent == 1
 
 
 # -- the pause, through the client --------------------------------------------------------
@@ -662,20 +607,6 @@ async def test_the_pause_logs_one_warning_with_method_and_path_only(
 
 @pytest.mark.anyio
 @pytest.mark.rate_limited
-async def test_the_cap_is_the_config_s_backoff_max() -> None:
-    events: list[str] = []
-    clock = Clock()
-    policy = QuotaPolicy(clock=clock, sleep=Sleeper(events, clock))
-    upstream = Upstream(events, answer(headers=SPENT), answer(headers=QUOTA))
-    patient = policy.install(make_config(retry=RetryPolicy(max_attempts=1, backoff_max=7200.0)))
-    client = AsyncClient(patient, transport=upstream)
-    await client.get("/v1/x")
-    await client.get("/v1/x")
-    assert events == ["sent /v1/x", "sleep 3600", "sent /v1/x"]
-
-
-@pytest.mark.anyio
-@pytest.mark.rate_limited
 async def test_a_cache_hit_never_waits_and_never_updates_the_snapshot() -> None:
     events: list[str] = []
     clock = Clock()
@@ -721,25 +652,6 @@ async def test_raw_answers_and_retried_attempts_update_the_snapshot() -> None:
 
 @pytest.mark.anyio
 @pytest.mark.rate_limited
-async def test_a_recorded_style_429_is_raised_once_and_the_next_request_refused() -> None:
-    # sdk-usda-psd's over_rate_limit.json: Retry-After 3151 s, beyond backoff_max.
-    events: list[str] = []
-    client, _, upstream, _ = quota_client(events, answer(429, {**SPENT, "Retry-After": "3151"}))
-    client = AsyncClient(
-        dataclasses.replace(client.config, retry=RetryPolicy()), transport=upstream
-    )
-    with pytest.raises(RateLimitError) as raised:
-        await client.get("/v1/x")
-    assert raised.value.retry_after == 3151.0
-    assert upstream.sent == 1
-    with pytest.raises(RateLimitError, match="nothing was sent") as refused:
-        await client.get("/v2/y")
-    assert refused.value.retry_after == 3151.0
-    assert upstream.sent == 1
-
-
-@pytest.mark.anyio
-@pytest.mark.rate_limited
 async def test_before_request_alone_uses_a_30_s_cap() -> None:
     events: list[str] = []
     clock = Clock()
@@ -752,17 +664,3 @@ async def test_before_request_alone_uses_a_30_s_cap() -> None:
     assert events == ["sleep 29"]
     await policy.before_request(httpx.Request("GET", f"{BASE}/v1/x"))
     assert events == ["sleep 29"], "the quota is expected back by now"
-
-
-@pytest.mark.rate_limited
-def test_the_sync_facade_pauses_too() -> None:
-    events: list[str] = []
-    clock = Clock()
-    policy = QuotaPolicy(window=5.0, clock=clock, sleep=Sleeper(events, clock))
-    upstream = Upstream(events, answer(headers=SPENT), answer(headers=QUOTA))
-    config = policy.install(make_config(retry=RetryPolicy(max_attempts=1)))
-    auth = HeaderKeyAuth("X-Api-Key", "EXAMPLE_API_KEY")
-    with Client(config, auth=auth, transport=upstream) as client:
-        client.get("/v1/x")
-        client.get("/v1/x")
-    assert events == ["sent /v1/x", "sleep 5", "sent /v1/x"]

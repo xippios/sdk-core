@@ -1,6 +1,7 @@
 import pytest
 
-from xippios.core.client import RateLimit, TokenBucket
+from xippios.core.client import RateLimit
+from xippios.core.client.ratelimit import TokenBucket
 
 
 class Clock:

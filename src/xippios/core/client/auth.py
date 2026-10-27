@@ -2,21 +2,38 @@
 
 Every upstream sends its key differently: USDA NASS as a query parameter, UN Comtrade
 in a header, CashCtrl as the HTTP basic user name. These ``httpx.Auth`` classes cover
-those shapes and resolve the key lazily through ``resolve_api_key``, so a package
-imports without credentials and fails with ``ConfigError`` on the first request
-instead of at import time.
+those shapes and read the key lazily from the environment (conventions §7), an explicit
+key winning, so a package imports without credentials and fails with ``ConfigError`` on
+the first request instead of at import time.
 """
 
 import base64
+import os
 import threading
 from collections.abc import Generator
 
 import httpx
 from pydantic import SecretStr
 
-from xippios.core.config import resolve_api_key
+from xippios.core.errors import ConfigError
 
 __all__ = ["BasicKeyAuth", "BearerAuth", "EnvKeyAuth", "HeaderKeyAuth", "QueryKeyAuth"]
+
+
+def _resolve_api_key(
+    env_var: str, override: str | SecretStr | None = None, *, source: str | None = None
+) -> SecretStr:
+    """The key from ``override``, else from ``env_var``; an empty variable counts as unset.
+
+    Raises:
+        ConfigError: Neither gives a key; the message names the variable, never a value.
+    """
+    if override is not None:
+        return override if isinstance(override, SecretStr) else SecretStr(override)
+    value = os.environ.get(env_var)
+    if value:
+        return SecretStr(value)
+    raise ConfigError(f"{env_var} is not set; export it or pass the key explicitly", source=source)
 
 
 class EnvKeyAuth(httpx.Auth):
@@ -48,7 +65,7 @@ class EnvKeyAuth(httpx.Auth):
         if self._key is None:
             with self._lock:
                 if self._key is None:
-                    secret = resolve_api_key(self.env_var, self._override, source=self.source)
+                    secret = _resolve_api_key(self.env_var, self._override, source=self.source)
                     self._key = secret.get_secret_value()
         return self._key
 

@@ -1,6 +1,6 @@
 # xippios SDK family — conventions
 
-Version 1.15 · 2026-10-26 · applies to every `sdk-*` repository under github.com/xippios.
+Version 1.16 · 2026-10-27 · applies to every `sdk-*` repository under github.com/xippios.
 Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 The rules of ADR-0019 and ADR-0022, all of them (the download and decode calls, the
 cache bound, `BULK_TASKS`, the fixture cap and the `truncated` marker, the file-fixture
@@ -289,8 +289,10 @@ the query can carry a key (ADR-0005).
 
 ## 7. Configuration
 
-`pydantic-settings`; keys read from `<SOURCE>_API_KEY`, or the issuer's variable where
-ADR-0009 applies, overridable by constructor argument. No config files, no dotenv
+The environment is read through the `EnvKeyAuth` helpers (`QueryKeyAuth`,
+`HeaderKeyAuth`, `BearerAuth`, `BasicKeyAuth`), on the first request: keys from
+`<SOURCE>_API_KEY`, or the issuer's variable where ADR-0009 applies, overridable by
+constructor argument (`key=`; ADR-0002, amendment 2026-10-27). No config files, no dotenv
 loading inside the package — the environment is the contract (direnv in development,
 secrets in CI).
 

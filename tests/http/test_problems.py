@@ -15,12 +15,8 @@ from xippios.core.errors import (
     ValidationError,
     XippiosError,
 )
-from xippios.core.http import (
-    PROBLEM_MEDIA_TYPE,
-    install_error_handlers,
-    problem_response,
-    status_for,
-)
+from xippios.core.http import status_for
+from xippios.core.http.problems import PROBLEM_MEDIA_TYPE, install_error_handlers, problem_response
 
 
 class SpecialNotFound(NotFoundError):

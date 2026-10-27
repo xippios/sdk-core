@@ -1,153 +1,31 @@
-"""HTTP client for upstream APIs (conventions §6): httpx, async core, sync facade."""
+"""HTTP client for upstream APIs (conventions §6): httpx, async core.
 
-from collections.abc import Mapping
-from types import TracebackType
-from typing import Any, Self
+The sync facade is ``xippios.core.sync``, applied to a task function (ADR-0002). This
+package exports what consumers import; the helpers the client calls itself
+(``EnvKeyAuth``, ``CacheBackend``, ``QuotaSnapshot``, ``TokenBucket``,
+``send_with_retries``, ``strip_wire_headers``, ...) are importable from their modules,
+``xippios.core.client.auth``, ``.cache``, ``.quota``, ``.ratelimit``, ``.retry``.
+"""
 
-import httpx
-
-from xippios.core._loop import run
-from xippios.core.client._core import AsyncClient, Params, UseClientDefault, decode_json
-from xippios.core.client.auth import (
-    BasicKeyAuth,
-    BearerAuth,
-    EnvKeyAuth,
-    HeaderKeyAuth,
-    QueryKeyAuth,
-)
-from xippios.core.client.cache import (
-    WIRE_HEADERS,
-    CacheBackend,
-    CachedResponse,
-    MemoryCache,
-    cache_key,
-    strip_wire_headers,
-)
+from xippios.core.client._core import AsyncClient, decode_json
+from xippios.core.client.auth import BasicKeyAuth, BearerAuth, HeaderKeyAuth, QueryKeyAuth
+from xippios.core.client.cache import CachedResponse, MemoryCache, cache_key
 from xippios.core.client.config import ClientConfig, RateLimit, RetryPolicy, Timeouts
-from xippios.core.client.quota import QuotaPolicy, QuotaSnapshot
-from xippios.core.client.ratelimit import TokenBucket
-from xippios.core.client.retry import send_with_retries
+from xippios.core.client.quota import QuotaPolicy
 
 __all__ = [
-    "WIRE_HEADERS",
     "AsyncClient",
     "BasicKeyAuth",
     "BearerAuth",
-    "CacheBackend",
     "CachedResponse",
-    "Client",
     "ClientConfig",
-    "EnvKeyAuth",
     "HeaderKeyAuth",
     "MemoryCache",
-    "Params",
     "QueryKeyAuth",
     "QuotaPolicy",
-    "QuotaSnapshot",
     "RateLimit",
     "RetryPolicy",
     "Timeouts",
-    "TokenBucket",
-    "UseClientDefault",
     "cache_key",
     "decode_json",
-    "send_with_retries",
-    "strip_wire_headers",
 ]
-
-
-class Client:
-    """Synchronous facade over ``AsyncClient`` (ADR-0002).
-
-    Every call runs on the family's background event loop, so it works from scripts,
-    notebooks and inside other event loops. ``async_client`` exposes the underlying
-    instance for code that wants to await natively.
-
-    Args:
-        config: Base URL, timeouts, retry policy, rate limit, cache and headers.
-        auth: An ``httpx.Auth`` adding credentials.
-        transport: Replacement transport, for tests.
-        limiter: A shared ``TokenBucket`` used instead of ``config.rate_limit``; see
-            ``AsyncClient``.
-    """
-
-    def __init__(
-        self,
-        config: ClientConfig,
-        *,
-        auth: httpx.Auth | None = None,
-        transport: httpx.AsyncBaseTransport | None = None,
-        limiter: TokenBucket | None = None,
-    ) -> None:
-        self.async_client = AsyncClient(config, auth=auth, transport=transport, limiter=limiter)
-
-    @property
-    def config(self) -> ClientConfig:
-        """The configuration in use."""
-        return self.async_client.config
-
-    def request(
-        self,
-        method: str,
-        path: str,
-        *,
-        params: Params = None,
-        json: Any = None,
-        data: Mapping[str, Any] | None = None,
-        headers: Mapping[str, str] | None = None,
-        raise_on_error: bool = True,
-        auth: httpx.Auth | UseClientDefault | None = httpx.USE_CLIENT_DEFAULT,
-    ) -> httpx.Response:
-        """See ``AsyncClient.request``; ``data`` is a form body, ``json`` a JSON one.
-
-        ``auth=None`` sends this request without the client's credentials.
-        """
-        return run(
-            self.async_client.request(
-                method,
-                path,
-                params=params,
-                json=json,
-                data=data,
-                headers=headers,
-                raise_on_error=raise_on_error,
-                auth=auth,
-            )
-        )
-
-    def get(
-        self,
-        path: str,
-        *,
-        params: Params = None,
-        headers: Mapping[str, str] | None = None,
-        auth: httpx.Auth | UseClientDefault | None = httpx.USE_CLIENT_DEFAULT,
-    ) -> httpx.Response:
-        """See ``AsyncClient.get``."""
-        return run(self.async_client.get(path, params=params, headers=headers, auth=auth))
-
-    def get_json(
-        self,
-        path: str,
-        *,
-        params: Params = None,
-        headers: Mapping[str, str] | None = None,
-        auth: httpx.Auth | UseClientDefault | None = httpx.USE_CLIENT_DEFAULT,
-    ) -> Any:
-        """See ``AsyncClient.get_json``."""
-        return run(self.async_client.get_json(path, params=params, headers=headers, auth=auth))
-
-    def close(self) -> None:
-        """Close the background loop's connection pool."""
-        run(self.async_client.aclose())
-
-    def __enter__(self) -> Self:
-        return self
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        tb: TracebackType | None,
-    ) -> None:
-        self.close()

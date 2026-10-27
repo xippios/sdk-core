@@ -16,7 +16,8 @@ from mcp.server.mcpserver import MCPServer
 from mcp.types import TextContent
 
 from xippios.core import Tenants
-from xippios.core.mcp import TenantLock, build_server, is_write_server, register_tasks
+from xippios.core.mcp import TenantLock, build_server
+from xippios.core.mcp.server import is_write_server, register_tasks
 from xippios.core.tenants import list_task
 from xippios.core.testing import mcp_call, mcp_call_text
 

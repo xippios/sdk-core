@@ -1,12 +1,7 @@
 import httpx
 
-from xippios.core.client import (
-    WIRE_HEADERS,
-    CachedResponse,
-    MemoryCache,
-    cache_key,
-    strip_wire_headers,
-)
+from xippios.core.client import CachedResponse, MemoryCache, cache_key
+from xippios.core.client.cache import WIRE_HEADERS, strip_wire_headers
 
 
 class Clock:

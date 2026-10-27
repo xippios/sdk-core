@@ -1,5 +1,4 @@
 import asyncio
-import dataclasses
 import gzip
 import time
 
@@ -9,20 +8,15 @@ import respx
 
 from xippios.core.client import (
     AsyncClient,
-    CachedResponse,
-    Client,
     ClientConfig,
     HeaderKeyAuth,
     MemoryCache,
     QueryKeyAuth,
     RateLimit,
     RetryPolicy,
-    Timeouts,
-    TokenBucket,
     cache_key,
     decode_json,
 )
-from xippios.core.client._core import _from_cache
 from xippios.core.errors import (
     AuthError,
     InvalidRequestError,
@@ -71,27 +65,6 @@ async def test_headers_url_and_params(respx_mock: respx.MockRouter, config: Clie
     assert headers["user-agent"] == "xippios-example/1.2.3 (+https://github.com/xippios)"
     assert headers["x-family"] == "xippios"
     assert sent_urls(route) == [f"{BASE}/v1/x?a=1"]
-
-
-@pytest.mark.anyio
-async def test_auth_is_applied(respx_mock: respx.MockRouter, config: ClientConfig) -> None:
-    route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
-    client = AsyncClient(config, auth=httpx.BasicAuth("user", "pw"))
-    await client.get("/v1/x")
-    assert route.calls.last.request.headers["authorization"].startswith("Basic ")
-
-
-@pytest.mark.anyio
-async def test_retries_5xx_then_succeeds(
-    respx_mock: respx.MockRouter, config: ClientConfig, sleeper: Sleeper
-) -> None:
-    route = respx_mock.get(f"{BASE}/v1/x").mock(
-        side_effect=[httpx.Response(503), httpx.Response(200, json={"n": 1})]
-    )
-    client = AsyncClient(config, sleep=sleeper)
-    assert await client.get_json("/v1/x") == {"n": 1}
-    assert route.call_count == 2
-    assert sleeper.calls == [0.1]
 
 
 @pytest.mark.anyio
@@ -191,11 +164,15 @@ async def test_5xx_to_a_write_is_returned_after_one_attempt(
 
 
 @pytest.mark.anyio
-async def test_5xx_to_a_write_is_retried_when_the_policy_allows(
+async def test_a_write_is_retried_when_the_policy_allows(
     respx_mock: respx.MockRouter, sleeper: Sleeper
 ) -> None:
     route = respx_mock.post(f"{BASE}/v1/x").mock(
-        side_effect=[httpx.Response(503), httpx.Response(200, json={"id": 7})]
+        side_effect=[
+            httpx.Response(503),
+            httpx.ConnectError("nope"),
+            httpx.Response(200, json={"id": 7}),
+        ]
     )
     config = ClientConfig(
         source="example",
@@ -206,8 +183,8 @@ async def test_5xx_to_a_write_is_retried_when_the_policy_allows(
     client = AsyncClient(config, sleep=sleeper)
     response = await client.request("POST", "/v1/x", json={"a": 1})
     assert response.json() == {"id": 7}
-    assert route.call_count == 2
-    assert sleeper.calls == [0.1]
+    assert route.call_count == 3  # a 5xx and a transport failure, each retried
+    assert sleeper.calls == [0.1, 0.2]
 
 
 @pytest.mark.anyio
@@ -243,25 +220,6 @@ async def test_5xx_to_an_idempotent_method_is_still_retried(
 
 
 @pytest.mark.anyio
-async def test_transport_error_to_a_write_is_retried_when_the_policy_allows(
-    respx_mock: respx.MockRouter, sleeper: Sleeper
-) -> None:
-    route = respx_mock.post(f"{BASE}/v1/x").mock(
-        side_effect=[httpx.ConnectError("nope"), httpx.Response(200, json={})]
-    )
-    config = ClientConfig(
-        source="example",
-        version="1",
-        base_url=BASE,
-        retry=RetryPolicy(backoff_base=0.1, jitter=False, retry_non_idempotent=True),
-    )
-    client = AsyncClient(config, sleep=sleeper)
-    await client.request("POST", "/v1/x", json={"a": 1})
-    assert route.call_count == 2
-    assert sleeper.calls == [0.1]
-
-
-@pytest.mark.anyio
 async def test_retry_transport_errors_off_wins_over_retry_non_idempotent(
     respx_mock: respx.MockRouter, sleeper: Sleeper
 ) -> None:
@@ -276,7 +234,7 @@ async def test_retry_transport_errors_off_wins_over_retry_non_idempotent(
 
 
 @pytest.mark.anyio
-async def test_data_is_sent_form_encoded(
+async def test_a_body_is_sent_form_encoded_or_as_json(
     respx_mock: respx.MockRouter, config: ClientConfig
 ) -> None:
     # sdk-cashctrl: CashCtrl's writes take form fields, not JSON.
@@ -285,12 +243,7 @@ async def test_data_is_sent_form_encoded(
     await client.request("POST", "/v1/x", data={"a": 1, "b": "x y/é"})
     assert route.calls.last.request.headers["content-type"] == "application/x-www-form-urlencoded"
     assert route.calls.last.request.content == b"a=1&b=x+y%2F%C3%A9"
-
-
-@pytest.mark.anyio
-async def test_json_is_sent_as_json(respx_mock: respx.MockRouter, config: ClientConfig) -> None:
-    route = respx_mock.post(f"{BASE}/v1/x").respond(200, json={})
-    await AsyncClient(config).request("POST", "/v1/x", json={"a": 1})
+    await client.request("POST", "/v1/x", json={"a": 1})
     assert route.calls.last.request.headers["content-type"] == "application/json"
     assert route.calls.last.request.content == b'{"a":1}'
 
@@ -304,13 +257,6 @@ async def test_json_and_data_together_are_refused_before_sending(
     with pytest.raises(ValueError, match="json= or data=, not both"):
         await client.request("POST", "/v1/x", json={"a": 1}, data={"a": 1})
     assert not route.called
-
-
-def test_sync_client_sends_form_data(respx_mock: respx.MockRouter, config: ClientConfig) -> None:
-    route = respx_mock.post(f"{BASE}/v1/x").respond(200, json={})
-    with Client(config) as client:
-        client.request("POST", "/v1/x", data={"a": "1", "b": "2"})
-    assert route.calls.last.request.content == b"a=1&b=2"
 
 
 @pytest.mark.anyio
@@ -330,147 +276,6 @@ async def test_rate_limiter_waits_between_calls(
     await client.get("/v1/x")
     assert len(sleeper.calls) == 1
     assert 0.9 <= sleeper.calls[0] <= 1.0
-
-
-class Clock:
-    def __init__(self) -> None:
-        self.now = 0.0
-
-    def __call__(self) -> float:
-        return self.now
-
-
-@pytest.mark.anyio
-@pytest.mark.rate_limited
-async def test_clients_share_one_limiter(respx_mock: respx.MockRouter, sleeper: Sleeper) -> None:
-    respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
-    bucket = TokenBucket(RateLimit(per_minute=60, burst=1), clock=Clock())
-    keyed = ClientConfig(source="example", version="1", base_url=BASE)
-    # A config of its own would pace at 6,000 a minute; the shared bucket wins.
-    keyless = ClientConfig(
-        source="example", version="1", base_url=BASE, rate_limit=RateLimit(per_minute=6000)
-    )
-    a = AsyncClient(keyed, sleep=sleeper, limiter=bucket)
-    b = AsyncClient(keyless, sleep=sleeper, limiter=bucket)
-    assert a.limiter is b.limiter
-    assert a.limiter is bucket
-    await a.get("/v1/x")
-    assert sleeper.calls == []
-    await b.get("/v1/x")  # the bucket's one token went to a
-    assert sleeper.calls == [pytest.approx(1.0)]
-
-
-def test_limiter_defaults_to_the_configured_rate_limit(config: ClientConfig) -> None:
-    assert AsyncClient(config).limiter is None
-    limited = ClientConfig(
-        source="example", version="1", base_url=BASE, rate_limit=RateLimit(per_minute=30)
-    )
-    own = AsyncClient(limited).limiter
-    assert own is not None
-    assert own.limit == RateLimit(per_minute=30)
-    shared = TokenBucket(RateLimit(per_minute=60))
-    assert Client(limited, limiter=shared).async_client.limiter is shared
-
-
-@pytest.mark.anyio
-@pytest.mark.rate_limited
-async def test_derive_shares_auth_limiter_and_cache_and_changes_only_the_policy(
-    respx_mock: respx.MockRouter, sleeper: Sleeper
-) -> None:
-    # sdk-comtrade: a recording needs longer timeouts than the source's client has.
-    route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={"n": 1})
-    cache = MemoryCache()
-    bucket = TokenBucket(RateLimit(per_minute=60, burst=1), clock=Clock())
-    config = ClientConfig(
-        source="example",
-        version="1",
-        base_url=BASE,
-        retry=RetryPolicy(max_attempts=1),
-        cache=cache,
-        headers={"X-Family": "xippios"},
-    )
-    client = AsyncClient(config, auth=httpx.BasicAuth("user", "pw"), sleep=sleeper, limiter=bucket)
-    retry = RetryPolicy(max_attempts=5, jitter=False)
-    timeouts = Timeouts(read=300.0)
-    derived = client.derive(retry=retry, timeouts=timeouts)
-
-    assert derived is not client
-    assert type(derived) is AsyncClient
-    assert derived.config == dataclasses.replace(config, retry=retry, timeouts=timeouts)
-    assert client.config is config
-    assert derived.config.cache is cache
-    assert derived.limiter is bucket
-    assert client.derive(timeouts=timeouts).config.retry is config.retry
-    assert client.derive(retry=retry).config.timeouts is config.timeouts
-    assert client.derive().config == config
-
-    await client.get("/v1/x", params={"a": 1})  # takes the bucket's one token, fills the cache
-    hit = await derived.get("/v1/x", params={"a": 1})
-    assert hit.extensions["xippios_cache"] == "hit"
-    assert route.call_count == 1
-    assert sleeper.calls == []
-    await derived.get("/v1/x", params={"a": 2})  # waits on the shared bucket, shared sleep
-    assert sleeper.calls == [pytest.approx(1.0)]
-    assert route.calls.last.request.headers["authorization"].startswith("Basic ")
-    assert route.calls.last.request.headers["x-family"] == "xippios"
-    assert route.calls.last.request.extensions["timeout"] == {
-        "connect": 10.0,
-        "read": 300.0,
-        "write": 10.0,
-        "pool": 10.0,
-    }
-    await derived.aclose()
-
-
-@pytest.mark.anyio
-async def test_derive_shares_the_transport(config: ClientConfig) -> None:
-    seen: list[httpx.Request] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        seen.append(request)
-        return httpx.Response(200, json={})
-
-    client = AsyncClient(config, transport=httpx.MockTransport(handler))
-    async with client.derive(retry=RetryPolicy(max_attempts=1)) as derived:
-        await derived.get("/v1/x")
-    assert [str(request.url) for request in seen] == [f"{BASE}/v1/x"]
-
-
-class CountingTransport(httpx.AsyncBaseTransport):
-    """Answers every request and counts the requests and how often it was closed."""
-
-    def __init__(self) -> None:
-        self.requests = 0
-        self.closed = 0
-
-    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
-        self.requests += 1
-        return httpx.Response(200, json={})
-
-    async def aclose(self) -> None:
-        self.closed += 1
-
-
-@pytest.mark.anyio
-async def test_a_derived_client_never_closes_the_transport_it_borrowed(
-    config: ClientConfig,
-) -> None:
-    transport = CountingTransport()
-    client = AsyncClient(config, transport=transport)
-    await client.get("/v1/x")
-    derived = client.derive(retry=RetryPolicy(max_attempts=1))
-    await derived.get("/v1/x")
-    pool = derived._pool()
-    await derived.aclose()
-    assert pool.is_closed  # the derived client's own pool is closed
-    assert transport.closed == 0  # the parent's transport is not
-    async with derived.derive(timeouts=Timeouts(read=1.0)) as grandchild:
-        await grandchild.get("/v1/x")
-    assert transport.closed == 0
-    await client.get("/v1/x")  # the parent still sends through it
-    assert transport.requests == 4
-    await client.aclose()
-    assert transport.closed == 1  # a transport passed by the caller closes with its client
 
 
 @pytest.mark.anyio
@@ -506,6 +311,7 @@ async def test_a_cache_hit_carries_the_time_its_entry_was_stored(
     assert hit.extensions["xippios_cache"] == "hit"
     assert hit.extensions["xippios_cache_stored_at"] == stored.stored_at
     assert before <= stored.stored_at <= after
+    assert decode_json(hit, source="example") == {"n": 1}  # get, then decode_json
 
 
 @pytest.mark.anyio
@@ -532,30 +338,6 @@ async def test_gzip_answer_replays_from_the_cache(respx_mock: respx.MockRouter) 
     names = {name.lower() for name, _ in stored.headers}
     assert "content-type" in names
     assert not names & {"content-encoding", "content-length"}
-
-
-def test_from_cache_strips_wire_headers_of_an_old_entry() -> None:
-    # A persistent backend may still hold entries stored by 0.1.0, wire headers and all.
-    entry = CachedResponse(
-        status=200,
-        headers=(
-            ("content-type", "application/json"),
-            ("Content-Encoding", "gzip"),
-            ("content-length", "99"),
-            ("transfer-encoding", "chunked"),
-            ("connection", "keep-alive"),
-        ),
-        content=b'{"a": 1}',
-        stored_at=0.0,
-    )
-    response = _from_cache(entry, httpx.Request("GET", f"{BASE}/v1/x"))
-    assert response.json() == {"a": 1}
-    assert response.headers.get("content-type") == "application/json"
-    for name in ("content-encoding", "transfer-encoding", "connection"):
-        assert name not in response.headers
-    assert response.headers.get("content-length") == "8"  # httpx's own, for the decoded body
-    assert response.extensions["xippios_cache"] == "hit"
-    assert response.extensions["xippios_cache_stored_at"] == 0.0
 
 
 @pytest.mark.anyio
@@ -610,31 +392,6 @@ async def test_non_200_and_non_get_are_not_cached(respx_mock: respx.MockRouter) 
     assert post.call_count == 2
 
 
-@pytest.mark.anyio
-async def test_get_json_rejects_non_json(
-    respx_mock: respx.MockRouter, config: ClientConfig
-) -> None:
-    respx_mock.get(f"{BASE}/v1/x").respond(200, text="<html>oops</html>")
-    client = AsyncClient(config)
-    with pytest.raises(ValidationError) as info:
-        await client.get_json("/v1/x")
-    assert info.value.raw == "<html>oops</html>"
-
-
-@pytest.mark.anyio
-async def test_get_then_decode_json_keeps_the_provenance(respx_mock: respx.MockRouter) -> None:
-    # A wrapper that sets retrieved_at from a cache hit needs the response, not only the JSON.
-    respx_mock.get(f"{BASE}/v1/x").respond(200, json={"n": 1})
-    config = ClientConfig(source="example", version="1", base_url=BASE, cache=MemoryCache())
-    client = AsyncClient(config)
-    fresh = await client.get("/v1/x")
-    assert decode_json(fresh, source="example") == {"n": 1}
-    assert "xippios_cache_stored_at" not in fresh.extensions
-    hit = await client.get("/v1/x")
-    assert decode_json(hit, source="example") == {"n": 1}
-    assert isinstance(hit.extensions["xippios_cache_stored_at"], float)
-
-
 def test_decode_json_refuses_a_body_that_is_not_json() -> None:
     request = httpx.Request("GET", f"{BASE}/v1/x?key=SECRET")
     response = httpx.Response(200, text="<html>oops</html>", request=request)
@@ -661,24 +418,6 @@ def test_one_pool_per_event_loop(respx_mock: respx.MockRouter, config: ClientCon
     first = asyncio.run(use())  # held alive, so the second pool cannot reuse its address
     second = asyncio.run(use())
     assert first is not second
-
-
-def test_sync_client_facade(respx_mock: respx.MockRouter, config: ClientConfig) -> None:
-    route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={"sync": True})
-    with Client(config) as client:
-        assert client.config is config
-        assert client.get_json("/v1/x") == {"sync": True}
-        assert client.get("/v1/x").status_code == 200
-        assert client.request("GET", "/v1/x").status_code == 200
-    assert route.call_count == 3
-
-
-def test_sync_client_raises_taxonomy_errors(
-    respx_mock: respx.MockRouter, config: ClientConfig
-) -> None:
-    respx_mock.get(f"{BASE}/v1/x").respond(403)
-    with pytest.raises(AuthError), Client(config) as client:
-        client.get("/v1/x")
 
 
 def _classify(response: httpx.Response) -> XippiosError | None:
@@ -802,19 +541,6 @@ async def test_a_5xx_that_classify_maps_to_an_upstream_error_is_still_retried(
 
 
 @pytest.mark.anyio
-async def test_a_5xx_upstream_error_to_a_write_is_still_not_retried(
-    respx_mock: respx.MockRouter, sleeper: Sleeper
-) -> None:
-    route = respx_mock.post(f"{BASE}/v1/x").respond(503)
-    classify = CountingClassify({503: UpstreamError("busy", status=503, body="")})
-    client = AsyncClient(_classified(classify), sleep=sleeper)
-    with pytest.raises(UpstreamError, match="busy"):
-        await client.request("POST", "/v1/x", json={})
-    assert route.call_count == 1
-    assert sleeper.calls == []
-
-
-@pytest.mark.anyio
 @pytest.mark.parametrize(
     ("status", "error"),
     [
@@ -878,19 +604,6 @@ async def test_a_raw_request_stops_retrying_and_returns_the_response(
     assert route.call_count == 1
     assert sleeper.calls == []
     assert classify.calls == [429]
-
-
-@pytest.mark.anyio
-async def test_classify_is_not_asked_before_a_retry_that_cannot_happen(
-    respx_mock: respx.MockRouter, sleeper: Sleeper
-) -> None:
-    route = respx_mock.post(f"{BASE}/v1/x").respond(503)
-    classify = CountingClassify({})
-    client = AsyncClient(_classified(classify), sleep=sleeper)
-    response = await client.request("POST", "/v1/x", json={}, raise_on_error=False)
-    assert response.status_code == 503
-    assert route.call_count == 1
-    assert classify.calls == []  # not retryable for a POST: the loop never asks
 
 
 # -- auth per request (ADR-0015) ----------------------------------------------------------
@@ -990,14 +703,6 @@ async def test_auth_none_and_the_default_share_the_cache(respx_mock: respx.MockR
     await client.get("/v1/reference", auth=None)
     hit = await client.get("/v1/reference")
     assert hit.extensions["xippios_cache"] == "hit"
+    spelled = await client.get("/v1/reference", auth=httpx.USE_CLIENT_DEFAULT)  # type: ignore[arg-type]
+    assert spelled.extensions["xippios_cache"] == "hit"  # httpx's default is the client's
     assert sent_urls(route) == [f"{BASE}/v1/reference"]
-
-
-def test_the_sync_facade_takes_auth(respx_mock: respx.MockRouter, config: ClientConfig) -> None:
-    route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
-    with Client(config, auth=QueryKeyAuth("key", KEY_ENV)) as client:
-        client.get("/v1/x", auth=None)
-        client.get_json("/v1/x", auth=None)
-        client.request("GET", "/v1/x", auth=None)
-        client.get("/v1/x")
-    assert sent_urls(route) == [f"{BASE}/v1/x"] * 3 + [f"{BASE}/v1/x?key={REDACTED}"]

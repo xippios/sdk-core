@@ -1,50 +1,17 @@
 """Result caps: never hand an agent more than it can use, never truncate silently."""
 
 import json
-from dataclasses import dataclass
 from typing import Any
 
 from pydantic_core import to_jsonable_python
 
-__all__ = ["ResultCap", "cap_result"]
+from xippios.core.models import ResultCap
+
+__all__ = ["cap_result"]
 
 
 _DEFAULT_NOTE = "narrow the query to see the rest"
 """What a capped result tells the agent when its cap has no ``note``: no filter promised."""
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ResultCap:
-    """Limits for one tool result, and what to tell the agent when they cut it (conventions §8).
-
-    The defaults are the family's: 200 rows or 64 KB. A reference tool whose whole list
-    an agent needs gets a cap of its own, through ``caps=`` of ``register_tasks`` or
-    ``build_server`` (ADR-0016), with the rows and bytes the source judges it needs; a
-    byte bound above the default is a deliberate choice for that tool.
-
-    Attributes:
-        max_rows: Most items of a list result that are returned.
-        max_bytes: Bytes of JSON text, encoded as UTF-8, a soft bound: it bounds the
-            rows and the preview, and the envelope and the note can add to it (see
-            ``cap_result``).
-        note: The text after the counts when the cap cuts a result, used verbatim, e.g.
-            ``"filter by period or by reporter to see the rest"`` for a tool that has
-            those filters. ``None`` says ``"narrow the query to see the rest"``, which
-            promises no filter the tool may lack.
-
-    Raises:
-        ValueError: ``max_rows`` or ``max_bytes`` is below 1, or ``note`` is blank.
-    """
-
-    max_rows: int = 200
-    max_bytes: int = 65_536
-    note: str | None = None
-
-    def __post_init__(self) -> None:
-        if self.max_rows < 1 or self.max_bytes < 1:
-            raise ValueError("max_rows and max_bytes must be at least 1")
-        if self.note is not None and not self.note.strip():
-            raise ValueError("note must say how to see the rest; None keeps the default")
 
 
 def _dumps(payload: Any) -> str:

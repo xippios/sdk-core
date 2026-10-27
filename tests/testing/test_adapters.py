@@ -6,7 +6,8 @@ import pytest
 
 from xippios.core import NotFoundError, Result, ResultMeta, UpstreamModel, parse_decimal, sync
 from xippios.core.http import router_from_tasks
-from xippios.core.mcp import TenantLock, build_server, register_tasks
+from xippios.core.mcp import TenantLock, build_server
+from xippios.core.mcp.server import register_tasks
 from xippios.core.testing import assert_projection, assert_write_tools, mcp_call, mcp_call_text
 
 

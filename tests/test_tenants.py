@@ -419,9 +419,9 @@ def test_each_tenant_has_its_own_client(monkeypatch: pytest.MonkeyPatch) -> None
     assert build.built == ["xa", "xb"]
     assert a.config.base_url == f"https://xa-{HIDDEN_SUBDOMAIN}.example.test/api"
     assert b.config.base_url == f"https://xb-{HIDDEN_SUBDOMAIN}.example.test/api"
-    assert a.limiter is not None
-    assert b.limiter is not None
-    assert a.limiter is not b.limiter
+    assert a._bucket is not None
+    assert b._bucket is not None
+    assert a._bucket is not b._bucket
 
 
 @pytest.mark.parametrize("variable", ["FICTIVE_SRC_XA_SUBDOMAIN", "FICTIVE_SRC_XA_API_KEY"])

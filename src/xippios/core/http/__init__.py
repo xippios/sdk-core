@@ -7,8 +7,10 @@ A source's ``http.py`` is a handful of lines::
 
     router = router_from_tasks("usda-nass", [tasks.get_series, tasks.list_commodities])
 
-The consumer mounts the router and, optionally, calls ``install_error_handlers`` on
-its app so errors raised outside endpoints become problem details too.
+The consumer mounts the router and, optionally, calls
+``xippios.core.http.problems.install_error_handlers`` on its app so errors raised
+outside endpoints become problem details too; that module also holds
+``problem_response``, ``PROBLEM_MEDIA_TYPE`` and ``STATUS_BY_ERROR``.
 
 Requires the ``http`` extra: ``uv add "xippios-core[http]"``.
 """
@@ -20,21 +22,7 @@ except ImportError as exc:  # pragma: no cover - exercised only without the extr
         "xippios.core.http needs the 'http' extra: uv add 'xippios-core[http]'"
     ) from exc
 
-from xippios.core.http.problems import (
-    PROBLEM_MEDIA_TYPE,
-    STATUS_BY_ERROR,
-    install_error_handlers,
-    problem_response,
-    status_for,
-)
+from xippios.core.http.problems import status_for
 from xippios.core.http.router import is_scalar, router_from_tasks
 
-__all__ = [
-    "PROBLEM_MEDIA_TYPE",
-    "STATUS_BY_ERROR",
-    "install_error_handlers",
-    "is_scalar",
-    "problem_response",
-    "router_from_tasks",
-    "status_for",
-]
+__all__ = ["is_scalar", "router_from_tasks", "status_for"]

@@ -3,7 +3,8 @@ import dataclasses
 import httpx
 import pytest
 
-from xippios.core.testing import REDACTED, Scrub, scrub_headers, scrub_params, scrub_url
+from xippios.core.testing import REDACTED, Scrub
+from xippios.core.testing.scrub import scrub_headers, scrub_params, scrub_url
 
 
 def test_scrub_params_matches_credential_like_names() -> None:

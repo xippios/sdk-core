@@ -193,3 +193,14 @@ client.
 Amended by ADR-0016 (2026-10-24): a consequence, that a subclass's override of
 `before_request` is not called through the hook `install` sets and is not neutralised by
 the testing plugin.
+
+Amended by ADR-0023, decision 5 (2026-10-27, core 0.3.0): decision 4's "the same on
+`Client`" and the consequence on `UseClientDefault` no longer hold. The sync `Client` is
+deleted, and `auth=` keeps its three states on `AsyncClient.request`, `get` and
+`get_json` and on `record`/`record_sync` with a default that is core's own private
+sentinel, mapped to `httpx.USE_CLIENT_DEFAULT` where the request is sent: core imports
+nothing from `httpx._client` and re-exports no `UseClientDefault`. Decision 2's "a client
+from `derive` keeps its parent's hooks and cap" goes with `AsyncClient.derive`; a config
+copied with `dataclasses.replace` keeps both. `QuotaSnapshot` is importable from
+`xippios.core.client.quota`, no longer exported from `xippios.core` or
+`xippios.core.client`.

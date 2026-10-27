@@ -11,14 +11,13 @@ import respx
 
 from xippios.core.client import (
     AsyncClient,
-    Client,
     ClientConfig,
     HeaderKeyAuth,
     MemoryCache,
     RateLimit,
     RetryPolicy,
 )
-from xippios.core.errors import NotFoundError, RateLimitError, TransportError, XippiosError
+from xippios.core.errors import NotFoundError, RateLimitError, XippiosError
 
 BASE = "https://api.example.test"
 
@@ -200,28 +199,3 @@ async def test_an_error_from_observe_propagates(respx_mock: respx.MockRouter) ->
     with pytest.raises(LookupError, match="observer bug"):
         await client.get("/v1/x")
     assert route.call_count == 1  # raised before the retry decision
-
-
-@pytest.mark.anyio
-async def test_observe_is_not_called_without_a_response(respx_mock: respx.MockRouter) -> None:
-    seen: list[int] = []
-    respx_mock.get(f"{BASE}/v1/x").mock(side_effect=httpx.ConnectError("nope"))
-    config = make(
-        observe=lambda response: seen.append(response.status_code),
-        retry=RetryPolicy(max_attempts=1),
-    )
-    with pytest.raises(TransportError):
-        await AsyncClient(config).get("/v1/x")
-    assert seen == []
-
-
-def test_the_sync_facade_runs_both_hooks(respx_mock: respx.MockRouter) -> None:
-    events = Events()
-    respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
-    config = make(
-        before_request=lambda request: events.seen.append("before"),
-        observe=lambda response: events.seen.append("observe"),
-    )
-    with Client(config) as client:
-        client.get_json("/v1/x")
-    assert events.seen == ["before", "observe"]

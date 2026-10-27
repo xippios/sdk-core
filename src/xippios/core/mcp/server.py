@@ -29,8 +29,8 @@ from mcp.types import CallToolResult, TextContent, ToolAnnotations
 from xippios.core._loop import as_async
 from xippios.core.errors import InvalidRequestError, XippiosError
 from xippios.core.mcp.errors import error_to_text
-from xippios.core.mcp.results import ResultCap, cap_result
-from xippios.core.models import Result
+from xippios.core.mcp.results import cap_result
+from xippios.core.models import Result, ResultCap
 from xippios.core.tenants import _LISTS_TENANTS
 
 __all__ = [
