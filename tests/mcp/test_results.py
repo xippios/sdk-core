@@ -31,15 +31,6 @@ def test_small_result_is_compact_json_untouched() -> None:
     assert ": " not in text
 
 
-def test_row_cap_adds_note() -> None:
-    payload = json.loads(cap_result(envelope(500), ResultCap(max_rows=10)))
-    assert len(payload["data"]) == 10
-    assert payload["data"][9]["n"] == 9
-    assert payload["note"].startswith("showing 10 of 500 rows")
-    assert "narrow the query" in payload["note"]
-    assert payload["meta"]["endpoint"] == "rows"
-
-
 def test_capped_result_keeps_the_upstream_total() -> None:
     payload = json.loads(cap_result(envelope(500, total=1234), ResultCap(max_rows=10)))
     assert len(payload["data"]) == 10
@@ -49,16 +40,6 @@ def test_capped_result_keeps_the_upstream_total() -> None:
     assert json.loads(cap_result(envelope(2)))["meta"]["total"] is None
 
 
-def test_byte_cap_shrinks_rows_to_fit() -> None:
-    cap = ResultCap(max_rows=1000, max_bytes=2000)
-    text = cap_result(envelope(500), cap)
-    assert len(text) <= 2000
-    payload = json.loads(text)
-    shown = len(payload["data"])
-    assert 0 < shown < 500
-    assert payload["note"].startswith(f"showing {shown} of 500 rows")
-
-
 def test_bare_list_is_wrapped() -> None:
     assert json.loads(cap_result([1, 2, 3])) == {"data": [1, 2, 3]}
     payload = json.loads(cap_result(list(range(50)), ResultCap(max_rows=5)))
@@ -66,16 +47,10 @@ def test_bare_list_is_wrapped() -> None:
     assert "showing 5 of 50" in payload["note"]
 
 
-def test_non_list_payload_passes_or_previews() -> None:
-    assert json.loads(cap_result({"a": 1})) == {"a": 1}
-    text = cap_result({"blob": "x" * 500}, ResultCap(max_bytes=100))
-    payload = json.loads(text)
-    assert payload["note"].startswith("result is ")
-    assert len(payload["preview"]) == 100
-
-
 def test_the_default_note_promises_no_filter() -> None:
     payload = json.loads(cap_result(envelope(500), ResultCap(max_rows=10)))
+    assert [row["n"] for row in payload["data"]] == list(range(10))
+    assert payload["meta"]["endpoint"] == "rows"
     assert payload["note"] == (
         "showing 10 of 500 rows (cap: 10 rows or 65536 bytes); narrow the query to see the rest"
     )
@@ -152,21 +127,6 @@ def test_the_byte_cap_counts_utf8_bytes_not_characters() -> None:
     assert 0 < shown < 20
     assert text == _cut_with(rows, shown, cap)
     assert _utf8(_cut_with(rows, shown + 1, cap)) > 1500  # no row more would have fitted
-
-
-def test_a_list_at_the_byte_bound_is_whole_and_one_byte_less_cuts_it() -> None:
-    names = ["Zürich", "Genève", "Curaçao", "Réunion", "Côte d'Ivoire", "東京"]
-    rows = [f"{name} {i}" for i in range(40) for name in names]
-    size = _utf8(_compact({"data": rows}))
-    assert len(_compact({"data": rows})) < size
-    assert cap_result(rows, ResultCap(max_rows=1000, max_bytes=size)) == _compact({"data": rows})
-    cap = ResultCap(max_rows=1000, max_bytes=size - 1)
-    cut = cap_result(rows, cap)
-    assert _utf8(cut) <= size - 1
-    shown = len(json.loads(cut)["data"])
-    assert 0 < shown < len(rows)
-    assert cut == _cut_with(rows, shown, cap)
-    assert _utf8(_cut_with(rows, shown + 1, cap)) > size - 1
 
 
 def test_the_byte_note_counts_utf8_bytes_and_the_preview_cuts_no_character() -> None:

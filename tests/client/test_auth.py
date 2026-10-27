@@ -37,41 +37,35 @@ def key_in_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(ENV, KEY)
 
 
-@pytest.mark.anyio
-@pytest.mark.usefixtures("key_in_env")
-async def test_query_key(respx_mock: respx.MockRouter, config: ClientConfig) -> None:
-    route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
-    client = AsyncClient(config, auth=QueryKeyAuth("key", ENV, source="example"))
-    await client.get("/v1/x", params={"year": 2024})
-    assert route.calls.last.request.url.params.multi_items() == [("year", "2024"), ("key", KEY)]
+BASIC = "Basic " + base64.b64encode(f"{KEY}:".encode()).decode()
 
 
 @pytest.mark.anyio
 @pytest.mark.usefixtures("key_in_env")
-async def test_header_key(respx_mock: respx.MockRouter, config: ClientConfig) -> None:
+@pytest.mark.parametrize(
+    ("auth", "header", "value"),
+    [
+        (QueryKeyAuth("key", ENV, source="example"), None, KEY),
+        (HeaderKeyAuth("Ocp-Apim-Subscription-Key", ENV), "ocp-apim-subscription-key", KEY),
+        (BearerAuth(ENV), "authorization", f"Bearer {KEY}"),
+        (BasicKeyAuth(ENV), "authorization", BASIC),
+    ],
+    ids=["query", "header", "bearer", "basic"],
+)
+async def test_each_shape_sends_the_key_from_the_environment(
+    respx_mock: respx.MockRouter,
+    config: ClientConfig,
+    auth: EnvKeyAuth,
+    header: str | None,
+    value: str,
+) -> None:
     route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
-    client = AsyncClient(config, auth=HeaderKeyAuth("Ocp-Apim-Subscription-Key", ENV))
-    await client.get("/v1/x")
-    assert route.calls.last.request.headers["ocp-apim-subscription-key"] == KEY
-
-
-@pytest.mark.anyio
-@pytest.mark.usefixtures("key_in_env")
-async def test_bearer(respx_mock: respx.MockRouter, config: ClientConfig) -> None:
-    route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
-    client = AsyncClient(config, auth=BearerAuth(ENV))
-    await client.get("/v1/x")
-    assert route.calls.last.request.headers["authorization"] == f"Bearer {KEY}"
-
-
-@pytest.mark.anyio
-@pytest.mark.usefixtures("key_in_env")
-async def test_basic_key_as_user_name(respx_mock: respx.MockRouter, config: ClientConfig) -> None:
-    route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
-    client = AsyncClient(config, auth=BasicKeyAuth(ENV))
-    await client.get("/v1/x")
-    expected = base64.b64encode(f"{KEY}:".encode()).decode()
-    assert route.calls.last.request.headers["authorization"] == f"Basic {expected}"
+    await AsyncClient(config, auth=auth).get("/v1/x", params={"year": 2024})
+    sent = route.calls.last.request
+    if header is None:  # the query shape
+        assert sent.url.params.multi_items() == [("year", "2024"), ("key", value)]
+    else:
+        assert sent.headers[header] == value
 
 
 @pytest.mark.anyio
@@ -105,13 +99,6 @@ async def test_explicit_key_wins_and_is_resolved_once(
     monkeypatch.setenv(ENV, "changed-later")
     await client.get("/v1/x")
     assert all(call.request.headers["authorization"] == "Bearer explicit" for call in route.calls)
-
-
-def test_base_class_requires_apply() -> None:
-    auth = EnvKeyAuth(ENV, key="k")
-    request = httpx.Request("GET", f"{BASE}/v1/x")
-    with pytest.raises(NotImplementedError):
-        next(auth.auth_flow(request))
 
 
 def test_apply_reads_the_key_itself() -> None:

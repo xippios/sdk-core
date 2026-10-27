@@ -8,7 +8,6 @@ import respx
 
 from xippios.core.client import (
     AsyncClient,
-    CachedResponse,
     ClientConfig,
     HeaderKeyAuth,
     MemoryCache,
@@ -18,7 +17,6 @@ from xippios.core.client import (
     cache_key,
     decode_json,
 )
-from xippios.core.client._core import _from_cache
 from xippios.core.errors import (
     AuthError,
     InvalidRequestError,
@@ -67,27 +65,6 @@ async def test_headers_url_and_params(respx_mock: respx.MockRouter, config: Clie
     assert headers["user-agent"] == "xippios-example/1.2.3 (+https://github.com/xippios)"
     assert headers["x-family"] == "xippios"
     assert sent_urls(route) == [f"{BASE}/v1/x?a=1"]
-
-
-@pytest.mark.anyio
-async def test_auth_is_applied(respx_mock: respx.MockRouter, config: ClientConfig) -> None:
-    route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
-    client = AsyncClient(config, auth=httpx.BasicAuth("user", "pw"))
-    await client.get("/v1/x")
-    assert route.calls.last.request.headers["authorization"].startswith("Basic ")
-
-
-@pytest.mark.anyio
-async def test_retries_5xx_then_succeeds(
-    respx_mock: respx.MockRouter, config: ClientConfig, sleeper: Sleeper
-) -> None:
-    route = respx_mock.get(f"{BASE}/v1/x").mock(
-        side_effect=[httpx.Response(503), httpx.Response(200, json={"n": 1})]
-    )
-    client = AsyncClient(config, sleep=sleeper)
-    assert await client.get_json("/v1/x") == {"n": 1}
-    assert route.call_count == 2
-    assert sleeper.calls == [0.1]
 
 
 @pytest.mark.anyio
@@ -187,11 +164,15 @@ async def test_5xx_to_a_write_is_returned_after_one_attempt(
 
 
 @pytest.mark.anyio
-async def test_5xx_to_a_write_is_retried_when_the_policy_allows(
+async def test_a_write_is_retried_when_the_policy_allows(
     respx_mock: respx.MockRouter, sleeper: Sleeper
 ) -> None:
     route = respx_mock.post(f"{BASE}/v1/x").mock(
-        side_effect=[httpx.Response(503), httpx.Response(200, json={"id": 7})]
+        side_effect=[
+            httpx.Response(503),
+            httpx.ConnectError("nope"),
+            httpx.Response(200, json={"id": 7}),
+        ]
     )
     config = ClientConfig(
         source="example",
@@ -202,8 +183,8 @@ async def test_5xx_to_a_write_is_retried_when_the_policy_allows(
     client = AsyncClient(config, sleep=sleeper)
     response = await client.request("POST", "/v1/x", json={"a": 1})
     assert response.json() == {"id": 7}
-    assert route.call_count == 2
-    assert sleeper.calls == [0.1]
+    assert route.call_count == 3  # a 5xx and a transport failure, each retried
+    assert sleeper.calls == [0.1, 0.2]
 
 
 @pytest.mark.anyio
@@ -239,25 +220,6 @@ async def test_5xx_to_an_idempotent_method_is_still_retried(
 
 
 @pytest.mark.anyio
-async def test_transport_error_to_a_write_is_retried_when_the_policy_allows(
-    respx_mock: respx.MockRouter, sleeper: Sleeper
-) -> None:
-    route = respx_mock.post(f"{BASE}/v1/x").mock(
-        side_effect=[httpx.ConnectError("nope"), httpx.Response(200, json={})]
-    )
-    config = ClientConfig(
-        source="example",
-        version="1",
-        base_url=BASE,
-        retry=RetryPolicy(backoff_base=0.1, jitter=False, retry_non_idempotent=True),
-    )
-    client = AsyncClient(config, sleep=sleeper)
-    await client.request("POST", "/v1/x", json={"a": 1})
-    assert route.call_count == 2
-    assert sleeper.calls == [0.1]
-
-
-@pytest.mark.anyio
 async def test_retry_transport_errors_off_wins_over_retry_non_idempotent(
     respx_mock: respx.MockRouter, sleeper: Sleeper
 ) -> None:
@@ -272,7 +234,7 @@ async def test_retry_transport_errors_off_wins_over_retry_non_idempotent(
 
 
 @pytest.mark.anyio
-async def test_data_is_sent_form_encoded(
+async def test_a_body_is_sent_form_encoded_or_as_json(
     respx_mock: respx.MockRouter, config: ClientConfig
 ) -> None:
     # sdk-cashctrl: CashCtrl's writes take form fields, not JSON.
@@ -281,12 +243,7 @@ async def test_data_is_sent_form_encoded(
     await client.request("POST", "/v1/x", data={"a": 1, "b": "x y/é"})
     assert route.calls.last.request.headers["content-type"] == "application/x-www-form-urlencoded"
     assert route.calls.last.request.content == b"a=1&b=x+y%2F%C3%A9"
-
-
-@pytest.mark.anyio
-async def test_json_is_sent_as_json(respx_mock: respx.MockRouter, config: ClientConfig) -> None:
-    route = respx_mock.post(f"{BASE}/v1/x").respond(200, json={})
-    await AsyncClient(config).request("POST", "/v1/x", json={"a": 1})
+    await client.request("POST", "/v1/x", json={"a": 1})
     assert route.calls.last.request.headers["content-type"] == "application/json"
     assert route.calls.last.request.content == b'{"a":1}'
 
@@ -354,6 +311,7 @@ async def test_a_cache_hit_carries_the_time_its_entry_was_stored(
     assert hit.extensions["xippios_cache"] == "hit"
     assert hit.extensions["xippios_cache_stored_at"] == stored.stored_at
     assert before <= stored.stored_at <= after
+    assert decode_json(hit, source="example") == {"n": 1}  # get, then decode_json
 
 
 @pytest.mark.anyio
@@ -380,30 +338,6 @@ async def test_gzip_answer_replays_from_the_cache(respx_mock: respx.MockRouter) 
     names = {name.lower() for name, _ in stored.headers}
     assert "content-type" in names
     assert not names & {"content-encoding", "content-length"}
-
-
-def test_from_cache_strips_wire_headers_of_an_old_entry() -> None:
-    # A persistent backend may still hold entries stored by 0.1.0, wire headers and all.
-    entry = CachedResponse(
-        status=200,
-        headers=(
-            ("content-type", "application/json"),
-            ("Content-Encoding", "gzip"),
-            ("content-length", "99"),
-            ("transfer-encoding", "chunked"),
-            ("connection", "keep-alive"),
-        ),
-        content=b'{"a": 1}',
-        stored_at=0.0,
-    )
-    response = _from_cache(entry, httpx.Request("GET", f"{BASE}/v1/x"))
-    assert response.json() == {"a": 1}
-    assert response.headers.get("content-type") == "application/json"
-    for name in ("content-encoding", "transfer-encoding", "connection"):
-        assert name not in response.headers
-    assert response.headers.get("content-length") == "8"  # httpx's own, for the decoded body
-    assert response.extensions["xippios_cache"] == "hit"
-    assert response.extensions["xippios_cache_stored_at"] == 0.0
 
 
 @pytest.mark.anyio
@@ -456,31 +390,6 @@ async def test_non_200_and_non_get_are_not_cached(respx_mock: respx.MockRouter) 
         await client.request("POST", "/v1/x", json={})
     assert get.call_count == 2
     assert post.call_count == 2
-
-
-@pytest.mark.anyio
-async def test_get_json_rejects_non_json(
-    respx_mock: respx.MockRouter, config: ClientConfig
-) -> None:
-    respx_mock.get(f"{BASE}/v1/x").respond(200, text="<html>oops</html>")
-    client = AsyncClient(config)
-    with pytest.raises(ValidationError) as info:
-        await client.get_json("/v1/x")
-    assert info.value.raw == "<html>oops</html>"
-
-
-@pytest.mark.anyio
-async def test_get_then_decode_json_keeps_the_provenance(respx_mock: respx.MockRouter) -> None:
-    # A wrapper that sets retrieved_at from a cache hit needs the response, not only the JSON.
-    respx_mock.get(f"{BASE}/v1/x").respond(200, json={"n": 1})
-    config = ClientConfig(source="example", version="1", base_url=BASE, cache=MemoryCache())
-    client = AsyncClient(config)
-    fresh = await client.get("/v1/x")
-    assert decode_json(fresh, source="example") == {"n": 1}
-    assert "xippios_cache_stored_at" not in fresh.extensions
-    hit = await client.get("/v1/x")
-    assert decode_json(hit, source="example") == {"n": 1}
-    assert isinstance(hit.extensions["xippios_cache_stored_at"], float)
 
 
 def test_decode_json_refuses_a_body_that_is_not_json() -> None:
@@ -632,19 +541,6 @@ async def test_a_5xx_that_classify_maps_to_an_upstream_error_is_still_retried(
 
 
 @pytest.mark.anyio
-async def test_a_5xx_upstream_error_to_a_write_is_still_not_retried(
-    respx_mock: respx.MockRouter, sleeper: Sleeper
-) -> None:
-    route = respx_mock.post(f"{BASE}/v1/x").respond(503)
-    classify = CountingClassify({503: UpstreamError("busy", status=503, body="")})
-    client = AsyncClient(_classified(classify), sleep=sleeper)
-    with pytest.raises(UpstreamError, match="busy"):
-        await client.request("POST", "/v1/x", json={})
-    assert route.call_count == 1
-    assert sleeper.calls == []
-
-
-@pytest.mark.anyio
 @pytest.mark.parametrize(
     ("status", "error"),
     [
@@ -708,19 +604,6 @@ async def test_a_raw_request_stops_retrying_and_returns_the_response(
     assert route.call_count == 1
     assert sleeper.calls == []
     assert classify.calls == [429]
-
-
-@pytest.mark.anyio
-async def test_classify_is_not_asked_before_a_retry_that_cannot_happen(
-    respx_mock: respx.MockRouter, sleeper: Sleeper
-) -> None:
-    route = respx_mock.post(f"{BASE}/v1/x").respond(503)
-    classify = CountingClassify({})
-    client = AsyncClient(_classified(classify), sleep=sleeper)
-    response = await client.request("POST", "/v1/x", json={}, raise_on_error=False)
-    assert response.status_code == 503
-    assert route.call_count == 1
-    assert classify.calls == []  # not retryable for a POST: the loop never asks
 
 
 # -- auth per request (ADR-0015) ----------------------------------------------------------

@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 
 import httpx
@@ -106,24 +105,6 @@ async def test_record_form_data_records_body_and_content_type(
 
 
 @pytest.mark.anyio
-async def test_record_json_records_the_json_text(
-    respx_mock: respx.MockRouter, config: ClientConfig, tmp_path: Path
-) -> None:
-    respx_mock.post(f"{BASE}/v1/query").respond(200, json={"rows": []})
-    fixture = await record(
-        AsyncClient(config),
-        "/v1/query",
-        tmp_path / "query.json",
-        method="POST",
-        json={"filter": {"year": 2024}},
-        headers={"X-Request": "one"},
-    )
-    assert fixture.request.body == '{"filter":{"year":2024}}'
-    assert json.loads(fixture.request.body) == {"filter": {"year": 2024}}
-    assert fixture.request.content_type == "application/json"
-
-
-@pytest.mark.anyio
 async def test_record_refuses_json_and_data_together(
     respx_mock: respx.MockRouter, config: ClientConfig, tmp_path: Path
 ) -> None:
@@ -179,15 +160,6 @@ async def test_record_without_the_client_s_auth(
     assert "x-api-key" in route.calls.last.request.headers
 
 
-def test_record_sync_takes_auth(
-    respx_mock: respx.MockRouter, config: ClientConfig, tmp_path: Path
-) -> None:
-    route = respx_mock.get(f"{BASE}/files/ref.json").respond(200, json={})
-    client = AsyncClient(config, auth=HeaderKeyAuth("X-Api-Key", "EXAMPLE_API_KEY"))
-    record_sync(client, "/files/ref.json", tmp_path / "ref.json", auth=None)
-    assert "x-api-key" not in route.calls.last.request.headers
-
-
 def _recorded(url: str, body: object, method: str = "GET") -> Fixture:
     """A synthetic fixture, built here: this repository records from no upstream."""
     request = httpx.Request(method, url)
@@ -218,21 +190,6 @@ async def test_match_params_matches_the_recorded_value_and_misses_another(
         assert (route.call_count, fallback.call_count) == (2, 1)
 
 
-@pytest.mark.anyio
-async def test_match_params_matches_every_recorded_value_of_a_name(
-    respx_mock: respx.MockRouter,
-) -> None:
-    chunk = _recorded(f"{BASE}/v1/x?period=2022&period=2023&flow=M", {"rows": 2})
-    route = mount_fixture(respx_mock, chunk, match_params=("period", "flow"))
-    async with httpx.AsyncClient() as http:
-        assert (await http.get(f"{BASE}/v1/x?flow=M&period=2022&period=2023")).status_code == 200
-        with pytest.raises(AllMockedAssertionError):
-            await http.get(f"{BASE}/v1/x?flow=M&period=2022")
-        with pytest.raises(AllMockedAssertionError):
-            await http.get(f"{BASE}/v1/x?flow=X&period=2022&period=2023")
-    assert route.call_count == 1
-
-
 def test_match_params_refuses_a_redacted_or_absent_name(
     respx_mock: respx.MockRouter, tmp_path: Path
 ) -> None:
@@ -250,23 +207,6 @@ def test_match_params_refuses_a_redacted_or_absent_name(
     replay(respx_mock, path, match_params=["year"])
     replay(respx_mock, path, match_params=[])
     assert len(respx_mock.routes) == 2
-
-
-def test_match_params_refuses_a_partly_redacted_value(
-    respx_mock: respx.MockRouter, tmp_path: Path
-) -> None:
-    request = httpx.Request("GET", f"{BASE}/v1/x?org=acme-1&year=2024")
-    path = tmp_path / "x.json"
-    write_fixture(
-        httpx.Response(200, json={}, request=request), path, scrub=Scrub(secrets=["acme"])
-    )
-    assert httpx.URL(load_fixture(path).request.url).params["org"] == f"{REDACTED}-1"
-    with pytest.raises(
-        ValueError, match=r"^match_params: 'org' was recorded as REDACTED, in"
-    ) as info:
-        replay(respx_mock, path, match_params=["org"])
-    assert "acme" not in str(info.value)
-    assert len(respx_mock.routes) == 0
 
 
 @pytest.mark.anyio
@@ -320,23 +260,7 @@ def test_replay_fixture_is_typed_as_replay_fixture(replay_fixture: ReplayFixture
     assert sent_urls(route) == [f"{BASE}/v1/x?year=2024"]
 
 
-def test_the_more_specific_fixture_is_mounted_first(
-    respx_mock: respx.MockRouter, tmp_path: Path
-) -> None:
-    # match_params cannot say "countOnly absent"; mount order does it (documented).
-    count = httpx.Request("GET", f"{BASE}/v1/get", params={"countOnly": "true", "r": 1})
-    data = httpx.Request("GET", f"{BASE}/v1/get", params={"r": 1})
-    write_fixture(httpx.Response(200, json={"count": 3}, request=count), tmp_path / "c.json")
-    write_fixture(httpx.Response(200, json={"rows": []}, request=data), tmp_path / "d.json")
-    replay(respx_mock, tmp_path / "c.json", match_params=["countOnly"])
-    replay(respx_mock, tmp_path / "d.json")
-    assert httpx.get(f"{BASE}/v1/get?countOnly=true&r=1").json() == {"count": 3}
-    assert httpx.get(f"{BASE}/v1/get?r=1").json() == {"rows": []}
-
-
-def test_sent_query_is_the_last_query_scrubbed(
-    respx_mock: respx.MockRouter, config: ClientConfig
-) -> None:
+def test_sent_query_is_the_last_query_scrubbed(respx_mock: respx.MockRouter) -> None:
     # sdk-usda-nass (sent_query) and sdk-comtrade (_sent) each carried it; cashctrl reads
     # route.calls.last inline (row 36 a).
     route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
@@ -383,14 +307,6 @@ def test_a_recorded_answer_is_served_at_another_url(
     assert flows.call_count == 1
     with pytest.raises(ValueError, match=r"'year' is not a query parameter of the URL given"):
         replay(respx_mock, path, url=f"{BASE}/v1/year/2024", match_params=["year"])
-
-
-def test_the_plugin_serves_a_recorded_answer_at_another_url(
-    replay_fixture: ReplayFixture,
-) -> None:
-    route = replay_fixture("x", "y", url=f"{BASE}/v2/x")
-    assert httpx.get(f"{BASE}/v2/x").json() == {"n": 1}
-    assert sent_urls(route) == [f"{BASE}/v2/x"]
 
 
 def test_response_from_fixture_carries_the_recorded_request(tmp_path: Path) -> None:

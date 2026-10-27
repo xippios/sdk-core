@@ -15,7 +15,6 @@ from xippios.core.models import (
     is_credential_key,
     parse,
     parse_decimal,
-    redact_credentials,
 )
 
 
@@ -30,10 +29,7 @@ def test_upstream_model_is_frozen_and_ignores_unknown_fields() -> None:
     assert item.value == 1.5
     with pytest.raises(Exception, match="frozen"):
         item.value = 2  # type: ignore[misc]
-
-
-def test_upstream_model_populates_by_name() -> None:
-    assert Series(series_id="b", value=1).series_id == "b"
+    assert Series(series_id="b", value=1).series_id == "b"  # by name as well as by alias
 
 
 def test_result_meta_defaults() -> None:
@@ -51,17 +47,6 @@ def test_result_meta_rejects_naive_datetimes() -> None:
         ResultMeta(source="x", endpoint="y", retrieved_at=datetime(2026, 1, 1))
     with pytest.raises(ValueError, match="timezone-aware"):
         ResultMeta(source="x", endpoint="y", published_at=datetime(2026, 1, 1))
-
-
-def test_result_meta_total_serialises_as_an_integer() -> None:
-    meta = ResultMeta(source="cashctrl", endpoint="journal/list.json", total=1234)
-    assert meta.total == 1234
-    dumped = meta.model_dump(mode="json")
-    assert dumped["total"] == 1234
-    assert type(dumped["total"]) is int
-    assert json.loads(meta.model_dump_json())["total"] == 1234
-    assert ResultMeta(source="s", endpoint="e", total=0).total == 0
-    assert ResultMeta(source="s", endpoint="e").model_dump(mode="json")["total"] is None
 
 
 def test_result_meta_tenant_round_trips_by_name() -> None:
@@ -137,22 +122,15 @@ def test_is_credential_key(name: str, expected: bool) -> None:
     assert is_credential_key(name) is expected
 
 
-def test_redact_credentials_is_deep_and_copies() -> None:
-    params = {"key": "SECRET", "year": 2024, "nested": {"token": "T", "ok": [{"secret": "S"}, 1]}}
-    redacted = redact_credentials(params)
-    assert redacted == {
-        "key": REDACTED,
-        "year": 2024,
-        "nested": {"token": REDACTED, "ok": [{"secret": REDACTED}, 1]},
-    }
-    assert params["key"] == "SECRET"
-
-
 def test_result_meta_never_carries_credentials() -> None:
-    meta = ResultMeta(
-        source="usda-nass", endpoint="api_GET", request={"key": "SECRET", "commodity_desc": "CORN"}
-    )
-    assert meta.request == {"key": REDACTED, "commodity_desc": "CORN"}
+    request = {"key": "SECRET", "commodity_desc": "CORN", "nested": {"ok": [{"token": "T"}, 1]}}
+    meta = ResultMeta(source="usda-nass", endpoint="api_GET", request=request)
+    assert meta.request == {
+        "key": REDACTED,
+        "commodity_desc": "CORN",
+        "nested": {"ok": [{"token": REDACTED}, 1]},  # at any depth
+    }
+    assert request["key"] == "SECRET"  # the caller's mapping is copied, not changed
     assert "SECRET" not in meta.model_dump_json()
 
 

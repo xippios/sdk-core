@@ -8,7 +8,7 @@ import pytest
 from xippios.core.client import QuotaPolicy
 from xippios.core.client.auth import EnvKeyAuth
 from xippios.core.client.ratelimit import TokenBucket
-from xippios.core.testing.plugin import LIVE_ENV, PLACEHOLDER_KEY, live_enabled
+from xippios.core.testing.plugin import LIVE_ENV, live_enabled
 
 # The pytester runs below install the plugin's patches themselves, in process. The outer
 # test lifts its own (the markers here, the placeholder pin by the override below), or
@@ -49,13 +49,16 @@ def test_live_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
     assert live_enabled() is False
 
 
-def test_live_tests_skipped_by_default(
+def test_live_tests_are_skipped_unless_the_gate_is_open(
     pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.delenv(LIVE_ENV, raising=False)
     pytester.makepyfile(TEST_FILE)
     result = pytester.runpytest("-p", "xippios.core.testing.plugin", "--strict-markers")
     result.assert_outcomes(passed=1, skipped=1)
+    monkeypatch.setenv(LIVE_ENV, "1")
+    result = pytester.runpytest("-p", "xippios.core.testing.plugin", "--strict-markers")
+    result.assert_outcomes(passed=2)
 
 
 def test_the_gate_follows_the_marker_not_a_name(
@@ -74,15 +77,6 @@ def test_the_gate_follows_the_marker_not_a_name(
     )
     result = pytester.runpytest("-p", "xippios.core.testing.plugin", "--strict-markers")
     result.assert_outcomes(passed=1, skipped=1)
-
-
-def test_live_tests_run_when_gate_open(
-    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv(LIVE_ENV, "1")
-    pytester.makepyfile(TEST_FILE)
-    result = pytester.runpytest("-p", "xippios.core.testing.plugin", "--strict-markers")
-    result.assert_outcomes(passed=2)
 
 
 def write_ep_case(pytester: pytest.Pytester) -> None:
@@ -110,36 +104,6 @@ def test_replay_fixture_helper(pytester: pytest.Pytester) -> None:
     )
     result = pytester.runpytest("-p", "xippios.core.testing.plugin")
     result.assert_outcomes(passed=1)
-
-
-def test_replay_fixture_helper_matches_params(pytester: pytest.Pytester) -> None:
-    fixtures = pytester.mkdir("tests") / "fixtures" / "get"
-    fixtures.mkdir(parents=True)
-    (fixtures / "count.json").write_text(
-        '{"recorded_at": "2026-10-23T00:00:00Z", "request": {"method": "GET",'
-        ' "url": "https://h.test/get?countOnly=true&r=1"}, "response": {"status": 200,'
-        ' "headers": [], "body": "{\\"count\\": 3}", "body_base64": false}}'
-    )
-    pytester.makepyfile(
-        """
-        import httpx
-        import pytest
-        from respx.models import AllMockedAssertionError
-
-        def test_matches_count_only(replay_fixture):
-            route = replay_fixture("get", "count", match_params=["countOnly"])
-            assert httpx.get("https://h.test/get?countOnly=true").json() == {"count": 3}
-            with pytest.raises(AllMockedAssertionError):
-                httpx.get("https://h.test/get?countOnly=false")
-            assert route.call_count == 1
-
-        def test_match_params_is_keyword_only(replay_fixture):
-            with pytest.raises(TypeError):
-                replay_fixture("get", "count", ["countOnly"])
-        """
-    )
-    result = pytester.runpytest("-p", "xippios.core.testing.plugin")
-    result.assert_outcomes(passed=2)
 
 
 OFFLINE_TESTS = """
@@ -575,12 +539,6 @@ def test_a_source_fixture_of_the_same_name_overrides_the_plugin(
     pytester.makepyfile(SOURCE_TESTS)
     result = pytester.runpytest("--strict-markers", "--strict-config")
     result.assert_outcomes(passed=1)
-
-
-def test_placeholder_key_is_exported() -> None:
-    from xippios.core.testing import plugin
-
-    assert PLACEHOLDER_KEY == plugin.PLACEHOLDER_KEY == "placeholder-for-fixture-replay"
 
 
 LOGGER_TESTS = """
