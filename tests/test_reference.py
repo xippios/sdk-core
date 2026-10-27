@@ -280,20 +280,24 @@ def test_a_mixed_module_is_clean_after_the_refresh_scripts_ruff(tmp_path: Path) 
         "CORN, GRAIN, IRRIGATED - ACRES HARVESTED, NET OF ABANDONMENT",  # fits once wrapped
         'say "hi"', "it's", "C:\\data", "C\u00f4te d\u2019Ivoire", "Beijing \u5317\u4eac",
     ]  # fmt: skip
+    long_key = "reporter_partner_flow_customs_transport_mode_codes_of_an_area"  # 61
     lists: dict[str, Sequence[str] | Sequence[tuple[int, str]]] = {
         "zeta": values,
         "unitId": [(8, "(1000 MT)"), (21, "(MT)")],
         "alpha": ["A"],
+        long_key: ["X"],
     }
+    dates = {"zeta": "2026-10-27", "unitId": "2026-10-23", "alpha": "2026-10-01"}
     source = render_enums(
         lists,
-        fetched={"zeta": "2026-10-27", "unitId": "2026-10-23", "alpha": "2026-10-01"},
+        fetched=dates | {long_key: "2026-10-02"},  # one date per list
         class_names={"unitId": "UnitId"},
         generator="scripts/refresh_reference.py",
     )
     assert source.isascii()
     assert f"{enum_member_name(LONG_VALUE)} = {LONG_VALUE!a}  # noqa: E501\n" in source
     assert '    """Values of ``unitId`` (fetched 2026-10-23)."""\n' in source
+    assert f'    """Values of ``{long_key}`` (fetched 2026-10-02)."""  # noqa: E501\n' in source
     path = tmp_path / "enums.py"
     path.write_text(source, encoding="ascii")
     for command in (("format",), ("check", "--fix"), ("format", "--check"), ("check",)):
@@ -303,9 +307,11 @@ def test_a_mixed_module_is_clean_after_the_refresh_scripts_ruff(tmp_path: Path) 
     namespace = run(formatted)
     assert [m.value for m in namespace["Zeta"]] == values  # the same values at runtime
     assert [m.value for m in namespace["UnitId"]] == [8, 21]
-    assert namespace["__all__"] == ["Alpha", "UnitId", "Zeta"]  # sorted by ruff (RUF022)
+    assert namespace["__all__"] == [  # sorted by ruff (RUF022)
+        "Alpha", "ReporterPartnerFlowCustomsTransportModeCodesOfAnArea", "UnitId", "Zeta",
+    ]  # fmt: skip
     assert "from enum import IntEnum, StrEnum\n" in formatted
-    assert formatted.count("# noqa: E501") == 1  # the line ruff wrapped lost it (RUF100)
+    assert formatted.count("# noqa: E501") == 2  # the member ruff wrapped lost it (RUF100)
 
 
 def test_no_lists_render_a_module_that_imports_nothing() -> None:
