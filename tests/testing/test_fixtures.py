@@ -232,7 +232,7 @@ def test_max_bytes_at_or_above_the_size_keeps_the_body_unmarked(tmp_path: Path) 
         fixture_from_response(_response(), max_bytes=0)
 
 
-SECRET = "tenant-7"
+SECRET = "tenant-7"  # pragma: allowlist secret
 """Not credential-named anywhere, so only ``Scrub.secrets`` can find it."""
 
 
