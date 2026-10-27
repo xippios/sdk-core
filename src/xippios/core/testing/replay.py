@@ -90,8 +90,8 @@ def mount_fixture(
                 raise ValueError(f"match_params: {name!r} is not a query parameter of {where}")
             if is_credential_name(name):
                 raise ValueError(
-                    f"match_params: {name!r} names a credential, recorded as {REDACTED}; "
-                    "it cannot be matched"
+                    f"match_params: {name!r} names a credential, which a fixture holds as "
+                    f"{REDACTED}; it cannot be matched"
                 )
             if any(REDACTED in value for value in values):
                 raise ValueError(
