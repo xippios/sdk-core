@@ -272,30 +272,39 @@ LEAKY_TEST = """
 from pathlib import Path
 
 import httpx
+import pytest
 
 from xippios.core.testing import Scrub
 from xippios.core.testing.fixtures import write_fixture
 from xippios.core.testing.scrub import _Scrubber
 
+TENANT = "tenant" + "-7"
 
-def test_refused(monkeypatch):
+
+@pytest.mark.parametrize("where", ["url", "header", "request", "response"])
+def test_refused(monkeypatch, where):
     monkeypatch.setattr(_Scrubber, "text", lambda self, text: text)  # a scrub that misses
-    request = httpx.Request("GET", "https://api.example.test/v1/x")
-    response = httpx.Response(200, content=b'{"org": "tenant' + b'-7"}', request=request)
-    write_fixture(response, Path("f.json"), scrub=Scrub(secrets=["tenant" + "-7"]))
+    url = "https://api.example.test/v1/" + (TENANT if where == "url" else "x")
+    sent = TENANT.encode() if where == "request" else None
+    request = httpx.Request("POST", url, content=sent)
+    headers = {"Location": "/" + TENANT} if where == "header" else {}
+    answer = TENANT.encode() if where == "response" else b"{}"
+    response = httpx.Response(200, headers=headers, content=answer, request=request)
+    write_fixture(response, Path(where + ".json"), scrub=Scrub(secrets=[TENANT]))
 """
 
 
-def test_the_verify_refuses_a_secret_left_in_a_body(pytester: pytest.Pytester) -> None:
+def test_the_verify_refuses_a_secret_left_in_the_exchange(pytester: pytest.Pytester) -> None:
     # The backstop of ADR-0005: the refusal names where, never the value, not even in the
     # arguments pytest prints for the frame that raised, and nothing is written.
     pytester.makepyfile(LEAKY_TEST)
     result = pytester.runpytest("--tb=long")
-    result.assert_outcomes(failed=1)
+    result.assert_outcomes(failed=4)
     output = result.stdout.str()
-    assert (
-        "ValueError: the scrubbed fixture still holds a secret value in the response body; "
-        "it is refused before anything is written"
-    ) in output
+    for location in ("request URL", "response header 'location'", "request body", "response body"):
+        assert (
+            f"ValueError: the scrubbed fixture still holds a secret value in the {location}; "
+            "it is refused before anything is written"
+        ) in output
     assert SECRET not in output
-    assert not (pytester.path / "f.json").exists()
+    assert not list(pytester.path.glob("*.json"))

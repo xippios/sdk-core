@@ -224,10 +224,10 @@ def register_tasks(
     <argument>: <message>`` before the tool runs, by a middleware installed once per
     server (conventions §8), never with pydantic's rendered error (its URL, input type or
     input value). It is appended to ``server.middleware`` at the first registration, and
-    the SDK runs that list outermost-first: a source's own middleware appended later runs
-    inside the check, after it, and one that must see a call before the check is
-    inserted ahead of it, ``server.middleware.insert(0, ...)``, which also puts it ahead
-    of the SDK's own OpenTelemetry and request-state middleware.
+    the SDK runs that list outermost-first, so a middleware appended later runs inside
+    the check. A source that installs middleware of its own chooses its place in
+    ``server.middleware``; index 0 is ahead of the SDK's own OpenTelemetry and
+    request-state middleware as well.
 
     A task the module that defines it names in ``BULK_TASKS`` (``tasks.py``, beside
     ``MCP_CAPS``) is skipped: a bulk task returns a file, or a list read from one, and is

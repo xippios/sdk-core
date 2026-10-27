@@ -352,7 +352,7 @@ def confirm_zero(confirm: int = 0) -> None:
 @pytest.mark.anyio
 async def test_register_tasks_on_existing_server_and_write_flag() -> None:
     server = build_server("example", [], name="custom", instructions="Call list first.")
-    assert server.name == "custom"
+    assert (server.name, server.instructions) == ("custom", "Call list first.")
     assert not is_write_server(server)
     names = register_tasks(server, "example", [create_thing, delete_thing], read_only=False)
     assert names == ["example_create_thing", "example_delete_thing"]
