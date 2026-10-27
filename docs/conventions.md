@@ -1,14 +1,16 @@
 # xippios SDK family — conventions
 
-Version 1.19 · 2026-10-27 · applies to every `sdk-*` repository under github.com/xippios.
+Version 1.20 · 2026-10-27 · applies to every `sdk-*` repository under github.com/xippios.
 Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 The rules of ADR-0019 and ADR-0022, all of them (the download and decode calls, the
 cache bound, `BULK_TASKS`, the fixture cap and the `truncated` marker, the file-fixture
 rules, the spared `key`, the packaged-answer rule and the packaged-list file,
 `published_at_naive`, the `None`-filter rule, `get_answer`, `matches` (§4), `UnknownCode`
-(§5), the frozen series and the period series (§4)), bind a source from its 0.3.0
-adoption (§15), since the code that serves them ships in core 0.3.0; until then a source
-records what its upstream answers and names a fixture over the cap in the PR
+(§5), the frozen series and the period series (§4)), and ADR-0008's rules of 1.20
+(`render_enums`, the module committed as formatted, and what an enum's class docstring
+holds, §8), bind a source from its 0.3.0 adoption (§15), since the code that serves them
+ships in core 0.3.0; until then a source records what its upstream answers and names a
+fixture over the cap in the PR
 description; a source that starts on a git pin of core 0.3.0 (the roadmap's pin rule) is
 bound by each rule from its first PR on a pin that carries the rule's code.
 
@@ -133,9 +135,12 @@ skip it (§8, §9; ADR-0019).
   from one parameter. The refresh script writes it with `PackagedList.write`, `fetched`
   the UTC time of the fetch to the second; the package reads it with
   `PackagedList.load(package, name)` (ADR-0022, amendment 2026-10-27). Enums are
-  generated from it with `xippios.core.reference` (`render_str_enums`,
-  `render_int_enums`), and the whole generated module, docstrings included, is
-  ASCII-only and passes `ruff check` and `ruff format --check` as rendered (ADR-0008).
+  generated from it with one `xippios.core.reference.render_enums` call: one module, a
+  `StrEnum` per value list and an `IntEnum` per list of `(id, name)` pairs, each class
+  docstring naming its list and fetch date. The whole generated module, docstrings
+  included, is ASCII-only and passes `ruff check` and `ruff format --check` as committed,
+  after the refresh script's `ruff format && ruff check --fix` (ADR-0008, amendment
+  2026-10-27).
 
 ## 4. Result envelope and metadata
 
@@ -375,6 +380,10 @@ Messages and results name tenants and variables, never a value.
 - The function docstring is the tool description: first line one sentence, then an
   `Args:` block explaining every parameter with examples of valid values. Agents read
   this; write it for them.
+- An enum's class docstring reaches the tool's input schema through the parameter type,
+  so it holds what an agent needs, what the values are and the upstream list they come
+  from with its fetch date (what `render_enums` writes); maintainers' notes go into
+  comments, never into the docstring (ADR-0008, amendment 2026-10-27).
 - Read-only by default. A tool that writes to the upstream (CashCtrl) lives in a
   separate server entry point (`xippios-<source>-mcp-write`), takes `confirm: bool`
   and returns a dry-run preview when `confirm=False`. `register_tasks(read_only=False)`
@@ -391,7 +400,9 @@ Messages and results name tenants and variables, never a value.
   ResultCap(max_rows=400, max_bytes=100_000)})`); a byte bound above the default is a
   deliberate choice for that tool, and every other tool keeps the default (ADR-0016).
   The note never promises a filter the tool lacks: the default says "narrow the query to
-  see the rest", and a tool with filters names them in its cap's `note`. Since that note
+  see the rest", and a tool with filters names them in its cap's `note`. A cut list whose
+  `meta.request` records an integer `start`, an offset-paged task's, ends its note with
+  `; resume with start=<start + shown>` (ADR-0016, amendment 2026-10-27). Since that note
   names a task's filters, a source keeps its caps with its tasks, as `MCP_CAPS:
   Mapping[str, ResultCap]` in `tasks.py` next to `__all__`, and its `mcp.py` passes them
   through as `caps=getattr(tasks, "MCP_CAPS", None)`.
@@ -410,7 +421,11 @@ Messages and results name tenants and variables, never a value.
   that takes the tenant parameter must receive it on a locked server; a default is
   refused.
 - Errors return as text starting with `error: <ErrorClass>: <message>`; never raise
-  through the MCP boundary.
+  through the MCP boundary. Arguments a tool's schema refuses are answered the same way,
+  before the tool runs, by a middleware `register_tasks` installs once per server:
+  `error: InvalidRequestError: <argument>: <message>`, the first error with the count
+  when there are several, never pydantic's rendered error (its URL, input type or input
+  value) (ADR-0014, amendment 2026-10-27).
 - Entry point `xippios-<source>-mcp` runs stdio by default; `--http` for streamable HTTP.
   A source's own options reach core's `main` through `add_options` and `apply_options`,
   parsed once with core's; an error applying them stops the process with exit status 2.
@@ -486,7 +501,9 @@ route: `router_from_tasks` skips it, and no route returns a file path (ADR-0019)
   default run offline and free of real keys (ADR-0013):
   - No network, from `pytest_configure` on: while test modules are collected, in a
     fixture of any scope and in a test, a request through httpx's default transports
-    raises `RuntimeError` naming its method and path. `respx` answers replayed and
+    raises `RuntimeError` naming its method and path; the plugin patches httpcore's two
+    connection-pool methods, through which every default transport sends, proxies
+    included (ADR-0013, amendment 2026-10-27). `respx` answers replayed and
     mocked requests as before, a `respx` route that passes through is refused like any
     other request, and a transport the test passes itself is untouched. A test that
     must reach the network is marked `network` (or `live`), and is let through with
@@ -506,6 +523,14 @@ route: `router_from_tasks` skips it, and no route returns a file path (ADR-0019)
     edges, snapshots shared by consecutive live tests, a quota spent by a fixture of
     wider scope, a subclass's override of `before_request`, are listed in ADR-0013 and
     ADR-0015.
+  - Response caches, in every test not marked `live`: every `MemoryCache` is cleared
+    before and after the test, so an answer one test cached never answers the route the
+    next test mounts; a `CacheBackend` of the source's own is not cleared, and a source
+    that keeps one clears it itself (ADR-0013, amendment 2026-10-27).
+  - After a live run, the terminal summary prints one line per quota policy a live test
+    left a reading on, `quota after the live run: <source>: <describe()>`, times, counts
+    and the source only, for the release PR's report of the quota left (ADR-0013,
+    amendment 2026-10-27).
   - Placeholder key, in every test not marked `live`: every `EnvKeyAuth` sends
     `PLACEHOLDER_KEY`, pinned on the class, and the variables named in the ini option
     `xippios_placeholder_key_envs` hold it; the fixture `placeholder_api_key` returns
@@ -581,6 +606,15 @@ which §12 bounds to one minor.
   upstream terms and attribution · licence.
 - Topics on GitHub: `xippios-sdk`, `python`, `mcp`, plus the domain (`agriculture`,
   `trade-data`, `accounting`) as appropriate.
+- Workflows are hardened (ADR-0018, amendment 2026-10-27). Every action is pinned to a
+  commit SHA with its version in a comment, and bumped deliberately. Every checkout sets
+  `persist-credentials: false`, except in a job that pushes with the token (the release
+  train's `tag` job), which says so in a comment. Every workflow declares
+  `permissions: contents: read` at the top, and a job adds only what it needs. No
+  `secrets: inherit`: a secret is passed by name to the one job that uses it. The
+  family's own reusable workflows in `xippios/sdk-gates` are called at `@main` by
+  design, since the gates read their own `main`: the one reference to another
+  repository that is not pinned.
 
 ## 14. What this family is not
 
@@ -619,8 +653,9 @@ changed template answer, a protected path, a build or install route) waits for J
    overridden: a limiter wait or a quota pause marked `rate_limited` (ADR-0013,
    ADR-0015), key resolution given a module-level `placeholder_api_key` override that
    pins nothing (ADR-0013).
-6. Generated enum files are re-rendered once with the release's renderers and committed
-   as rendered.
+6. Generated enum files are re-rendered once with the release's renderer, through the
+   template's refresh script, and committed as formatted, after the script's
+   `ruff format && ruff check --fix` (ADR-0008, amendment 2026-10-27).
 7. `mypy --strict` covers `scripts/` too (`files = ["src", "tests", "scripts"]`).
 8. The current conventions version is applied: every rule changed since the version the
    source last applied holds in the source.

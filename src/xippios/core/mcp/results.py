@@ -44,11 +44,20 @@ def _how(cap: ResultCap) -> str:
     return _DEFAULT_NOTE if cap.note is None else cap.note
 
 
-def _note(shown: int, total: int, cap: ResultCap) -> str:
+def _note(shown: int, total: int, cap: ResultCap, start: int | None) -> str:
+    resume = "" if start is None else f"; resume with start={start + shown}"
     return (
         f"showing {shown} of {total} rows (cap: {cap.max_rows} rows or {cap.max_bytes} bytes); "
-        f"{_how(cap)}"
+        f"{_how(cap)}{resume}"
     )
+
+
+def _start(payload: dict[str, Any]) -> int | None:
+    """The integer ``start`` the result's ``meta.request`` records, for the resume hint."""
+    meta = payload.get("meta")
+    request = meta.get("request") if isinstance(meta, dict) else None
+    start = request.get("start") if isinstance(request, dict) else None
+    return start if isinstance(start, int) and not isinstance(start, bool) else None
 
 
 def cap_result(value: Any, cap: ResultCap | None = None) -> str:
@@ -56,7 +65,9 @@ def cap_result(value: Any, cap: ResultCap | None = None) -> str:
 
     A ``Result`` whose ``data`` is a list, or a bare list, is cut to the cap and gains a
     ``note``: ``"showing <shown> of <total> rows (cap: <max_rows> rows or <max_bytes>
-    bytes); "`` and then the cap's ``note``, or ``"narrow the query to see the rest"``.
+    bytes); "`` and then the cap's ``note``, or ``"narrow the query to see the rest"``;
+    where ``meta.request`` records an integer ``start``, an offset-paged task's, the note
+    ends ``"; resume with start=<start + shown>"``.
     A bare list is wrapped as ``{"data": [...]}`` so the shape is the same either way.
     Any other value that exceeds the byte cap is replaced by a note, ``"result is <n>
     bytes, over the cap of <max_bytes>; "`` and the same text, and a preview of its first
@@ -110,4 +121,5 @@ def _render(
 ) -> str:
     if shown >= total:
         return _dumps(payload)
-    return _dumps({**payload, "data": rows[:shown], "note": _note(shown, total, cap)})
+    note = _note(shown, total, cap, _start(payload))
+    return _dumps({**payload, "data": rows[:shown], "note": note})

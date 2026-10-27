@@ -70,6 +70,18 @@ All notable changes to this project are documented here. The format follows
   decision 5; no consumer): the rule's functions live in `xippios.core.redaction`, as
   `is_credential_name` and `redact_credentials`. `xippios.core.models.REDACTED` stays.
 
+- **`render_str_enums` and `render_int_enums`, with the renderers' ruff layout** (the
+  family review's C7; ADR-0008, amendment 2026-10-27; ADR-0023, decision 5; found by
+  sdk-comtrade, queue row 12, and by sdk-template, rows 31 c and 32 b): `render_enums`
+  (Added, below) replaces both. The quote choice, the parenthesised and split long
+  values, `__all__` sorted as RUF022 sorts it, the wrapped docstrings and the refusal of
+  a member name too long for a line go: the refresh script's `ruff format` and
+  `ruff check --fix` do that work. Every source re-renders `enums.py` at its adoption
+  through the template's script.
+- **The testing plugin's patches of httpx's transports** (the family review's C11;
+  ADR-0013, amendment 2026-10-27): `httpx.HTTPTransport.handle_request` and
+  `httpx.AsyncHTTPTransport.handle_async_request` are no longer patched (Changed, below).
+
 ### Changed
 
 - **`pause_cap` is the one bound of a quota pause** (C6; ADR-0010, decision 4, and
@@ -139,6 +151,29 @@ All notable changes to this project are documented here. The format follows
   the day the refresh scripts truncated the time to; a source's next refresh writes the
   full time. The sources answered with the time of the call and put the fetch date into
   `vintage`, which now holds an upstream release identifier only.
+
+- **Parse failures print no payload** (queue row 42, found by sdk-cashctrl): `parse`,
+  `UpstreamModel.project`, `load_table`, `PackagedList.load`, `decode_json`, `decode_text`
+  and `decode_csv` build their `ValidationError` and raise it `from None` through a
+  private helper whose frame holds the error alone. The text folds in the cause's
+  location, error type and message (`example get_thing: 1 validation error(s); first at
+  1.value (float_parsing): Input should be a valid number, ...`), json's message and
+  position, the decoder's reason or the csv module's message, never an input value; the
+  payload stays on `raw`, and the error's `repr` is its message. So neither pydantic's
+  chained error, whose text quoted every failing value, nor the raising frame's arguments
+  reach a printed traceback: under pytest's default `--tb=auto` the function that holds
+  the payload is a middle entry, printed short. `project`, `load_table` and
+  `PackagedList.load` raised pydantic's own `ValidationError` before and raise the
+  taxonomy's now. Row 42's core half is closed in core; the template's `--tb=short` on
+  the live run stays as a second guard.
+- **The network guard sits on httpcore's connection pools only** (C11; ADR-0013,
+  amendment 2026-10-27): `httpcore.ConnectionPool.handle_request` and
+  `httpcore.AsyncConnectionPool.handle_async_request`, which every default httpx
+  transport sends through, proxies included. The refusal, its message and its edges are
+  unchanged: respx answers a mocked request, a route that passes through meets the
+  refusal, and a transport a test passes itself bypasses it. The plugin's docstrings name
+  the decision of ADR-0013 they implement instead of restating it, and the
+  `rate_limited` marker's text names the quota pause it keeps as well.
 
 ### Added
 
@@ -267,6 +302,48 @@ All notable changes to this project are documented here. The format follows
   scripts of sdk-usda-psd, sdk-usda-esr, sdk-usda-gats and the template
   (`upstream_record`), and sdk-comtrade's tables (`_columns`).
 
+- **`render_enums(lists, *, fetched, class_names=None, member_names=None,
+  generator=...)`** (C7; ADR-0008, amendment 2026-10-27; rows 31 c and 32 b, found by
+  sdk-template; row 39 c, found by sdk-usda-gats), in `xippios.core.reference`: one module
+  of `StrEnum` and `IntEnum` classes, the kind inferred per list, a list of strings or of
+  `(id, name)` pairs as `id_name_pairs` builds them; `fetched` one date for the module or
+  one per list; each class docstring one line, "Values of ``<key>`` (fetched <date>).",
+  which an MCP tool's input schema shows the agent. The output is plain ASCII: values as
+  `ascii()` writes them, one member per line, `__all__` in the order of the lists,
+  `# noqa: E501` on a line over 100 columns, `# noqa: E741` on a member named `I`, `O` or
+  `l`. Refused with `ValueError`: an empty list or one that mixes kinds (the message
+  names what it found, by type); a key, class name, date or generator text that is not
+  printable ASCII; a class name over 84 characters, named `IntEnum` or `StrEnum`, or
+  shared by two lists; a repeated id; a member
+  name with nothing to derive it from, or one that collides or an enum cannot take; and a
+  key of `fetched`, `class_names` or `member_names` that `lists` does not hold. Consumers:
+  every source, through the template's refresh script (ADR-0023, decision 1).
+- **Every `MemoryCache` cleared around each offline test** (queue row 39 b, found by
+  sdk-usda-gats; sdk-comtrade carries the same fixture; ADR-0013, amendment 2026-10-27): a
+  `MemoryCache` adds itself to a module-level weak set when it is built, and the plugin's
+  autouse fixture clears every registered cache before and after each test not marked
+  `live`, next to the quota reset. A `CacheBackend` of the source's own is not cleared;
+  the `MemoryCache`s one holds are.
+- **The quota a live run left** (queue row 44 b, found by sdk-usda-esr; ADR-0013,
+  amendment 2026-10-27): after each `live` test that ran the plugin keeps every quota
+  policy's source and `snapshot().describe()`, and the terminal summary prints one line
+  per policy with a reading, `quota after the live run: <source>: <describe()>`: times,
+  counts and the source, never a key, a host or a query.
+- **Arguments a tool's schema refuses answered in conventions §8's form** (queue row 41 a,
+  found by sdk-usda-esr; ADR-0014, amendment 2026-10-27): `register_tasks`, and
+  `build_server` through it, installs one middleware per server that validates a call's
+  arguments with the argument model the `mcp` SDK builds for the tool and answers a
+  refusal before the tool runs as `error: InvalidRequestError: <argument>: <message>`,
+  the first error with the count when there are several. The SDK answered an MCP error,
+  `Error executing tool ...` with pydantic's text, its URL and the input value. A
+  `TenantLock`'s middleware stays outside it; a source's own middleware appended later
+  runs after it, and one inserted with `server.middleware.insert(0, ...)` runs ahead of
+  it; task errors keep their path. A family invariant (ADR-0023, decision 3 (a)).
+- **A capped list says where to resume** (queue row 21 b, found by sdk-cashctrl;
+  ADR-0016, amendment 2026-10-27): `cap_result` ends the note of a cut list whose
+  `meta.request` records an integer `start`, an offset-paged task's, with
+  `; resume with start=<start + shown>`; every other note is unchanged.
+
 ### Documentation
 
 - **ADR-0002, amendment 2026-10-27**: `pydantic-settings` and `xippios.core.config` are
@@ -316,6 +393,24 @@ All notable changes to this project are documented here. The format follows
   reading, `matches`, the frozen series (row 39 h) and the period series (row 39 i);
   §5 `UnknownCode`, in the taxonomy tree under `InvalidRequestError`; §6 `get_answer`.
   The preamble lists these among the rules that bind a source from its 0.3.0 adoption.
+
+- **ADR-0008, amended 2026-10-27**: `render_enums` replaces the two renderers, the plain
+  output and the refresh script's ruff step replace the amendment of 2026-10-24's
+  layout. **ADR-0013** (the guard on the pools, the cache clearing, the live summary),
+  **ADR-0014** (the argument middleware), **ADR-0016** (the resume hint) and **ADR-0018**
+  (amendment (f), the workflow hardening) get a dated line each.
+- **Conventions 1.20**: §3 `render_enums` and the module committed as formatted; §8 what
+  an enum's class docstring holds (queue row 39 c), the resume hint and refused
+  arguments as `InvalidRequestError` text; §10 the guard on the pools, the cache clearing
+  and the live summary; §13 the workflow hardening (queue row 51, the family's): actions
+  pinned by SHA, no persisted credentials but the `tag` job's, least permissions, no
+  `secrets: inherit`, the gates called at `@main`; §15 item 6 re-renders through the
+  template's script. The header binds the renderer rule from the 0.3.0 adoption.
+- `publish.yml`'s `tag` job says in a comment that its checkout keeps its credentials,
+  since it pushes the tag with the token (conventions §13).
+- The definition of done's adoption line and its copy in `.github/PULL_REQUEST_TEMPLATE.md`:
+  generated enum files are committed as formatted, after the refresh script's
+  `ruff format && ruff check --fix`, as conventions §15 item 6 says.
 
 ### Hand-apply for sources
 
@@ -449,7 +544,7 @@ listed here.
   v0.3.0) — `upstream_record(record)` → `record.dump_upstream()`; psd's `write(...)` and
   comtrade's `_columns` and `_write_table` → `PackagedList(param=..., endpoint=...,
   fetched=..., records=...).write(path)`, `fetched` = `datetime.now(UTC)` to the second;
-  the renderers still take the fetch day as text (`f"{fetched:%Y-%m-%d}"`) — rows 32 a,
+  `render_enums` takes the fetch day as text (`f"{fetched:%Y-%m-%d}"`) — rows 32 a,
   34 a.
 - `tests/` (psd, comtrade) — the snapshot counts of packaged lists (psd's 42, comtrade's
   38) → structure checks (each record carries the list's fields; `endpoint` and
@@ -460,6 +555,35 @@ listed here.
 
 sdk-comtrade's planned `QuotaPolicy(limit_header=None, remaining_header=None,
 window=86400, spent=...)` is unaffected: `spent=` stays.
+
+- `scripts/refresh_reference.py` (every source with a generated `enums.py`; the template
+  renders it in v0.3.0) — `render_str_enums(...)` and `render_int_enums(...)` → one
+  `render_enums(lists, fetched=..., ...)` call, value lists and id lists in one mapping,
+  `fetched` one date or one per list, then `ruff format` and `ruff check --fix` on
+  `enums.py`, which is re-rendered and committed as formatted — C7.
+- `scripts/refresh_reference.py` and `.claude/commands/refresh-reference-data.md`
+  (sdk-comtrade) — the per-class rewrite of each docstring with its list's date →
+  `fetched={name: date, ...}`; its notes leave the class docstrings, which reach the
+  agent, for the packaged list's `note` (`PackagedList(note=...)`); the command's ruff
+  step and its note on row 12 go, since the script runs ruff — C7, rows 32 b, 39 c.
+- `scripts/refresh_reference.py` (usda-psd, usda-esr, usda-gats) — the refusal of a value
+  list and an id list together and `--render-only`'s refusal of lists fetched on
+  different days go — rows 31 c, 32 b.
+- `tests/conftest.py` (sdk-comtrade, `empty_reference_cache`) and `tests/test_client.py`
+  (sdk-usda-gats, its autouse cache-clearing fixture) — deleted: the plugin clears every
+  `MemoryCache` around each offline test — row 39 b.
+- Every source, `tests/` — a test that asserted the SDK's answer to an argument the schema
+  refuses (`Error executing tool ...`, `is_error`, `mcp_call_text` failing) → the text
+  `error: InvalidRequestError: <argument>: <message>` through `mcp_call_text`; `mcp_call`
+  still raises `AssertionError` on it — row 41 a.
+- Every source, `tests/` — a test that matched `parse`'s text "first at <loc>: <msg>" →
+  "first at <loc> (<type>): <msg>"; one that read pydantic's error from `__cause__` finds
+  `None`; one that expected pydantic's `ValidationError` from `load_table`, `project` or
+  `PackagedList.load` expects `xippios.core.errors.ValidationError` — row 42.
+- sdk-cashctrl, a test that asserted a capped note of an offset-paged list task in full —
+  the note ends `; resume with start=<n>` — row 21 b.
+- Every source's own workflows (a `siblings.yml`, a `live.yml` of its own) — checked
+  against conventions §13's hardening — row 51.
 
 ## [0.2.1] - 2026-10-27
 

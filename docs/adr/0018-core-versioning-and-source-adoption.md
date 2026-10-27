@@ -107,3 +107,18 @@ merges automatically after CI, the merge-class check and the review, unless its 
 `human`. Conventions §15, the definition of done's Adoption PR intro and its Process
 line (and the Process line's copy in the PR template) state it from 1.15 on, citing
 "ADR-0018, amendment (e)".
+
+## Amendment 2026-10-27
+
+(f) The release train's workflows, and every workflow of the family, follow the hardening
+that conventions §13 states from 1.20 on (queue row 51, the family's; decided by Johannes
+on 2026-10-27): every action pinned to a commit SHA with its version in a comment;
+`persist-credentials: false` on every checkout except in a job that pushes with the token,
+the `tag` job of `publish.yml`, which says so in a comment; `permissions: contents: read`
+at the top of every workflow and, per job, only what the job needs; no `secrets: inherit`,
+a secret passed by name to the one job that uses it. The family's reusable workflows in
+`xippios/sdk-gates` are called at `@main` by design, since the gates read their own `main`
+(Johannes's caller-mode decision of 2026-10-26): the one reference to another
+repository that is not pinned. Core's
+`ci.yml`, `publish.yml` and `gates.yml` met it except for the `tag` job's comment, which
+the change that brought this amendment added.

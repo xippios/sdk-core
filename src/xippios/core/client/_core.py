@@ -5,6 +5,7 @@ import contextlib
 import csv
 import inspect
 import io
+import json
 import os
 import tempfile
 import threading
@@ -35,6 +36,7 @@ from xippios.core.errors import (
     UpstreamError,
     ValidationError,
     XippiosError,
+    _raise,
     raise_for_status,
 )
 
@@ -493,16 +495,30 @@ def decode_json(
             (conventions §5).
 
     Raises:
-        ValidationError: The body is not JSON; ``raw`` holds its text, truncated.
+        ValidationError: The body is not JSON; raised ``from None``, the text naming the
+            decoder's message and position (``... is not JSON: Expecting value at line 1
+            column 1 (char 0)``), ``raw`` the body's text, truncated (queue row 42).
     """
     try:
         return response.json()
     except ValueError as exc:
-        raise ValidationError(
-            f"{source + ': ' if source else ''}{_where(response, path)} is not JSON",
-            raw=response.text[:BODY_LIMIT],
-            source=source,
-        ) from exc
+        _raise(
+            ValidationError(
+                f"{source + ': ' if source else ''}{_where(response, path)} is not JSON: "
+                f"{_reason(exc)}",
+                raw=response.text[:BODY_LIMIT],
+                source=source,
+            )
+        )
+
+
+def _reason(exc: ValueError) -> str:
+    """What a decoder said and where, never the text it read (queue row 42)."""
+    if isinstance(exc, json.JSONDecodeError):
+        return f"{exc.msg} at line {exc.lineno} column {exc.colno} (char {exc.pos})"
+    if isinstance(exc, UnicodeDecodeError):
+        return f"{exc.reason} at byte {exc.start}"
+    return type(exc).__name__
 
 
 def _where(response: httpx.Response, path: str | None) -> str:
@@ -532,17 +548,22 @@ def decode_text(
 
     Raises:
         ValidationError: The body is not text in that charset, or the charset is
-            unknown; ``raw`` holds the first ``BODY_LIMIT`` bytes.
+            unknown; raised ``from None``, the text naming the decoder's reason and the
+            byte, ``raw`` the first ``BODY_LIMIT`` bytes (queue row 42).
     """
     charset = response.charset_encoding or "utf-8"
     try:
         text = response.content.decode(charset)
     except (LookupError, UnicodeDecodeError) as exc:
-        raise ValidationError(
-            f"{source + ': ' if source else ''}{_where(response, path)} is not {charset} text",
-            raw=response.content[:BODY_LIMIT],
-            source=source,
-        ) from exc
+        reason = _reason(exc) if isinstance(exc, UnicodeDecodeError) else "an unknown charset"
+        _raise(
+            ValidationError(
+                f"{source + ': ' if source else ''}{_where(response, path)} is not {charset} "
+                f"text: {reason}",
+                raw=response.content[:BODY_LIMIT],
+                source=source,
+            )
+        )
     return text.removeprefix("\ufeff")
 
 
@@ -569,7 +590,8 @@ def decode_csv(
     Raises:
         ValidationError: The text is not UTF-8 (or not in the response's charset), or
             not CSV the stdlib can read, e.g. a field over its size limit; raised while
-            iterating, at the row where it is found.
+            iterating, at the row where it is found, ``from None``, naming the decoder's
+            or the csv module's message, never the text.
     """
     if isinstance(data, httpx.Response):
         text = io.StringIO(decode_text(data, source=source), newline="")
@@ -587,13 +609,19 @@ def _rows(
     try:
         yield from csv.DictReader(handle, delimiter=delimiter)
     except UnicodeDecodeError as exc:
-        raise ValidationError(
-            f"{prefix}{name} is not UTF-8 text", raw=exc.object[:BODY_LIMIT], source=source
-        ) from exc
+        _raise(
+            ValidationError(
+                f"{prefix}{name} is not UTF-8 text: {exc.reason}",
+                raw=exc.object[:BODY_LIMIT],
+                source=source,
+            )
+        )
     except csv.Error as exc:
-        raise ValidationError(
-            f"{prefix}{name} is not CSV the csv module reads: {exc}", raw="", source=source
-        ) from exc
+        _raise(
+            ValidationError(
+                f"{prefix}{name} is not CSV the csv module reads: {exc}", raw="", source=source
+            )
+        )
 
 
 class _ClassifyOnce:

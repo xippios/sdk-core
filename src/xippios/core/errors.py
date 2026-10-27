@@ -10,7 +10,7 @@ import math
 import re
 from collections.abc import Sequence
 from datetime import UTC, date, datetime
-from typing import Any
+from typing import Any, NoReturn
 
 import httpx
 
@@ -106,6 +106,8 @@ class NotFoundError(XippiosError):
 class ValidationError(XippiosError):
     """We could not parse what upstream returned.
 
+    Its ``str`` and ``repr`` are the message alone; the payload is on ``raw`` only.
+
     Attributes:
         raw: The decoded payload (or body text) that failed to validate.
     """
@@ -113,6 +115,17 @@ class ValidationError(XippiosError):
     def __init__(self, message: str, *, raw: object, source: str | None = None) -> None:
         super().__init__(message, source=source)
         self.raw = raw
+
+
+def _raise(error: XippiosError) -> NoReturn:
+    """Raise ``error`` without a chained cause, from a frame that holds nothing else.
+
+    A printed traceback shows the raising frame in full, its arguments included (pytest's
+    default ``--tb=auto``). Raised here, that frame holds the error alone, whose ``repr``
+    is its message, and the caller's frame, which holds the payload, is a middle entry
+    printed short: no upstream data reaches the report (queue row 42).
+    """
+    raise error from None
 
 
 class UpstreamError(XippiosError):

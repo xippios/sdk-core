@@ -46,8 +46,8 @@ It gives a source package the things that should be identical across the family:
   names, per-tenant variables, one client per tenant (`Tenants`).
 - **Reference data**: loaders for code lists shipped inside a package, `PackagedList`
   for a list fetched from one upstream operation (its file, the meta of an answer from
-  it, its writer), `matches` and `closest` for the list tasks and their refusals, and the
-  renderers that generate `StrEnum` and `IntEnum` modules.
+  it, its writer), `matches` and `closest` for the list tasks and their refusals, and
+  `render_enums`, which generates one module of `StrEnum` and `IntEnum` classes.
 - **Adapters** that turn task functions into MCP tools (`xippios.core.mcp`) and FastAPI
   routes (`xippios.core.http`) without any logic of their own.
 - **Test support**: a live-test gate, offline guarantees for every other test (no
@@ -412,33 +412,31 @@ the list.
 
 Other code lists are read with `load_json` or `load_table` (`load_csv`, which
 `load_table` calls for a CSV file, stays in `xippios.core.reference`). The refresh
-script generates `enums.py` from them with `xippios.core.reference`, and the module is
-committed as rendered:
+script generates `enums.py` from the lists with one `render_enums` call, then runs
+`ruff format` and `ruff check --fix` on it, and the module is committed as formatted:
 
 ```python
-from xippios.core.reference import id_name_pairs, render_int_enums, render_str_enums
+from xippios.core.reference import id_name_pairs, render_enums
 
-# Value lists: one StrEnum each, member names derived from the values.
-enums = render_str_enums(
-    {"state_alpha": ["AK", "AL"], "sector_desc": ["ANIMALS & PRODUCTS", "CROPS"]},
-    class_names={"sector_desc": "Sector"},
-    fetched="2026-10-24",
-    generator="scripts/refresh_reference.py",
-)
-
-# Integer ids with names: one IntEnum each, values the ids, in upstream order.
 records = [
     {"attributeId": 4, "attributeName": "Area Harvested"},
     {"attributeId": 126, "attributeName": "Total Disappearance"},
     {"attributeId": 173, "attributeName": "Total Disappearance"},
 ]
-pairs = id_name_pairs(records, id_field="attributeId", name_field="attributeName")
-ids = render_int_enums(
-    {"attributeId": pairs},
-    class_names={"attributeId": "AttributeId"},
-    fetched="2026-10-24",
+source = render_enums(
+    {
+        # Strings: a StrEnum, member names derived from the values.
+        "sector_desc": ["ANIMALS & PRODUCTS", "CROPS"],
+        # (id, name) pairs: an IntEnum, values the ids, in upstream order.
+        "attributeId": id_name_pairs(records, id_field="attributeId", name_field="attributeName"),
+    },
+    fetched={"sector_desc": "2026-10-27", "attributeId": "2026-10-24"},  # or one date
+    class_names={"sector_desc": "Sector", "attributeId": "AttributeId"},
     generator="scripts/refresh_reference.py",
 )
+ENUMS.write_text(source, encoding="utf-8")
+# then: uv run ruff format src/xippios/example/enums.py
+#       uv run ruff check --fix src/xippios/example/enums.py
 ```
 
 ```python
@@ -451,21 +449,22 @@ class AttributeId(IntEnum):
 ```
 
 An upstream whose ids are integers gets `IntEnum` (conventions §3), so a member compares
-equal to the id in upstream's data; a name several ids share gets `_<id>`. Values are
+equal to the id in upstream's data; a name several ids share gets `_<id>`. Each class's
+docstring is one line naming the list and its fetch date, which an MCP tool's input
+schema shows the agent (conventions §8). The output is plain and ASCII-only: values are
 written as `ascii()` writes them, every character outside ASCII as an escape
-(`"C\xf4te d\u2019Ivoire"`), a member too long for its line is wrapped as ruff wraps it,
-and `__all__` is sorted as ruff sorts it, one name per line. The whole module is
-ASCII-only, so no ruff version can find an ambiguous character in it, and it passes
-`ruff check` and `ruff format --check` unchanged; a key, class name, fetch date or
-generator text that is not printable ASCII is refused. A member name too long for any
-line (over 92 columns), or a value with nothing to derive one from (an empty or a
-non-Latin label), is refused with `ValueError`; the refresh script names that member by
-hand, once:
+(`'C\xf4te d\u2019Ivoire'`), one member per line, `__all__` in the order of the lists, and
+a line over 100 columns carries `# noqa: E501`; ruff chooses the quotes, wraps what fits
+and sorts `__all__`. A key, class name, fetch date or generator text that is not
+printable ASCII is refused, and so is an empty list, a repeated id, and a value with
+nothing to derive a member name from (an empty or a non-Latin label) or whose name
+collides; the refresh script names that member by hand, once:
 
 ```python
-enums = render_str_enums(
+source = render_enums(
     {"short_desc": values},
-    member_names={"short_desc": {long_value: "CORN_GRAIN_IRRIGATED_ALL"}},
+    fetched="2026-10-27",
+    member_names={"short_desc": {"\u5317\u4eac": "BEIJING"}},
 )
 ```
 
@@ -485,8 +484,12 @@ def run() -> None:  # entry point: xippios-example-mcp = "xippios.example.mcp:ru
 
 Tool names are `<source>_<function>` (`example_get_series`), the docstring is the tool
 description, the signature is the input schema. Results are capped at 200 rows or
-64 KB with a note on how to narrow the query; errors come back as
-`error: <Class>: <message>`. `--http` serves streamable HTTP instead of stdio.
+64 KB with a note on how to narrow the query, and a capped list whose `meta.request`
+records an integer `start` says where to resume (`; resume with start=200`); errors come
+back as `error: <Class>: <message>`, arguments the tool's schema refuses too
+(`error: InvalidRequestError: year: Input should be a valid integer, ...`), before the
+tool runs and never with pydantic's rendered error (its URL, input type or input value).
+`--http` serves streamable HTTP instead of stdio.
 A reference tool whose whole list an agent needs gets a cap of its own, keyed by the
 task function's name, with the rows and bytes the source judges it needs:
 `build_server(..., caps={"list_commodities": ResultCap(max_rows=500,
@@ -601,16 +604,20 @@ xippios_placeholder_key_envs = ["EXAMPLE_API_KEY"]
 - `@pytest.mark.live` tests are skipped unless `XIPPIOS_LIVE_TESTS=1`, and `anyio`
   tests run on asyncio (the plugin's `anyio_backend`).
 - The whole run is offline (ADR-0013). From `pytest_configure` on, during collection, in
-  fixtures and in tests, a request through httpx's default transports raises
+  fixtures and in tests, a request through httpx's default transports (the plugin
+  patches httpcore's connection pools, which they all send through) raises
   `RuntimeError` naming its method and path unless `respx` answers it, a `respx` route
   that passes through included; mark a test `network` to let it through. In every test
   not marked `live`, the rate limiter never waits (mark a test `rate_limited` to keep
-  it) and no `QuotaPolicy` pauses, refuses or stays spent from one test to the next
-  (`rate_limited` keeps the pause too), and every `EnvKeyAuth` sends `PLACEHOLDER_KEY`
-  while the variables named in `xippios_placeholder_key_envs` hold it (fixture
-  `placeholder_api_key`), whatever the shell or an earlier live test left behind. The
-  `httpx` and `httpcore` logger levels come back after every test. ADR-0013 states the
-  edges of these guarantees.
+  it), no `QuotaPolicy` pauses, refuses or stays spent from one test to the next
+  (`rate_limited` keeps the pause too), every `MemoryCache` starts and ends empty (a
+  cache backend of the source's own is the source's to clear), and every `EnvKeyAuth`
+  sends `PLACEHOLDER_KEY` while the variables named in `xippios_placeholder_key_envs`
+  hold it (fixture `placeholder_api_key`), whatever the shell or an earlier live test
+  left behind. The `httpx` and `httpcore` logger levels come back after every test.
+  After a live run the summary prints each quota policy's last reading, `quota after the
+  live run: usda-psd: 986 of 1000 requests left as of ...`. ADR-0013 states the edges of
+  these guarantees.
 - `replay_fixture("api_GET", "corn_2024")` mounts `tests/fixtures/api_GET/corn_2024.json`
   on its method, host and path; `match_params=["countOnly"]` makes the route match those
   recorded query parameters too. A parameter's absence cannot be matched: where two
