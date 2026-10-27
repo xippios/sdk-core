@@ -12,21 +12,21 @@ EXPORTS = {
         # client
         "AsyncClient", "ClientConfig", "MemoryCache", "QuotaPolicy", "RateLimit",
         "RetryPolicy", "Timeouts", "QueryKeyAuth", "HeaderKeyAuth", "BearerAuth",
-        "BasicKeyAuth", "Downloaded",
+        "BasicKeyAuth", "Downloaded", "Answer",
         # errors
         "AuthError", "ConfigError", "InvalidRequestError", "NotFoundError", "RateLimitError",
-        "TransportError", "UpstreamError", "ValidationError", "XippiosError",
+        "TransportError", "UpstreamError", "ValidationError", "XippiosError", "UnknownCode",
         "BODY_LIMIT", "error_from_response", "parse_retry_after",
         # models and helpers
         "Result", "ResultCap", "ResultMeta", "UpstreamModel", "parse", "parse_decimal",
         "Tenants", "collect", "paginate_offset", "load_json", "load_table",
-        "sync", "__version__",
+        "PackagedList", "matches", "closest", "sync", "__version__",
     },
     "xippios.core.client": {
         "AsyncClient", "BasicKeyAuth", "BearerAuth", "CachedResponse", "ClientConfig",
         "HeaderKeyAuth", "MemoryCache", "QueryKeyAuth", "QuotaPolicy", "RateLimit",
         "RetryPolicy", "Timeouts", "cache_key", "decode_json", "decode_text", "decode_csv",
-        "Downloaded",
+        "Downloaded", "Answer",
     },
     "xippios.core.testing": {
         "CLOCK_SLACK", "REDACTED", "Fixture", "FixtureResponse", "ReplayFixture", "Scrub",

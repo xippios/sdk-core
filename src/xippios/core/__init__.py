@@ -10,6 +10,7 @@ live in their own subpackages and are imported explicitly: ``xippios.core.mcp``,
 from xippios.core._loop import sync
 from xippios.core._version import __version__
 from xippios.core.client import (
+    Answer,
     AsyncClient,
     BasicKeyAuth,
     BearerAuth,
@@ -31,6 +32,7 @@ from xippios.core.errors import (
     NotFoundError,
     RateLimitError,
     TransportError,
+    UnknownCode,
     UpstreamError,
     ValidationError,
     XippiosError,
@@ -46,11 +48,12 @@ from xippios.core.models import (
     parse_decimal,
 )
 from xippios.core.pagination import collect, paginate_offset
-from xippios.core.reference import load_json, load_table
+from xippios.core.reference import PackagedList, closest, load_json, load_table, matches
 from xippios.core.tenants import Tenants
 
 __all__ = [
     "BODY_LIMIT",
+    "Answer",
     "AsyncClient",
     "AuthError",
     "BasicKeyAuth",
@@ -62,6 +65,7 @@ __all__ = [
     "InvalidRequestError",
     "MemoryCache",
     "NotFoundError",
+    "PackagedList",
     "QueryKeyAuth",
     "QuotaPolicy",
     "RateLimit",
@@ -73,15 +77,18 @@ __all__ = [
     "Tenants",
     "Timeouts",
     "TransportError",
+    "UnknownCode",
     "UpstreamError",
     "UpstreamModel",
     "ValidationError",
     "XippiosError",
     "__version__",
+    "closest",
     "collect",
     "error_from_response",
     "load_json",
     "load_table",
+    "matches",
     "paginate_offset",
     "parse",
     "parse_decimal",
