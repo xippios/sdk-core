@@ -7,6 +7,7 @@ from typing import Any, Self
 
 import pydantic
 from pydantic import (
+    AliasChoices,
     BaseModel,
     ConfigDict,
     Field,
@@ -14,7 +15,9 @@ from pydantic import (
     TypeAdapter,
     field_serializer,
     field_validator,
+    model_validator,
 )
+from pydantic.fields import FieldInfo
 
 from xippios.core.errors import ValidationError
 from xippios.core.redaction import REDACTED, redact_credentials
@@ -55,6 +58,25 @@ def _as_json_number(value: Any, rendered: Any) -> Any:
     return rendered
 
 
+def _upstream_name(name: str, info: FieldInfo) -> str:
+    """The name upstream gives a field: its alias for output, else for input, else its own."""
+    if info.serialization_alias is not None:
+        return info.serialization_alias
+    alias = info.validation_alias
+    if isinstance(alias, AliasChoices):
+        alias = alias.choices[0]
+    return alias if isinstance(alias, str) else name
+
+
+def _upstream_value(value: Any, dumped: Any) -> Any:
+    """``dumped`` with a nested ``UpstreamModel``, alone or in a list, under upstream's names."""
+    if isinstance(value, UpstreamModel):
+        return value.dump_upstream()
+    if isinstance(value, list | tuple) and isinstance(dumped, list):
+        return [_upstream_value(item, out) for item, out in zip(value, dumped, strict=True)]
+    return dumped
+
+
 class UpstreamModel(BaseModel):
     """Base for models that mirror an upstream payload field by field.
 
@@ -62,7 +84,8 @@ class UpstreamModel(BaseModel):
     and fields can be populated by name as well as by alias, so upstream ``camelCase``
     maps onto ``snake_case`` attributes without breaking construction in tests.
     ``Decimal`` fields serialise as JSON numbers in both adapters (ADR-0008); Python
-    keeps the ``Decimal``.
+    keeps the ``Decimal``. ``dump_upstream`` gives the record back under upstream's
+    names, for a packaged reference file.
     """
 
     model_config = ConfigDict(
@@ -99,6 +122,30 @@ class UpstreamModel(BaseModel):
         copied = {name: getattr(source, name) for name in cls.model_fields if name not in overrides}
         return cls(**copied, **overrides)
 
+    def dump_upstream(self) -> dict[str, Any]:
+        """This record as JSON values under upstream's field names, in field order.
+
+        What a refresh script writes into a packaged reference file (conventions §3):
+        ``model_dump(mode="json")``, a ``Decimal`` as a number and a date as ISO text,
+        with each field under the name upstream gives it: its ``serialization_alias``
+        when set, else its ``validation_alias`` when that is a string, else the first
+        choice of an ``AliasChoices`` when that is a string, else the field's own name.
+        ``Field(alias="seriesId")`` sets the first two, so ``series_id`` comes back as
+        ``"seriesId"``. A nested ``UpstreamModel``, alone or in a list or tuple, is
+        dumped the same way; one inside a mapping keeps the field names
+        ``model_dump`` gives it. A computed field is the package's, not upstream's, and
+        is left out, as is a field excluded from dumping.
+
+        Returns:
+            E.g. ``{"seriesId": "CORN_YIELD", "value": 177.3}``.
+        """
+        dumped = self.model_dump(mode="json")
+        return {
+            _upstream_name(name, info): _upstream_value(getattr(self, name), dumped[name])
+            for name, info in type(self).model_fields.items()
+            if name in dumped
+        }
+
 
 def utcnow() -> datetime:
     """Current time as a timezone-aware UTC datetime."""
@@ -106,18 +153,32 @@ def utcnow() -> datetime:
 
 
 class ResultMeta(BaseModel):
-    """Release metadata attached to every result.
+    """Release metadata attached to every result (conventions §4).
+
+    A field the model does not define is refused at construction, never dropped
+    silently: a misspelt ``totl=`` is an error, not a lost count.
 
     Attributes:
         source: Source slug, e.g. ``"usda-nass"``.
-        endpoint: Upstream operation name, e.g. ``"api_GET"``.
-        retrieved_at: When we fetched the data; timezone-aware UTC, defaults to now.
-        published_at: Upstream publication or release time when known.
-        vintage: Upstream release identifier when the source has one.
-        request: The parameters used, for reproducibility. The value of every key that
-            names a credential, at any depth, is ``REDACTED`` at construction by the one
-            rule of ``xippios.core.redaction`` (ADR-0005; ``key`` only where a
-            ``QueryKeyAuth`` sends it, ADR-0019); record the variable name, never the
+        endpoint: Upstream operation name, e.g. ``"api_GET"``; for a packaged answer the
+            operation the list came from (ADR-0022), as ``PackagedList.meta`` sets it.
+        retrieved_at: When we fetched the data; timezone-aware UTC, defaults to now. A
+            cache hit's is the time its entry was stored (``AsyncClient.get_answer``), a
+            packaged answer's the time the list was fetched (ADR-0022, rule 1).
+        published_at: Upstream publication or release time when known, timezone-aware;
+            naive only with ``published_at_naive`` set.
+        published_at_naive: ``True`` when upstream printed ``published_at`` without a
+            zone (FAS: ``2026-10-06T08:00:00``): the value is stored as given, no zone
+            attached, upstream's text and not comparable across sources (ADR-0022,
+            rule 2). Set only with a naive ``published_at``.
+        vintage: Upstream release identifier when the source has one, as upstream names
+            it; never a fetch date (ADR-0022, rule 1).
+        request: The parameters sent, for reproducibility. A top-level parameter whose
+            value is ``None``, one the caller left out, is dropped at construction
+            (ADR-0022, rule 3); a ``None`` inside a nested mapping is kept as given. The
+            value of every key that names a credential, at any depth, is ``REDACTED``
+            by the one rule of ``xippios.core.redaction`` (ADR-0005; ``key`` only where
+            a ``QueryKeyAuth`` sends it, ADR-0019); record the variable name, never the
             value.
         total: Upstream's count of the records matching the request, when the source
             reports one; ``None`` when it does not or the count is unknown. Set only from
@@ -125,28 +186,52 @@ class ResultMeta(BaseModel):
         tenant: The tenant the data came from, by name, e.g. ``"acme"``; never a
             credential, nor a host or another value of the tenant's (conventions §7).
             ``None`` for a single-tenant source and for the list of tenant names.
+
+    Raises:
+        pydantic.ValidationError: A field the model does not define; a naive
+            ``retrieved_at``; a naive ``published_at`` without ``published_at_naive``,
+            or the flag set with an aware ``published_at`` or none; a negative
+            ``total``.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     source: str
     endpoint: str
     retrieved_at: datetime = Field(default_factory=utcnow)
     published_at: datetime | None = None
+    published_at_naive: bool = False
     vintage: str | None = None
     request: dict[str, Any] = Field(default_factory=dict)
     total: int | None = None
     tenant: str | None = None
 
-    @field_validator("retrieved_at", "published_at")
+    @field_validator("retrieved_at")
     @classmethod
-    def _timezone_aware(cls, value: datetime | None) -> datetime | None:
-        if value is not None and value.tzinfo is None:
+    def _timezone_aware(cls, value: datetime) -> datetime:
+        if value.tzinfo is None:
             raise ValueError("datetime must be timezone-aware")
         return value
 
+    @model_validator(mode="after")
+    def _published_at_as_upstream_printed_it(self) -> Self:
+        naive = self.published_at is not None and self.published_at.tzinfo is None
+        if naive and not self.published_at_naive:
+            raise ValueError(
+                "datetime must be timezone-aware: published_at is naive; a time upstream "
+                "printed without a zone takes published_at_naive=True"
+            )
+        if self.published_at_naive and not naive:
+            raise ValueError(
+                "published_at_naive says upstream printed published_at without a zone, but "
+                + ("published_at carries one" if self.published_at else "published_at is None")
+            )
+        return self
+
     @field_validator("request")
     @classmethod
-    def _no_credentials(cls, value: dict[str, Any]) -> dict[str, Any]:
-        return redact_credentials(value)
+    def _sent_and_no_credentials(cls, value: dict[str, Any]) -> dict[str, Any]:
+        return redact_credentials({name: item for name, item in value.items() if item is not None})
 
     @field_validator("total")
     @classmethod
