@@ -17,7 +17,8 @@ It gives a source package the things that should be identical across the family:
   (`json=`) or form-encoded (`data=`). Two hooks, `before_request` and `observe`, see
   each call and each response; `QuotaPolicy` uses them to wait out or refuse a request
   into a spent quota.
-  `auth=None` sends one call without the client's key. A file is streamed to disk with
+  `auth=None` sends one call without the client's key. `get_answer` returns the payload
+  with its `retrieved_at`, a cache hit's stored time. A file is streamed to disk with
   `download`, never held in memory; `decode_text` and `decode_csv` read text and CSV
   next to `decode_json`; the cache stores no body over `cache_max_bytes` (8 MiB).
 - **Auth helpers** that read the key from the environment on the first request:
@@ -30,18 +31,23 @@ It gives a source package the things that should be identical across the family:
   `ValidationError`, `UpstreamError`, `TransportError` and `InvalidRequestError` (the
   request as given cannot be served: a bad argument, or a refusal the source documents,
   detected before the call or mapped from upstream's own refusal), all under
-  `XippiosError`.
+  `XippiosError`; `UnknownCode`, an `InvalidRequestError`, refuses a code a packaged
+  list lacks and names the closest known ones.
 - **Result envelope**: every task function returns `Result[T]` with `ResultMeta`
-  (source, endpoint, retrieved_at, published_at, vintage, request, total: upstream's
-  count of the matching records when the source reports one, and tenant: the tenant the
-  data came from, by name, for a multi-tenant source). `Decimal` fields
-  of upstream models arrive as JSON numbers in both adapters; `UpstreamModel.project`
-  builds a projection of a record under upstream names, `parse_decimal` reads a
-  published figure.
+  (source, endpoint, retrieved_at, published_at with published_at_naive for a time
+  upstream printed without a zone, vintage, request without the parameters left `None`,
+  total: upstream's count of the matching records when the source reports one, and
+  tenant: the tenant the data came from, by name, for a multi-tenant source); a field it
+  does not define is refused. `Decimal` fields of upstream models arrive as JSON numbers
+  in both adapters; `UpstreamModel.project` builds a projection of a record under
+  upstream names, `dump_upstream` gives a record back under upstream's field names,
+  `parse_decimal` reads a published figure.
 - **Tenants** for a source that serves several tenants from the environment: declared
   names, per-tenant variables, one client per tenant (`Tenants`).
-- **Reference data**: loaders for code lists shipped inside a package, and the
-  renderers that generate their `StrEnum` and `IntEnum` modules.
+- **Reference data**: loaders for code lists shipped inside a package, `PackagedList`
+  for a list fetched from one upstream operation (its file, the meta of an answer from
+  it, its writer), `matches` and `closest` for the list tasks and their refusals, and the
+  renderers that generate `StrEnum` and `IntEnum` modules.
 - **Adapters** that turn task functions into MCP tools (`xippios.core.mcp`) and FastAPI
   routes (`xippios.core.http`) without any logic of their own.
 - **Test support**: a live-test gate, offline guarantees for every other test (no
@@ -125,7 +131,13 @@ safe to hand to an agent or return over HTTP. A bare `key` is a credential only 
 `QueryKeyAuth` sends the key under that name, as above, which registers it for the
 process; elsewhere it is data, as Eurostat's SDMX series `key` is, and so is a
 `sort_key`. The fixture recorder and the replay helpers redact by the same rule
-(`xippios.core.redaction`).
+(`xippios.core.redaction`). A parameter the caller left `None` was not sent and is left
+out of `meta.request`, so a task passes its parameters as they are.
+
+A release time upstream prints without a zone (FAS: `2026-10-06T08:00:00`) goes into
+`published_at` as printed, with `published_at_naive=True`, and `vintage` keeps the
+release identifier as upstream names it; `ResultMeta` refuses a naive time without the
+flag, the flag without a naive time, and any field it does not define.
 
 Upstream failures arrive as taxonomy errors, never as raw `httpx` exceptions:
 
@@ -222,20 +234,28 @@ any source in the process waits within the policy's cap or is refused before sen
 
 A request the cache answers never waits: `before_request` runs after the cache lookup,
 and a cache hit carries the time its entry was stored in
-`response.extensions["xippios_cache_stored_at"]`, the hit's `retrieved_at`; a wrapper
-that needs it calls `get()` and then `decode_json(response, source=...)` instead of
-`get_json()`. The hooks are plain callables on `ClientConfig` (`before_request` may be
-async) for anything else that has to see each call or each response.
+`response.extensions["xippios_cache_stored_at"]`, the hit's `retrieved_at`. A wrapper
+whose answer may come from the cache calls `get_answer()` instead of `get_json()`: its
+`Answer` carries the payload and `retrieved_at`, the stored time on a hit and the time
+the answer arrived otherwise.
+
+```python
+answer = await client.get_answer("/api/regions", auth=None)
+meta = ResultMeta(source="example", endpoint="regions", retrieved_at=answer.retrieved_at)
+```
+
+The hooks are plain callables on `ClientConfig` (`before_request` may be async) for
+anything else that has to see each call or each response.
 
 `ClientConfig.classify` is asked before a 429 or 5xx is retried: a `RateLimitError`
 with a `retry_after` beyond `backoff_max` is raised after one attempt instead of being
 retried into a spent quota; an `UpstreamError` for a 5xx leaves the retries as they are;
 any other error it returns, an `AuthError` say, ends them.
 
-`auth=` on `request`, `get`, `get_json` and `record` overrides the client's credentials
-for one call: `None` sends none, for a keyless endpoint on the same host, and another
-`httpx.Auth` replaces them. `None` and the default share the cache; a call with an
-`httpx.Auth` of its own bypasses it, neither looked up nor stored.
+`auth=` on `request`, `get`, `get_json`, `get_answer` and `record` overrides the
+client's credentials for one call: `None` sends none, for a keyless endpoint on the same
+host, and another `httpx.Auth` replaces them. `None` and the default share the cache; a
+call with an `httpx.Auth` of its own bypasses it, neither looked up nor stored.
 
 ## Files: download and decode
 
@@ -330,10 +350,66 @@ on the first request, so a declared tenant without one fails then, with `ConfigE
 
 ## Reference data and generated enums
 
-A source ships its code lists under `reference/` and reads them with `load_json` or
-`load_table` (`load_csv`, which `load_table` calls for a CSV file, stays in
-`xippios.core.reference`). Its refresh script generates `enums.py` from them with
-`xippios.core.reference`, and the module is committed as rendered:
+A list a source fetches from one upstream operation and ships, so that its `list_*`
+tasks and its argument checks need no call, is a `PackagedList`: `reference/<param>.json`
+with `{"param", "endpoint", "fetched", "records"}`, upstream's records under upstream's
+field names. The refresh script writes it; the tasks read it:
+
+```python
+from datetime import UTC, datetime
+
+from xippios.core import PackagedList, Result, UnknownCode, closest, matches
+
+# scripts/refresh_reference.py: the records as upstream named them, the time of the fetch
+fetched = datetime.now(UTC).replace(microsecond=0)
+records = [record.dump_upstream() for record in commodities]  # from the api/ wrapper
+PackagedList(
+    param="commodities", endpoint="GetCommodities", fetched=fetched, records=records
+).write(REFERENCE / "commodities.json")
+
+
+# tasks.py
+async def list_commodities_async(search: str | None = None) -> Result[list[Commodity]]:
+    """List the commodities with their codes, the values commodity_code takes.
+
+    Args:
+        search: Keep the commodities whose code or name contains this text, ignoring
+            case, e.g. ``"wheat"``. Omit (``None``) for all.
+    """
+    packaged = PackagedList.load("xippios.example", "commodities")
+    rows = packaged.parse(Commodity, source="example")
+    kept = [row for row in rows if matches(search, row.commodity_code, row.commodity_name)]
+    return Result(data=kept, meta=packaged.meta("example", request={"search": search}))
+
+
+def validate_commodity_code(code: str) -> str:
+    packaged = PackagedList.load("xippios.example", "commodities")
+    codes = {r["commodityCode"]: r["commodityName"] for r in packaged.records}
+    if code not in codes:
+        raise UnknownCode(
+            "commodity_code",
+            code,
+            list_name="commodities",
+            fetched=packaged.fetched,
+            closest=closest(code, codes),  # "wheat" -> [("0410000", "Wheat")]
+            source="example",
+        )
+    return code
+```
+
+The answer's `meta` follows ADR-0022: `endpoint` is the upstream operation the list came
+from, `retrieved_at` the time it was fetched, `vintage` an upstream release identifier
+only when one is passed (a fetch date is not a vintage), `total` `None`. A file whose
+`fetched` is a bare date, as refresh scripts wrote it before template v0.3.0, reads as
+00:00 UTC of that day. A list of values is records of one field named by the upstream
+parameter (`[{"state_alpha": "AK"}, ...]`). `UnknownCode` names the value, the list and
+its fetch date, the closest codes (or a `hint=`), an optional `reason=`, and that a code
+upstream added since needs a refresh of the list.
+
+Other code lists are read with `load_json` or `load_table` (`load_csv`, which
+`load_table` calls for a CSV file, stays in `xippios.core.reference`). The refresh
+script generates `enums.py` from them with `xippios.core.reference`, and the module is
+committed as rendered:
 
 ```python
 from xippios.core.reference import id_name_pairs, render_int_enums, render_str_enums
@@ -603,12 +679,12 @@ changed, breaking changes first.
 
 | Module | What | Status |
 | --- | --- | --- |
-| `xippios.core.client` | httpx client, retries, rate limit, cache with a byte bound, quota policy, request hooks, env-key auth, `download`, `decode_text`, `decode_csv` | alpha |
-| `xippios.core.errors` | taxonomy and response classification | alpha |
+| `xippios.core.client` | httpx client, retries, rate limit, cache with a byte bound, quota policy, request hooks, env-key auth, `get_answer`, `download`, `decode_text`, `decode_csv` | alpha |
+| `xippios.core.errors` | taxonomy, `UnknownCode`, response classification | alpha |
 | `xippios.core.data_gov` | `Gateway`: the api.data.gov key, the gateway's `classify`, one quota policy per process | alpha |
 | `xippios.core.redaction` | the one credential rule of the envelope, the recorder and replay | alpha |
-| `xippios.core.models` | `UpstreamModel`, `Result`, `ResultMeta`, `ResultCap`, `parse` | alpha |
-| `xippios.core.reference` | packaged CSV/JSON loaders, generated `StrEnum`/`IntEnum` modules | alpha |
+| `xippios.core.models` | `UpstreamModel` with `dump_upstream`, `Result`, `ResultMeta` with `published_at_naive`, `ResultCap`, `parse` | alpha |
+| `xippios.core.reference` | packaged CSV/JSON loaders, `PackagedList`, `matches`, `closest`, generated `StrEnum`/`IntEnum` modules | alpha |
 | `xippios.core.pagination` | `paginate_offset` (a page-numbered endpoint maps the offset to its page), `collect` | alpha |
 | `xippios.core.tenants` | `Tenants`, `list_task`: tenants from the environment, one client each | alpha |
 | `xippios.core.mcp` | tool registration, result caps, error text, CLI, quiet request log | alpha |
