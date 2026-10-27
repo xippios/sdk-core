@@ -157,7 +157,9 @@ class QuotaPolicy:
             (cut to ``window``, and ahead of ``Retry-After``); ``None`` says the response
             does not tell. E.g. a function that reads "replenished in 01:02:03" from a
             403's body and returns ``3723.0``. An exception it raises propagates, as one
-            from any ``observe`` hook does.
+            from any ``observe`` hook does, except on a ``download``'s success, whose
+            body goes to the file unread: reading it there is suppressed and counts as
+            nothing observed (ADR-0019).
         pause_cap: The longest wait inside a call, in seconds, e.g. ``30.0``, the
             default, which is ``RetryPolicy``'s default ``backoff_max``. A spent quota
             expected back later than that is refused without sending.

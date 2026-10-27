@@ -405,9 +405,10 @@ from, `retrieved_at` the time it was fetched, `vintage` an upstream release iden
 only when one is passed (a fetch date is not a vintage), `total` `None`. A file whose
 `fetched` is a bare date, as refresh scripts wrote it before template v0.3.0, reads as
 00:00 UTC of that day; `write` writes `fetched` to the second. A list of values is
-records of one field named by the upstream parameter (`[{"state_alpha": "AK"}, ...]`). `UnknownCode` names the value, the list and
-its fetch date, the closest codes (or a `hint=`), an optional `reason=`, and that a code
-upstream added since needs a refresh of the list.
+records of one field named by the upstream parameter (`[{"state_alpha": "AK"}, ...]`).
+`UnknownCode` names the value, the list and its fetch date, the closest codes (or a
+`hint=`), an optional `reason=`, and that a code upstream added since needs a refresh of
+the list.
 
 Other code lists are read with `load_json` or `load_table` (`load_csv`, which
 `load_table` calls for a CSV file, stays in `xippios.core.reference`). The refresh

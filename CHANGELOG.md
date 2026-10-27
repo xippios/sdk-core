@@ -379,9 +379,9 @@ All notable changes to this project are documented here. The format follows
   most periods one call fetches; an unreleased period is skipped where upstream's empty
   answer can be told from data, else the range is refused), its refusal as
   `NotFoundError` naming the latest released period, and the packaged file's optional
-  `note` with every other key refused. **ADR-0015** (decision 5's `get_answer`), **ADR-0012**
-  (`ResultMeta` refuses unknown fields) and **ADR-0004** (`reference` above `models`)
-  get a dated line each.
+  `note` with every other key refused. **ADR-0015** (decision 5's `get_answer`),
+  **ADR-0012** (`ResultMeta` refuses unknown fields) and **ADR-0004** (`reference` above
+  `models`) get a dated line each.
 - **Conventions 1.19**: §3 the packaged-list file, `reference/<name>.json` with its
   optional `note`; §4 the refusal of unknown fields, `get_answer` for a hit's
   `retrieved_at`, the flag's refusals, `PackagedList`'s methods and the bare-date
@@ -469,9 +469,6 @@ listed here.
   test that matched the text "was recorded as REDACTED" for a credential named in
   `match_params` → "names a credential"; a parameter whose name has the whole word `sig`
   or `pwd` now reads `REDACTED` — C10.
-- Every source that calls `decode_csv` by keyword (none yet) — `source=` is now the slug
-  for its errors; the file or response is the positional `data` — ADR-0019, decision 2,
-  amended 2026-10-27.
 - `src/xippios/<pkg>/tasks.py` of a source with a bulk task — `BULK_TASKS =
   frozenset({...})` beside `MCP_CAPS`; `mcp.py` and `http.py` may pass `tasks.__all__`
   whole. Template v0.3.0 renders the `BULK_TASKS = frozenset()` scaffold — C15.
@@ -510,7 +507,8 @@ listed here.
   operation (nass's `get_param_values`, comtrade's `files/v1/app/reference/<file>.json`)
   where nass wrote "reference" and comtrade a file path; any other key is refused, so
   nass writes its `derived_from` into `note` as text, and its two lists derived from
-  `unit_desc` keep `param: "unit_desc"` in files of their own names, which
+  `api_GET` records, `condition_categories` and `progress_stages`, keep
+  `param: "unit_desc"` and `endpoint: "api_GET"` in files of their own names, which
   `PackagedList.load(package, name)` takes; comtrade writes its `note` and its
   `exceptions` into `note` as text, and its `origin` becomes `endpoint`. The list tasks
   read the files with `PackagedList.load` and still return strings — ADR-0022, rule 1
@@ -525,9 +523,9 @@ listed here.
   from their naive release times with `published_at_naive=published_at is not None`,
   since the flag without a time is refused; `vintage` keeps the release text as
   upstream prints it — ADR-0022, rule 2.
-- `src/xippios/usda/psd/tasks.py`, `get_time_series` — its docstring states its ceiling
-  and that a market year answering PSD's empty 404 is skipped — ADR-0022, amendment (6),
-  conventions §4.
+- `src/xippios/usda/psd/tasks.py`, `get_time_series` — nothing; its docstring already
+  states its ceiling and that a market year answering PSD's empty 404 is skipped —
+  ADR-0022, amendment (6), conventions §4.
 - `src/xippios/usda/gats/tasks.py`, `get_census_export_series`,
   `get_census_import_series` and `get_census_reexport_series` — nothing: they already
   refuse a range with an unreleased month with `NotFoundError` naming the released

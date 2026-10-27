@@ -162,21 +162,21 @@ def test_a_one_field_value_list_round_trips_through_write_and_load(
 
 
 def test_a_note_is_written_when_set_and_fetched_to_the_second(package: str, tmp_path: Path) -> None:
-    # sdk-usda-nass: two lists derived from one parameter, each in a file of its own name.
+    # sdk-usda-nass: two lists derived from api_GET's unit_desc, each in a file of its own.
     derived = PackagedList(
         param="unit_desc",
-        endpoint="get_param_values",
+        endpoint="api_GET",
         fetched=datetime(2026, 10, 27, 9, 15, 30, 654321, tzinfo=UTC),
-        note="derived from unit_desc: the units of yield statistics",
-        records=[{"unit_desc": "BU / ACRE"}],
+        note="derived from statisticcat_desc=CONDITION, agg_level_desc=NATIONAL",
+        records=[{"unit_desc": "PCT EXCELLENT"}, {"unit_desc": "PCT FAIR"}],
     )
-    derived.write(tmp_path / PKG / "reference" / "unit_desc_yield.json")
-    loaded = PackagedList.load(package, "unit_desc_yield")
+    derived.write(tmp_path / PKG / "reference" / "condition_categories.json")
+    loaded = PackagedList.load(package, "condition_categories")
     assert loaded == derived.model_copy(
         update={"fetched": datetime(2026, 10, 27, 9, 15, 30, tzinfo=UTC)}
     )
-    text = (tmp_path / PKG / "reference" / "unit_desc_yield.json").read_text(encoding="utf-8")
-    assert '"fetched": "2026-10-27T09:15:30Z",\n  "note": "derived from unit_desc' in text
+    text = (tmp_path / PKG / "reference" / "condition_categories.json").read_text("utf-8")
+    assert '"fetched": "2026-10-27T09:15:30Z",\n  "note": "derived from statisticcat' in text
 
 
 def test_a_packaged_list_refuses_a_naive_time_an_unknown_key_and_unparsable_records() -> None:

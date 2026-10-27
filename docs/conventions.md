@@ -125,8 +125,8 @@ skip it (§8, §9; ADR-0019).
 - Reference data (commodity codes, country codes, report calendars) ships inside the
   package under `reference/` as CSV or JSON, loaded via `xippios.core.reference`, and is
   versioned with the package. A list fetched from one upstream operation is a packaged
-  list, `reference/<name>.json` with `{"param", "endpoint", "fetched", "records"}` and an
-  optional `"note"`, free-text provenance (what a derived list is derived from, how a
+  list, `reference/<name>.json` with `{"param", "endpoint", "fetched", "records"}` and
+  an optional `"note"`, free-text provenance (what a derived list is derived from, how a
   list was reconciled with upstream's documentation), and no other key: upstream's
   records under upstream's field names (`UpstreamModel.dump_upstream`), a list of values
   as records of one field named by the upstream parameter, a table as records of its
@@ -329,14 +329,14 @@ the query can carry a key (ADR-0005).
   as they do to `get()`, and `auth` works as it does there; a retry restarts the file;
   except that `observe` and `classify` see a success's status and headers only, its
   body going to the file unread, and a 1xx or 3xx raises `UpstreamError`, since
-  redirects are not followed (ADR-0019, amendment 2026-10-27). `Downloaded` carries `path`, `bytes`, `content_type`, the file name from
-  `Content-Disposition` when sent, `etag`, `last_modified` and `retrieved_at`.
+  redirects are not followed (ADR-0019, amendment 2026-10-27). `Downloaded` carries
+  `path`, `bytes`, `content_type`, the file name from `Content-Disposition` when sent,
+  `etag`, `last_modified` and `retrieved_at`.
 - `decode_text(response)` (charset from `Content-Type`, UTF-8 by default, a BOM
-  stripped) and `decode_csv(data, *, delimiter=",", source=None)` (a path or a response;
-  the stdlib's `csv.DictReader`, headers as upstream prints them) sit beside
-  `decode_json`. The source opens gzip and
-  zip with the stdlib; core ships no XML, spreadsheet or PDF parser (ADR-0019,
-  ADR-0020).
+  stripped) and `decode_csv(data, *, delimiter=",", source=None)` (a path or a
+  response; the stdlib's `csv.DictReader`, headers as upstream prints them) sit beside
+  `decode_json`. The source opens gzip and zip with the stdlib; core ships no XML,
+  spreadsheet or PDF parser (ADR-0019, ADR-0020).
 - Credentials come from the client's `auth`. A call to a keyless endpoint on the same
   host passes `auth=None` and is sent without them; another `httpx.Auth` replaces them
   for one call; no second client is needed to leave the key off (ADR-0015). `auth=None`
