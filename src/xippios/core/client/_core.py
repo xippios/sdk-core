@@ -10,6 +10,7 @@ import threading
 import time
 import weakref
 from collections.abc import Awaitable, Callable, Iterator, Mapping
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from types import TracebackType
@@ -36,7 +37,7 @@ from xippios.core.errors import (
     raise_for_status,
 )
 
-__all__ = ["AsyncClient", "Params", "decode_csv", "decode_json", "decode_text"]
+__all__ = ["Answer", "AsyncClient", "Params", "decode_csv", "decode_json", "decode_text"]
 
 Params = Mapping[str, Any] | None
 
@@ -266,12 +267,47 @@ class AsyncClient:
     ) -> Any:
         """GET and decode a JSON body, raising ``ValidationError`` when it is not JSON.
 
-        ``auth`` as for ``request``: ``None`` sends no credentials. A wrapper that needs
-        the response too, e.g. a cache hit's ``xippios_cache_stored_at``, calls ``get``
-        and then ``decode_json``.
+        ``auth`` as for ``request``: ``None`` sends no credentials. A wrapper whose
+        answer may come from the cache calls ``get_answer``, which also says when the
+        answer was retrieved.
         """
         response = await self.get(path, params=params, headers=headers, auth=auth)
         return decode_json(response, source=self.source, path=path)
+
+    async def get_answer(
+        self,
+        path: str,
+        *,
+        params: Params = None,
+        headers: Mapping[str, str] | None = None,
+        auth: httpx.Auth | _ClientAuth | None = _CLIENT_AUTH,
+    ) -> "Answer":
+        """GET and decode a JSON body with the time it was retrieved (conventions §4).
+
+        ``get_json``'s call and decoding, and the ``retrieved_at`` a task puts into its
+        ``ResultMeta``: on a cache hit the time the entry was stored, read from
+        ``xippios_cache_stored_at`` (ADR-0015, decision 5), else the time the answer
+        arrived. ``auth`` as for ``request``.
+
+        Args:
+            path: Path joined onto the base URL, e.g. ``"/api/gats/regions"``.
+            params: Query parameters.
+            headers: Extra headers for this request only.
+            auth: The client's credentials by default, ``None`` for none, an
+                ``httpx.Auth`` to replace them.
+
+        Returns:
+            The ``Answer``: the decoded payload and ``retrieved_at``, timezone-aware UTC.
+
+        Raises:
+            ValidationError: The body is not JSON.
+        """
+        response = await self.get(path, params=params, headers=headers, auth=auth)
+        stored_at = response.extensions.get("xippios_cache_stored_at")
+        payload = decode_json(response, source=self.source, path=path)
+        if stored_at is None:
+            return Answer(payload, datetime.now(UTC))
+        return Answer(payload, datetime.fromtimestamp(stored_at, UTC))
 
     async def download(
         self,
@@ -416,14 +452,28 @@ class AsyncClient:
         await self.aclose()
 
 
+@dataclass(frozen=True, slots=True)
+class Answer:
+    """A decoded JSON answer and when it was retrieved: what ``get_answer`` returns.
+
+    Attributes:
+        payload: The body as ``get_json`` decodes it, e.g. ``{"data": [...]}``.
+        retrieved_at: Timezone-aware UTC: on a cache hit the time the entry was stored,
+            else the time the answer arrived; a task's ``ResultMeta.retrieved_at``.
+    """
+
+    payload: Any
+    retrieved_at: datetime
+
+
 def decode_json(
     response: httpx.Response, *, source: str | None = None, path: str | None = None
 ) -> Any:
     """Decode ``response``'s JSON body, raising ``ValidationError`` when it is not JSON.
 
-    What ``get_json`` does after ``get``. A wrapper that needs the response as well as
-    its payload, such as a cache hit's ``response.extensions["xippios_cache_stored_at"]``
-    for ``retrieved_at`` (conventions §4), calls ``get`` and then this.
+    What ``get_json`` and ``get_answer`` do after ``get``. A wrapper that needs more of
+    the response than its payload and ``get_answer``'s ``retrieved_at`` (a header, say)
+    calls ``get`` and then this.
 
     Args:
         response: A response with its body read, e.g. from ``AsyncClient.get``.
@@ -546,7 +596,7 @@ def _from_cache(cached: CachedResponse, request: httpx.Request) -> httpx.Respons
     """The cached entry as a response, marked ``xippios_cache: hit`` with its ``stored_at``.
 
     ``xippios_cache_stored_at`` is the entry's ``stored_at`` in epoch seconds: on a hit,
-    a task sets ``retrieved_at`` from it, not from the clock (conventions §4).
+    ``get_answer`` reads ``retrieved_at`` from it, not from the clock (conventions §4).
     """
     # Stripped again: a persistent backend may hold entries stored with wire headers (0.1.0).
     response = httpx.Response(
