@@ -95,10 +95,13 @@ since no tool can shorten upstream's value. The quote choice, the parentheses, t
 order, the docstring wrapping, the string splitting and the refusal of a member name too
 long for a line go. A key, a class name, a date or a generator text that is not printable
 ASCII, or holds a backslash or three double quotes, is still refused, and so is a class
-name longer than 84 characters, whose `class` line `ruff format` cannot shorten. The
+name longer than 84 characters, whose `class` line `ruff format` cannot shorten, two lists
+that would get one class name, and a key of `fetched`, `class_names` or `member_names`
+that the lists do not hold. The
 refresh script, the template's, runs `ruff format && ruff check --fix` after rendering,
 which choose the quotes, wrap what fits, drop a `# noqa` the wrapping made unused (RUF100)
 and sort `__all__` (RUF022, whose fix applies to an `__all__` without comments), and the
-module is committed as formatted. Every source re-renders at its 0.3.0 adoption through
-the template's script (ADR-0023, decision 5). Conventions §3, §8 and §15 item 6 state it
+module is committed as formatted. Its consumers are every source: the template's refresh
+script makes the one call (ADR-0023, decision 1), and every source re-renders at its 0.3.0
+adoption through it (ADR-0023, decision 5). Conventions §3, §8 and §15 item 6 state it
 from 1.20 on.

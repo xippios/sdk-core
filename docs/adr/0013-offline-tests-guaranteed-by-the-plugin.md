@@ -191,4 +191,7 @@ and `pytest_terminal_summary` prints one line per policy, `quota after the live 
 <source>: <describe()>`: times, counts and the source, never a key, a host or a query.
 The marker `rate_limited` names the quota pause it keeps as well. The plugin's docstrings
 point to the decisions above instead of restating them; the edges stay listed here.
-Conventions §10 states the clearing and the summary from 1.20 on.
+Consumers: sdk-usda-gats and sdk-comtrade clear their caches in fixtures of their own,
+and the plugin, which the template's `tests/conftest.py` enables in every source, is a
+family invariant (ADR-0023, decisions 1 and 3 (a)). Conventions §10 states the clearing
+and the summary from 1.20 on.

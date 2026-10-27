@@ -120,4 +120,6 @@ Amended 2026-10-27 (core 0.3.0; queue row 21 b, found by sdk-cashctrl): decision
 of a cut list ends `; resume with start=<start + shown>` where the result's
 `meta.request` records an integer `start`, an offset-paged task's, after the default text
 or the cap's own `note`; every other note, the byte-cap note included, is unchanged.
+Its consumer is sdk-cashctrl's offset-paged tasks; it adds no name to core and extends the
+note decision 3 gives every cut, which says how to see the rest, to say where to resume.
 Conventions §8 states it from 1.20 on.
