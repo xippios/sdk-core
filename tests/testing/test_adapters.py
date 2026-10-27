@@ -89,10 +89,12 @@ async def test_mcp_call_goes_through_the_middleware() -> None:
 @pytest.mark.anyio
 async def test_mcp_call_fails_when_the_server_reports_an_error() -> None:
     server = build_server("example", [get_thing])
-    with pytest.raises(AssertionError, match="name"):
-        await mcp_call_text(server, "example_get_thing", {})  # the schema requires name
+    refused = "error: InvalidRequestError: name: Field required"  # §8's text, not is_error
+    assert await mcp_call_text(server, "example_get_thing", {}) == refused
+    with pytest.raises(AssertionError, match=refused):
+        await mcp_call(server, "example_get_thing", {})
     with pytest.raises(AssertionError):
-        await mcp_call(server, "example_no_such_tool", {})
+        await mcp_call_text(server, "example_no_such_tool", {})
 
 
 def create_thing(name: str, confirm: bool = False) -> dict[str, str]:
