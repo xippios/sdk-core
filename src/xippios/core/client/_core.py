@@ -36,6 +36,9 @@ class _ClientAuth:
 
 _CLIENT_AUTH: Final = _ClientAuth()
 
+_HTTPX_DEFAULT: Final[object] = httpx.USE_CLIENT_DEFAULT
+"""httpx's own spelling of the default, outside the annotation: treated as ``_CLIENT_AUTH``."""
+
 
 class AsyncClient:
     """Async HTTP client for one upstream (conventions §6).
@@ -157,7 +160,9 @@ class AsyncClient:
         probe = pool.build_request(method, path, params=params)
         # A call with credentials of its own may get another answer: no cache for it. Any
         # explicit auth counts, also a form httpx accepts beyond the annotation (a tuple).
-        own_auth = auth is not None and not isinstance(auth, _ClientAuth)
+        own_auth = (
+            auth is not None and not isinstance(auth, _ClientAuth) and auth is not _HTTPX_DEFAULT
+        )
         sent_auth = httpx.USE_CLIENT_DEFAULT if isinstance(auth, _ClientAuth) else auth
         key = None if own_auth else self._cache_key_for(probe)
         if key is not None and self.config.cache is not None:

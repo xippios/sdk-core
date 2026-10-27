@@ -46,6 +46,9 @@ and the standalone `fastmcp` package.
 
 Amended by ADR-0002's amendment of 2026-10-27 (core 0.3.0): the `config` module is
 deleted, so it leaves the modules and the middle layer named above; the sync facade is
-`xippios.core.sync` alone, the sync `Client` deleted. `ResultCap` is defined in `models`,
-at the bottom, so `xippios.core` exports it without the `mcp` extra, and
-`xippios.core.mcp` re-exports it.
+`xippios.core.sync` alone, the sync `Client` deleted. By Johannes's decision of
+2026-10-27 (queue row 30 a), `ResultCap` is defined in `models`, at the bottom, so
+`xippios.core` exports it without the `mcp` extra, and `xippios.core.mcp` re-exports it.
+The public surface is the `__all__` of `xippios.core` and of the four subpackages
+`client`, `mcp`, `http` and `testing`, each exporting what consumers import (ADR-0023,
+decision 5), and the adapters are still never re-exported from `xippios.core`.

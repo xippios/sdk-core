@@ -35,9 +35,9 @@ All notable changes to this project are documented here. The format follows
   page, `page = first_page + offset // page_size`. sdk-cashctrl, its one consumer, is
   unaffected.
 - **26 names leave the export lists** (ADR-0023, decision 5: an `__init__.py` exports
-  only what consumers import), each still importable from its own module, where core
-  itself imports it from: `CacheBackend`, `EnvKeyAuth`, `QuotaSnapshot` and `load_csv`
-  from `xippios.core`; those three and `WIRE_HEADERS`, `Params`, `TokenBucket`,
+  only what consumers import), each still importable from the module that defines it:
+  `CacheBackend`, `EnvKeyAuth`, `QuotaSnapshot` and `load_csv` from `xippios.core`;
+  `CacheBackend`, `EnvKeyAuth`, `QuotaSnapshot`, `WIRE_HEADERS`, `Params`, `TokenBucket`,
   `send_with_retries` and `strip_wire_headers` from `xippios.core.client`; `LIVE_ENV`,
   `PLACEHOLDER_KEY`, `FixtureRequest`, `live_enabled`, `mount_fixture`, `replay`,
   `write_fixture`, `scrub_headers`, `scrub_params` and `scrub_url` from
@@ -149,6 +149,9 @@ and texts that change, listed here.
   `src/xippios/usda/gats/_client.py` (`parse_retry_after`) — `from xippios.core.errors
   import ...` may become `from xippios.core import ...` — the names are exported now; the
   module path keeps working.
+- `src/xippios/cashctrl/_cli.py` (sdk-cashctrl) — its module docstring names
+  `xippios.core.mcp.quiet_request_logging`, which is importable from
+  `xippios.core.mcp.server` only → name that path — docstring only, nothing breaks.
 - `src/xippios/usda/psd/_client.py`, `src/xippios/usda/esr/_client.py`,
   `src/xippios/usda/gats/_client.py` — the gateway block (`API_KEY_ENV`,
   `policy = QuotaPolicy(...)`, `_URL`, `_gateway_error`, `_over_rate_limit`, the
