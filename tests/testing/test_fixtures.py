@@ -1,5 +1,6 @@
 import base64
 import gzip
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -139,6 +140,78 @@ def test_a_fixture_written_by_0_1_0_still_loads(tmp_path: Path) -> None:
     assert (fixture.request.body, fixture.request.body_base64) == (None, False)
     assert fixture.request.content_type is None
     assert fixture.response.content == b'{"ok": true}'
+
+
+def _answer(content: bytes, content_type: str) -> httpx.Response:
+    request = httpx.Request("GET", "https://api.example.test/v1/file")
+    headers = {"Content-Type": content_type}
+    return httpx.Response(200, content=content, headers=headers, request=request)
+
+
+def test_max_bytes_cuts_a_text_at_a_character_boundary(tmp_path: Path) -> None:
+    # Row 46 (sdk-usda-nass): a bulk text file of hundreds of MB as a fixture.
+    full = "Région\tValue\n" + "Île-de-France\t1\n" * 50
+    fixture = fixture_from_response(_answer(full.encode(), "text/plain"), max_bytes=15)
+    assert fixture.response.body == "Région\tValue\n"  # 14 bytes: byte 15 is half of "Î"
+    response = fixture.response
+    assert (response.truncated, response.original_bytes) == (True, len(full.encode()))
+    assert response.sha256 == hashlib.sha256(full.encode()).hexdigest()
+    assert response.original_count is None
+    path = tmp_path / "f.json"
+    path.write_text(json.dumps(fixture.model_dump(mode="json")))
+    assert load_fixture(path) == fixture
+
+
+def test_max_bytes_keeps_the_first_whole_elements_of_a_json_array() -> None:
+    # Row 43 (sdk-usda-gats): list fixtures over the 256 KiB cap.
+    rows = [{"id": i, "name": "Côte d'Ivoire"} for i in range(100)]
+    body = json.dumps(rows, indent=2).encode()
+    fixture = fixture_from_response(_answer(body, "application/json"), max_bytes=100)
+    assert json.loads(fixture.response.body) == rows[:3]  # 2 brackets, 3 x 32 bytes, 2 commas
+    compact = json.dumps(rows[:3], ensure_ascii=False, separators=(",", ":"))
+    assert fixture.response.body == compact
+    assert (fixture.response.truncated, fixture.response.original_count) == (True, 100)
+
+
+@pytest.mark.parametrize(
+    ("content", "content_type", "reason"),
+    [
+        (
+            json.dumps({"data": list(range(30))}).encode(),
+            "application/json",
+            "a JSON body that is not an array",
+        ),
+        (b"<data>" + b"<row/>" * 20 + b"</data>", "application/xml", "an XML body"),
+        (b"<?xml version='1.0'?><data/>" + b" " * 50, "text/plain", "an XML body"),
+        (b"PK\x03\x04" + b"\x00" * 60, "application/zip", "a ZIP body"),
+        (
+            b"PK\x03\x04" + b"\x00" * 60,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "an XLSX body",
+        ),
+        (gzip.compress(b"a\tb\n" * 100), "application/gzip", "a gzip body"),
+        (b"\xd0\xcf\x11\xe0" + b"\x00" * 60, "application/vnd.ms-excel", "an XLS body"),
+        (b"\xff\xfe" + "a,b\n".encode("utf-16-le") * 20, "text/csv", "a body that is not UTF-8"),
+    ],
+)
+def test_max_bytes_refuses_what_a_cut_would_break(
+    content: bytes, content_type: str, reason: str
+) -> None:
+    # ADR-0019, decision 5, as amended: a small real answer or sample instead.
+    with pytest.raises(ValueError, match=f"^max_bytes: {reason}"):
+        fixture_from_response(_answer(content, content_type), max_bytes=20)
+
+
+def test_max_bytes_at_or_above_the_size_keeps_the_body_unmarked(tmp_path: Path) -> None:
+    for max_bytes in (12, 13):  # the body is 12 bytes
+        whole = fixture_from_response(_response(), max_bytes=max_bytes)
+        assert whole.response.body == '{"ok": true}'
+        assert (whole.response.truncated, whole.response.sha256) == (False, None)
+    write_fixture(_response(), tmp_path / "f.json")
+    written = json.loads((tmp_path / "f.json").read_text())["response"]
+    assert not {"truncated", "original_bytes", "original_count", "sha256"} & written.keys()
+    with pytest.raises(ValueError, match="max_bytes must be at least 1"):
+        fixture_from_response(_response(), max_bytes=0)
 
 
 def test_placeholder_host_leaves_no_trace_of_the_tenant(tmp_path: Path) -> None:

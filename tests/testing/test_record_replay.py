@@ -275,6 +275,26 @@ def test_replay_fixture_is_typed_as_replay_fixture(replay_fixture: ReplayFixture
     assert sent_urls(route) == [f"{BASE}/v1/x?year=2024"]
 
 
+@pytest.mark.anyio
+async def test_a_truncated_array_records_replays_and_decodes(
+    respx_mock: respx.MockRouter, replay_fixture: ReplayFixture, fixtures_dir: Path
+) -> None:
+    # Row 43 (sdk-usda-gats): a list over the fixture cap keeps its first elements.
+    respx_mock.get(f"{BASE}/v1/rows").respond(200, json=[{"n": n} for n in range(1000)])
+    client = AsyncClient(ClientConfig(source="example", version="1", base_url=BASE))
+    with pytest.raises(ValueError, match="max_bytes must be at least 1"):
+        await record(client, "/v1/rows", fixtures_dir / "rows" / "cut.json", max_bytes=0)
+    assert respx_mock.calls.call_count == 0  # refused before anything is sent
+    recorded = await record(client, "/v1/rows", fixtures_dir / "rows" / "cut.json", max_bytes=60)
+    written = load_fixture(fixtures_dir / "rows" / "cut.json").response
+    assert written == recorded.response
+    assert (written.truncated, written.original_count) == (True, 1000)
+
+    respx_mock.routes.clear()
+    replay_fixture("rows", "cut")
+    assert await client.get_json("/v1/rows") == [{"n": n} for n in range(7)]
+
+
 def test_sent_query_is_the_last_query_scrubbed(respx_mock: respx.MockRouter) -> None:
     # sdk-usda-nass (sent_query) and sdk-comtrade (_sent) each carried it; cashctrl reads
     # route.calls.last inline (row 36 a).

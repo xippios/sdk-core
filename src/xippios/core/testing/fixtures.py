@@ -3,12 +3,20 @@
 A fixture holds the scrubbed request (method, URL, body and its content type) and the
 decoded response. Bodies are stored as text; the headers that describe wire encoding
 are dropped because the body is already decoded.
+
+A recording may cut a large body to its first part (``max_bytes=``, ADR-0019, decision
+5): the response is then marked ``truncated`` and keeps the full body's size, its sha256
+and, for a JSON array, its length. A fixture recorded without a cut is written without
+those four fields, as fixtures were before them, and every fixture written before them
+loads.
 """
 
 import base64
+import hashlib
 import json
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import httpx
 from pydantic import BaseModel, ConfigDict
@@ -60,8 +68,19 @@ class FixtureResponse(BaseModel):
     Attributes:
         status: HTTP status code.
         headers: Response headers minus wire-encoding ones, credentials scrubbed.
-        body: Decoded body text, or base64 when ``body_base64`` is set.
+        body: Decoded body text, or base64 when ``body_base64`` is set; the first part
+            of upstream's body when ``truncated`` is set.
         body_base64: True when the body was not valid UTF-8 text.
+        truncated: True when the recording cut the body (``max_bytes=``): it is the
+            first part of upstream's answer, the first whole elements of a JSON array
+            or the first bytes of a text, never all of it (ADR-0019, decision 5).
+        original_bytes: The size of upstream's whole body in bytes, as ``httpx``
+            decoded it; set when ``truncated``.
+        original_count: The length of upstream's whole JSON array; set when an array
+            was cut by elements.
+        sha256: The hex SHA-256 of upstream's whole body as ``httpx`` decoded it,
+            taken before the scrub, so a later recording can tell whether upstream's
+            answer changed; set when ``truncated``. A one-way identity of the answer.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -70,6 +89,10 @@ class FixtureResponse(BaseModel):
     headers: list[tuple[str, str]]
     body: str
     body_base64: bool = False
+    truncated: bool = False
+    original_bytes: int | None = None
+    original_count: int | None = None
+    sha256: str | None = None
 
     @property
     def content(self) -> bytes:
@@ -94,7 +117,9 @@ def fixture_path(root: Path, endpoint: str, case: str) -> Path:
     return root / endpoint / f"{case}.json"
 
 
-def fixture_from_response(response: httpx.Response, *, scrub: Scrub | None = None) -> Fixture:
+def fixture_from_response(
+    response: httpx.Response, *, scrub: Scrub | None = None, max_bytes: int | None = None
+) -> Fixture:
     r"""Build a scrubbed ``Fixture`` in memory from a fully read ``httpx.Response``.
 
     Credentials are always scrubbed (``scrub_url``, ``scrub_headers``). ``scrub`` adds
@@ -104,16 +129,44 @@ def fixture_from_response(response: httpx.Response, *, scrub: Scrub | None = Non
     returned: the original host or a secret value still present anywhere, a JSON body
     decoded included (e.g. behind a ``\u`` escape), refuses the exchange.
 
+    ``max_bytes`` cuts a response body larger than it before the scrub, which then runs
+    on what is kept, as the verify does (ADR-0019, decision 5; conventions §10):
+
+    - a JSON array (a ``Content-Type`` of ``application/json`` or ``...+json``, or a
+      body that parses as JSON) keeps its first whole elements whose compact JSON text
+      (``json.dumps`` with ``separators=(",", ":")`` and ``ensure_ascii=False``, so a
+      number reads as Python writes it, ``1.50`` as ``1.5``) fits in ``max_bytes``
+      bytes of UTF-8, with ``original_count`` the array's length;
+    - any other text is cut at ``max_bytes`` bytes, back to the last whole UTF-8
+      character;
+    - a JSON object is refused: record a small real answer instead (a short date range,
+      one commodity), since its parts are no list to take the first of;
+    - XML (``text/xml``, ``application/xml``, ``...+xml``, or a body starting with
+      ``<?xml``), ZIP, XLSX, gzip and XLS bodies, and a body that is not UTF-8 text, are
+      refused: record a small real sample (a short query, one member of the archive, a
+      few rows), since a cut-off XML document is not well-formed and a cut-off binary
+      or compressed file cannot be parsed.
+
+    A cut body is marked ``truncated`` with ``original_bytes`` and ``sha256``, both of
+    the whole body as ``httpx`` decoded it, before the scrub. A body of ``max_bytes`` or
+    fewer bytes is kept whole and unmarked; ``None`` never cuts.
+
     Args:
         response: The response, with the request that produced it.
         scrub: What else to remove before anything is kept, e.g.
             ``Scrub(host="demo.example.test", secrets=[tenant])``.
+        max_bytes: The most bytes of the response body to keep, e.g. ``200_000`` to stay
+            under the 256 KiB fixture cap; ``None`` keeps it whole.
 
     Raises:
         ValueError: The request or response body is not UTF-8 text and ``scrub`` does
             not set ``allow_binary``; or the original host or a secret value survived
-            the scrub (the message names which and where, never the value).
+            the scrub (the message names which and where, never the value); or
+            ``max_bytes`` is below 1, or cannot cut this body (the message, starting
+            ``max_bytes:``, names the format and what to record instead).
     """
+    if max_bytes is not None and max_bytes < 1:
+        raise ValueError("max_bytes must be at least 1")
     request = response.request
     scrubber = _Scrubber(scrub if scrub is not None else Scrub(), request.url)
     request_body: str | None = None
@@ -121,7 +174,8 @@ def fixture_from_response(response: httpx.Response, *, scrub: Scrub | None = Non
     if request.content:
         request_body, request_base64 = scrubber.body(request.content)
     content_type = request.headers.get("content-type")
-    body, is_base64 = scrubber.body(response.content)
+    content, cut = _cut(response, max_bytes)
+    body, is_base64 = scrubber.body(content)
     fixture = Fixture(
         recorded_at=utcnow(),
         request=FixtureRequest(
@@ -136,6 +190,7 @@ def fixture_from_response(response: httpx.Response, *, scrub: Scrub | None = Non
             headers=scrubber.headers(strip_wire_headers(response.headers.multi_items())),
             body=body,
             body_base64=is_base64,
+            **cut,
         ),
     )
     kept = fixture.request.content_type
@@ -147,6 +202,92 @@ def fixture_from_response(response: httpx.Response, *, scrub: Scrub | None = Non
         None if fixture.response.body_base64 else fixture.response.body,
     )
     return fixture
+
+
+_SAMPLE = (
+    "record a small real sample instead (a short query, one member of the archive, a few rows)"
+)
+_CUT_FILE = "since a cut-off binary or compressed file cannot be parsed"
+_MAGIC = (
+    (b"\x1f\x8b", "a gzip body"),
+    (b"\xd0\xcf\x11\xe0", "an XLS body"),
+)
+_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml"
+_TRUNCATION_FIELDS = ("truncated", "original_bytes", "original_count", "sha256")
+
+
+def _cut(response: httpx.Response, max_bytes: int | None) -> tuple[bytes, dict[str, Any]]:
+    """The body to keep and the ``FixtureResponse`` fields that mark a cut; see above."""
+    content = response.content
+    if max_bytes is None or len(content) <= max_bytes:
+        return content, {}
+    media = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    if content.startswith(b"PK\x03\x04"):
+        kind = "an XLSX body" if media.startswith(_XLSX) else "a ZIP body"
+        raise ValueError(f"max_bytes: {kind} cannot be cut, {_CUT_FILE}; {_SAMPLE}")
+    for magic, kind in _MAGIC:
+        if content.startswith(magic):
+            raise ValueError(f"max_bytes: {kind} cannot be cut, {_CUT_FILE}; {_SAMPLE}")
+    try:
+        text = content.decode("utf-8")
+    except UnicodeDecodeError:
+        raise ValueError(
+            f"max_bytes: a body that is not UTF-8 text cannot be cut, {_CUT_FILE}; {_SAMPLE}"
+        ) from None
+    xml = media in ("text/xml", "application/xml") or media.endswith("+xml")
+    if xml or text.removeprefix("\ufeff").lstrip().startswith("<?xml"):
+        raise ValueError(
+            "max_bytes: an XML body cannot be cut, since a cut-off XML document is not "
+            f"well-formed; {_SAMPLE}"
+        )
+    marks: dict[str, Any] = {
+        "truncated": True,
+        "original_bytes": len(content),
+        "sha256": hashlib.sha256(content).hexdigest(),
+    }
+    declared_json = media == "application/json" or media.endswith("+json")
+    try:
+        payload = json.loads(text)
+    except ValueError:
+        if declared_json:
+            raise ValueError(
+                f"max_bytes: the body is declared {media} but is not JSON; record a small "
+                "real answer instead (a short date range, one commodity)"
+            ) from None
+    else:
+        return _first_elements(payload, max_bytes), marks | {"original_count": _count(payload)}
+    end = max_bytes
+    while end > 0 and content[end] & 0xC0 == 0x80:  # a UTF-8 continuation byte
+        end -= 1
+    return content[:end], marks
+
+
+def _count(payload: Any) -> int:
+    if not isinstance(payload, list):
+        raise ValueError(
+            "max_bytes: a JSON body that is not an array cannot be cut by elements; record "
+            "a small real answer instead (a short date range, one commodity)"
+        )
+    return len(payload)
+
+
+def _first_elements(payload: Any, max_bytes: int) -> bytes:
+    """The compact JSON text of the first whole elements of ``payload`` within ``max_bytes``."""
+    _count(payload)
+    parts: list[bytes] = []
+    size = 2  # the brackets
+    for element in payload:
+        part = json.dumps(element, ensure_ascii=False, separators=(",", ":")).encode()
+        size += len(part) + (1 if parts else 0)
+        if size > max_bytes:
+            break
+        parts.append(part)
+    if not parts:
+        raise ValueError(
+            f"max_bytes: the JSON array's first element alone is over {max_bytes} bytes; "
+            "raise max_bytes or record a smaller answer"
+        )
+    return b"[" + b",".join(parts) + b"]"
 
 
 def write_fixture(response: httpx.Response, path: Path, *, scrub: Scrub | None = None) -> Fixture:
@@ -163,12 +304,20 @@ def write_fixture(response: httpx.Response, path: Path, *, scrub: Scrub | None =
         ValueError: A binary body without ``Scrub(allow_binary=True)``, or the original
             host or a secret value left after the scrub; see ``fixture_from_response``.
     """
-    fixture = fixture_from_response(response, scrub=scrub)
+    return _write(fixture_from_response(response, scrub=scrub), path)
+
+
+def _write(fixture: Fixture, path: Path) -> Fixture:
+    """Write ``fixture`` to ``path`` as indented JSON, creating directories; ``fixture``.
+
+    The fields that mark a cut are left out of a fixture that was not cut.
+    """
+    data = fixture.model_dump(mode="json")
+    if not fixture.response.truncated:
+        for name in _TRUNCATION_FIELDS:
+            del data["response"][name]
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(fixture.model_dump(mode="json"), indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return fixture
 
 
