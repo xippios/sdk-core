@@ -10,7 +10,6 @@ import respx
 from xippios.core.client import (
     AsyncClient,
     CachedResponse,
-    Client,
     ClientConfig,
     HeaderKeyAuth,
     MemoryCache,
@@ -306,13 +305,6 @@ async def test_json_and_data_together_are_refused_before_sending(
     assert not route.called
 
 
-def test_sync_client_sends_form_data(respx_mock: respx.MockRouter, config: ClientConfig) -> None:
-    route = respx_mock.post(f"{BASE}/v1/x").respond(200, json={})
-    with Client(config) as client:
-        client.request("POST", "/v1/x", data={"a": "1", "b": "2"})
-    assert route.calls.last.request.content == b"a=1&b=2"
-
-
 @pytest.mark.anyio
 @pytest.mark.rate_limited
 async def test_rate_limiter_waits_between_calls(
@@ -368,8 +360,6 @@ def test_limiter_defaults_to_the_configured_rate_limit(config: ClientConfig) -> 
     own = AsyncClient(limited).limiter
     assert own is not None
     assert own.limit == RateLimit(per_minute=30)
-    shared = TokenBucket(RateLimit(per_minute=60))
-    assert Client(limited, limiter=shared).async_client.limiter is shared
 
 
 @pytest.mark.anyio
@@ -661,24 +651,6 @@ def test_one_pool_per_event_loop(respx_mock: respx.MockRouter, config: ClientCon
     first = asyncio.run(use())  # held alive, so the second pool cannot reuse its address
     second = asyncio.run(use())
     assert first is not second
-
-
-def test_sync_client_facade(respx_mock: respx.MockRouter, config: ClientConfig) -> None:
-    route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={"sync": True})
-    with Client(config) as client:
-        assert client.config is config
-        assert client.get_json("/v1/x") == {"sync": True}
-        assert client.get("/v1/x").status_code == 200
-        assert client.request("GET", "/v1/x").status_code == 200
-    assert route.call_count == 3
-
-
-def test_sync_client_raises_taxonomy_errors(
-    respx_mock: respx.MockRouter, config: ClientConfig
-) -> None:
-    respx_mock.get(f"{BASE}/v1/x").respond(403)
-    with pytest.raises(AuthError), Client(config) as client:
-        client.get("/v1/x")
 
 
 def _classify(response: httpx.Response) -> XippiosError | None:
@@ -991,13 +963,3 @@ async def test_auth_none_and_the_default_share_the_cache(respx_mock: respx.MockR
     hit = await client.get("/v1/reference")
     assert hit.extensions["xippios_cache"] == "hit"
     assert sent_urls(route) == [f"{BASE}/v1/reference"]
-
-
-def test_the_sync_facade_takes_auth(respx_mock: respx.MockRouter, config: ClientConfig) -> None:
-    route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
-    with Client(config, auth=QueryKeyAuth("key", KEY_ENV)) as client:
-        client.get("/v1/x", auth=None)
-        client.get_json("/v1/x", auth=None)
-        client.request("GET", "/v1/x", auth=None)
-        client.get("/v1/x")
-    assert sent_urls(route) == [f"{BASE}/v1/x"] * 3 + [f"{BASE}/v1/x?key={REDACTED}"]

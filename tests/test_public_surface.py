@@ -6,7 +6,7 @@ import xippios.core as core
 
 EXPECTED = {
     # client
-    "AsyncClient", "CacheBackend", "Client", "ClientConfig", "MemoryCache",
+    "AsyncClient", "CacheBackend", "ClientConfig", "MemoryCache",
     "QuotaPolicy", "QuotaSnapshot", "RateLimit", "RetryPolicy", "Timeouts",
     "EnvKeyAuth", "QueryKeyAuth", "HeaderKeyAuth", "BearerAuth", "BasicKeyAuth",
     # errors
@@ -27,12 +27,9 @@ def test_public_surface_is_exactly_what_the_readme_promises() -> None:
 
 
 def test_the_client_package_exports_its_helpers() -> None:
-    import httpx
-
     import xippios.core.client as client
 
-    assert client.UseClientDefault is type(httpx.USE_CLIENT_DEFAULT)
-    for name in ("QuotaPolicy", "QuotaSnapshot", "UseClientDefault", "decode_json"):
+    for name in ("QuotaPolicy", "QuotaSnapshot", "decode_json"):
         assert name in client.__all__
     assert client.QuotaPolicy is core.QuotaPolicy
 

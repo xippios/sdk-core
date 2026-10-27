@@ -8,15 +8,9 @@ import time
 import weakref
 from collections.abc import Awaitable, Callable, Mapping
 from types import TracebackType
-from typing import Any, Self
+from typing import Any, Final, Self, final
 
 import httpx
-
-# httpx exports the sentinel USE_CLIENT_DEFAULT but not its class, which the annotation
-# of ``auth=`` needs; the class lives in httpx's private ``_client`` module (httpx 0.28).
-# Imported here once and re-exported from xippios.core.client, for sources whose
-# wrappers pass ``auth=`` through.
-from httpx._client import UseClientDefault
 
 from xippios.core.client.cache import CachedResponse, cache_key, strip_wire_headers
 from xippios.core.client.config import ClientConfig, RetryPolicy, Timeouts
@@ -24,9 +18,24 @@ from xippios.core.client.ratelimit import TokenBucket
 from xippios.core.client.retry import send_with_retries
 from xippios.core.errors import BODY_LIMIT, ValidationError, XippiosError, raise_for_status
 
-__all__ = ["AsyncClient", "Params", "UseClientDefault", "decode_json"]
+__all__ = ["AsyncClient", "Params", "decode_json"]
 
 Params = Mapping[str, Any] | None
+
+
+@final
+class _ClientAuth:
+    """The type of the default of ``auth=``: the client's own credentials (ADR-0015).
+
+    Core's own sentinel, so no annotation needs httpx's private ``UseClientDefault``;
+    ``request`` maps it to ``httpx.USE_CLIENT_DEFAULT`` where the request is sent.
+    """
+
+    def __repr__(self) -> str:
+        return "<the client's auth>"
+
+
+_CLIENT_AUTH: Final = _ClientAuth()
 
 
 class AsyncClient:
@@ -156,7 +165,7 @@ class AsyncClient:
         data: Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
         raise_on_error: bool = True,
-        auth: httpx.Auth | UseClientDefault | None = httpx.USE_CLIENT_DEFAULT,
+        auth: httpx.Auth | _ClientAuth | None = _CLIENT_AUTH,
     ) -> httpx.Response:
         """Send one request and return the response.
 
@@ -182,12 +191,12 @@ class AsyncClient:
             raise_on_error: ``False`` returns 4xx/5xx responses instead of raising, for
                 callers that record fixtures or inspect error bodies; ``classify``
                 still decides whether a 429 or 5xx is retried.
-            auth: Credentials for this request only, every retry included:
-                ``httpx.USE_CLIENT_DEFAULT`` (the default) sends the client's ``auth``,
-                ``None`` sends none, for a keyless endpoint on the same host, and an
-                ``httpx.Auth`` replaces the client's. The default and ``None`` share the
-                cache; a call with an ``httpx.Auth`` of its own bypasses it, neither
-                looked up nor stored, since another identity may get another answer.
+            auth: Credentials for this request only, every retry included: left at its
+                default it sends the client's ``auth``, ``None`` sends none, for a keyless
+                endpoint on the same host, and an ``httpx.Auth`` replaces the client's.
+                The default and ``None`` share the cache; a call with an ``httpx.Auth`` of
+                its own bypasses it, neither looked up nor stored, since another identity
+                may get another answer.
 
         Raises:
             ValueError: Both ``json`` and ``data`` were given; a request has one body.
@@ -199,7 +208,8 @@ class AsyncClient:
         probe = pool.build_request(method, path, params=params)
         # A call with credentials of its own may get another answer: no cache for it. Any
         # explicit auth counts, also a form httpx accepts beyond the annotation (a tuple).
-        own_auth = auth is not None and not isinstance(auth, UseClientDefault)
+        own_auth = auth is not None and not isinstance(auth, _ClientAuth)
+        sent_auth = httpx.USE_CLIENT_DEFAULT if isinstance(auth, _ClientAuth) else auth
         key = None if own_auth else self._cache_key_for(probe)
         if key is not None and self.config.cache is not None:
             cached = self.config.cache.get(key)
@@ -222,7 +232,7 @@ class AsyncClient:
             request = pool.build_request(
                 method, path, params=params, json=json, data=data, headers=headers
             )
-            response = await pool.send(request, auth=auth)
+            response = await pool.send(request, auth=sent_auth)
             if observe is not None:
                 observe(response)
             return response
@@ -262,7 +272,7 @@ class AsyncClient:
         *,
         params: Params = None,
         headers: Mapping[str, str] | None = None,
-        auth: httpx.Auth | UseClientDefault | None = httpx.USE_CLIENT_DEFAULT,
+        auth: httpx.Auth | _ClientAuth | None = _CLIENT_AUTH,
     ) -> httpx.Response:
         """``request("GET", ...)``; ``auth=None`` sends no credentials."""
         return await self.request("GET", path, params=params, headers=headers, auth=auth)
@@ -273,7 +283,7 @@ class AsyncClient:
         *,
         params: Params = None,
         headers: Mapping[str, str] | None = None,
-        auth: httpx.Auth | UseClientDefault | None = httpx.USE_CLIENT_DEFAULT,
+        auth: httpx.Auth | _ClientAuth | None = _CLIENT_AUTH,
     ) -> Any:
         """GET and decode a JSON body, raising ``ValidationError`` when it is not JSON.
 

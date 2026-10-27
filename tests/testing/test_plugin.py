@@ -285,11 +285,9 @@ def test_offline_tests_cannot_reach_the_network(
 
 
 LIMITER_TESTS = """
-import time
-
 import pytest
 
-from xippios.core.client import AsyncClient, Client, ClientConfig, RateLimit, TokenBucket
+from xippios.core.client import AsyncClient, ClientConfig, RateLimit, TokenBucket
 
 ACQUIRE = TokenBucket.acquire
 CONFIG = ClientConfig(
@@ -318,16 +316,6 @@ async def test_replayed_requests_do_not_wait(replay_fixture):
     assert route.call_count == 2
     assert sleeper.calls == []
     assert TokenBucket.acquire is not ACQUIRE
-
-
-def test_the_sync_client_does_not_wait_either(replay_fixture):
-    route = replay_fixture("ep", "case")
-    started = time.monotonic()
-    with Client(CONFIG) as client:
-        client.get("/p")
-        client.get("/p")
-    assert route.call_count == 2
-    assert time.monotonic() - started < 0.5
 
 
 @pytest.mark.anyio
@@ -366,7 +354,7 @@ def test_offline_tests_never_wait_on_the_rate_limiter(
     write_ep_case(pytester)
     pytester.makepyfile(LIMITER_TESTS)
     result = pytester.runpytest("-p", "xippios.core.testing.plugin", "--strict-markers")
-    result.assert_outcomes(passed=5)
+    result.assert_outcomes(passed=4)
     assert TokenBucket.acquire is ACQUIRE
 
 
@@ -462,14 +450,14 @@ def test_a_replayed_429_leaves_no_quota_spent_for_later_tests(
 PLACEHOLDER_TESTS = """
 import os
 
+import httpx
 import pytest
 
-from xippios.core.client import Client, ClientConfig, EnvKeyAuth, HeaderKeyAuth, QueryKeyAuth
+from xippios.core.client import EnvKeyAuth, HeaderKeyAuth, QueryKeyAuth
 from xippios.core.testing import PLACEHOLDER_KEY
 
 KEY = EnvKeyAuth.key
 SHELL = dict(os.environ)  # at collection, before any fixture: what direnv loaded
-CONFIG = ClientConfig(source="example", version="1", base_url="https://h.test")
 TENANTS = {name: HeaderKeyAuth("X-Key", f"TENANT_{name.upper()}_KEY") for name in ("a", "b")}
 
 
@@ -491,12 +479,10 @@ def test_the_named_variables_hold_the_placeholder(placeholder_api_key):
 def test_every_auth_object_sends_the_placeholder(respx_mock):
     header = respx_mock.get("https://h.test/h", headers={"X-Key": PLACEHOLDER_KEY}).respond(200)
     for auth in TENANTS.values():  # "a" holds the live key, "b" has no variable at all
-        with Client(CONFIG, auth=auth) as client:
-            client.get("/h")
+        httpx.get("https://h.test/h", auth=auth)
     assert header.call_count == 2
     query = respx_mock.get("https://h.test/q", params={"key": PLACEHOLDER_KEY}).respond(200)
-    with Client(CONFIG, auth=QueryKeyAuth("key", "EXAMPLE_API_KEY")) as client:
-        client.get("/q")
+    httpx.get("https://h.test/q", auth=QueryKeyAuth("key", "EXAMPLE_API_KEY"))
     assert query.called
 
 

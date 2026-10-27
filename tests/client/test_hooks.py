@@ -11,7 +11,6 @@ import respx
 
 from xippios.core.client import (
     AsyncClient,
-    Client,
     ClientConfig,
     HeaderKeyAuth,
     MemoryCache,
@@ -213,15 +212,3 @@ async def test_observe_is_not_called_without_a_response(respx_mock: respx.MockRo
     with pytest.raises(TransportError):
         await AsyncClient(config).get("/v1/x")
     assert seen == []
-
-
-def test_the_sync_facade_runs_both_hooks(respx_mock: respx.MockRouter) -> None:
-    events = Events()
-    respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
-    config = make(
-        before_request=lambda request: events.seen.append("before"),
-        observe=lambda response: events.seen.append("observe"),
-    )
-    with Client(config) as client:
-        client.get_json("/v1/x")
-    assert events.seen == ["before", "observe"]

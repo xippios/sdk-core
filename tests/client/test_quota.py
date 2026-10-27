@@ -18,9 +18,7 @@ import respx
 
 from xippios.core.client import (
     AsyncClient,
-    Client,
     ClientConfig,
-    HeaderKeyAuth,
     MemoryCache,
     QuotaPolicy,
     QuotaSnapshot,
@@ -752,17 +750,3 @@ async def test_before_request_alone_uses_a_30_s_cap() -> None:
     assert events == ["sleep 29"]
     await policy.before_request(httpx.Request("GET", f"{BASE}/v1/x"))
     assert events == ["sleep 29"], "the quota is expected back by now"
-
-
-@pytest.mark.rate_limited
-def test_the_sync_facade_pauses_too() -> None:
-    events: list[str] = []
-    clock = Clock()
-    policy = QuotaPolicy(window=5.0, clock=clock, sleep=Sleeper(events, clock))
-    upstream = Upstream(events, answer(headers=SPENT), answer(headers=QUOTA))
-    config = policy.install(make_config(retry=RetryPolicy(max_attempts=1)))
-    auth = HeaderKeyAuth("X-Api-Key", "EXAMPLE_API_KEY")
-    with Client(config, auth=auth, transport=upstream) as client:
-        client.get("/v1/x")
-        client.get("/v1/x")
-    assert events == ["sent /v1/x", "sleep 5", "sent /v1/x"]

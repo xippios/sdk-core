@@ -13,7 +13,8 @@ from typing import Any
 import httpx
 
 from xippios.core._loop import sync
-from xippios.core.client import AsyncClient, Params, RetryPolicy, Timeouts, UseClientDefault
+from xippios.core.client import AsyncClient, Params, RetryPolicy, Timeouts
+from xippios.core.client._core import _CLIENT_AUTH, _ClientAuth
 from xippios.core.testing.fixtures import Fixture, write_fixture
 from xippios.core.testing.scrub import Scrub
 
@@ -33,7 +34,7 @@ async def record(
     scrub: Scrub | None = None,
     retry: RetryPolicy | None = None,
     timeouts: Timeouts | None = None,
-    auth: httpx.Auth | UseClientDefault | None = httpx.USE_CLIENT_DEFAULT,
+    auth: httpx.Auth | _ClientAuth | None = _CLIENT_AUTH,
 ) -> Fixture:
     """Perform one live request and write the scrubbed exchange to ``fixture``.
 

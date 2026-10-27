@@ -8,7 +8,6 @@ from respx.models import AllMockedAssertionError
 
 from xippios.core.client import (
     AsyncClient,
-    Client,
     ClientConfig,
     HeaderKeyAuth,
     RetryPolicy,
@@ -92,8 +91,7 @@ async def test_record_keeps_error_responses(
 
 def test_record_sync(respx_mock: respx.MockRouter, config: ClientConfig, tmp_path: Path) -> None:
     respx_mock.get(f"{BASE}/v1/x").respond(200, json={"n": 1})
-    client = Client(config)
-    fixture = record_sync(client.async_client, "/v1/x", tmp_path / "x.json")
+    fixture = record_sync(AsyncClient(config), "/v1/x", tmp_path / "x.json")
     assert fixture.response.status == 200
     assert (tmp_path / "x.json").exists()
 
@@ -248,9 +246,8 @@ def test_record_sync_takes_the_new_keywords(
     respx_mock: respx.MockRouter, config: ClientConfig, tmp_path: Path
 ) -> None:
     respx_mock.post(f"{BASE}/v1/x").respond(200, json={"org": "s3cr3t"})
-    client = Client(config)
     fixture = record_sync(
-        client.async_client,
+        AsyncClient(config),
         "/v1/x",
         tmp_path / "x.json",
         method="POST",
@@ -281,8 +278,8 @@ def test_record_sync_takes_auth(
     respx_mock: respx.MockRouter, config: ClientConfig, tmp_path: Path
 ) -> None:
     route = respx_mock.get(f"{BASE}/files/ref.json").respond(200, json={})
-    client = Client(config, auth=HeaderKeyAuth("X-Api-Key", "EXAMPLE_API_KEY"))
-    record_sync(client.async_client, "/files/ref.json", tmp_path / "ref.json", auth=None)
+    client = AsyncClient(config, auth=HeaderKeyAuth("X-Api-Key", "EXAMPLE_API_KEY"))
+    record_sync(client, "/files/ref.json", tmp_path / "ref.json", auth=None)
     assert "x-api-key" not in route.calls.last.request.headers
 
 
@@ -414,8 +411,7 @@ def fixtures_dir(tmp_path: Path) -> Path:
 
 def test_replay_fixture_is_typed_as_replay_fixture(replay_fixture: ReplayFixture) -> None:
     route = replay_fixture("x", "y", match_params=["year"])
-    with Client(ClientConfig(source="example", version="1", base_url=BASE)) as client:
-        assert client.get_json("/v1/x", params={"year": 2024}) == {"n": 1}
+    assert httpx.get(f"{BASE}/v1/x", params={"year": 2024}).json() == {"n": 1}
     assert sent_urls(route) == [f"{BASE}/v1/x?year=2024"]
 
 
@@ -441,9 +437,8 @@ def test_sent_query_is_the_last_query_scrubbed(
     route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
     with pytest.raises(AssertionError, match="received no request"):
         sent_query(route)
-    with Client(config) as client:
-        client.get("/v1/x", params={"key": "SECRET", "year": 2024})
-        client.get("/v1/x", params={"year": 2025, "state": ""})
+    httpx.get(f"{BASE}/v1/x", params={"key": "SECRET", "year": 2024})
+    httpx.get(f"{BASE}/v1/x", params={"year": 2025, "state": ""})
     assert sent_query(route) == {"year": "2025", "state": ""}
     assert [httpx.URL(url).params.get("key") for url in sent_urls(route)] == [REDACTED, None]
 
@@ -489,8 +484,7 @@ def test_the_plugin_serves_a_recorded_answer_at_another_url(
     replay_fixture: ReplayFixture,
 ) -> None:
     route = replay_fixture("x", "y", url=f"{BASE}/v2/x")
-    with Client(ClientConfig(source="example", version="1", base_url=BASE)) as client:
-        assert client.get_json("/v2/x") == {"n": 1}
+    assert httpx.get(f"{BASE}/v2/x").json() == {"n": 1}
     assert sent_urls(route) == [f"{BASE}/v2/x"]
 
 
