@@ -1,5 +1,4 @@
 import json
-import traceback
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
@@ -128,23 +127,61 @@ MARKER = "payload-marker-of-row-42"
 """What a failing payload carries: it reaches ``raw``, never a printed traceback (row 42)."""
 
 
-def test_parse_raises_from_none_and_keeps_the_payload_out_of_the_traceback() -> None:
+def test_parse_raises_the_first_failure_without_a_value_and_keeps_the_payload_on_raw() -> None:
     raw = [{"seriesId": MARKER, "value": 1}, {"seriesId": MARKER, "value": MARKER}]
     with pytest.raises(ValidationError) as info:
         parse(list[Series], raw, source="example", endpoint="get_thing")
-    assert str(info.value) == (
+    message = (
         "example get_thing: 1 validation error(s); first at 1.value (float_parsing): Input "
         "should be a valid number, unable to parse string as a number"
     )
+    assert (str(info.value), repr(info.value)) == (message, f"ValidationError({message!r})")
     assert (info.value.raw, info.value.source) == (raw, "example")
-    assert info.value.__cause__ is None
-    assert info.value.__suppress_context__
-    printed = "".join(traceback.format_exception(info.value))
-    assert "first at 1.value (float_parsing)" in printed
+    assert (info.value.__cause__, info.value.__suppress_context__) == (None, True)
+
+
+FAILING_PARSES = f"""
+from xippios.core import UpstreamModel, parse
+
+RAW = [{{"value": "{MARKER}"}}]
+
+
+class Series(UpstreamModel):
+    value: float
+
+
+class Wide(UpstreamModel):
+    label: str
+    value: str
+
+
+WIDE = Wide(label="{MARKER}", value="{MARKER}")
+
+
+def test_parse():
+    parse(list[Series], RAW, source="example", endpoint="get_thing")
+
+
+def test_project():
+    Series.project(WIDE)
+"""
+
+
+def test_a_failing_parse_prints_no_payload_under_pytests_default_traceback(
+    pytester: pytest.Pytester,
+) -> None:
+    # Row 42 (sdk-cashctrl): --tb=auto prints the raising frame long, its arguments too.
+    pytester.makepyfile(FAILING_PARSES)
+    result = pytester.runpytest()
+    result.assert_outcomes(failed=2)
+    printed = result.stdout.str()
+    assert "first at 0.value (float_parsing)" in printed
+    assert "Series.project: 1 validation error(s); first at value (float_parsing)" in printed
+    assert "raw = " not in printed  # parse's frame, a middle entry, is printed short
     assert MARKER not in printed
 
 
-def test_a_projection_that_does_not_fit_raises_from_none() -> None:
+def test_a_projection_that_does_not_fit_raises_the_taxonomys_error() -> None:
     wide = Wide(label=MARKER, amount=None, extra=1)
     with pytest.raises(ValidationError) as info:
         Row.project(wide, amounts=[MARKER])
@@ -153,7 +190,6 @@ def test_a_projection_that_does_not_fit_raises_from_none() -> None:
         "should be a valid decimal"
     )
     assert info.value.raw == {"label": MARKER, "amount": None, "amounts": [MARKER]}
-    assert MARKER not in "".join(traceback.format_exception(info.value))
 
 
 class Row(UpstreamModel):
