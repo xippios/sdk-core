@@ -164,7 +164,10 @@ as `error: InvalidRequestError: <argument>: <message>`, the first error with the
 when there are several, never pydantic's URL, input type or input value; the SDK answered
 an MCP error, `Error executing tool ...` and pydantic's text. A lock's middleware stays
 outside it, so a call naming another tenant, or leaving the tenant out, gets the lock's
-refusal. So, among the consequences, arguments the tool's schema refuses no longer fail
+refusal. The check is appended to `server.middleware` at the first registration, which the
+SDK runs outermost-first: a source's own middleware appended later runs after it, and one
+that must see a call first is inserted ahead of it (`server.middleware.insert(0, ...)`,
+ahead of the SDK's own middleware too). So, among the consequences, arguments the tool's schema refuses no longer fail
 `mcp_call_text`: it returns the text, and `mcp_call` raises `AssertionError` on it as on
 every `error:` text; an unknown tool still fails both. It is a family invariant (ADR-0023,
 decision 3 (a)), for every source's schema-typed arguments. Conventions §8 states it from

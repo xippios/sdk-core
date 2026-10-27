@@ -6,10 +6,11 @@ The rules of ADR-0019 and ADR-0022, all of them (the download and decode calls, 
 cache bound, `BULK_TASKS`, the fixture cap and the `truncated` marker, the file-fixture
 rules, the spared `key`, the packaged-answer rule and the packaged-list file,
 `published_at_naive`, the `None`-filter rule, `get_answer`, `matches` (§4), `UnknownCode`
-(§5), the frozen series and the period series (§4)), and ADR-0008's renderer rule of 1.20
-(`render_enums`, the module committed as formatted), bind a source from its 0.3.0
-adoption (§15), since the code that serves them ships in core 0.3.0; until then a source
-records what its upstream answers and names a fixture over the cap in the PR
+(§5), the frozen series and the period series (§4)), and ADR-0008's rules of 1.20
+(`render_enums`, the module committed as formatted, and what an enum's class docstring
+holds, §8), bind a source from its 0.3.0 adoption (§15), since the code that serves them
+ships in core 0.3.0; until then a source records what its upstream answers and names a
+fixture over the cap in the PR
 description; a source that starts on a git pin of core 0.3.0 (the roadmap's pin rule) is
 bound by each rule from its first PR on a pin that carries the rule's code.
 
@@ -423,8 +424,8 @@ Messages and results name tenants and variables, never a value.
   through the MCP boundary. Arguments a tool's schema refuses are answered the same way,
   before the tool runs, by a middleware `register_tasks` installs once per server:
   `error: InvalidRequestError: <argument>: <message>`, the first error with the count
-  when there are several, never pydantic's text, its URL or the input value (ADR-0014,
-  amendment 2026-10-27).
+  when there are several, never pydantic's rendered error (its URL, input type or input
+  value) (ADR-0014, amendment 2026-10-27).
 - Entry point `xippios-<source>-mcp` runs stdio by default; `--http` for streamable HTTP.
   A source's own options reach core's `main` through `add_options` and `apply_options`,
   parsed once with core's; an error applying them stops the process with exit status 2.

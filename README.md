@@ -488,8 +488,8 @@ description, the signature is the input schema. Results are capped at 200 rows o
 records an integer `start` says where to resume (`; resume with start=200`); errors come
 back as `error: <Class>: <message>`, arguments the tool's schema refuses too
 (`error: InvalidRequestError: year: Input should be a valid integer, ...`), before the
-tool runs and never with pydantic's text or the value given. `--http` serves
-streamable HTTP instead of stdio.
+tool runs and never with pydantic's rendered error (its URL, input type or input value).
+`--http` serves streamable HTTP instead of stdio.
 A reference tool whose whole list an agent needs gets a cap of its own, keyed by the
 task function's name, with the rows and bytes the source judges it needs:
 `build_server(..., caps={"list_commodities": ResultCap(max_rows=500,
