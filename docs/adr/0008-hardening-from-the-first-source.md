@@ -91,12 +91,14 @@ holds what an agent needs; a maintainer's note goes into a comment. The output i
 values as `ascii()` writes them, so the module stays ASCII-only and the values the same at
 runtime; one member per line; `__all__` one name per line in the order of the lists; the
 import names the kinds the module needs; a line over 100 columns carries `# noqa: E501`,
-since no tool can shorten upstream's value. The quote choice, the parentheses, the RUF022
+since no tool can shorten upstream's value, and a member named `I`, `O` or `l`, which ruff
+flags as ambiguous (E741) with no fix, `# noqa: E741`. The quote choice, the parentheses, the RUF022
 order, the docstring wrapping, the string splitting and the refusal of a member name too
 long for a line go. A key, a class name, a date or a generator text that is not printable
 ASCII, or holds a backslash or three double quotes, is still refused, and so is a class
-name longer than 84 characters, whose `class` line `ruff format` cannot shorten, two lists
-that would get one class name, and a key of `fetched`, `class_names` or `member_names`
+name longer than 84 characters, whose `class` line `ruff format` cannot shorten, a class
+named `IntEnum` or `StrEnum`, which the module imports, two lists that would get one class
+name, and a key of `fetched`, `class_names` or `member_names`
 that the lists do not hold. The
 refresh script, the template's, runs `ruff format && ruff check --fix` after rendering,
 which choose the quotes, wrap what fits, drop a `# noqa` the wrapping made unused (RUF100)

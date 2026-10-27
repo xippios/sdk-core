@@ -6,10 +6,11 @@ The rules of ADR-0019 and ADR-0022, all of them (the download and decode calls, 
 cache bound, `BULK_TASKS`, the fixture cap and the `truncated` marker, the file-fixture
 rules, the spared `key`, the packaged-answer rule and the packaged-list file,
 `published_at_naive`, the `None`-filter rule, `get_answer`, `matches` (§4), `UnknownCode`
-(§5), the frozen series and the period series (§4)), and ADR-0008's renderer rule of 1.20
-(`render_enums`, the module committed as formatted), bind a source from its 0.3.0
-adoption (§15), since the code that serves them ships in core 0.3.0; until then a source
-records what its upstream answers and names a fixture over the cap in the PR
+(§5), the frozen series and the period series (§4)), and ADR-0008's rules of 1.20
+(`render_enums`, the module committed as formatted, and what an enum's class docstring
+holds, §8), bind a source from its 0.3.0 adoption (§15), since the code that serves them
+ships in core 0.3.0; until then a source records what its upstream answers and names a
+fixture over the cap in the PR
 description; a source that starts on a git pin of core 0.3.0 (the roadmap's pin rule) is
 bound by each rule from its first PR on a pin that carries the rule's code.
 
@@ -125,8 +126,8 @@ skip it (§8, §9; ADR-0019).
 - Reference data (commodity codes, country codes, report calendars) ships inside the
   package under `reference/` as CSV or JSON, loaded via `xippios.core.reference`, and is
   versioned with the package. A list fetched from one upstream operation is a packaged
-  list, `reference/<name>.json` with `{"param", "endpoint", "fetched", "records"}` and an
-  optional `"note"`, free-text provenance (what a derived list is derived from, how a
+  list, `reference/<name>.json` with `{"param", "endpoint", "fetched", "records"}` and
+  an optional `"note"`, free-text provenance (what a derived list is derived from, how a
   list was reconciled with upstream's documentation), and no other key: upstream's
   records under upstream's field names (`UpstreamModel.dump_upstream`), a list of values
   as records of one field named by the upstream parameter, a table as records of its
@@ -329,14 +330,14 @@ the query can carry a key (ADR-0005).
   as they do to `get()`, and `auth` works as it does there; a retry restarts the file;
   except that `observe` and `classify` see a success's status and headers only, its
   body going to the file unread, and a 1xx or 3xx raises `UpstreamError`, since
-  redirects are not followed (ADR-0019, amendment 2026-10-27). `Downloaded` carries `path`, `bytes`, `content_type`, the file name from
-  `Content-Disposition` when sent, `etag`, `last_modified` and `retrieved_at`.
+  redirects are not followed (ADR-0019, amendment 2026-10-27). `Downloaded` carries
+  `path`, `bytes`, `content_type`, the file name from `Content-Disposition` when sent,
+  `etag`, `last_modified` and `retrieved_at`.
 - `decode_text(response)` (charset from `Content-Type`, UTF-8 by default, a BOM
-  stripped) and `decode_csv(data, *, delimiter=",", source=None)` (a path or a response;
-  the stdlib's `csv.DictReader`, headers as upstream prints them) sit beside
-  `decode_json`. The source opens gzip and
-  zip with the stdlib; core ships no XML, spreadsheet or PDF parser (ADR-0019,
-  ADR-0020).
+  stripped) and `decode_csv(data, *, delimiter=",", source=None)` (a path or a
+  response; the stdlib's `csv.DictReader`, headers as upstream prints them) sit beside
+  `decode_json`. The source opens gzip and zip with the stdlib; core ships no XML,
+  spreadsheet or PDF parser (ADR-0019, ADR-0020).
 - Credentials come from the client's `auth`. A call to a keyless endpoint on the same
   host passes `auth=None` and is sent without them; another `httpx.Auth` replaces them
   for one call; no second client is needed to leave the key off (ADR-0015). `auth=None`
@@ -407,8 +408,8 @@ tenant of every result in `ResultMeta.tenant` (§4; ADR-0024).
   through the MCP boundary. Arguments a tool's schema refuses are answered the same way,
   before the tool runs, by a middleware `register_tasks` installs once per server:
   `error: InvalidRequestError: <argument>: <message>`, the first error with the count
-  when there are several, never pydantic's text, its URL or the input value (ADR-0014,
-  amendment 2026-10-27).
+  when there are several, never pydantic's rendered error (its URL, input type or input
+  value) (ADR-0014, amendment 2026-10-27).
 - Entry point `xippios-<source>-mcp` runs stdio by default; `--http` for streamable HTTP.
   A source's own options reach core's `main` through `add_options` and `apply_options`,
   parsed once with core's; an error applying them stops the process with exit status 2.

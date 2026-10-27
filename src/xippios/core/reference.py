@@ -33,7 +33,7 @@ from typing import Any, Self, cast
 import pydantic
 from pydantic import BaseModel, ConfigDict, TypeAdapter, field_validator
 
-from xippios.core.errors import ValidationError
+from xippios.core.errors import ValidationError, _raise
 from xippios.core.models import ResultMeta, _validation_text, parse
 
 __all__ = [
@@ -93,16 +93,16 @@ def load_table[T](package: str, name: str, model: type[T]) -> list[T]:
         model: The row model, e.g. a ``UpstreamModel`` subclass.
 
     Raises:
-        ValidationError: A row does not fit ``model``; raised ``from None``, its text
-            naming the package, the file and the first failure's location, type and
-            message as ``parse``'s does, the rows on ``raw``.
+        ValidationError: A row does not fit ``model``; raised as ``parse`` raises it,
+            its text naming the package, the file and the first failure's location, type
+            and message, the rows on ``raw``.
     """
     raw = load_csv(package, name) if name.endswith(".csv") else load_json(package, name)
     try:
         return TypeAdapter(list[model]).validate_python(raw)  # type: ignore[valid-type]
     except pydantic.ValidationError as exc:
         message = f"{package} reference/{name}: {_validation_text(exc)}"
-        raise ValidationError(message, raw=raw) from None
+        _raise(ValidationError(message, raw=raw))
 
 
 class PackagedList(BaseModel):
@@ -179,10 +179,18 @@ class PackagedList(BaseModel):
 
         Raises:
             FileNotFoundError: The package ships no such file.
-            pydantic.ValidationError: The file is not a packaged list.
+            ValidationError: The file is not a packaged list; raised as ``parse`` raises
+                it, its text naming the package, the file and the first failure's
+                location, type and message, the file's contents on ``raw``.
         """
         file = name if name.endswith(".json") else f"{name}.json"
-        return cls.model_validate(load_json(package, file))
+        data = load_json(package, file)
+        try:
+            return cls.model_validate(data)
+        except pydantic.ValidationError as exc:
+            _raise(
+                ValidationError(f"{package} reference/{file}: {_validation_text(exc)}", raw=data)
+            )
 
     def meta(
         self,
@@ -343,6 +351,9 @@ def id_name_pairs(
 
 _TEXT_RULE = "non-empty printable ASCII without a backslash or three double quotes"
 
+_BASES = frozenset({"IntEnum", "StrEnum"})
+"""The names the generated module imports, which no class of it may take."""
+
 _CLASS_NAME_LIMIT = _LINE_LENGTH - len("class (StrEnum):")
 """84: the longest class name whose ``class`` line fits; ``ruff format`` cannot shorten one."""
 
@@ -358,14 +369,20 @@ def _plain_text(text: str) -> bool:
     )
 
 
-def _fit(line: str) -> str:
-    """``line``, with ``# noqa: E501`` when it is longer than the family's 100 columns.
+_AMBIGUOUS = frozenset({"I", "O", "l"})
+"""Names ruff flags as ambiguous (E741) and cannot fix: a member upstream's ``"I"`` names."""
+
+
+def _fit(line: str, *codes: str) -> str:
+    """``line`` with a ``# noqa`` for ``codes``, and for E501 when it is over 100 columns.
 
     No tool can shorten an upstream value, a long key or a member name derived from a long
-    label, so such a line is exempted, not refused; ruff drops the comment again where
-    ``ruff format`` makes the line fit (RUF100).
+    label, nor rename a member upstream's value names ``I`` or ``O`` (E741), so such a line
+    is exempted, not refused; ruff drops a code again where ``ruff format`` makes the line
+    fit (RUF100).
     """
-    return f"{line}  # noqa: E501" if len(line) > _LINE_LENGTH else line
+    exempt = ("E501",) * (len(line) > _LINE_LENGTH) + codes
+    return f"{line}  # noqa: {', '.join(exempt)}" if exempt else line
 
 
 def _class_name(key: str) -> str:
@@ -383,8 +400,9 @@ def _class_names(lists: Mapping[str, object], class_names: Mapping[str, str]) ->
 
     Raises:
         ValueError: A key is not ``_TEXT_RULE``; a class name is no ASCII identifier, is a
-            keyword or is longer than ``_CLASS_NAME_LIMIT``; two keys get one class name.
-            The message names the position.
+            keyword or one of ``_BASES``, which the module could not execute with, or is
+            longer than ``_CLASS_NAME_LIMIT``; two keys get one class name. The message
+            names the position.
     """
     names: dict[str, str] = {}
     for index, key in enumerate(lists):
@@ -393,15 +411,16 @@ def _class_names(lists: Mapping[str, object], class_names: Mapping[str, str]) ->
         given = class_names.get(key)
         name = _class_name(key) if given is None else given
         too_long = len(name) > _CLASS_NAME_LIMIT
-        if not (name.isascii() and name.isidentifier()) or keyword.iskeyword(name) or too_long:
+        refused = keyword.iskeyword(name) or name in _BASES or too_long
+        if not (name.isascii() and name.isidentifier()) or refused:
             where = (
                 f"the class name derived from the key at position {index} of lists"
                 if given is None
                 else f"class_names for the key at position {index} of lists"
             )
             raise ValueError(
-                f"{where} must be an ASCII identifier, not a keyword, of at most "
-                f"{_CLASS_NAME_LIMIT} characters; set it in class_names"
+                f"{where} must be an ASCII identifier, not a keyword, IntEnum or StrEnum, of "
+                f"at most {_CLASS_NAME_LIMIT} characters; set it in class_names"
             )
         names[key] = name
     positions: dict[str, list[int]] = {}
@@ -456,18 +475,40 @@ def _kind(key: str, values: object) -> str:
 
     Raises:
         ValueError: ``values`` is a string or empty, or is neither all strings nor all
-            pairs of an ``int`` and a ``str``.
+            pairs of an ``int`` and a ``str``; the message names what it found, by type.
     """
-    if isinstance(values, str) or not isinstance(values, Sequence) or not values:
-        raise ValueError(f"{key}: a list of values or of (id, name) pairs is needed, not empty")
+    if isinstance(values, str) or not isinstance(values, Sequence):
+        raise ValueError(
+            f"{key}: a list of values or of (id, name) pairs is needed, not {_described(values)}"
+        )
+    if not values:
+        raise ValueError(f"{key}: the list is empty; an enum needs at least one value")
     if all(isinstance(item, str) for item in values):
         return "StrEnum"
     if all(_is_pair(item) for item in values):
         return "IntEnum"
+    if isinstance(values[0], str) or _is_pair(values[0]):
+        fits = _is_pair if _is_pair(values[0]) else (lambda item: isinstance(item, str))
+        position = next(index for index, item in enumerate(values) if not fits(item))
+        found = (
+            f"item 0 is {_described(values[0])} and item {position} {_described(values[position])}"
+        )
+    else:
+        found = f"item 0 is {_described(values[0])}"
     raise ValueError(
-        f"{key}: the list mixes kinds; it holds strings (a StrEnum) or (id, name) pairs of an "
-        "int and a str (an IntEnum), as id_name_pairs builds them"
+        f"{key}: a list holds strings (a StrEnum) or (id, name) pairs of an int and a str (an "
+        f"IntEnum), as id_name_pairs builds them; {found}"
     )
+
+
+def _described(item: object) -> str:
+    """What ``item`` is, by type, never by value: ``"a str"``, ``"a tuple of int, str"``."""
+    if _is_pair(item):
+        return "an (id, name) pair"
+    if isinstance(item, tuple):
+        return f"a tuple of {', '.join(type(part).__name__ for part in item) or 'nothing'}"
+    name = type(item).__name__
+    return f"{'an' if name[:1] in 'aeiou' else 'a'} {name}"
 
 
 def _derived(text: str) -> str | None:
@@ -605,9 +646,10 @@ def render_enums(
     ASCII is escaped (``"Côte"`` as ``'C\xf4te'``) and the value is the same at runtime;
     one member per line; ``__all__`` one name per line in the order of ``lists``; the
     import names the kinds the module needs. A line longer than 100 columns carries
-    ``# noqa: E501``. The refresh script runs ``ruff format`` and ``ruff check --fix`` on
-    the result, which choose the quotes, wrap what fits and sort ``__all__`` (RUF022); the
-    module is committed as formatted.
+    ``# noqa: E501``, and a member named ``I``, ``O`` or ``l``, which ruff flags as
+    ambiguous with no fix, ``# noqa: E741``. The refresh script runs ``ruff format`` and
+    ``ruff check --fix`` on the result, which choose the quotes, wrap what fits and sort
+    ``__all__`` (RUF022); the module is committed as formatted.
 
     Args:
         lists: Enum key to its values in upstream order: strings
@@ -630,14 +672,15 @@ def render_enums(
     Raises:
         ValueError: A list is empty, a string, or mixes strings and pairs; ``generator``,
             a date or a key is not non-empty printable ASCII or holds a backslash or three
-            double quotes; a class name is no ASCII identifier, is a keyword or is longer
-            than 84 characters, or two lists get one; an id is listed twice; a value
-            without an override has nothing to derive a member name from; two members of
-            one list share a name; a name in ``member_names`` is not one an enum takes
-            (``mro``, ``_x_``, any with ``__``); or ``fetched``, ``class_names`` or
-            ``member_names`` names a key ``lists`` does not hold, ``fetched`` lacks one, or
-            ``member_names`` names a value or an id its list does not hold. A message names
-            the argument and the position.
+            double quotes; a class name is no ASCII identifier, is a keyword, ``IntEnum``
+            or ``StrEnum``, is longer than 84 characters, or two lists get one; an id is
+            listed twice; a value without an override has nothing to derive a member name
+            from; two members of one list share a name; a name in ``member_names`` is not
+            one an enum takes (``mro``, ``_x_``, any with ``__``); or ``fetched``,
+            ``class_names`` or ``member_names`` names a key ``lists`` does not hold,
+            ``fetched`` lacks one, or ``member_names`` names a value or an id its list does
+            not hold. A message names the argument and the position, a list's items by
+            type.
     """
     if not _plain_text(generator):
         raise ValueError(f"generator must be {_TEXT_RULE}")
@@ -661,7 +704,10 @@ def render_enums(
                 f"class {names[key]}({kind}):",
                 _fit(f'    """Values of ``{key}`` (fetched {dates[key]})."""'),
                 "",
-                *(_fit(f"    {member} = {literal}") for member, literal in members),
+                *(
+                    _fit(f"    {member} = {literal}", *("E741",) * (member in _AMBIGUOUS))
+                    for member, literal in members
+                ),
             ]
         )
     lines = [

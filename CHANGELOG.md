@@ -184,18 +184,20 @@ All notable changes to this project are documented here. The format follows
   full time. The sources answered with the time of the call and put the fetch date into
   `vintage`, which now holds an upstream release identifier only.
 
-- **Parse failures are raised without a chained cause** (queue row 42, found by
-  sdk-cashctrl): `parse`, `UpstreamModel.project`, `load_table`, `decode_json`,
-  `decode_text` and `decode_csv` raise their `ValidationError` `from None`. The text folds
-  in the cause's location, error type and message (`example get_thing: 1 validation
-  error(s); first at 1.value (float_parsing): Input should be a valid number, ...`),
-  json's message and position, the decoder's reason or the csv module's message, never
-  an input value, and the payload stays on `raw`; pydantic's chained error, whose text a
-  traceback printed with every failing value, is no longer shown. `project` and
-  `load_table` raised pydantic's own `ValidationError` before and raise the taxonomy's
-  now. pytest's own display of a frame's arguments (`--tb=long`, its default) still shows
-  a function's arguments, `raw=` included; the template's `--tb=short` on the live run
-  covers that, the template's half of row 42.
+- **Parse failures print no payload** (queue row 42, found by sdk-cashctrl): `parse`,
+  `UpstreamModel.project`, `load_table`, `PackagedList.load`, `decode_json`, `decode_text`
+  and `decode_csv` build their `ValidationError` and raise it `from None` through a
+  private helper whose frame holds the error alone. The text folds in the cause's
+  location, error type and message (`example get_thing: 1 validation error(s); first at
+  1.value (float_parsing): Input should be a valid number, ...`), json's message and
+  position, the decoder's reason or the csv module's message, never an input value; the
+  payload stays on `raw`, and the error's `repr` is its message. So neither pydantic's
+  chained error, whose text quoted every failing value, nor the raising frame's arguments
+  reach a printed traceback: under pytest's default `--tb=auto` the function that holds
+  the payload is a middle entry, printed short. `project`, `load_table` and
+  `PackagedList.load` raised pydantic's own `ValidationError` before and raise the
+  taxonomy's now. Row 42's core half is closed in core; the template's `--tb=short` on
+  the live run stays as a second guard.
 - **The network guard sits on httpcore's connection pools only** (C11; ADR-0013,
   amendment 2026-10-27): `httpcore.ConnectionPool.handle_request` and
   `httpcore.AsyncConnectionPool.handle_async_request`, which every default httpx
@@ -359,9 +361,11 @@ All notable changes to this project are documented here. The format follows
   one per list; each class docstring one line, "Values of ``<key>`` (fetched <date>).",
   which an MCP tool's input schema shows the agent. The output is plain ASCII: values as
   `ascii()` writes them, one member per line, `__all__` in the order of the lists,
-  `# noqa: E501` on a line over 100 columns. Refused with `ValueError`: an empty list or
-  one that mixes kinds; a key, class name, date or generator text that is not printable
-  ASCII; a class name over 84 characters or shared by two lists; a repeated id; a member
+  `# noqa: E501` on a line over 100 columns, `# noqa: E741` on a member named `I`, `O` or
+  `l`. Refused with `ValueError`: an empty list or one that mixes kinds (the message
+  names what it found, by type); a key, class name, date or generator text that is not
+  printable ASCII; a class name over 84 characters, named `IntEnum` or `StrEnum`, or
+  shared by two lists; a repeated id; a member
   name with nothing to derive it from, or one that collides or an enum cannot take; and a
   key of `fetched`, `class_names` or `member_names` that `lists` does not hold. Consumers:
   every source, through the template's refresh script (ADR-0023, decision 1).
@@ -383,8 +387,9 @@ All notable changes to this project are documented here. The format follows
   refusal before the tool runs as `error: InvalidRequestError: <argument>: <message>`,
   the first error with the count when there are several. The SDK answered an MCP error,
   `Error executing tool ...` with pydantic's text, its URL and the input value. A
-  `TenantLock`'s middleware stays outside it; task errors keep their path. A family
-  invariant (ADR-0023, decision 3 (a)).
+  `TenantLock`'s middleware stays outside it; a source's own middleware appended later
+  runs after it, and one inserted with `server.middleware.insert(0, ...)` runs ahead of
+  it; task errors keep their path. A family invariant (ADR-0023, decision 3 (a)).
 - **A capped list says where to resume** (queue row 21 b, found by sdk-cashctrl;
   ADR-0016, amendment 2026-10-27): `cap_result` ends the note of a cut list whose
   `meta.request` records an integer `start`, an offset-paged task's, with
@@ -430,9 +435,9 @@ All notable changes to this project are documented here. The format follows
   most periods one call fetches; an unreleased period is skipped where upstream's empty
   answer can be told from data, else the range is refused), its refusal as
   `NotFoundError` naming the latest released period, and the packaged file's optional
-  `note` with every other key refused. **ADR-0015** (decision 5's `get_answer`), **ADR-0012**
-  (`ResultMeta` refuses unknown fields) and **ADR-0004** (`reference` above `models`)
-  get a dated line each.
+  `note` with every other key refused. **ADR-0015** (decision 5's `get_answer`),
+  **ADR-0012** (`ResultMeta` refuses unknown fields) and **ADR-0004** (`reference` above
+  `models`) get a dated line each.
 - **Conventions 1.19**: §3 the packaged-list file, `reference/<name>.json` with its
   optional `note`; §4 the refusal of unknown fields, `get_answer` for a hit's
   `retrieved_at`, the flag's refusals, `PackagedList`'s methods and the bare-date
@@ -454,6 +459,9 @@ All notable changes to this project are documented here. The format follows
   template's script. The header binds the renderer rule from the 0.3.0 adoption.
 - `publish.yml`'s `tag` job says in a comment that its checkout keeps its credentials,
   since it pushes the tag with the token (conventions §13).
+- The definition of done's adoption line and its copy in `.github/PULL_REQUEST_TEMPLATE.md`:
+  generated enum files are committed as formatted, after the refresh script's
+  `ruff format && ruff check --fix`, as conventions §15 item 6 says.
 
 - **ADR-0024**: sdk-cashctrl stands alone; tenants, the tenant lock, `assert_write_tools`
   and the recorder's host placeholder, encoded matching, JSON verify and `rewrite` leave
@@ -537,9 +545,6 @@ listed here.
   test that matched the text "was recorded as REDACTED" for a credential named in
   `match_params` → "names a credential"; a parameter whose name has the whole word `sig`
   or `pwd` now reads `REDACTED` — C10.
-- Every source that calls `decode_csv` by keyword (none yet) — `source=` is now the slug
-  for its errors; the file or response is the positional `data` — ADR-0019, decision 2,
-  amended 2026-10-27.
 - `src/xippios/<pkg>/tasks.py` of a source with a bulk task — `BULK_TASKS =
   frozenset({...})` beside `MCP_CAPS`; `mcp.py` and `http.py` may pass `tasks.__all__`
   whole. Template v0.3.0 renders the `BULK_TASKS = frozenset()` scaffold — C15.
@@ -578,7 +583,8 @@ listed here.
   operation (nass's `get_param_values`, comtrade's `files/v1/app/reference/<file>.json`)
   where nass wrote "reference" and comtrade a file path; any other key is refused, so
   nass writes its `derived_from` into `note` as text, and its two lists derived from
-  `unit_desc` keep `param: "unit_desc"` in files of their own names, which
+  `api_GET` records, `condition_categories` and `progress_stages`, keep
+  `param: "unit_desc"` and `endpoint: "api_GET"` in files of their own names, which
   `PackagedList.load(package, name)` takes; comtrade writes its `note` and its
   `exceptions` into `note` as text, and its `origin` becomes `endpoint`. The list tasks
   read the files with `PackagedList.load` and still return strings — ADR-0022, rule 1
@@ -593,9 +599,9 @@ listed here.
   from their naive release times with `published_at_naive=published_at is not None`,
   since the flag without a time is refused; `vintage` keeps the release text as
   upstream prints it — ADR-0022, rule 2.
-- `src/xippios/usda/psd/tasks.py`, `get_time_series` — its docstring states its ceiling
-  and that a market year answering PSD's empty 404 is skipped — ADR-0022, amendment (6),
-  conventions §4.
+- `src/xippios/usda/psd/tasks.py`, `get_time_series` — nothing; its docstring already
+  states its ceiling and that a market year answering PSD's empty 404 is skipped —
+  ADR-0022, amendment (6), conventions §4.
 - `src/xippios/usda/gats/tasks.py`, `get_census_export_series`,
   `get_census_import_series` and `get_census_reexport_series` — nothing: they already
   refuse a range with an unreleased month with `NotFoundError` naming the released
@@ -640,8 +646,8 @@ window=86400, spent=...)` is unaffected: `spent=` stays.
   still raises `AssertionError` on it — row 41 a.
 - Every source, `tests/` — a test that matched `parse`'s text "first at <loc>: <msg>" →
   "first at <loc> (<type>): <msg>"; one that read pydantic's error from `__cause__` finds
-  `None`; one that expected pydantic's `ValidationError` from `load_table` or `project`
-  expects `xippios.core.errors.ValidationError` — row 42.
+  `None`; one that expected pydantic's `ValidationError` from `load_table`, `project` or
+  `PackagedList.load` expects `xippios.core.errors.ValidationError` — row 42.
 - sdk-cashctrl, a test that asserted a capped note of an offset-paged list task in full —
   the note ends `; resume with start=<n>` — row 21 b.
 - Every source's own workflows (a `siblings.yml`, a `live.yml` of its own) — checked

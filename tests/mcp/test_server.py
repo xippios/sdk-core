@@ -8,6 +8,7 @@ from typing import Annotated, Any
 
 import httpx
 import pytest
+from pydantic import BaseModel, field_validator
 
 from xippios.core import sync
 from xippios.core.errors import InvalidRequestError, NotFoundError
@@ -279,6 +280,32 @@ async def test_arguments_the_schema_refuses_are_answered_in_the_family_form(
     assert text == f"error: InvalidRequestError: {expected}"
     assert not {"volume", "soon", "pydantic", "input_value"} & set(text.replace(",", " ").split())
     assert await mcp_call(server, "example_get_top", {"field": "value"}) == {"field": "value"}
+
+
+class Query(BaseModel):
+    name: str
+
+    @field_validator("name")
+    @classmethod
+    def _crash(cls, value: str) -> str:
+        raise RuntimeError("a validator that crashes")
+
+
+def search(query: Query) -> dict[str, str]:
+    """Search by a query.
+
+    Args:
+        query: What to look for, e.g. ``{"name": "corn"}``.
+    """
+    return {"name": query.name}
+
+
+@pytest.mark.anyio
+async def test_a_validator_that_crashes_falls_through_to_the_sdks_answer() -> None:
+    # Only a refusal is answered as InvalidRequestError; a crash stays the SDK's to answer.
+    server = build_server("example", [search])
+    with pytest.raises(AssertionError, match="Error executing tool example_search"):
+        await mcp_call_text(server, "example_search", {"query": {"name": "corn"}})  # is_error
 
 
 @pytest.mark.anyio

@@ -60,13 +60,13 @@ Johannes decided five points of the code on 2026-10-27, in the interview before 
    truncated the time to, and the source's next reference refresh writes the full time.
    A time without a zone is refused.
 2. **One model.** `PackagedList(param, endpoint, fetched, records)`, frozen, with
-   `PackagedList.load(package, name)` on `load_json`, `.meta(source, *, request, vintage,
-   published_at, published_at_naive)` building rule 1's meta, `.parse(model, *,
-   source)` validating the records, and `.write(path)` writing the file
-   (`{"param", "endpoint", "fetched", "records"}`, indented, non-ASCII text kept,
-   `fetched` to the second) for the refresh scripts. A list of values is records of one field named by the upstream
-   parameter, and a table records of its columns: usda-nass's value files and
-   sdk-comtrade's value files and CSV tables become such files in their adoptions,
+   `PackagedList.load(package, name)` on `load_json`, `.meta(source, *, request,
+   vintage, published_at, published_at_naive)` building rule 1's meta, `.parse(model, *,
+   source)` validating the records, and `.write(path)` writing the file (`{"param",
+   "endpoint", "fetched", "records"}`, indented, non-ASCII text kept, `fetched` to the
+   second) for the refresh scripts. A list of values is records of one field named by
+   the upstream parameter, and a table records of its columns: usda-nass's value files
+   and sdk-comtrade's value files and CSV tables become such files in their adoptions,
    without network, their list tasks still returning strings. `endpoint` names the
    upstream operation, an operationId or a URL path; comtrade's
    `files/v1/app/reference/<file>.json` is a URL path and qualifies.
@@ -86,9 +86,9 @@ Johannes decided five points of the code on 2026-10-27, in the interview before 
    `vintage` holds the last release's identifier. `ResultMeta` gains no field (queue row
    39 h).
 
-With them, three rules of the code. Rule 2: the flag with an aware `published_at`, or
-with none, is refused, since the flag says upstream printed a time without a zone. Rule
-3: `ResultMeta` drops a top-level `None` from `request` at construction, before the
+With them, two rules of the code. Rule 2: the flag with an aware `published_at`, or with
+none, is refused, since the flag says upstream printed a time without a zone. Rule 3:
+`ResultMeta` drops a top-level `None` from `request` at construction, before the
 credential rule, so a credential left `None` is not recorded as sent; a `None` inside a
 nested mapping is kept as given.
 

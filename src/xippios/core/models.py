@@ -19,7 +19,7 @@ from pydantic import (
 )
 from pydantic.fields import FieldInfo
 
-from xippios.core.errors import ValidationError
+from xippios.core.errors import ValidationError, _raise
 from xippios.core.redaction import REDACTED, redact_credentials
 
 __all__ = [
@@ -111,8 +111,8 @@ class UpstreamModel(BaseModel):
         Raises:
             TypeError: When a field of this model is neither on ``source`` nor overridden.
             ValidationError: When a copied or overridden value does not fit this model;
-                raised ``from None``, its text naming the location, type and message as
-                ``parse``'s does, the values on ``raw``.
+                raised as ``parse`` raises it, its text naming the location, type and
+                message, the values on ``raw``.
         """
         missing = [
             name for name in cls.model_fields if name not in overrides and not hasattr(source, name)
@@ -128,7 +128,7 @@ class UpstreamModel(BaseModel):
             return cls(**values)
         except pydantic.ValidationError as exc:
             message = f"{cls.__name__}.project: {_validation_text(exc)}"
-            raise ValidationError(message, raw=values) from None
+            _raise(ValidationError(message, raw=values))
 
     def dump_upstream(self) -> dict[str, Any]:
         """This record as JSON values under upstream's field names, in field order.
@@ -318,9 +318,11 @@ def _validation_text(exc: pydantic.ValidationError) -> str:
 def parse[T](type_: type[T], raw: object, *, source: str, endpoint: str) -> T:
     """Validate an upstream payload, wrapping failures as ``ValidationError``.
 
-    The error is raised ``from None``: its text names the first failure's location, type
-    and message and never a value, and the payload stays on ``raw`` for a debugger, out
-    of ``str()`` and out of a printed traceback (queue row 42).
+    The error's text names the first failure's location, type and message and never a
+    value; the payload stays on ``raw`` for a debugger, out of ``str()`` and ``repr()``.
+    It is raised ``from None``, so no chained pydantic error quotes the values, and from a
+    private helper's frame, so a printed traceback, pytest's default included, shows this
+    function's frame short, without its arguments (queue row 42).
 
     Args:
         type_: The target type: a model class or a generic such as ``list[Series]``.
@@ -340,4 +342,4 @@ def parse[T](type_: type[T], raw: object, *, source: str, endpoint: str) -> T:
         return TypeAdapter(type_).validate_python(raw)
     except pydantic.ValidationError as exc:
         message = f"{source} {endpoint}: {_validation_text(exc)}"
-        raise ValidationError(message, raw=raw, source=source) from None
+        _raise(ValidationError(message, raw=raw, source=source))

@@ -36,6 +36,7 @@ from xippios.core.errors import (
     UpstreamError,
     ValidationError,
     XippiosError,
+    _raise,
     raise_for_status,
 )
 
@@ -501,12 +502,14 @@ def decode_json(
     try:
         return response.json()
     except ValueError as exc:
-        raise ValidationError(
-            f"{source + ': ' if source else ''}{_where(response, path)} is not JSON: "
-            f"{_reason(exc)}",
-            raw=response.text[:BODY_LIMIT],
-            source=source,
-        ) from None
+        _raise(
+            ValidationError(
+                f"{source + ': ' if source else ''}{_where(response, path)} is not JSON: "
+                f"{_reason(exc)}",
+                raw=response.text[:BODY_LIMIT],
+                source=source,
+            )
+        )
 
 
 def _reason(exc: ValueError) -> str:
@@ -553,12 +556,14 @@ def decode_text(
         text = response.content.decode(charset)
     except (LookupError, UnicodeDecodeError) as exc:
         reason = _reason(exc) if isinstance(exc, UnicodeDecodeError) else "an unknown charset"
-        raise ValidationError(
-            f"{source + ': ' if source else ''}{_where(response, path)} is not {charset} "
-            f"text: {reason}",
-            raw=response.content[:BODY_LIMIT],
-            source=source,
-        ) from None
+        _raise(
+            ValidationError(
+                f"{source + ': ' if source else ''}{_where(response, path)} is not {charset} "
+                f"text: {reason}",
+                raw=response.content[:BODY_LIMIT],
+                source=source,
+            )
+        )
     return text.removeprefix("\ufeff")
 
 
@@ -604,15 +609,19 @@ def _rows(
     try:
         yield from csv.DictReader(handle, delimiter=delimiter)
     except UnicodeDecodeError as exc:
-        raise ValidationError(
-            f"{prefix}{name} is not UTF-8 text: {exc.reason}",
-            raw=exc.object[:BODY_LIMIT],
-            source=source,
-        ) from None
+        _raise(
+            ValidationError(
+                f"{prefix}{name} is not UTF-8 text: {exc.reason}",
+                raw=exc.object[:BODY_LIMIT],
+                source=source,
+            )
+        )
     except csv.Error as exc:
-        raise ValidationError(
-            f"{prefix}{name} is not CSV the csv module reads: {exc}", raw="", source=source
-        ) from None
+        _raise(
+            ValidationError(
+                f"{prefix}{name} is not CSV the csv module reads: {exc}", raw="", source=source
+            )
+        )
 
 
 class _ClassifyOnce:

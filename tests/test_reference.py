@@ -162,21 +162,21 @@ def test_a_one_field_value_list_round_trips_through_write_and_load(
 
 
 def test_a_note_is_written_when_set_and_fetched_to_the_second(package: str, tmp_path: Path) -> None:
-    # sdk-usda-nass: two lists derived from one parameter, each in a file of its own name.
+    # sdk-usda-nass: two lists derived from api_GET's unit_desc, each in a file of its own.
     derived = PackagedList(
         param="unit_desc",
-        endpoint="get_param_values",
+        endpoint="api_GET",
         fetched=datetime(2026, 10, 27, 9, 15, 30, 654321, tzinfo=UTC),
-        note="derived from unit_desc: the units of yield statistics",
-        records=[{"unit_desc": "BU / ACRE"}],
+        note="derived from statisticcat_desc=CONDITION, agg_level_desc=NATIONAL",
+        records=[{"unit_desc": "PCT EXCELLENT"}, {"unit_desc": "PCT FAIR"}],
     )
-    derived.write(tmp_path / PKG / "reference" / "unit_desc_yield.json")
-    loaded = PackagedList.load(package, "unit_desc_yield")
+    derived.write(tmp_path / PKG / "reference" / "condition_categories.json")
+    loaded = PackagedList.load(package, "condition_categories")
     assert loaded == derived.model_copy(
         update={"fetched": datetime(2026, 10, 27, 9, 15, 30, tzinfo=UTC)}
     )
-    text = (tmp_path / PKG / "reference" / "unit_desc_yield.json").read_text(encoding="utf-8")
-    assert '"fetched": "2026-10-27T09:15:30Z",\n  "note": "derived from unit_desc' in text
+    text = (tmp_path / PKG / "reference" / "condition_categories.json").read_text("utf-8")
+    assert '"fetched": "2026-10-27T09:15:30Z",\n  "note": "derived from statisticcat' in text
 
 
 def test_a_packaged_list_refuses_a_naive_time_an_unknown_key_and_unparsable_records() -> None:
@@ -187,6 +187,19 @@ def test_a_packaged_list_refuses_a_naive_time_an_unknown_key_and_unparsable_reco
     broken = PackagedList.model_validate({**COMMODITIES, "records": [{"commodityCode": "1"}]})
     with pytest.raises(ValidationError, match=r"^usda-psd PSDData_GetCommodities: 1 validation"):
         broken.parse(Commodity, source="usda-psd")
+
+
+def test_a_file_that_is_no_packaged_list_raises_the_taxonomys_error(
+    package: str, tmp_path: Path
+) -> None:
+    (tmp_path / PKG / "reference" / "old.json").write_text(json.dumps({"param": "x"}))
+    with pytest.raises(ValidationError) as info:
+        PackagedList.load(package, "old")
+    assert str(info.value) == (
+        f"{PKG} reference/old.json: 3 validation error(s); first at endpoint (missing): "
+        "Field required"
+    )
+    assert (info.value.raw, info.value.__cause__) == ({"param": "x"}, None)
 
 
 @pytest.mark.parametrize(
@@ -340,10 +353,31 @@ def test_no_lists_render_a_module_that_imports_nothing() -> None:
     assert run(source)["__all__"] == []
 
 
-@pytest.mark.parametrize("values", [[], "AK", ["AK", (1, "Area")], [(1, "Area", "x")]])
-def test_a_list_that_is_empty_or_of_no_one_kind_is_refused(values: Any) -> None:
-    with pytest.raises(ValueError, match=r"^state: (a list of values|the list mixes kinds)"):
+@pytest.mark.parametrize(
+    ("values", "found"),
+    [
+        ([], "the list is empty; an enum needs at least one value$"),
+        ("AK", "a list of values or of \\(id, name\\) pairs is needed, not a str$"),
+        ([126, 173], "item 0 is an int"),  # ids without their names
+        (["AK", (1, "Area")], "item 0 is a str and item 1 an \\(id, name\\) pair"),
+        ([(1, "Area"), (2, "Yield", "x")], "item 0 is an \\(id, name\\) pair and item 1 a tuple"),
+    ],
+)  # fmt: skip
+def test_a_list_that_is_empty_or_of_no_one_kind_is_refused(values: Any, found: str) -> None:
+    kinds = "a list holds strings .* as id_name_pairs builds them; "
+    message = f"^state: {'' if found.endswith('$') else kinds}{found}"
+    with pytest.raises(ValueError, match=message):
         render_enums({"state": values}, fetched="2026-10-27")
+
+
+def test_a_member_named_i_or_o_carries_a_noqa_for_e741(tmp_path: Path) -> None:
+    # Ruff flags I, O and l as ambiguous names and has no fix: upstream's value names them.
+    source = render_enums({"grade": ["I", "O", "A"]}, fetched="2026-10-27")
+    assert "    I = 'I'  # noqa: E741\n    O = 'O'  # noqa: E741\n    A = 'A'\n" in source
+    path = tmp_path / "enums.py"
+    path.write_text(source, encoding="ascii")
+    result = ruff(path, "check")
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 BAD_TEXT = ["2026\u201310\u201324", "C:\\data", 'say """hi"""', "a\nb", ""]
@@ -374,6 +408,8 @@ def test_text_that_would_not_stay_printable_ascii_is_refused(
     [
         ({"1st": "Caf\u00e9"}, "class_names for the key at position 1 of lists must be an ASCII"),
         ({"1st": "None"}, "class_names for the key at position 1 of lists must be an ASCII"),
+        ({"1st": "StrEnum"}, "class_names for the key at position 1 of lists must be an "
+                             "ASCII identifier, not a keyword, IntEnum or StrEnum"),
         ({"1st": "C" * 85}, "class_names for the key at position 1 of lists must be an ASCII"),
         ({}, "the class name derived from the key at position 1 of lists must be"),  # "1st"
         ({"1st": "Ok"}, r"class names collide: 'Ok' at positions 0, 1; set them in class_names"),
