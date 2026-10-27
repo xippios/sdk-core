@@ -28,7 +28,8 @@ from mcp.server.context import CallNext, HandlerResult, ServerMiddleware, Server
 from mcp.server.mcpserver import MCPServer
 from mcp.types import CallToolResult, TextContent, ToolAnnotations
 
-from xippios.core._loop import as_async, is_bulk_task
+from xippios.core._loop import as_async
+from xippios.core._tasks import is_bulk_task
 from xippios.core.errors import InvalidRequestError, XippiosError
 from xippios.core.mcp.errors import error_to_text
 from xippios.core.mcp.results import cap_result

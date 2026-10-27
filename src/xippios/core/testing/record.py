@@ -62,11 +62,12 @@ async def record(
             ``None`` records a keyless endpoint without the client's key, an
             ``httpx.Auth`` replaces it; the default sends the client's.
         max_bytes: Keep at most this many bytes of a large response body, e.g.
-            ``200_000`` to stay under the 256 KiB fixture cap: a JSON array keeps its
-            first whole elements, a text its first bytes, and the fixture is marked
-            ``truncated`` with the whole body's size, sha256 and, for an array, length
-            (ADR-0019, decision 5; see ``fixture_from_response``). ``None`` keeps it
-            whole.
+            ``80_000``: a JSON array keeps its first whole elements, a text its first
+            bytes, and the fixture is marked ``truncated`` with the whole body's size,
+            sha256 and, for an array, length (ADR-0019, decision 5; see
+            ``fixture_from_response``). It bounds the body, not the file, which escapes
+            the body as a JSON string, text outside ASCII up to three times as long:
+            ``80_000`` keeps a file under the 256 KiB cap. ``None`` keeps it whole.
 
     Raises:
         ValueError: Both ``json`` and ``data``, or ``max_bytes`` below 1, before anything

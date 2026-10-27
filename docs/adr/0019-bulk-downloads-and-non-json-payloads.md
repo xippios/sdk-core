@@ -83,23 +83,43 @@ recorder option and of decision 6, and, at gate 5 of the same day, the JSON-obje
 - **Decision 1**: the default of `auth=` is the client's own credentials, core's own
   sentinel as on `request`, `get` and `get_json`, not httpx's `USE_CLIENT_DEFAULT`, which
   core no longer names (ADR-0015, amendment 2026-10-27): `download(url, dest, *,
-  auth=<the client's>) -> Downloaded`.
+  auth=<the client's>) -> Downloaded`. Two things differ from `get()`: a success's body
+  goes to the file unread, so `observe` and `classify` see its status and headers only (a
+  hook that reads the body finds it unread, which counts as nothing observed and as
+  `None`), and a 1xx or 3xx answer raises `UpstreamError` where `get()` returns it, since
+  redirects are not followed (queue row 82 asks whether a download should follow them).
+  `dest` names a file in a directory that exists: a directory, or a missing one, is
+  refused with `ValueError` before anything is sent.
+- **Decision 2**: `decode_csv(data, *, delimiter=",", source=None)`. The positional
+  parameter is `data`, a path (`Path` or `str`) or a response, so that it does not
+  collide with the `source=` slug its errors carry, as `decode_json`'s and
+  `decode_text`'s do.
 - **Decision 5**: one `max_bytes=`, on `record`, `record_sync` and
-  `fixture_from_response`, cuts texts and JSON arrays alike. A JSON array (a
-  `Content-Type` of `application/json` or `...+json`, or a body that parses as JSON)
-  keeps its first whole elements whose compact JSON text fits in `max_bytes` bytes, and
-  `original_count` records its length; another text is cut at `max_bytes` bytes, back to
-  a whole UTF-8 character. A cut is marked `truncated` with `original_bytes` and
-  `sha256`, both of the whole body before the scrub, which then runs on what is kept. A
-  JSON object is refused: the source records a small real answer, since an object's
-  parts are no list to take the first of. XML is refused for the reason that a cut-off
-  XML document is not well-formed; ZIP, XLSX, gzip, XLS and a body that is not UTF-8
-  text for the reason above. A body within `max_bytes` is kept whole and unmarked. Queue
-  rows 43 (sdk-usda-gats) and 48 are served by this.
+  `fixture_from_response`, cuts texts and JSON arrays alike; it bounds the body, not the
+  fixture file, which escapes the body as a JSON string. A JSON array (a `Content-Type`
+  of `application/json` or `...+json`, or a body that parses as JSON, a byte order mark
+  allowed) is cut at an element boundary in its original text, never re-serialised: the
+  first whole elements that fit in `max_bytes` bytes with a closing `]`, numbers and
+  spacing as upstream wrote them, and `original_count` records its length. Another text
+  is cut at `max_bytes` bytes, back to a whole UTF-8 character and back to the start of
+  a secret value or of the request host the cut would split, so no part of one is kept.
+  A cut is marked `truncated` with `original_bytes` and `sha256`, both of the whole body
+  before the scrub, which then runs on what is kept. A JSON object is refused: the
+  source records a small real answer, since an object's parts are no list to take the
+  first of; so is a body declared JSON that does not parse, an array whose first element
+  alone does not fit, and a text cut that keeps nothing, since an empty sample tells a
+  parser test nothing. XML is refused for the reason that a cut-off XML document is not
+  well-formed; ZIP, XLSX, gzip, XLS and a body that is not UTF-8 text for the reason
+  above. A body within `max_bytes` is kept whole and unmarked, and a fixture that was
+  not cut is written without the four fields, as fixtures were before them. Queue row 43
+  (sdk-usda-gats) and the family's finding that a cut-off JSON object, a JSON-stat cube,
+  does not decode on replay (row 48) are served by this.
 - **Decision 6**, the mechanism: the one rule lives in `xippios.core.redaction`. A name
   is a credential when a whole word of it, between `_`, `-` or the ends, is `api_key`
-  (also `apikey`, `api-key`), `token`, `secret`, `password`, `passwd`, `auth`,
-  `authorization`, `signature`, `credential` or `credentials`; a bare `key` is not. A
+  (also `apikey`, `api-key`), `token`, `secret`, `password`, `passwd`, `pwd`, `auth`,
+  `authorization`, `sig`, `signature`, `credential` or `credentials`; a bare `key` is
+  not. `sig` and `pwd` are on the list because catalog file links can arrive as
+  pre-signed URLs (an Azure SAS carries `sig=`; queue row 84). A
   `QueryKeyAuth(param, ...)` registers `param` when it is built, and the name is a
   credential from then on in the whole process, matched exactly in any letter case: USDA
   NASS's `QueryKeyAuth("key", ...)` makes `key` one, and Eurostat, keyless, keeps its

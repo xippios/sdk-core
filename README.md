@@ -126,10 +126,10 @@ get_series = sync(get_series_async)  # same signature, same docstring, blocks un
 ```
 
 `meta.request` is provenance, not a copy of the call: `ResultMeta` redacts any key that
-names a credential (`api_key`, `token`, `secret`, ... as whole words) so an envelope is
-safe to hand to an agent or return over HTTP. A bare `key` is a credential only where a
-`QueryKeyAuth` sends the key under that name, as above, which registers it for the
-process; elsewhere it is data, as Eurostat's SDMX series `key` is, and so is a
+names a credential (`api_key`, `token`, `secret`, `sig`, ... as whole words) so an
+envelope is safe to hand to an agent or return over HTTP. A bare `key` is a credential
+only where a `QueryKeyAuth` sends the key under that name, as above, which registers it
+for the process; elsewhere it is data, as Eurostat's SDMX series `key` is, and so is a
 `sort_key`. The fixture recorder and the replay helpers redact by the same rule
 (`xippios.core.redaction`). A parameter the caller left `None` was not sent and is left
 out of `meta.request`, so a task passes its parameters as they are.
@@ -262,7 +262,9 @@ call with an `httpx.Auth` of its own bypasses it, neither looked up nor stored.
 An upstream that publishes files (a bulk dataset, a release's CSV or XLS) is read with
 `download`, which streams the body to disk under a temporary name and renames it when it
 is complete; the limiter, the hooks, `classify` and the retries apply as for `get()`, a
-retry restarting the file, and the response cache is never touched:
+retry restarting the file, and the response cache is never touched. The hooks see a
+success's status and headers only, since its body goes to the file unread, and a
+redirect raises `UpstreamError`:
 
 ```python
 from pathlib import Path
@@ -627,11 +629,14 @@ xippios_placeholder_key_envs = ["EXAMPLE_API_KEY"]
   with credentials scrubbed. Never hand-write a fixture. `json=` or `data=` (a form) send
   a body, recorded with its content type. The recording goes through the client as it
   is configured; one that must not retry a 5xx goes through a client whose config says
-  `RetryPolicy(max_attempts=1)`. `max_bytes=` keeps a large answer under the 256 KiB
-  fixture cap: a JSON array keeps its first whole elements, a text its first bytes, and
-  the fixture is marked `truncated` with the whole body's size and sha256 (and an
-  array's length); a JSON object, XML, ZIP, XLSX, gzip, XLS or a body that is not UTF-8
-  text is refused: record a small real answer or sample instead.
+  `RetryPolicy(max_attempts=1)`. `max_bytes=80_000` cuts a large answer's body: a JSON
+  array after its first whole elements, in upstream's own text, a text after its first
+  bytes, never inside a secret or the host, and the fixture is marked `truncated` with
+  the whole body's size and sha256 (and an array's length); a JSON object, XML, ZIP,
+  XLSX, gzip, XLS or a body that is not UTF-8 text is refused: record a small real
+  answer or sample instead. It bounds the body, not the file, which escapes the body as
+  a JSON string, text outside ASCII up to three times as long: 80,000 bytes keep a file
+  under the 256 KiB cap.
 
 `mcp_call(server, "example_get_series", {...})` calls a tool through an in-process MCP
 client, so the server's middleware, a tenant lock included, runs as for a real client;
