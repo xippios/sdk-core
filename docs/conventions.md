@@ -177,9 +177,9 @@ the file's URL or release id plus the filters applied in Python (ADR-0020).
 `request` records what was sent: a parameter the caller left `None` is omitted
 (ADR-0022). It never carries credentials (ADR-0005). `ResultMeta` redacts the value of
 any key that names one, at any depth, to `"REDACTED"` at construction, by the one rule
-of `xippios.core.redaction` (a whole word `api_key`, `token`, `secret`, `password`,
-`auth`, `authorization`, `signature` or `credential`, between `_`, `-` or the ends of
-the name), so an envelope is safe to hand to an agent, return over HTTP, or write to a
+of `xippios.core.redaction` (a whole word `api_key`, `apikey`, `api-key`, `token`,
+`secret`, `password`, `passwd`, `pwd`, `auth`, `authorization`, `sig`, `signature`,
+`credential` or `credentials`, between `_`, `-` or the ends of the name), so an envelope is safe to hand to an agent, return over HTTP, or write to a
 store; personal identifiers in upstream data stay out of it by §3's rule for
 projections (ADR-0017). A bare `key` is not on the list: it is a credential in a process
 where a `QueryKeyAuth` sends the key under that name (USDA NASS), which registers it
@@ -274,12 +274,15 @@ the query can carry a key (ADR-0005).
   auth=...) -> Downloaded` streams the body to `dest` under a temporary name, renames it
   when complete and removes it on failure, and never touches the response cache. The
   limiter, the hooks (`before_request`, `observe`), `classify` and the retry rule apply
-  as they do to `get()`, and `auth` works as it does there; a retry restarts the file.
-  `Downloaded` carries `path`, `bytes`, `content_type`, the file name from
+  as they do to `get()`, and `auth` works as it does there; a retry restarts the file;
+  except that `observe` and `classify` see a success's status and headers only, its
+  body going to the file unread, and a 1xx or 3xx raises `UpstreamError`, since
+  redirects are not followed (ADR-0019, amendment 2026-10-27). `Downloaded` carries `path`, `bytes`, `content_type`, the file name from
   `Content-Disposition` when sent, `etag`, `last_modified` and `retrieved_at`.
 - `decode_text(response)` (charset from `Content-Type`, UTF-8 by default, a BOM
-  stripped) and `decode_csv(source, *, delimiter=",")` (the stdlib's `csv.DictReader`,
-  headers as upstream prints them) sit beside `decode_json`. The source opens gzip and
+  stripped) and `decode_csv(data, *, delimiter=",", source=None)` (a path or a response;
+  the stdlib's `csv.DictReader`, headers as upstream prints them) sit beside
+  `decode_json`. The source opens gzip and
   zip with the stdlib; core ships no XML, spreadsheet or PDF parser (ADR-0019,
   ADR-0020).
 - Credentials come from the client's `auth`. A call to a keyless endpoint on the same
@@ -389,9 +392,11 @@ route: `router_from_tasks` skips it, and no route returns a file path (ADR-0019)
   compressed file cannot be parsed and a cut-off XML document is not well-formed; byte
   truncation (`max_bytes=`) applies to text bodies, and the recorder refuses it for those
   formats and for a body that is not UTF-8 text; a JSON array is truncated by elements:
-  the recorder keeps the first N whose compact JSON text fits, marks `truncated: true`
-  and records the full count (`original_count`) and the sha256; a JSON object is
-  refused, and the source records a small real answer (ADR-0019, amendment 2026-10-27).
+  the recorder cuts its original text after the first N elements that fit, never
+  re-serialising them, marks `truncated: true` and records the full count
+  (`original_count`) and the sha256; a JSON object is refused, and the source records a
+  small real answer (ADR-0019, amendment 2026-10-27). `max_bytes` bounds the body, not
+  the fixture file, which escapes the body as a JSON string.
   A test on a sample or a truncated fixture asserts the parser's shape, never a size.
 - A file-distributed source keeps a sample of each file kind under
   `tests/fixtures/files/<file_kind>/<case>.*` with a provenance line: the release id, the
