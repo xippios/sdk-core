@@ -558,8 +558,8 @@ window=86400, spent=...)` is unaffected: `spent=` stays.
 - `scripts/refresh_reference.py` and `.claude/commands/refresh-reference-data.md`
   (sdk-comtrade) — the per-class rewrite of each docstring with its list's date →
   `fetched={name: date, ...}`; its notes leave the class docstrings, which reach the
-  agent, for `reference/README.md`; the command's ruff step and its note on row 12 go,
-  since the script runs ruff — C7, rows 32 b, 39 c.
+  agent, for the packaged list's `note` (`PackagedList(note=...)`); the command's ruff
+  step and its note on row 12 go, since the script runs ruff — C7, rows 32 b, 39 c.
 - `scripts/refresh_reference.py` (usda-psd, usda-esr, usda-gats) — the refusal of a value
   list and an id list together and `--render-only`'s refusal of lists fetched on
   different days go — rows 31 c, 32 b.
