@@ -10,12 +10,15 @@ class Row(UpstreamModel):
     when: datetime
 
 
-def envelope(count: int, total: int | None = None) -> Result[list[Row]]:
+def envelope(
+    count: int, total: int | None = None, request: dict[str, object] | None = None
+) -> Result[list[Row]]:
     meta = ResultMeta(
         source="example",
         endpoint="rows",
         retrieved_at=datetime(2026, 10, 20, tzinfo=UTC),
         total=total,
+        request=request or {},
     )
     return Result[list[Row]](
         data=[Row(n=i, when=datetime(2026, 1, 1, tzinfo=UTC)) for i in range(count)], meta=meta
@@ -56,6 +59,23 @@ def test_the_default_note_promises_no_filter() -> None:
     )
     assert "filter" not in payload["note"]
     assert "date range" not in payload["note"]
+
+
+def test_a_capped_list_with_an_integer_start_says_where_to_resume() -> None:
+    # Row 21 b (sdk-cashctrl): an offset-paged task records start in meta.request.
+    capped = json.loads(cap_result(envelope(500, request={"start": 100}), ResultCap(max_rows=10)))
+    assert capped["note"] == (
+        "showing 10 of 500 rows (cap: 10 rows or 65536 bytes); narrow the query to see the "
+        "rest; resume with start=110"
+    )
+
+
+def test_no_integer_start_no_resume_hint() -> None:
+    requests: list[dict[str, object]] = [{}, {"start": "100"}, {"start": True}]
+    for request in requests:
+        note = json.loads(cap_result(envelope(50, request=request), ResultCap(max_rows=5)))["note"]
+        assert note.endswith("narrow the query to see the rest")
+    assert "resume" not in json.loads(cap_result(envelope(5, request={"start": 0})))
 
 
 def test_a_cap_note_is_used_verbatim_after_the_counts() -> None:
