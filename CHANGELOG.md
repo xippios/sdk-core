@@ -6,137 +6,166 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-27
+
+The family review of 2026-10-25 in one minor: its core items C1 to C11 and C13 to C15
+(C12 shipped in 0.2.1), each named below with what it did; the code of ADR-0019 (bulk
+downloads and non-JSON payloads) and ADR-0022 (packaged answers and release times),
+whose rules 0.2.1 shipped as documentation; and ADR-0024, under which sdk-cashctrl
+stands alone: tenants, the tenant lock, `assert_write_tools` and the recorder's host
+placeholder, encoded matching, JSON verify and `rewrite` leave core for it. What had no
+consumer is deleted and the export lists keep what consumers import (ADR-0023); what
+sdk-usda-psd, sdk-usda-esr and sdk-usda-gats carried as copies, the api.data.gov gateway
+and the packaged lists with their refusals, is core's now. Conventions 1.16 to 1.21 come
+with it (0.2.1 shipped 1.15). While core is 0.x a minor keeps no compatibility with the
+one before it (conventions §12): a source moves to `xippios-core~=0.3.0` and adopts this
+release in one adoption PR before its next release, through conventions §15 with
+`/adopt-release` (ADR-0018), and the rules of ADR-0019 and ADR-0022 bind it from that
+adoption (conventions, header of 1.21). "Hand-apply for sources" below lists, per
+source, what that PR changes by hand; the section "Adopting core 0.3.0" of
+[`docs/handover.md`](https://github.com/xippios/sdk-core/blob/main/docs/handover.md), in
+the repository and not in the sdist, walks the same items through §15.
+
+The test suite counts 6,830 lines, from 8,072 at 0.2.1 and 7,546 at 0.2.0, by
+`git ls-files 'tests/**/*.py' 'tests/*.py' | xargs cat | wc -l`, against the family
+review's target of about 4,500 to 5,000. It stays above the target: the deletions with
+no consumer took 834 lines and the move to sdk-cashctrl 1,271, while the tests of the
+new code added 863 net, 29 for the gateway module after the slimmed quota policy's tests
+went, 494 for the downloads, the recorder's truncation and the redaction rule, 310 for
+the packaged answers, and 30 for the renderer, the argument check, the payload-free
+parse failures, the cache clearing and the live run's quota summary, after 214 lines of
+renderer tests went.
+
 ### Removed
 
-- **`xippios.core.config` and the `pydantic-settings` dependency** (ADR-0002, amendment
-  2026-10-27; ADR-0023, decision 5; no consumer, counted by the family review of
-  2026-10-25): `SourceSettings` goes; `resolve_api_key`, whose one caller was
+- **`xippios.core.config` and the `pydantic-settings` dependency** (the family review's
+  C1, a settings module with no consumer; ADR-0002, amendment 2026-10-27; ADR-0023,
+  decision 5): `SourceSettings` goes; `resolve_api_key`, whose one caller was
   `EnvKeyAuth`, is folded into `xippios.core.client.auth` as a private helper with the
   same behaviour for that caller and the same `ConfigError` message. `pydantic` stays,
   `SecretStr` with it. Conventions 1.16 §7: the environment is read through the
   `EnvKeyAuth` helpers.
-- **The sync `Client`** (ADR-0002 and ADR-0015, amendments 2026-10-27; no consumer):
-  every source derives its sync task functions with `xippios.core.sync`, which stays.
-  `xippios.core.client` no longer re-exports `UseClientDefault`, and core no longer
-  imports it from httpx's private `httpx._client`: `auth=` keeps its three states on
-  `AsyncClient.request`, `get` and `get_json` and on `record` and `record_sync` (the
-  client's credentials by default, `None` for none, an `httpx.Auth` to replace them),
-  its default now a sentinel of core's own.
+- **The sync `Client`** (the family review's C2, a sync client with no consumer;
+  ADR-0002 and ADR-0015, amendments 2026-10-27): every source derives its sync task
+  functions with `xippios.core.sync`, which stays. `xippios.core.client` no longer
+  re-exports `UseClientDefault`, and core no longer imports it from httpx's private
+  `httpx._client`: `auth=` keeps its three states on `AsyncClient.request`, `get` and
+  `get_json` and on `record` and `record_sync` (the client's credentials by default,
+  `None` for none, an `httpx.Auth` to replace them), its default now a sentinel of
+  core's own.
 - **`AsyncClient.derive`, the `limiter=` argument and the `limiter` property, and
-  `retry=` and `timeouts=` on `record` and `record_sync`** (ADR-0015, amendment
-  2026-10-27; the overrides queue row 12 asked for, found by sdk-comtrade; no source
-  calls them): the rate limiter is built from `config.rate_limit` alone, and the testing
-  plugin, which patches `TokenBucket.acquire`, needs neither. A recording goes through
-  the client it is given; one that must not retry a 5xx records through a client whose
+  `retry=` and `timeouts=` on `record` and `record_sync`** (the family review's C3,
+  overrides no source calls; ADR-0015, amendment 2026-10-27; asked for by sdk-comtrade):
+  the rate limiter is built from `config.rate_limit` alone, and the testing plugin,
+  which patches `TokenBucket.acquire`, needs neither. A recording goes through the
+  client it is given; one that must not retry a 5xx records through a client whose
   config says `RetryPolicy(max_attempts=1)`. `auth=` per call stays: sdk-comtrade
   records its keyless reference files with it.
-- **`paginate_pages` and `paginate_cursor`** (no consumer): `paginate_offset` keeps its
-  signature, and its docstring shows how a page-numbered endpoint maps the offset to its
-  page, `page = first_page + offset // page_size`. sdk-cashctrl, its one consumer, is
-  unaffected.
-- **26 names leave the export lists** (ADR-0023, decision 5: an `__init__.py` exports
-  only what consumers import), each still importable from the module that defines it:
+- **`paginate_pages` and `paginate_cursor`** (the family review's C4, page paging folded
+  into offset paging and cursor paging deleted; no consumer): `paginate_offset` keeps
+  its signature, and its docstring shows how a page-numbered endpoint maps the offset to
+  its page, `page = first_page + offset // page_size`. sdk-cashctrl, its one consumer,
+  is unaffected.
+- **26 names leave the export lists** (the family review's C5, the public surface cut to
+  what consumers import; ADR-0023, decision 5: an `__init__.py` exports only what
+  consumers import), each still importable from the module that defines it:
   `CacheBackend`, `EnvKeyAuth`, `QuotaSnapshot` and `load_csv` from `xippios.core`;
-  `CacheBackend`, `EnvKeyAuth`, `QuotaSnapshot`, `WIRE_HEADERS`, `Params`, `TokenBucket`,
-  `send_with_retries` and `strip_wire_headers` from `xippios.core.client`; `LIVE_ENV`,
-  `PLACEHOLDER_KEY`, `FixtureRequest`, `live_enabled`, `mount_fixture`, `replay`,
-  `write_fixture`, `scrub_headers`, `scrub_params` and `scrub_url` from
-  `xippios.core.testing`; `is_write_server`, `quiet_request_logging` and
-  `register_tasks` from `xippios.core.mcp`; `PROBLEM_MEDIA_TYPE`, `STATUS_BY_ERROR`,
-  `install_error_handlers` and `problem_response` from `xippios.core.http`. With the
-  six deleted names above, the five lists go from 113 entries (98 names) to 81 (69
-  names). No source imports a removed name from a package.
+  `CacheBackend`, `EnvKeyAuth`, `QuotaSnapshot`, `WIRE_HEADERS`, `Params`,
+  `TokenBucket`, `send_with_retries` and `strip_wire_headers` from
+  `xippios.core.client`; `LIVE_ENV`, `PLACEHOLDER_KEY`, `FixtureRequest`,
+  `live_enabled`, `mount_fixture`, `replay`, `write_fixture`, `scrub_headers`,
+  `scrub_params` and `scrub_url` from `xippios.core.testing`; `is_write_server`,
+  `quiet_request_logging` and `register_tasks` from `xippios.core.mcp`;
+  `PROBLEM_MEDIA_TYPE`, `STATUS_BY_ERROR`, `install_error_handlers` and
+  `problem_response` from `xippios.core.http`. With the six deleted names above, the
+  five lists go from 113 entries (98 names) to 81 (69 names); with the names added below
+  and the three that move out, 88 (74) at 0.3.0. No source imports a removed name from a
+  package.
 - **`QuotaPolicy`'s `reset_header`, with the reset header's three formats** (the family
-  review's C6; ADR-0015, amendment 2026-10-27; no source sets it, and api.data.gov sends
-  no reset header): delay-seconds, epoch seconds and an HTTP-date are no longer read. A
-  spent quota is back after a 429's `Retry-After`, the seconds `spent` names, or
-  `window`, each cut to `window`.
-- **`QuotaPolicy.mark_spent`** (C6; no caller): `spent=` stays, for an upstream that
-  answers a spent limit with something other than a 429.
-- **The per-config cap and the hook check of `QuotaPolicy.install`** (C6): `install` no
-  longer binds the pause to each config's `retry.backoff_max` through a hook of its own,
-  nor refuses with `ValueError` a config that has a `before_request` or `observe` hook of
-  its own; `pause_cap=None` and the 30 s of a `before_request` called directly go with
-  them (Changed, below).
-
-- **The recorder's substring credential pattern** (the family review's C10; ADR-0005
-  and ADR-0019, amendments 2026-10-27; found in the Eurostat design round, ADR-0019's
-  context: its SDMX series `key` would have been redacted): `scrub_params`, `scrub_url`
-  and every recording no longer redact a query parameter whose name merely contains
-  `key`, `pass`, `auth`, `sig`, `cred`, `token` or `secret` (`keyword`, `passport`,
-  `author`, `design`); they read the whole-word rule of `xippios.core.redaction`
-  (Changed, below).
-- **`is_credential_key` and `redact_credentials` leave `xippios.core.models`** (ADR-0023,
-  decision 5; no consumer): the rule's functions live in `xippios.core.redaction`, as
-  `is_credential_name` and `redact_credentials`. `xippios.core.models.REDACTED` stays.
-
+  review's C6, a slimmer `QuotaPolicy`; ADR-0015, amendment 2026-10-27; no source sets
+  it, and api.data.gov sends no reset header): delay-seconds, epoch seconds and an
+  HTTP-date are no longer read. A spent quota is back after a 429's `Retry-After`, the
+  seconds `spent` names, or `window`, each cut to `window`.
+- **`QuotaPolicy.mark_spent`** (the family review's C6; no caller): `spent=` stays, for
+  an upstream that answers a spent limit with something other than a 429.
+- **The per-config cap and the hook check of `QuotaPolicy.install`** (the family
+  review's C6): `install` no longer binds the pause to each config's `retry.backoff_max`
+  through a hook of its own, nor refuses with `ValueError` a config that has a
+  `before_request` or `observe` hook of its own; `pause_cap=None` and the 30 s of a
+  `before_request` called directly go with them (Changed, breaking, below).
+- **The recorder's substring credential pattern** (the family review's C10, one
+  redaction rule; ADR-0005 and ADR-0019, amendments 2026-10-27; found in the Eurostat
+  design round, ADR-0019's context: its SDMX series `key` would have been redacted):
+  `scrub_params`, `scrub_url` and every recording no longer redact a query parameter
+  whose name merely contains `key`, `pass`, `auth`, `sig`, `cred`, `token` or `secret`
+  (`keyword`, `passport`, `author`, `design`); they read the whole-word rule of
+  `xippios.core.redaction` (Changed, breaking, below).
+- **`is_credential_key` and `redact_credentials` leave `xippios.core.models`** (the
+  family review's C10; ADR-0023, decision 5; no consumer): the rule's functions live in
+  `xippios.core.redaction`, as `is_credential_name` and `redact_credentials`.
+  `xippios.core.models.REDACTED` stays.
 - **`render_str_enums` and `render_int_enums`, with the renderers' ruff layout** (the
-  family review's C7; ADR-0008, amendment 2026-10-27; ADR-0023, decision 5; found by
-  sdk-comtrade, queue row 12, and by sdk-template, rows 31 c and 32 b): `render_enums`
-  (Added, below) replaces both. The quote choice, the parenthesised and split long
-  values, `__all__` sorted as RUF022 sorts it, the wrapped docstrings and the refusal of
-  a member name too long for a line go: the refresh script's `ruff format` and
-  `ruff check --fix` do that work. Every source re-renders `enums.py` at its adoption
-  through the template's script.
-- **The testing plugin's patches of httpx's transports** (the family review's C11;
-  ADR-0013, amendment 2026-10-27): `httpx.HTTPTransport.handle_request` and
-  `httpx.AsyncHTTPTransport.handle_async_request` are no longer patched (Changed, below).
-
-- **`Tenants` and `list_task` move to sdk-cashctrl** (the family review's C8; ADR-0024,
-  superseding ADR-0014's decisions 1 to 4, 6 and 11; Johannes's decision of 2026-10-25
-  that sdk-cashctrl stands alone; queue rows 3 and 24 b, found by sdk-cashctrl):
-  `xippios.core.tenants` is deleted and `Tenants` leaves `xippios.core`'s export list. The
-  last commit that holds the code is the commit on `main` that merges the PR before this
-  move, named in `docs/handover.md`'s Adopting core 0.3.0 section: `git show <that
-  sha>:src/xippios/core/tenants.py`, tested in `tests/test_tenants.py`.
-  `ResultMeta.tenant` stays.
-- **`TenantLock` moves to sdk-cashctrl** (C8; ADR-0024, superseding ADR-0014's decision
-  7; queue row 3, found by sdk-cashctrl): `build_server` and `register_tasks` lose
-  `tenant_lock=`, and the lock's middleware, the refusal of a tenant parameter with a
-  default on a locked server, the instructions sentence and the narrowing of a
-  `list_task` tool go with it. At that commit:
-  `src/xippios/core/mcp/server.py` (`TenantLock`, `_lock_middleware`, `_check_lock`,
-  `_defaulted`, `_declares`, `_refusal`, `_lock_sentence`, `_only_the_locked_tenant`, the
-  `narrow` argument of `_as_tool`), tested in `tests/mcp/test_lock.py`. `TenantLock`
-  leaves `xippios.core.mcp`'s export list. The `confirm` check, `is_write_server`,
-  `main`'s loopback rule and option hooks, and `mcp_call` and `mcp_call_text` stay.
-- **`assert_write_tools` moves to sdk-cashctrl** (C8; ADR-0024; queue rows 7, its write
-  parts, and 26 f, found by sdk-cashctrl): with `_tool_names` and `_serves`, at that
-  commit in `src/xippios/core/testing/adapters.py`, tested in
-  `tests/testing/test_adapters.py`; it leaves `xippios.core.testing`'s export list, and
-  the family check's write-server test, which called it, goes (Changed, below).
+  family review's C7, a renderer that leaves the layout to ruff; ADR-0008, amendment
+  2026-10-27; ADR-0023, decision 5; found by sdk-comtrade and by sdk-template):
+  `render_enums` (Added, below) replaces both. The quote choice, the parenthesised and
+  split long values, `__all__` sorted as RUF022 sorts it, the wrapped docstrings and the
+  refusal of a member name too long for a line go: the refresh script's `ruff format`
+  and `ruff check --fix` do that work. Every source re-renders `enums.py` at its
+  adoption through the template's script.
+- **The testing plugin's patches of httpx's transports** (the family review's C11, the
+  network guard on the connection pools only; ADR-0013, amendment 2026-10-27):
+  `httpx.HTTPTransport.handle_request` and
+  `httpx.AsyncHTTPTransport.handle_async_request` are no longer patched (Changed,
+  below).
+- **`Tenants` and `list_task` move to sdk-cashctrl** (the family review's C8, the
+  multi-tenant pieces with one consumer out of core; ADR-0024, superseding ADR-0014's
+  decisions 1 to 4, 6 and 11; Johannes's decision of 2026-10-25 that sdk-cashctrl stands
+  alone; found by sdk-cashctrl): `xippios.core.tenants` is deleted and `Tenants` leaves
+  `xippios.core`'s export list. The last commit that holds the code is
+  `cb8ecdf379c04522e5f1dcd91ea5e8bdfa1fb3ff` on `main`, named in `docs/handover.md`'s
+  "Adopting core 0.3.0" section:
+  `git show cb8ecdf379c04522e5f1dcd91ea5e8bdfa1fb3ff:src/xippios/core/tenants.py`,
+  tested in `tests/test_tenants.py`. `ResultMeta.tenant` stays.
+- **`TenantLock` moves to sdk-cashctrl** (the family review's C8; ADR-0024, superseding
+  ADR-0014's decision 7; found by sdk-cashctrl): `build_server` and `register_tasks`
+  lose `tenant_lock=`, and the lock's middleware, the refusal of a tenant parameter with
+  a default on a locked server, the instructions sentence and the narrowing of a
+  `list_task` tool go with it. At that commit: `src/xippios/core/mcp/server.py`
+  (`TenantLock`, `_lock_middleware`, `_check_lock`, `_defaulted`, `_declares`,
+  `_refusal`, `_lock_sentence`, `_only_the_locked_tenant`, the `narrow` argument of
+  `_as_tool`), tested in `tests/mcp/test_lock.py`. `TenantLock` leaves
+  `xippios.core.mcp`'s export list. The `confirm` check, `is_write_server`, `main`'s
+  loopback rule and option hooks, and `mcp_call` and `mcp_call_text` stay.
+- **`assert_write_tools` moves to sdk-cashctrl** (the family review's C8; ADR-0024; the
+  write checks found by sdk-cashctrl): with `_tool_names` and `_serves`, at that commit
+  in `src/xippios/core/testing/adapters.py`, tested in `tests/testing/test_adapters.py`;
+  it leaves `xippios.core.testing`'s export list, and the family check's write-server
+  test, which called it, goes (Changed, below).
 - **`Scrub(host=...)`, `Scrub(rewrite=...)`, the percent-encoded matching of secrets and
-  the JSON-decoded verify move to sdk-cashctrl** (the family review's C9; ADR-0024;
-  ADR-0023, decision 3 (b): a recorder's pre-write hooks are the source's; queue rows 1,
-  its host part, 23 and 26 c, found by sdk-cashctrl): `host` with its checks and the
-  placeholder it wrote into the URL, the headers and the bodies, `rewrite`,
+  the JSON-decoded verify move to sdk-cashctrl** (the family review's C9, the recorder's
+  extras with one consumer out of core; ADR-0024; ADR-0023, decision 3 (b): a recorder's
+  pre-write hooks are the source's; found by sdk-cashctrl): `host` with its checks and
+  the placeholder it wrote into the URL, the headers and the bodies, `rewrite`,
   `_plain_or_encoded`, the host forms, `_json_strings` and `_strings`. At that commit:
   `src/xippios/core/testing/scrub.py`, tested in `tests/testing/test_scrub.py`,
   `tests/testing/test_fixtures.py` and `tests/testing/test_record_replay.py`. With the
-  three names above, the export lists hold 41 names in `xippios.core`, 7 in
-  `xippios.core.mcp` and 19 in `xippios.core.testing`.
+  three names above, the five export lists hold 41 names in `xippios.core`, 18 in
+  `xippios.core.client`, 7 in `xippios.core.mcp`, 3 in `xippios.core.http` and 19 in
+  `xippios.core.testing`: 88 entries, 74 names.
 
-### Changed
+### Changed (breaking)
 
-- **`pause_cap` is the one bound of a quota pause** (C6; ADR-0010, decision 4, and
-  ADR-0015, amended 2026-10-27): 30.0 by default, the default `backoff_max`, whether
-  `before_request` runs as the hook or is called directly; a config's
-  `retry.backoff_max` bounds the retries alone.
-- **`QuotaPolicy.install(config)` sets the policy's own hooks** (C6):
-  `dataclasses.replace(config, before_request=policy.before_request,
+- **`pause_cap` is the one bound of a quota pause** (the family review's C6; ADR-0010,
+  decision 4, and ADR-0015, amended 2026-10-27): 30.0 by default, the default
+  `backoff_max`, whether `before_request` runs as the hook or is called directly; a
+  config's `retry.backoff_max` bounds the retries alone.
+- **`QuotaPolicy.install(config)` sets the policy's own hooks** (the family review's
+  C6): `dataclasses.replace(config, before_request=policy.before_request,
   observe=policy.observe)`, reading nothing else from the config. Hooks the config had
   are replaced; a source that needs hooks of its own as well composes them itself.
   Installing again changes nothing. Since the hook is `before_request` itself, a
-  subclass's override is called through it; the testing plugin still turns off the
-  pause step alone.
-- **The api.data.gov 429's wait comes from the quota snapshot** (queue row 30 c, found
-  by sdk-usda-psd): the gateway's `classify` counts to `Gateway.policy.snapshot()`'s
-  `resumes_at` on the policy's clock, since `observe` ran before it, instead of
-  restating "`Retry-After`, else the window" as the three copies did; no
-  `QuotaPolicy.wait_for` is added. Its message names the gateway's allowance, that every
-  package using the key shares it, and the quota as the snapshot reports it, or the wait
-  in seconds where no snapshot shows it spent, and no longer says what was retried: the
-  retry loop's bound decides that.
+  subclass's override is called through it; the testing plugin still turns off the pause
+  step alone.
 - **`key` is a credential only where a `QueryKeyAuth` sends it** (the family review's
   C10; ADR-0019, decision 6, amended 2026-10-27; found in the Eurostat design round,
   ADR-0019's context). The one rule of `xippios.core.redaction` names credentials by
@@ -148,67 +177,37 @@ All notable changes to this project are documented here. The format follows
   any letter case. USDA NASS's `QueryKeyAuth("key", ...)` keeps its `key` redacted;
   Eurostat, keyless, keeps its SDMX `key` as data; a `sort_key` is data everywhere. A
   process that imports both redacts `key` for both.
-- **One rule for the envelope, the recorder and replay** (C10, ADR-0005, amended
-  2026-10-27): `ResultMeta.request`, the recorder's scrub, `sent_urls`, `sent_query`,
-  `recorded_query` and `mount_fixture` read `xippios.core.redaction`; `scrub_params`,
-  `scrub_url` and `scrub_headers` move there (the header list unchanged) and stay
-  importable from `xippios.core.testing.scrub`; `models.REDACTED`,
-  `testing.REDACTED` and `redaction.REDACTED` are one object. `recorded_query` reads the
-  recorded URL through `scrub_url` again, and `match_params` naming a credential is
-  refused by name ("names a credential, which a fixture holds as REDACTED") before its
-  value is looked at.
-- **`ResultCap` is defined in `xippios.core.models` and exported from `xippios.core`**
-  (queue row 30 a, found by sdk-usda-psd; the per-tool cap of ADR-0016): a source's
-  `tasks.py` declares its `MCP_CAPS` without the `mcp` extra and without the
-  `ImportError` guard around the import. `xippios.core.mcp` keeps re-exporting it, and
-  `cap_result` stays there.
-- **`.claude/settings.json`** (queue row 31 b, found by sdk-template, which copies the
-  file verbatim): `gh pr merge --auto` is allowed and `gh pr merge` is no longer denied,
-  as in the workspace root's settings. A deny shadows every allow, so the session's one
-  merge action, enabling auto-merge (ADR-0018, amendment (e)), was refused here.
-- `gates.yml` calls the gates repository under its new name `xippios/sdk-gates` (renamed
-  from `.github` on 2026-10-27).
-
-- **`ResultMeta` refuses a field it does not define** (queue row 21 a, found by
-  sdk-cashctrl; ADR-0012, amendment 2026-10-27): `extra="forbid"`, so a misspelt
-  `totl=3` raises pydantic's `ValidationError` ("Extra inputs are not permitted")
-  instead of losing the count without a word. The model is otherwise as it was, not
-  frozen.
-- **`meta.request` omits a parameter left `None`** (ADR-0022, rule 3; queue row 28 b,
-  found by sdk-usda-psd): `ResultMeta` drops a top-level `None` at construction, before
-  the credential rule, so a task passes its parameters as they are and a credential left
+- **One rule for the envelope, the recorder and replay** (the family review's C10;
+  ADR-0005, amended 2026-10-27): `ResultMeta.request`, the recorder's scrub,
+  `sent_urls`, `sent_query`, `recorded_query` and `mount_fixture` read
+  `xippios.core.redaction`; `scrub_params`, `scrub_url` and `scrub_headers` move there
+  (the header list unchanged) and stay importable from `xippios.core.testing.scrub`;
+  `models.REDACTED`, `testing.REDACTED` and `redaction.REDACTED` are one object.
+  `recorded_query` reads the recorded URL through `scrub_url` again, and `match_params`
+  naming a credential is refused by name ("names a credential, which a fixture holds as
+  REDACTED") before its value is looked at.
+- **`ResultMeta` refuses a field it does not define** (ADR-0012, amendment 2026-10-27;
+  found by sdk-cashctrl): `extra="forbid"`, so a misspelt `totl=3` raises pydantic's
+  `ValidationError` ("Extra inputs are not permitted") instead of losing the count
+  without a word. The model is otherwise as it was, not frozen.
+- **`meta.request` omits a parameter left `None`** (ADR-0022, rule 3; found by
+  sdk-usda-psd): `ResultMeta` drops a top-level `None` at construction, before the
+  credential rule, so a task passes its parameters as they are and a credential left
   `None` is not recorded as sent; a `None` inside a nested mapping is kept as given.
-- **A packaged answer's `retrieved_at` is the list's fetch time, read from `fetched`**
-  (ADR-0022, rule 1 and amendment 2026-10-27; row 28 a, found by sdk-usda-psd):
-  `PackagedList.fetched` is a timezone-aware UTC time, and a file whose `fetched` is a
-  bare date, every packaged file so far, reads as 00:00 UTC of that day, the start of
-  the day the refresh scripts truncated the time to; a source's next refresh writes the
-  full time. The sources answered with the time of the call and put the fetch date into
-  `vintage`, which now holds an upstream release identifier only.
-
-- **Parse failures print no payload** (queue row 42, found by sdk-cashctrl): `parse`,
-  `UpstreamModel.project`, `load_table`, `PackagedList.load`, `decode_json`, `decode_text`
-  and `decode_csv` build their `ValidationError` and raise it `from None` through a
-  private helper whose frame holds the error alone. The text folds in the cause's
-  location, error type and message (`example get_thing: 1 validation error(s); first at
-  1.value (float_parsing): Input should be a valid number, ...`), json's message and
-  position, the decoder's reason or the csv module's message, never an input value; the
-  payload stays on `raw`, and the error's `repr` is its message. So neither pydantic's
-  chained error, whose text quoted every failing value, nor the raising frame's arguments
-  reach a printed traceback: under pytest's default `--tb=auto` the function that holds
-  the payload is a middle entry, printed short. `project`, `load_table` and
-  `PackagedList.load` raised pydantic's own `ValidationError` before and raise the
-  taxonomy's now. Row 42's core half is closed in core; the template's `--tb=short` on
-  the live run stays as a second guard.
-- **The network guard sits on httpcore's connection pools only** (C11; ADR-0013,
-  amendment 2026-10-27): `httpcore.ConnectionPool.handle_request` and
-  `httpcore.AsyncConnectionPool.handle_async_request`, which every default httpx
-  transport sends through, proxies included. The refusal, its message and its edges are
-  unchanged: respx answers a mocked request, a route that passes through meets the
-  refusal, and a transport a test passes itself bypasses it. The plugin's docstrings name
-  the decision of ADR-0013 they implement instead of restating it, and the
-  `rate_limited` marker's text names the quota pause it keeps as well.
-
+- **Parse failures print no payload** (conventions §5: errors never leak tracebacks;
+  found by sdk-cashctrl in a live test's traceback): `parse`, `UpstreamModel.project`,
+  `load_table`, `PackagedList.load`, `decode_json`, `decode_text` and `decode_csv` build
+  their `ValidationError` and raise it `from None` through a private helper whose frame
+  holds the error alone. The text folds in the cause's location, error type and message
+  (`example get_thing: 1 validation error(s); first at 1.value (float_parsing): Input
+  should be a valid number, ...`), json's message and position, the decoder's reason or
+  the csv module's message, never an input value; the payload stays on `raw`, and the
+  error's `repr` is its message. So neither pydantic's chained error, whose text quoted
+  every failing value, nor the raising frame's arguments reach a printed traceback:
+  under pytest's default `--tb=auto` the function that holds the payload is a middle
+  entry, printed short. `project`, `load_table` and `PackagedList.load` raised
+  pydantic's own `ValidationError` before and raise the taxonomy's now. The template's
+  `--tb=short` on the live run stays as a second guard.
 - **Core's recording verify is plain** (the family review's C9; Johannes's decision of
   2026-10-27; ADR-0024, decision 3; ADR-0005, amended 2026-10-27): `Scrub(secrets=...)`
   replaces each value as given, the longest first, in the letter case given, and before
@@ -216,125 +215,135 @@ All notable changes to this project are documented here. The format follows
   text bodies for each value as given. A hit refuses the exchange with "the scrubbed
   fixture still holds a secret value in the <location>; it is refused before anything is
   written", the location `request URL` (it read `url`), `request header '<name>'`,
-  `response header '<name>'`, `request body` or `response body`, never the value. A value
-  percent-encoded or behind a JSON escape is no longer found by core, and header names are
-  scrubbed but no longer searched.
-- **The binary-body refusal is neutral** (queue row 24 a, found by sdk-cashctrl): "a
-  binary body cannot be scrubbed; the recording is refused unless
-  Scrub(allow_binary=True) stores it base64, flagged", which no longer tells every caller
-  to pass the flag.
-- **The family check has ten tests** (the family review's C8; Johannes's decision of
-  2026-10-27; ADR-0024):
-  `test_family_write_server_serves_the_write_tasks` is gone, and a source's write server
-  is its own to test. The write tasks of `tasks_write` stay in
-  `test_family_tasks_return_results`, `test_family_tasks_carry_agent_docstrings` and the
-  README status table.
+  `response header '<name>'`, `request body` or `response body`, never the value. A
+  value percent-encoded or behind a JSON escape is no longer found by core, and header
+  names are scrubbed but no longer searched.
+- **The binary-body refusal is neutral** (ADR-0024, decision 5; found by sdk-cashctrl):
+  "a binary body cannot be scrubbed; the recording is refused unless
+  Scrub(allow_binary=True) stores it base64, flagged", which no longer tells every
+  caller to pass the flag.
+- **Arguments a tool's schema refuses are answered in conventions §8's form** (ADR-0014,
+  amendment 2026-10-27; found by sdk-usda-esr): `register_tasks`, and `build_server`
+  through it, installs one middleware per server that validates a call's arguments with
+  the argument model the `mcp` SDK builds for the tool and answers a refusal before the
+  tool runs as `error: InvalidRequestError: <argument>: <message>`, the first error with
+  the count when there are several. The SDK answered an MCP error, `Error executing tool
+  ...` with pydantic's text, its URL and the input value. The SDK runs
+  `server.middleware` outermost-first, so a source's own middleware appended later runs
+  inside the check, and one placed ahead of it in the list runs first; task errors keep
+  their path. A family invariant (ADR-0023, decision 3 (a)).
+- **A capped list says where to resume** (ADR-0016, amendment 2026-10-27; found by
+  sdk-cashctrl): `cap_result` ends the note of a cut list whose `meta.request` records
+  an integer `start`, an offset-paged task's, with `; resume with start=<start +
+  shown>`; every other note is unchanged.
 
 ### Added
 
 - **`BODY_LIMIT`, `error_from_response` and `parse_retry_after` exported from
-  `xippios.core`** (ADR-0023, decision 5: a name keeps or gains its export when a
-  consumer imports it): sdk-cashctrl imports the first two from `xippios.core.errors`,
-  and sdk-usda-psd, then sdk-usda-esr and sdk-usda-gats, the third. The module path
-  keeps working.
-- **`xippios.core.data_gov`, the api.data.gov gateway module** (the family review's C14;
-  ADR-0009, amendment 2026-10-27; ADR-0023; queue row 30 d, found by sdk-usda-psd, and
-  row 39 e, by sdk-usda-gats). `Gateway(source)` gives `auth`, a `HeaderKeyAuth` on
-  `X-Api-Key` from `DATA_GOV_API_KEY` with the source's slug for its `ConfigError`;
-  `classify(response)`, the gateway's `API_KEY_*` answer to a 401 or 403 as `AuthError`,
-  its 429 as `RateLimitError` and its `NOT_FOUND` 404 as `NotFoundError`, in the source's
-  name with the gateway's URL written `<host>`, and `None` for every other answer; and
-  `install(config)`, the hooks of `Gateway.policy`, one `QuotaPolicy` per process on
-  `x-ratelimit-limit` and `x-ratelimit-remaining` with a one-hour window, which every
-  source in the process shares. The policy's refusal before sending speaks for
-  `api.data.gov` and names the variable. `API_KEY_ENV`, `KEY_HEADER`, `WINDOW`,
-  `LIMIT_HEADER` and `REMAINING_HEADER` come with it. Consumers: sdk-usda-psd,
-  sdk-usda-esr and sdk-usda-gats, which carry the same code as copies today, and the
-  template's api.data.gov gateway answer of v0.3.0. Imported from its module;
-  `xippios.core` does not re-export it.
-
+  `xippios.core`** (the family review's C5; ADR-0023, decision 5: a name keeps or gains
+  its export when a consumer imports it): sdk-cashctrl imports the first two from
+  `xippios.core.errors`, and sdk-usda-psd, then sdk-usda-esr and sdk-usda-gats, the
+  third. The module path keeps working.
+- **`xippios.core.data_gov`, the api.data.gov gateway module** (the family review's C14,
+  one module for the gateway three sources copied; ADR-0009, amendment 2026-10-27;
+  ADR-0023; found by sdk-usda-psd and by sdk-usda-gats). `Gateway(source)` gives `auth`,
+  a `HeaderKeyAuth` on `X-Api-Key` from `DATA_GOV_API_KEY` with the source's slug for
+  its `ConfigError`; `classify(response)`, the gateway's `API_KEY_*` answer to a 401 or
+  403 as `AuthError`, its 429 as `RateLimitError` and its `NOT_FOUND` 404 as
+  `NotFoundError`, in the source's name with the gateway's URL written `<host>`, and
+  `None` for every other answer; and `install(config)`, the hooks of `Gateway.policy`,
+  one `QuotaPolicy` per process on `x-ratelimit-limit` and `x-ratelimit-remaining` with
+  a one-hour window, which every source in the process shares. The policy's refusal
+  before sending speaks for `api.data.gov` and names the variable. `API_KEY_ENV`,
+  `KEY_HEADER`, `WINDOW`, `LIMIT_HEADER` and `REMAINING_HEADER` come with it. Consumers:
+  sdk-usda-psd, sdk-usda-esr and sdk-usda-gats, which carry the same code as copies
+  today, and the template's api.data.gov gateway answer of v0.3.0. Imported from its
+  module; `xippios.core` does not re-export it.
 - **`AsyncClient.download(url, dest, *, auth=)` and `Downloaded`** (the family review's
-  C15; ADR-0019, decision 1; queue row 46, found by sdk-usda-nass): a GET through the
-  client's pool, streamed to a temporary file beside `dest` and renamed when complete,
-  removed on any failure, never cached and never held in memory. `before_request`, the
-  limiter, `observe` and `classify` (both see a success's status and headers only; its
-  body goes to the file unread) and the retry rule of ADR-0011 apply as for `get()`, a
-  retry restarting the file; an error answer is read up to `BODY_LIMIT` bytes and raised
-  through the taxonomy; a 1xx or 3xx raises `UpstreamError`, since redirects are not
-  followed; a `dest` that is a directory, or whose directory does not exist, is refused
-  with `ValueError` before anything is sent.
+  C15, bulk downloads and non-JSON payloads; ADR-0019, decision 1; found by
+  sdk-usda-nass): a GET through the client's pool, streamed to a temporary file beside
+  `dest` and renamed when complete, removed on any failure, never cached and never held
+  in memory. `before_request`, the limiter, `observe` and `classify` (both see a
+  success's status and headers only; its body goes to the file unread) and the retry
+  rule of ADR-0011 apply as for `get()`, a retry restarting the file; an error answer is
+  read up to `BODY_LIMIT` bytes and raised through the taxonomy; a 1xx or 3xx raises
+  `UpstreamError`, since redirects are not followed; a `dest` that is a directory, or
+  whose directory does not exist, is refused with `ValueError` before anything is sent.
   `Downloaded` carries `path`, `bytes`, `content_type`, `filename` (from
-  `Content-Disposition`), `etag`, `last_modified` (the header's text) and `retrieved_at`;
-  exported from `xippios.core` and `xippios.core.client`. Consumers, named by ADR-0019:
-  sdk-usda-esmis, sdk-usda-wasde, sdk-usda-nass's bulk datasets, sdk-eurostat and
-  sdk-faostat.
-- **`decode_text` and `decode_csv`** (C15; ADR-0019, decision 2, amended 2026-10-27;
-  row 46), exported from `xippios.core.client` beside `decode_json`: the text in the
-  `Content-Type` charset, UTF-8 by default, a byte order mark stripped; and
-  `decode_csv(data, *, delimiter=",", source=None)`, `csv.DictReader` rows from a
-  downloaded file (a `Path` or `str`) or a response, headers as upstream prints them, a
-  generator that reads a file row by row and closes it when it ends.
-- **`ClientConfig.cache_max_bytes`** (C15; ADR-0019, decision 3; row 46): 8 MiB by
-  default; a larger body is returned and not stored; a value below 1 is refused.
-- **`BULK_TASKS`** (C15; ADR-0019, decision 4): `register_tasks` and `router_from_tasks`
-  skip a task whose defining module names it in `BULK_TASKS`, so the rendered adapters
-  may pass `tasks.__all__` whole, and the family check's "`tasks.__all__` minus
-  `BULK_TASKS`" holds for them; a cap in `caps` for a bulk task is refused as naming no
-  task, and the refusal now says that a task in `BULK_TASKS` is no tool.
+  `Content-Disposition`), `etag`, `last_modified` (the header's text) and
+  `retrieved_at`; exported from `xippios.core` and `xippios.core.client`. Consumers,
+  named by ADR-0019: sdk-usda-esmis, sdk-usda-wasde, sdk-usda-nass's bulk datasets,
+  sdk-eurostat and sdk-faostat.
+- **`decode_text` and `decode_csv`** (the family review's C15; ADR-0019, decision 2,
+  amended 2026-10-27; found by sdk-usda-nass), exported from `xippios.core.client`
+  beside `decode_json`: the text in the `Content-Type` charset, UTF-8 by default, a byte
+  order mark stripped; and `decode_csv(data, *, delimiter=",", source=None)`,
+  `csv.DictReader` rows from a downloaded file (a `Path` or `str`) or a response,
+  headers as upstream prints them, a generator that reads a file row by row and closes
+  it when it ends.
+- **`ClientConfig.cache_max_bytes`** (the family review's C15; ADR-0019, decision 3;
+  found by sdk-usda-nass): 8 MiB by default; a larger body is returned and not stored; a
+  value below 1 is refused.
+- **`BULK_TASKS`** (the family review's C15; ADR-0019, decision 4; found by
+  sdk-usda-nass): `register_tasks` and `router_from_tasks` skip a task whose defining
+  module names it in `BULK_TASKS`, so the rendered adapters may pass `tasks.__all__`
+  whole, and the family check's "`tasks.__all__` minus `BULK_TASKS`" holds for them; a
+  cap in `caps` for a bulk task is refused as naming no task, and the refusal now says
+  that a task in `BULK_TASKS` is no tool.
 - **The recorder's `max_bytes=`** on `record`, `record_sync` and `fixture_from_response`
-  (C15; ADR-0019, decision 5, amended 2026-10-27; queue row 43, found by sdk-usda-gats,
-  and the family's finding that a cut-off JSON object, a JSON-stat cube, does not decode
-  on replay): a JSON array is cut at an element boundary of its original text, its
-  numbers and spacing as upstream wrote them; a text is cut at a UTF-8 character
-  boundary, never inside a secret value or the request host; a JSON object, a body
-  declared JSON that does not parse, an array whose first element alone does not fit, a
-  cut that keeps nothing, XML, ZIP, XLSX, gzip, XLS and a body that is not UTF-8 text
-  are refused with the reason. `max_bytes` bounds the body, not the fixture file, which
-  escapes the body as a JSON string. A cut response is marked `truncated` with
-  `original_bytes`, `sha256` (of the whole body, before the scrub) and, for an array,
-  `original_count`, new optional fields of `FixtureResponse`; a fixture without a cut is
-  written without them, so every existing fixture loads and re-records unchanged. Replay
-  serves the body as recorded.
-- **`xippios.core.redaction`** (C10; ADR-0019, decision 6; ADR-0023, decision 3 (b),
-  credential redaction): the one `REDACTED`, `is_credential_name`,
-  `register_credential_name`, `redact_credentials` and the three `scrub_*` functions, at
-  the bottom of the package. Imported from its module; not re-exported.
-
-- **`ResultMeta.published_at_naive`** (ADR-0022, rule 2; queue row 39 d, found by
-  sdk-usda-gats): a naive `published_at`, a release time upstream printed without a zone
-  (FAS: `2026-10-06T08:00:00`), is kept as given with the flag set; without the flag it
-  is refused as before, and the flag with an aware `published_at` or with none is
-  refused too. The HTTP envelope and the MCP text carry it. A family invariant
-  (ADR-0023, decision 3 (a)); sdk-usda-esr and sdk-usda-gats fill it at adoption.
-- **`PackagedList`** (the family review's C13; ADR-0022, rule 1 and amendment
-  2026-10-27; queue rows 28 a and d and 34 a, found by sdk-usda-psd, 38 b, the template's
-  scaffold, found by sdk-usda-esr, and 39 g, found by sdk-usda-gats), in
+  (the family review's C15; ADR-0019, decision 5, amended 2026-10-27; found by
+  sdk-usda-gats, and the family's finding that a cut-off JSON object, a JSON-stat cube,
+  does not decode on replay): a JSON array is cut at an element boundary of its original
+  text, its numbers and spacing as upstream wrote them; a text is cut at a UTF-8
+  character boundary, never inside a secret value; a JSON object, a body declared JSON
+  that does not parse, an array whose first element alone does not fit, a cut that keeps
+  nothing, XML, ZIP, XLSX, gzip, XLS and a body that is not UTF-8 text are refused with
+  the reason. `max_bytes` bounds the body, not the fixture file, which escapes the body
+  as a JSON string. A cut response is marked `truncated` with `original_bytes`, `sha256`
+  (of the whole body, before the scrub) and, for an array, `original_count`, new
+  optional fields of `FixtureResponse`; a fixture without a cut is written without them,
+  so every existing fixture loads and re-records unchanged. Replay serves the body as
+  recorded.
+- **`xippios.core.redaction`** (the family review's C10; ADR-0019, decision 6; ADR-0023,
+  decision 3 (b), credential redaction; found in the Eurostat design round): the one
+  `REDACTED`, `is_credential_name`, `register_credential_name`, `redact_credentials` and
+  the three `scrub_*` functions, at the bottom of the package. Imported from its module;
+  not re-exported.
+- **`ResultMeta.published_at_naive`** (ADR-0022, rule 2; found by sdk-usda-gats): a
+  naive `published_at`, a release time upstream printed without a zone (FAS:
+  `2026-10-06T08:00:00`), is kept as given with the flag set; without the flag it is
+  refused as before, and the flag with an aware `published_at` or with none is refused
+  too. The HTTP envelope and the MCP text carry it. A family invariant (ADR-0023,
+  decision 3 (a)); sdk-usda-esr and sdk-usda-gats fill it at adoption.
+- **`PackagedList`** (the family review's C13, one packaged-list class for the sources'
+  copies; ADR-0022, rule 1 and amendment 2026-10-27; found by sdk-usda-psd, by
+  sdk-usda-esr in the template's scaffold, and by sdk-usda-gats), in
   `xippios.core.reference` and exported from `xippios.core`: one frozen model,
   `PackagedList(param, endpoint, fetched, records)` with an optional free-text `note`,
   for a list fetched from one upstream operation, upstream's records under upstream's
   field names, a list of values being records of one field named by the upstream
-  parameter; any other key of a file is refused. `PackagedList.load(package,
-  name)` reads `reference/<name>.json` through `load_json` (`name` with or without
-  `.json`); `.meta(source, *, request, vintage, published_at, published_at_naive)` builds
-  rule 1's `ResultMeta` (`endpoint` the list's operation, `retrieved_at` its `fetched`,
-  `vintage` only what the caller passes, `total` `None`); `.parse(model, *, source)`
-  validates the records through `parse`; `.write(path)` writes the file
-  (`{"param", "endpoint", "fetched", "records"}` and `note` when it is set, indented,
-  non-ASCII text kept, `fetched` to the second as `...Z`) for the refresh scripts.
-  Consumers: sdk-usda-psd, sdk-usda-esr and sdk-usda-gats, which carry copies,
-  sdk-usda-nass and sdk-comtrade, whose value files and tables it reads after their
-  adoption, and the template's refresh script.
-- **`matches` and `closest`** (C13; rows 28 d, 39 g and 39 j), in
-  `xippios.core.reference` and exported from `xippios.core`: `matches(search, *fields)`,
-  the `search` filter of the `list_*` tasks (`None` matches everything; otherwise a
-  case-folded substring test of each field that is not `None`, as text, never joined),
-  and `closest(value, codes, *, n=3)`, sdk-usda-psd's two `difflib` passes, by code and
-  then by name, at most `n` `(code, name)` pairs. Consumers: sdk-usda-psd,
-  sdk-usda-esr, sdk-usda-gats and sdk-comtrade (`matches`); sdk-usda-psd and
-  sdk-usda-gats, the latter behind its three-letter pass (`closest`; sdk-usda-esr's is
-  integer-nearest and stays its own).
-- **`UnknownCode`** (row 39 j, found by sdk-usda-gats; ADR-0022, amendment 2026-10-27),
-  an `InvalidRequestError` in `xippios.core.errors`, exported from `xippios.core`:
+  parameter; any other key of a file is refused. `PackagedList.load(package, name)`
+  reads `reference/<name>.json` through `load_json` (`name` with or without `.json`);
+  `.meta(source, *, request, vintage, published_at, published_at_naive)` builds rule 1's
+  `ResultMeta` (`endpoint` the list's operation, `retrieved_at` its `fetched`, `vintage`
+  only what the caller passes, `total` `None`); `.parse(model, *, source)` validates the
+  records through `parse`; `.write(path)` writes the file (`{"param", "endpoint",
+  "fetched", "records"}` and `note` when it is set, indented, non-ASCII text kept,
+  `fetched` to the second as `...Z`) for the refresh scripts. Consumers: sdk-usda-psd,
+  sdk-usda-esr and sdk-usda-gats, which carry copies, sdk-usda-nass and sdk-comtrade,
+  whose value files and tables it reads after their adoption, and the template's refresh
+  script.
+- **`matches` and `closest`** (the family review's C13; found by sdk-usda-psd and
+  sdk-usda-gats), in `xippios.core.reference` and exported from `xippios.core`:
+  `matches(search, *fields)`, the `search` filter of the `list_*` tasks (`None` matches
+  everything; otherwise a case-folded substring test of each field that is not `None`,
+  as text, never joined), and `closest(value, codes, *, n=3)`, sdk-usda-psd's two
+  `difflib` passes, by code and then by name, at most `n` `(code, name)` pairs.
+  Consumers: sdk-usda-psd, sdk-usda-esr, sdk-usda-gats and sdk-comtrade (`matches`);
+  sdk-usda-psd and sdk-usda-gats, the latter behind its three-letter pass (`closest`;
+  sdk-usda-esr's is integer-nearest and stays its own).
+- **`UnknownCode`** (ADR-0022, amendment 2026-10-27; found by sdk-usda-gats), an
+  `InvalidRequestError` in `xippios.core.errors`, exported from `xippios.core`:
   `UnknownCode(param, value, *, list_name, fetched, closest=(), hint=None, reason=None,
   source=None)` refuses a code a packaged list lacks with the copies' common message:
   the value, the parameter, the list and the day it was fetched, "Did you mean A (name),
@@ -342,100 +351,131 @@ All notable changes to this project are documented here. The format follows
   upstream added since needs a refresh (`/refresh-reference-data`). Attributes `param`,
   `value`, `list_name`, `fetched`, `closest`. No strategy protocol: a source passes the
   closest codes it found. Consumers: sdk-usda-psd, sdk-usda-esr and sdk-usda-gats.
-- **`AsyncClient.get_answer(path, *, params, headers, auth)` and `Answer`** (row 39 a,
-  found by sdk-usda-gats; ADR-0015, decision 5, amended 2026-10-27): the payload as
-  `get_json` decodes it and `retrieved_at`, a cache hit's stored time from
+- **`AsyncClient.get_answer(path, *, params, headers, auth)` and `Answer`** (ADR-0015,
+  decision 5, amended 2026-10-27; found by sdk-usda-gats): the payload as `get_json`
+  decodes it and `retrieved_at`, a cache hit's stored time from
   `xippios_cache_stored_at` as an aware UTC datetime, else the time the answer arrived.
   `Answer(payload, retrieved_at)` is a frozen dataclass, exported from `xippios.core`
   and `xippios.core.client`; `get_json` stays. Consumers: sdk-usda-gats's five cached
   wrappers and sdk-comtrade's cached `list_commodities`.
-- **`UpstreamModel.dump_upstream()`** (row 32 a, found by sdk-template; ADR-0003): a
-  record as `model_dump(mode="json")` under upstream's field names, the
-  `serialization_alias`, else a string `validation_alias`, else the first choice of an
-  `AliasChoices`, else the field name; a nested `UpstreamModel`, alone or in a list,
-  likewise; a computed field, which is the package's, left out. Consumers: the refresh
-  scripts of sdk-usda-psd, sdk-usda-esr, sdk-usda-gats and the template
-  (`upstream_record`), and sdk-comtrade's tables (`_columns`).
-
+- **`UpstreamModel.dump_upstream()`** (ADR-0003; found by sdk-template): a record as
+  `model_dump(mode="json")` under upstream's field names, the `serialization_alias`,
+  else a string `validation_alias`, else the first choice of an `AliasChoices`, else the
+  field name; a nested `UpstreamModel`, alone or in a list, likewise; a computed field,
+  which is the package's, left out. Consumers: the refresh scripts of sdk-usda-psd,
+  sdk-usda-esr, sdk-usda-gats and the template (`upstream_record`), and sdk-comtrade's
+  tables (`_columns`).
 - **`render_enums(lists, *, fetched, class_names=None, member_names=None,
-  generator=...)`** (C7; ADR-0008, amendment 2026-10-27; rows 31 c and 32 b, found by
-  sdk-template; row 39 c, found by sdk-usda-gats), in `xippios.core.reference`: one module
-  of `StrEnum` and `IntEnum` classes, the kind inferred per list, a list of strings or of
-  `(id, name)` pairs as `id_name_pairs` builds them; `fetched` one date for the module or
-  one per list; each class docstring one line, "Values of ``<key>`` (fetched <date>).",
-  which an MCP tool's input schema shows the agent. The output is plain ASCII: values as
-  `ascii()` writes them, one member per line, `__all__` in the order of the lists,
-  `# noqa: E501` on a line over 100 columns, `# noqa: E741` on a member named `I`, `O` or
-  `l`. Refused with `ValueError`: an empty list or one that mixes kinds (the message
-  names what it found, by type); a key, class name, date or generator text that is not
-  printable ASCII; a class name over 84 characters, named `IntEnum` or `StrEnum`, or
-  shared by two lists; a repeated id; a member
-  name with nothing to derive it from, or one that collides or an enum cannot take; and a
-  key of `fetched`, `class_names` or `member_names` that `lists` does not hold. Consumers:
-  every source, through the template's refresh script (ADR-0023, decision 1).
-- **Every `MemoryCache` cleared around each offline test** (queue row 39 b, found by
-  sdk-usda-gats; sdk-comtrade carries the same fixture; ADR-0013, amendment 2026-10-27): a
-  `MemoryCache` adds itself to a module-level weak set when it is built, and the plugin's
-  autouse fixture clears every registered cache before and after each test not marked
-  `live`, next to the quota reset. A `CacheBackend` of the source's own is not cleared;
-  the `MemoryCache`s one holds are.
-- **The quota a live run left** (queue row 44 b, found by sdk-usda-esr; ADR-0013,
-  amendment 2026-10-27): after each `live` test that ran the plugin keeps every quota
-  policy's source and `snapshot().describe()`, and the terminal summary prints one line
-  per policy with a reading, `quota after the live run: <source>: <describe()>`: times,
-  counts and the source, never a key, a host or a query.
-- **Arguments a tool's schema refuses answered in conventions §8's form** (queue row 41 a,
-  found by sdk-usda-esr; ADR-0014, amendment 2026-10-27): `register_tasks`, and
-  `build_server` through it, installs one middleware per server that validates a call's
-  arguments with the argument model the `mcp` SDK builds for the tool and answers a
-  refusal before the tool runs as `error: InvalidRequestError: <argument>: <message>`,
-  the first error with the count when there are several. The SDK answered an MCP error,
-  `Error executing tool ...` with pydantic's text, its URL and the input value. The SDK
-  runs `server.middleware` outermost-first, so a source's own middleware appended later
-  runs inside the check, and one placed ahead of it in the list runs first; task errors
-  keep their path. A family invariant (ADR-0023, decision 3 (a)).
-- **A capped list says where to resume** (queue row 21 b, found by sdk-cashctrl;
-  ADR-0016, amendment 2026-10-27): `cap_result` ends the note of a cut list whose
-  `meta.request` records an integer `start`, an offset-paged task's, with
-  `; resume with start=<start + shown>`; every other note is unchanged.
+  generator=...)`** (the family review's C7; ADR-0008, amendment 2026-10-27; found by
+  sdk-template and, for the class docstrings, by sdk-usda-gats), in
+  `xippios.core.reference`: one module of `StrEnum` and `IntEnum` classes, the kind
+  inferred per list, a list of strings or of `(id, name)` pairs as `id_name_pairs`
+  builds them; `fetched` one date for the module or one per list; each class docstring
+  one line, "Values of ``<key>`` (fetched <date>).", which an MCP tool's input schema
+  shows the agent. The output is plain ASCII: values as `ascii()` writes them, one
+  member per line, `__all__` in the order of the lists, `# noqa: E501` on a line over
+  100 columns, `# noqa: E741` on a member named `I`, `O` or `l`. Refused with
+  `ValueError`: an empty list or one that mixes kinds (the message names what it found,
+  by type); a key, class name, date or generator text that is not printable ASCII; a
+  class name over 84 characters, named `IntEnum` or `StrEnum`, or shared by two lists; a
+  repeated id; a member name with nothing to derive it from, or one that collides or an
+  enum cannot take; and a key of `fetched`, `class_names` or `member_names` that `lists`
+  does not hold. Consumers: every source, through the template's refresh script
+  (ADR-0023, decision 1).
+- **Every `MemoryCache` cleared around each offline test** (ADR-0013, amendment
+  2026-10-27; found by sdk-usda-gats; sdk-comtrade carries the same fixture): a
+  `MemoryCache` adds itself to a module-level weak set when it is built, and the
+  plugin's autouse fixture clears every registered cache before and after each test not
+  marked `live`, next to the quota reset. A `CacheBackend` of the source's own is not
+  cleared; the `MemoryCache`s one holds are.
+- **The quota a live run left** (ADR-0013, amendment 2026-10-27; found by sdk-usda-esr):
+  after each `live` test that ran the plugin keeps every quota policy's source and
+  `snapshot().describe()`, and the terminal summary prints one line per policy with a
+  reading, `quota after the live run: <source>: <describe()>`: times, counts and the
+  source, never a key, a host or a query.
+
+### Changed
+
+- **The api.data.gov 429's wait comes from the quota snapshot** (the family review's
+  C14, the gateway module; found by sdk-usda-psd): the gateway's `classify` counts to
+  `Gateway.policy.snapshot()`'s `resumes_at` on the policy's clock, since `observe` ran
+  before it, instead of restating "`Retry-After`, else the window" as the three copies
+  did; no `QuotaPolicy.wait_for` is added. Its message names the gateway's allowance,
+  that every package using the key shares it, and the quota as the snapshot reports it,
+  or the wait in seconds where no snapshot shows it spent, and no longer says what was
+  retried: the retry loop's bound decides that.
+- **`ResultCap` is defined in `xippios.core.models` and exported from `xippios.core`**
+  (the family review's C5; the per-tool cap of ADR-0016; found by sdk-usda-psd): a
+  source's `tasks.py` declares its `MCP_CAPS` without the `mcp` extra and without the
+  `ImportError` guard around the import. `xippios.core.mcp` keeps re-exporting it, and
+  `cap_result` stays there.
+- **A packaged answer's `retrieved_at` is the list's fetch time, read from `fetched`**
+  (ADR-0022, rule 1 and amendment 2026-10-27; found by sdk-usda-psd):
+  `PackagedList.fetched` is a timezone-aware UTC time, and a file whose `fetched` is a
+  bare date, every packaged file so far, reads as 00:00 UTC of that day, the start of
+  the day the refresh scripts truncated the time to; a source's next refresh writes the
+  full time. The sources answered with the time of the call and put the fetch date into
+  `vintage`, which now holds an upstream release identifier only.
+- **The network guard sits on httpcore's connection pools only** (the family review's
+  C11; ADR-0013, amendment 2026-10-27): `httpcore.ConnectionPool.handle_request` and
+  `httpcore.AsyncConnectionPool.handle_async_request`, which every default httpx
+  transport sends through, proxies included. The refusal, its message and its edges are
+  unchanged: respx answers a mocked request, a route that passes through meets the
+  refusal, and a transport a test passes itself bypasses it. The plugin's docstrings
+  name the decision of ADR-0013 they implement instead of restating it, and the
+  `rate_limited` marker's text names the quota pause it keeps as well.
+- **The family check has ten tests** (the family review's C8; Johannes's decision of
+  2026-10-27; ADR-0024): `test_family_write_server_serves_the_write_tasks` is gone, and
+  a source's write server is its own to test. The write tasks of `tasks_write` stay in
+  `test_family_tasks_return_results`, `test_family_tasks_carry_agent_docstrings` and the
+  README status table.
+- **`.claude/settings.json`** (ADR-0018, amendment (e); found by sdk-template, which
+  copies the file verbatim): `gh pr merge --auto` is allowed and `gh pr merge` is no
+  longer denied, as in the workspace root's settings. A deny shadows every allow, so the
+  session's one merge action, enabling auto-merge (ADR-0018, amendment (e)), was refused
+  here.
+- **`gates.yml` calls the gates repository under its new name `xippios/sdk-gates`**
+  (ADR-0018, amendment (e): the merge classes it calls for; the repository was renamed
+  from `.github` on 2026-10-27).
 
 ### Documentation
 
 - **ADR-0002, amendment 2026-10-27**: `pydantic-settings` and `xippios.core.config` are
   gone, keys are read by the `EnvKeyAuth` helpers, and the sync facade is
   `xippios.core.sync`.
-- **ADR-0015, amended 2026-10-27**: the sync `Client`, `UseClientDefault` and `derive` leave
-  decisions 2 and 4 and the consequences; `QuotaSnapshot` is importable from
+- **ADR-0015, amended 2026-10-27**: the sync `Client`, `UseClientDefault` and `derive`
+  leave decisions 2 and 4 and the consequences; `QuotaSnapshot` is importable from
   `xippios.core.client.quota`. **ADR-0004** and **ADR-0009** get a line each for the
-  deleted `config` module and `resolve_api_key`.
+  deleted `config` module and `resolve_api_key`, and **ADR-0012** one for the
+  paginators, of which `paginate_offset` remains.
 - **Conventions 1.16**: §7 reads the environment through the `EnvKeyAuth` helpers.
 - **ADR-0009, ADR-0010 and ADR-0015, amended 2026-10-27**: the gateway module as the
-  code side of one key per issuer; the quota pause bounded by `pause_cap`; C6's
-  removals, `install`'s contract and the 429's wait read from the snapshot.
+  code side of one key per issuer; the quota pause bounded by `pause_cap`; the removals
+  of the family review's C6, `install`'s contract and the 429's wait read from the
+  snapshot. **ADR-0016** gets a dated line: a subclass's override of `before_request` is
+  called through the hook `install` sets.
 - **Conventions 1.17**: §6 bounds the quota pause by the policy's `pause_cap` and says
   that `install` replaces the config's hooks; §7 names `xippios.core.data_gov` for the
   sources behind api.data.gov.
-
 - **ADR-0019, amendment 2026-10-27**: decision 1's `auth=` default is the client's own
   credentials, and what differs from `get()` (the hooks see a success's headers only, a
-  1xx or 3xx raises, `dest` refused before sending); decision 2's `decode_csv(data, ...)`;
-  decision 5's one `max_bytes=` for texts and arrays, the cut at element boundaries, the
-  JSON-object refusal and the XML reason ("a cut-off XML document is not well-formed");
-  decision 6's mechanism and the words `sig` and `pwd`. **ADR-0005** (the list without a
-  bare `key`, no second pattern for fixtures), **ADR-0013** (the guard covers
-  `download`; replay of a cut body) and **ADR-0004** (`redaction` and `_tasks` at the
-  bottom, `client/download.py`) get a dated line each.
+  1xx or 3xx raises, `dest` refused before sending); decision 2's `decode_csv(data,
+  ...)`; decision 5's one `max_bytes=` for texts and arrays, the cut at element
+  boundaries, the JSON-object refusal and the XML reason ("a cut-off XML document is not
+  well-formed"); decision 6's mechanism and the words `sig` and `pwd`. **ADR-0005** (the
+  list without a bare `key`, no second pattern for fixtures), **ADR-0013** (the guard
+  covers `download`; replay of a cut body) and **ADR-0004** (`redaction` and `_tasks` at
+  the bottom, `client/download.py`) get a dated line each.
 - **Conventions 1.18**: §4 states the one rule, every word of it, and when `key` is a
-  credential; §6 that a download's hooks see a success's headers only, that a 1xx or
-  3xx raises, and `decode_csv`'s signature; §10 the scrub's rule, the JSON-object
-  refusal, the XML reason, the cut at element boundaries, `original_count`, and that
-  `max_bytes` bounds the body, not the file.
-
-- **ADR-0022, amendment 2026-10-27**: the five decisions on the code (the `fetched`
-  time and its bare-date reading; one `PackagedList` with value lists as one-field
-  records and a URL path as `endpoint`; the helpers; `get_answer`; frozen series), the
-  flag's refusals, the order of the `None` rule and the credential rule, and three more
-  from the review of the code: the period series of queue row 39 i (the ceiling is the
+  credential; §6 that a download's hooks see a success's headers only, that a 1xx or 3xx
+  raises, and `decode_csv`'s signature; §10 the scrub's rule, the JSON-object refusal,
+  the XML reason, the cut at element boundaries, `original_count`, and that `max_bytes`
+  bounds the body, not the file.
+- **ADR-0022, amendment 2026-10-27**: the five decisions on the code (the `fetched` time
+  and its bare-date reading; one `PackagedList` with value lists as one-field records
+  and a URL path as `endpoint`; the helpers; `get_answer`; frozen series), the flag's
+  refusals, the order of the `None` rule and the credential rule, and three more from
+  the review of the code: the period series, found by sdk-usda-gats (the ceiling is the
   most periods one call fetches; an unreleased period is skipped where upstream's empty
   answer can be told from data, else the range is refused), its refusal as
   `NotFoundError` naming the latest released period, and the packaged file's optional
@@ -445,253 +485,245 @@ All notable changes to this project are documented here. The format follows
 - **Conventions 1.19**: §3 the packaged-list file, `reference/<name>.json` with its
   optional `note`; §4 the refusal of unknown fields, `get_answer` for a hit's
   `retrieved_at`, the flag's refusals, `PackagedList`'s methods and the bare-date
-  reading, `matches`, the frozen series (row 39 h) and the period series (row 39 i);
-  §5 `UnknownCode`, in the taxonomy tree under `InvalidRequestError`; §6 `get_answer`.
-  The preamble lists these among the rules that bind a source from its 0.3.0 adoption.
-
+  reading, `matches`, the frozen series and the period series (both found by
+  sdk-usda-gats); §5 `UnknownCode`, in the taxonomy tree under `InvalidRequestError`; §6
+  `get_answer`. The preamble lists these among the rules that bind a source from its
+  0.3.0 adoption.
 - **ADR-0008, amended 2026-10-27**: `render_enums` replaces the two renderers, the plain
   output and the refresh script's ruff step replace the amendment of 2026-10-24's
   layout. **ADR-0013** (the guard on the pools, the cache clearing, the live summary),
-  **ADR-0014** (the argument middleware), **ADR-0016** (the resume hint) and **ADR-0018**
-  (amendment (f), the workflow hardening) get a dated line each.
+  **ADR-0014** (the argument middleware), **ADR-0016** (the resume hint) and
+  **ADR-0018** (amendment (f), the workflow hardening) get a dated line each.
 - **Conventions 1.20**: §3 `render_enums` and the module committed as formatted; §8 what
-  an enum's class docstring holds (queue row 39 c), the resume hint and refused
-  arguments as `InvalidRequestError` text; §10 the guard on the pools, the cache clearing
-  and the live summary; §13 the workflow hardening (queue row 51, the family's): actions
-  pinned by SHA, no persisted credentials but the `tag` job's, least permissions, no
-  `secrets: inherit`, the gates called at `@main`; §15 item 6 re-renders through the
-  template's script. The header binds the renderer rule from the 0.3.0 adoption.
+  an enum's class docstring holds (found by sdk-usda-gats), the resume hint and refused
+  arguments as `InvalidRequestError` text; §10 the guard on the pools, the cache
+  clearing and the live summary; §13 the workflow hardening (the family's own finding):
+  actions pinned by SHA, no persisted credentials but the `tag` job's, least
+  permissions, no `secrets: inherit`, the gates called at `@main`; §15 item 6 re-renders
+  through the template's script. The header binds the renderer rule from the 0.3.0
+  adoption.
 - `publish.yml`'s `tag` job says in a comment that its checkout keeps its credentials,
-  since it pushes the tag with the token (conventions §13).
-- The definition of done's adoption line and its copy in `.github/PULL_REQUEST_TEMPLATE.md`:
-  generated enum files are committed as formatted, after the refresh script's
-  `ruff format && ruff check --fix`, as conventions §15 item 6 says.
-
-- **ADR-0024**: sdk-cashctrl stands alone; tenants, the tenant lock, `assert_write_tools`
-  and the recorder's host placeholder, encoded matching, JSON verify and `rewrite` leave
-  core, while `ResultMeta.tenant` (a family invariant, ADR-0023, decision 3 (a)), the
-  `confirm` check and the loopback rule (conventions §8, C8) and the plain verify (secret
-  scrubbing, decision 3 (b)) stay. **ADR-0014** is superseded in part (decisions 1 to 4,
-  6, 7 and 11, and two consequences: the template's `multi_tenant` question and
-  `tests/mcp/test_lock.py` as the middleware API's guard; 5, 8, 9 and 10 stand);
-  **ADR-0005** (the verify's scope), **ADR-0013** (the placeholder host, the verify's
-  forms and the family check's write-server test), **ADR-0017** (`rewrite`), **ADR-0019**
-  (the text cut spares secrets only) and **ADR-0023** (which of "the write checks" left)
-  get a dated line each.
-  The template's `multi_tenant` question ADR-0014 announced (queue row 25, found by
-  sdk-cashctrl) is not built.
-- **Conventions 1.21**: §1 names a multi-tenant source's key variables as its own scheme;
-  §3 makes the rewrite by key the source's recorder step; §7 has a multi-tenant source
-  carry its tenant registry and keep `ResultMeta.tenant`; §8 loses the tenant list and
-  the lock and keeps the write server's rules; §10 loses the placeholder host and the
-  JSON-aware verify, keeps the plain verify and `allow_binary`, and the family check no
-  longer names the write server.
+  since it pushes the tag with the token (conventions §13; ADR-0018, amendment (f)).
+- The definition of done's adoption line and its copy in
+  `.github/PULL_REQUEST_TEMPLATE.md`: generated enum files are committed as formatted,
+  after the refresh script's `ruff format && ruff check --fix`, as conventions §15 item
+  6 says (ADR-0008, amendment 2026-10-27).
+- **ADR-0024**: sdk-cashctrl stands alone; tenants, the tenant lock,
+  `assert_write_tools` and the recorder's host placeholder, encoded matching, JSON
+  verify and `rewrite` leave core, while `ResultMeta.tenant` (a family invariant,
+  ADR-0023, decision 3 (a)), the `confirm` check and the loopback rule (conventions §8,
+  C8) and the plain verify (secret scrubbing, decision 3 (b)) stay. **ADR-0014** is
+  superseded in part (decisions 1 to 4, 6, 7 and 11, and two consequences: the
+  template's `multi_tenant` question and `tests/mcp/test_lock.py` as the middleware
+  API's guard; 5, 8, 9 and 10 stand); **ADR-0005** (the verify's scope), **ADR-0013**
+  (the placeholder host, the verify's forms and the family check's write-server test),
+  **ADR-0017** (`rewrite`), **ADR-0019** (the text cut spares secrets only) and
+  **ADR-0023** (which of "the write checks" left) get a dated line each. The template's
+  `multi_tenant` question ADR-0014 announced (asked for by sdk-cashctrl) is not built.
+- **Conventions 1.21**: §1 names a multi-tenant source's key variables as its own
+  scheme; §3 makes the rewrite by key the source's recorder step; §7 has a multi-tenant
+  source carry its tenant registry and keep `ResultMeta.tenant`; §8 loses the tenant
+  list and the lock and keeps the write server's rules; §10 loses the placeholder host
+  and the JSON-aware verify, keeps the plain verify and `allow_binary`, and the family
+  check no longer names the write server.
 
 ### Hand-apply for sources
 
-What a source's adoption of 0.3.0 changes because of the changes above. No source
-imports a deleted name; the tests of the api.data.gov sources read a deleted attribute
-and texts that change, and every source's tests meet the narrower credential rule,
-listed here.
+What a source's adoption of 0.3.0 changes by hand because of the changes above, per
+source: every source first, then each by name. Of the names this release deletes, the
+sources import the two renderers, in their refresh scripts; sdk-cashctrl imports the
+names that move to it. The tests of the api.data.gov sources read a deleted attribute
+and texts that change, and every source's tests meet the narrower credential rule.
+`docs/handover.md`, "Adopting core 0.3.0", walks the same items through conventions §15.
 
-- `src/xippios/usda/nass/tasks.py`, `src/xippios/usda/psd/tasks.py`,
-  `src/xippios/usda/esr/tasks.py`, `src/xippios/usda/gats/tasks.py` — the
-  `ImportError`-guarded `from xippios.core.mcp import ResultCap` → an unguarded
-  `from xippios.core import ResultCap`, and the comment that names the `mcp` extra goes
-  — `ResultCap` lives in `xippios.core.models` (queue row 30 a).
-- `src/xippios/cashctrl/_client.py`, `src/xippios/cashctrl/api/_form.py`,
-  `tests/test_errors.py` (sdk-cashctrl: `BODY_LIMIT`, `error_from_response`);
-  `src/xippios/usda/psd/_client.py`, `src/xippios/usda/esr/_client.py`,
-  `src/xippios/usda/gats/_client.py` (`parse_retry_after`) — `from xippios.core.errors
-  import ...` may become `from xippios.core import ...` — the names are exported now; the
-  module path keeps working.
-- `src/xippios/cashctrl/_cli.py` (sdk-cashctrl) — its module docstring names
-  `xippios.core.mcp.quiet_request_logging`, which is importable from
-  `xippios.core.mcp.server` only → name that path — docstring only, nothing breaks.
-- `src/xippios/usda/psd/_client.py`, `src/xippios/usda/esr/_client.py`,
-  `src/xippios/usda/gats/_client.py` — the gateway block (`API_KEY_ENV`,
-  `policy = QuotaPolicy(...)`, `_URL`, `_gateway_error`, `_over_rate_limit`, the
-  `API_KEY_*`, 429 and `NOT_FOUND` branches of `classify`, `auth = HeaderKeyAuth(...)`) →
-  `gateway = Gateway(SOURCE)` from `xippios.core.data_gov`: `classify` returns
+#### Every source
+
+- `tests/` — a test that expected a name without a credential word redacted (a
+  whole-word `key` its own `QueryKeyAuth` does not send, `sort_key`, or a substring
+  match such as `keyword` or `author`), in `meta.request`, `sent_urls`, `sent_query` or
+  a newly recorded fixture, now sees the value → assert the value; a fixture recorded
+  with the substring rule keeps `REDACTED` for such a name, so a `sent_query(route) ==
+  recorded_query(fixture)` comparison differs on it until the fixture is re-recorded; a
+  test that matched the text "was recorded as REDACTED" for a credential named in
+  `match_params` → "names a credential"; a parameter whose name has the whole word `sig`
+  or `pwd` now reads `REDACTED` — one redaction rule (C10).
+- `tests/` — a `ResultMeta(...)` given a field it does not define now raises: name the
+  field right — ADR-0012, amendment 2026-10-27.
+- `tests/` — a test that asserted the SDK's answer to an argument the schema refuses
+  (`Error executing tool ...`, `is_error`, `mcp_call_text` failing) → the text `error:
+  InvalidRequestError: <argument>: <message>` through `mcp_call_text`; `mcp_call` still
+  raises `AssertionError` on it — ADR-0014, amendment 2026-10-27.
+- `tests/` — a test that matched `parse`'s text "first at <loc>: <msg>" → "first at
+  <loc> (<type>): <msg>"; one that read pydantic's error from `__cause__` finds `None`;
+  one that expected pydantic's `ValidationError` from `load_table`, `project` or
+  `PackagedList.load` expects `xippios.core.errors.ValidationError` — parse failures
+  print no payload.
+- `scripts/refresh_reference.py` (every source with a generated `enums.py`; the template
+  renders it in v0.3.0) — `render_str_enums(...)` and `render_int_enums(...)` → one
+  `render_enums(lists, fetched=..., ...)` call, value lists and id lists in one mapping,
+  `fetched` one date or one per list, then `ruff format` and `ruff check --fix` on
+  `enums.py`, which is re-rendered and committed as formatted — the renderer (C7),
+  ADR-0008, amendment 2026-10-27.
+- `src/xippios/<pkg>/tasks.py` of a source with a bulk task — `BULK_TASKS =
+  frozenset({...})` beside `MCP_CAPS`; `mcp.py` and `http.py` may pass `tasks.__all__`
+  whole. Template v0.3.0 renders the `BULK_TASKS = frozenset()` scaffold — bulk
+  downloads (C15), ADR-0019, decision 4.
+- A source that caches an answer over 8 MiB (none known) — raise
+  `ClientConfig(cache_max_bytes=...)` and say why in `CLAUDE.md` — ADR-0019, decision 3.
+- The source's own workflows (a `siblings.yml`, a `live.yml` of its own) — checked
+  against conventions §13's hardening — ADR-0018, amendment (f).
+
+#### sdk-usda-nass
+
+- `src/xippios/usda/nass/tasks.py` — the `ImportError`-guarded `from xippios.core.mcp
+  import ResultCap` → an unguarded `from xippios.core import ResultCap`, and the comment
+  that names the `mcp` extra goes — `ResultCap` lives in `xippios.core.models`.
+- `src/xippios/usda/nass/tasks.py` and its `reference/*.json` value files — converted,
+  without network, to packaged-list files (`{"param", "endpoint", "fetched", "records"}`
+  and an optional `note`, a value list as records of one field named by the parameter,
+  `fetched` kept as the date it is), `endpoint` the upstream operation,
+  `get_param_values`, where nass wrote "reference"; any other key is refused, so nass
+  writes its `derived_from` into `note` as text, and its two lists derived from
+  `api_GET` records, `condition_categories` and `progress_stages`, keep `param:
+  "unit_desc"` and `endpoint: "api_GET"` in files of their own names, which
+  `PackagedList.load(package, name)` takes. The list tasks read the files with
+  `PackagedList.load` and still return strings — ADR-0022, rule 1 and amendment (2) and
+  (8).
+- `src/xippios/usda/nass/` — nothing for the credential rule: its `QueryKeyAuth("key",
+  ...)` registers `key`, so `meta.request`, `sent_urls`, `sent_query`, `recorded_query`
+  and every recording keep `key=REDACTED` — C10.
+
+#### sdk-comtrade
+
+- `src/xippios/comtrade/tasks.py` — `_packaged_meta` and `_matches` →
+  `packaged.meta(SOURCE, request=...)` and `matches`; `meta.vintage` becomes `None` and
+  `meta.retrieved_at` the list's `fetched`, so the list tasks' docstrings that say
+  "``meta.vintage`` is the day the package fetched the list, ``meta.retrieved_at`` when
+  this task answered" and the tests that assert it change — ADR-0022, rule 1.
+- `src/xippios/comtrade/tasks.py`, its `reference/*.json` value files and its CSV tables
+  with `reference/tables.json` — converted, without network, to packaged-list files as
+  for sdk-usda-nass, `endpoint` the upstream operation,
+  `files/v1/app/reference/<file>.json`, where comtrade wrote a file path; comtrade
+  writes its `note` and its `exceptions` into `note` as text, and its `origin` becomes
+  `endpoint`. The list tasks read the files with `PackagedList.load` and still return
+  strings — ADR-0022, rule 1 and amendment (2) and (8).
+- `src/xippios/comtrade/tasks.py` — the cached `list_commodities` reads its answer with
+  `client.get_answer(...)` for `retrieved_at` instead of `get()` and `decode_json()` —
+  ADR-0015, decision 5, amended 2026-10-27.
+- `scripts/refresh_reference.py` — `_columns` and `_write_table` →
+  `PackagedList(param=..., endpoint=..., fetched=..., records=...).write(path)`, the
+  records under upstream's names by `record.dump_upstream()`, `fetched` =
+  `datetime.now(UTC)` to the second; `render_enums` takes the fetch day as text
+  (`f"{fetched:%Y-%m-%d}"`) — `dump_upstream`, `PackagedList.write`.
+- `scripts/refresh_reference.py` and `.claude/commands/refresh-reference-data.md` — the
+  per-class rewrite of each docstring with its list's date → `fetched={name: date,
+  ...}`; its notes leave the class docstrings, which reach the agent, for the packaged
+  list's `note` (`PackagedList(note=...)`); the command's ruff step and its note on the
+  renderer's layout go, since the script runs ruff — C7, conventions §8.
+- `tests/` — the snapshot count of packaged lists (38) → structure checks (each record
+  carries the list's fields; `endpoint` and `fetched` set) — a list's size changes with
+  every refresh, and the next one rewrites every file with the full `fetched` time.
+- `tests/conftest.py` (`empty_reference_cache`) — deleted: the plugin clears every
+  `MemoryCache` around each offline test — ADR-0013, amendment 2026-10-27.
+- Its planned `QuotaPolicy(limit_header=None, remaining_header=None, window=86400,
+  spent=...)` — nothing: `spent=` stays — C6.
+
+#### sdk-usda-psd
+
+- `src/xippios/usda/psd/tasks.py` — the `ImportError`-guarded `ResultCap` import → `from
+  xippios.core import ResultCap`, as for sdk-usda-nass.
+- `src/xippios/usda/psd/_client.py` — the gateway block (`API_KEY_ENV`, `policy =
+  QuotaPolicy(...)`, `_URL`, `_gateway_error`, `_over_rate_limit`, the `API_KEY_*`, 429
+  and `NOT_FOUND` branches of `classify`, `auth = HeaderKeyAuth(...)`) → `gateway =
+  Gateway(SOURCE)` from `xippios.core.data_gov`: `classify` returns
   `gateway.classify(response)` when that is not `None` and keeps its own branches after
-  it (psd's empty 404, esr's 400), `config = gateway.install(ClientConfig(...))`,
-  `client = AsyncClient(config, auth=gateway.auth)`; where the package keeps the names
+  it (psd's empty 404), `config = gateway.install(ClientConfig(...))`, `client =
+  AsyncClient(config, auth=gateway.auth)`; where the package keeps the names
   `API_KEY_ENV`, `policy` and `auth`, they become `xippios.core.data_gov.API_KEY_ENV`,
   `Gateway.policy` and `gateway.auth`; the `parse_retry_after` import goes when nothing
-  else uses it; the module docstring's "waiting within `RetryPolicy.backoff_max`" reads
-  "waiting within the policy's `pause_cap`" — the gateway module replaces the three
-  copies (C14, ADR-0023), and the pause has one cap (C6).
-- `tests/test_client.py` (psd, esr, gats) — the wiring test drops
-  `policy.reset_header`, which is gone, and may assert
-  `config.before_request == Gateway.policy.before_request` next to
+  else uses it, and may otherwise come from `xippios.core`; the module docstring's
+  "waiting within `RetryPolicy.backoff_max`" reads "waiting within the policy's
+  `pause_cap`" — the gateway module replaces the copies (C14, ADR-0023), and the pause
+  has one cap (C6).
+- `tests/test_client.py` — the wiring test drops `policy.reset_header`, which is gone,
+  and may assert `config.before_request == Gateway.policy.before_request` next to
   `config.observe == Gateway.policy.observe`; the assertion on "Nothing was retried"
   goes, since the message no longer speaks of retries; a `retry_after` read through the
   client is the snapshot's wait from now, so `== 3151.0` or `== 3600` becomes a bracket
   with `CLOCK_SLACK`, while `classify` called on its own still gives the exact wait; the
   policy's refusal before sending carries `source == "api.data.gov"`, not the slug, and
   starts "api.data.gov quota of the key in DATA_GOV_API_KEY spent" — C6, C14.
-- `tests/test_tasks.py` (sdk-usda-gats), the 429 test of `get_census_export_series` —
-  `info.value.retry_after == 3151.0` is read through the client, so it becomes the
-  snapshot's wait, a fraction under 3151: bracket it with `CLOCK_SLACK` — C14.
-- `CLAUDE.md` (psd, esr, gats), the rate-limit row — "within `RetryPolicy.backoff_max`
-  (30 s by default)" → "within the policy's `pause_cap` (30 s by default)", and the
-  gateway's key, answers and quota named as `xippios.core.data_gov`'s — ADR-0010,
-  decision 4, amended 2026-10-27.
-
-- `src/xippios/usda/nass/` — nothing: its `QueryKeyAuth("key", ...)` registers `key`, so
-  `meta.request`, `sent_urls`, `sent_query`, `recorded_query` and every recording keep
-  `key=REDACTED` — C10.
-- sdk-cashctrl, where it imports `xippios.core.models.REDACTED` and
-  `xippios.core.testing.REDACTED` — nothing: both keep working, one object — C10.
-- Every source, tests — a test that expected a name without a credential word redacted
-  (a whole-word `key` its own `QueryKeyAuth` does not send, `sort_key`, or a substring
-  match such as `keyword` or `author`), in `meta.request`, `sent_urls`, `sent_query` or a
-  newly recorded fixture, now sees the value → assert the value; a fixture recorded with
-  the substring rule keeps `REDACTED` for such a name, so a `sent_query(route) ==
-  recorded_query(fixture)` comparison differs on it until the fixture is re-recorded; a
-  test that matched the text "was recorded as REDACTED" for a credential named in
-  `match_params` → "names a credential"; a parameter whose name has the whole word `sig`
-  or `pwd` now reads `REDACTED` — C10.
-- `src/xippios/<pkg>/tasks.py` of a source with a bulk task — `BULK_TASKS =
-  frozenset({...})` beside `MCP_CAPS`; `mcp.py` and `http.py` may pass `tasks.__all__`
-  whole. Template v0.3.0 renders the `BULK_TASKS = frozenset()` scaffold — C15.
-- A source that caches an answer over 8 MiB (none known) — raise
-  `ClientConfig(cache_max_bytes=...)` and say why in `CLAUDE.md` — ADR-0019, decision 3.
-
-- `src/xippios/usda/psd/params.py`, `src/xippios/usda/esr/params.py`,
-  `src/xippios/usda/gats/params.py` — the `PackagedList` class and `packaged_values` →
+- `CLAUDE.md`, the rate-limit row — "within `RetryPolicy.backoff_max` (30 s by default)"
+  → "within the policy's `pause_cap` (30 s by default)", and the gateway's key, answers
+  and quota named as `xippios.core.data_gov`'s — ADR-0010, decision 4, amended
+  2026-10-27.
+- `src/xippios/usda/psd/params.py` — the `PackagedList` class and `packaged_values` →
   `PackagedList.load(PACKAGE, name)` from `xippios.core`; `_codes` reads
   `packaged.records` as before and keeps `packaged.fetched` (a datetime now, not ISO
-  text); psd's `_closest` → `closest(value, codes)`; gats keeps its three-letter pass in
-  front of `closest` and its `_nearest` and `_sharing_digits`; esr keeps its
-  integer-nearest `_closest` — C13, rows 39 g and j, ADR-0023 decision 4.
-- `src/xippios/usda/psd/errors.py`, `src/xippios/usda/esr/errors.py`,
-  `src/xippios/usda/gats/errors.py` — `UnknownCode` → `xippios.core.UnknownCode`, with
+  text); `_closest` → `closest(value, codes)` — C13, ADR-0023, decision 4.
+- `src/xippios/usda/psd/errors.py` — `UnknownCode` → `xippios.core.UnknownCode`, with
   `reason=` and `source=SOURCE` at each raise (or a subclass that fills them in); the
   message reads "... in the packaged commodities list (fetched 2026-10-23). ..." and
   ends "If upstream added it since, the packaged list needs a refresh
   (/refresh-reference-data).", so a test that matched "in PSD's commodities list
-  (packaged, fetched ...)" or "If PSD added the code since" matches the new text; gats
-  passes its example codes as `hint=` only when `closest` is empty, since a `hint` wins
-  over `closest` — row 39 j.
-- `src/xippios/usda/psd/tasks.py`, `src/xippios/usda/esr/tasks.py`,
-  `src/xippios/usda/gats/tasks.py`, `src/xippios/comtrade/tasks.py` — `_packaged`,
-  `_packaged_meta` and `_matches` (comtrade: `_packaged_meta` and `_matches`) →
+  (packaged, fetched ...)" or "If PSD added the code since" matches the new text —
+  ADR-0022, amendment 2026-10-27.
+- `src/xippios/usda/psd/tasks.py` — `_packaged`, `_packaged_meta` and `_matches` →
   `packaged.parse(Model, source=SOURCE)`, `packaged.meta(SOURCE, request=...)` and
   `matches`; `meta.vintage` becomes `None` and `meta.retrieved_at` the list's `fetched`,
   so the list tasks' docstrings that say "``meta.vintage`` is the day the package
   fetched the list, ``meta.retrieved_at`` when this task answered" and the tests that
   assert it change — ADR-0022, rule 1.
-- `src/xippios/usda/nass/tasks.py`, `src/xippios/comtrade/tasks.py`, their
-  `reference/*.json` value files and comtrade's CSV tables with `reference/tables.json`
-  — converted, without network, to packaged-list files (`{"param", "endpoint",
-  "fetched", "records"}` and an optional `note`, a value list as records of one field
-  named by the parameter, `fetched` kept as the date it is), `endpoint` the upstream
-  operation (nass's `get_param_values`, comtrade's `files/v1/app/reference/<file>.json`)
-  where nass wrote "reference" and comtrade a file path; any other key is refused, so
-  nass writes its `derived_from` into `note` as text, and its two lists derived from
-  `api_GET` records, `condition_categories` and `progress_stages`, keep
-  `param: "unit_desc"` and `endpoint: "api_GET"` in files of their own names, which
-  `PackagedList.load(package, name)` takes; comtrade writes its `note` and its
-  `exceptions` into `note` as text, and its `origin` becomes `endpoint`. The list tasks
-  read the files with `PackagedList.load` and still return strings — ADR-0022, rule 1
-  and amendment (2) and (8).
-- `src/xippios/usda/gats/api/` — the five wrappers that return `(records, stored_at)` →
-  `client.get_answer(path)`, its `retrieved_at` the task's `meta.retrieved_at` on a hit
-  and a miss alike; `_client.stored_at` goes — row 39 a.
-- `src/xippios/comtrade/tasks.py` — the cached `list_commodities` reads its answer with
-  `client.get_answer(...)` for `retrieved_at` instead of `get()` and `decode_json()` —
-  row 39 a.
-- `src/xippios/usda/esr/tasks.py`, `src/xippios/usda/gats/tasks.py` — `published_at`
-  from their naive release times with `published_at_naive=published_at is not None`,
-  since the flag without a time is refused; `vintage` keeps the release text as
-  upstream prints it — ADR-0022, rule 2.
+- `src/xippios/usda/psd/tasks.py` — nothing for its `None` filters: `meta.request`
+  leaves them out by itself; a test that asserted `{"search": None}` sees `{}` —
+  ADR-0022, rule 3.
 - `src/xippios/usda/psd/tasks.py`, `get_time_series` — nothing; its docstring already
   states its ceiling and that a market year answering PSD's empty 404 is skipped —
   ADR-0022, amendment (6), conventions §4.
-- `src/xippios/usda/gats/tasks.py`, `get_census_export_series`,
-  `get_census_import_series` and `get_census_reexport_series` — nothing: they already
-  refuse a range with an unreleased month with `NotFoundError` naming the released
-  months, and their docstrings say so — ADR-0022, amendment (6) and (7).
-- `src/xippios/usda/psd/tasks.py` — nothing for its `None` filters: `meta.request` leaves
-  them out by itself; a test that asserted `{"search": None}` sees `{}` — rule 3.
-- `scripts/refresh_reference.py` (psd, esr, gats, comtrade; the template renders it in
-  v0.3.0) — `upstream_record(record)` → `record.dump_upstream()`; psd's `write(...)` and
-  comtrade's `_columns` and `_write_table` → `PackagedList(param=..., endpoint=...,
-  fetched=..., records=...).write(path)`, `fetched` = `datetime.now(UTC)` to the second;
-  `render_enums` takes the fetch day as text (`f"{fetched:%Y-%m-%d}"`) — rows 32 a,
-  34 a.
-- `tests/` (psd, comtrade) — the snapshot counts of packaged lists (psd's 42, comtrade's
-  38) → structure checks (each record carries the list's fields; `endpoint` and
-  `fetched` set) — a list's size changes with every refresh, and the next one rewrites
-  every file with the full `fetched` time.
-- Every source, `tests/` — a `ResultMeta(...)` given a field it does not define now
-  raises: name the field right — row 21 a.
+- `scripts/refresh_reference.py` — `upstream_record(record)` → `record.dump_upstream()`;
+  `write(...)` → `PackagedList(param=..., endpoint=..., fetched=...,
+  records=...).write(path)`, `fetched` = `datetime.now(UTC)` to the second;
+  `render_enums` takes the fetch day as text (`f"{fetched:%Y-%m-%d}"`); the refusal of a
+  value list and an id list together and `--render-only`'s refusal of lists fetched on
+  different days go — `dump_upstream`, `PackagedList.write`, C7.
+- `tests/` — the snapshot count of packaged lists (42) → structure checks, as for
+  sdk-comtrade.
 
-sdk-comtrade's planned `QuotaPolicy(limit_header=None, remaining_header=None,
-window=86400, spent=...)` is unaffected: `spent=` stays.
+#### sdk-cashctrl
 
-- `scripts/refresh_reference.py` (every source with a generated `enums.py`; the template
-  renders it in v0.3.0) — `render_str_enums(...)` and `render_int_enums(...)` → one
-  `render_enums(lists, fetched=..., ...)` call, value lists and id lists in one mapping,
-  `fetched` one date or one per list, then `ruff format` and `ruff check --fix` on
-  `enums.py`, which is re-rendered and committed as formatted — C7.
-- `scripts/refresh_reference.py` and `.claude/commands/refresh-reference-data.md`
-  (sdk-comtrade) — the per-class rewrite of each docstring with its list's date →
-  `fetched={name: date, ...}`; its notes leave the class docstrings, which reach the
-  agent, for the packaged list's `note` (`PackagedList(note=...)`); the command's ruff
-  step and its note on row 12 go, since the script runs ruff — C7, rows 32 b, 39 c.
-- `scripts/refresh_reference.py` (usda-psd, usda-esr, usda-gats) — the refusal of a value
-  list and an id list together and `--render-only`'s refusal of lists fetched on
-  different days go — rows 31 c, 32 b.
-- `tests/conftest.py` (sdk-comtrade, `empty_reference_cache`) and `tests/test_client.py`
-  (sdk-usda-gats, its autouse cache-clearing fixture) — deleted: the plugin clears every
-  `MemoryCache` around each offline test — row 39 b.
-- Every source, `tests/` — a test that asserted the SDK's answer to an argument the schema
-  refuses (`Error executing tool ...`, `is_error`, `mcp_call_text` failing) → the text
-  `error: InvalidRequestError: <argument>: <message>` through `mcp_call_text`; `mcp_call`
-  still raises `AssertionError` on it — row 41 a.
-- Every source, `tests/` — a test that matched `parse`'s text "first at <loc>: <msg>" →
-  "first at <loc> (<type>): <msg>"; one that read pydantic's error from `__cause__` finds
-  `None`; one that expected pydantic's `ValidationError` from `load_table`, `project` or
-  `PackagedList.load` expects `xippios.core.errors.ValidationError` — row 42.
-- sdk-cashctrl, a test that asserted a capped note of an offset-paged list task in full —
-  the note ends `; resume with start=<n>` — row 21 b.
-- Every source's own workflows (a `siblings.yml`, a `live.yml` of its own) — checked
-  against conventions §13's hardening — row 51.
-
-sdk-cashctrl receives what leaves core in its 0.3.0 adoption, copied from the last commit
-that holds it, the commit on `main` that merges the PR before this move, named in
-`docs/handover.md`'s Adopting core 0.3.0 section: `git show <that sha>:<path>` (ADR-0024).
-No other source imports a moved name.
+sdk-cashctrl receives what leaves core, copied from the last commit that holds it,
+`cb8ecdf379c04522e5f1dcd91ea5e8bdfa1fb3ff` on `main`:
+`git show cb8ecdf379c04522e5f1dcd91ea5e8bdfa1fb3ff:<path>` (ADR-0024). No other source
+imports a moved name.
 
 - `src/xippios/cashctrl/_client.py` (the `Tenants` import, `TENANTS = Tenants(...)`,
   `client_for`) — `Tenants` → a module of its own copied from
   `src/xippios/core/tenants.py`; `client_for` keeps its shape. The copy keeps the
-  replaced client dropped without closing (row 24 b) until cashctrl decides otherwise —
-  C8.
-- `src/xippios/cashctrl/tasks.py` (the module docstring's `xippios.core.tenants.list_task`,
-  `from xippios.core.tenants import list_task`, `list_organisations = list_task(...)`) →
-  the copy's `list_task` — C8.
+  replaced client dropped without closing until cashctrl decides otherwise — C8.
+- `src/xippios/cashctrl/tasks.py` (the module docstring's
+  `xippios.core.tenants.list_task`, `from xippios.core.tenants import list_task`,
+  `list_organisations = list_task(...)`) → the copy's `list_task` — C8.
 - `src/xippios/cashctrl/_cli.py`, `src/xippios/cashctrl/mcp.py`,
   `src/xippios/cashctrl/mcp_write.py` — `from xippios.core.mcp import TenantLock` and
-  `build_server(..., tenant_lock=...)` → a lock of its own that is a wrapper binding `org`
-  on its tools, no middleware, as the family review's C8 has it; ADR-0014's decision 7 no
-  longer binds it. From `src/xippios/core/mcp/server.py` the wrapper keeps `TenantLock`'s
-  validation of the parameter and the tenant, `_only_the_locked_tenant` for the
-  organisation list, and the instructions sentence (`_lock_sentence`) reworded for a bound
-  `org`; the middleware's functions (`_lock_middleware`, `_declares`, `_refusal`,
-  `_check_lock`, `_defaulted`) have no part in it — C8.
-- `tests/test_adapters.py` (`test_the_write_server_serves_write_tasks_only`) — `from
-  xippios.core.testing import assert_write_tools` → its copy, from
-  `src/xippios/core/testing/adapters.py`, with a check that `confirm` is the last
-  parameter (row 26 f). The family check no longer tests the write server; this test
-  does — C8.
-- `tests/test_org_lock.py` — follows the wrapper: a call names no other organisation than
-  the one the server binds, so the refusal texts it asserts ("this server is locked to
-  org=...; the call named another tenant", "...; the call did not name the tenant") and the
-  instructions sentence it asserts change with the wrapper; `tests/test_registry.py` —
-  against the package's own registry — C8.
+  `build_server(..., tenant_lock=...)` → a lock of its own that is a wrapper binding
+  `org` on its tools, no middleware, as the family review's C8 has it; ADR-0014's
+  decision 7 no longer binds it. From `src/xippios/core/mcp/server.py` the wrapper keeps
+  `TenantLock`'s validation of the parameter and the tenant, `_only_the_locked_tenant`
+  for the organisation list, and the instructions sentence (`_lock_sentence`) reworded
+  for a bound `org`; the middleware's functions (`_lock_middleware`, `_declares`,
+  `_refusal`, `_check_lock`, `_defaulted`) have no part in it — C8.
+- `tests/test_adapters.py`, which the update from template v0.2.0 deletes
+  (`test_the_write_server_serves_write_tasks_only`) — the write-server test moves to a
+  test file of cashctrl's own, such as `tests/test_tasks_write.py`, and calls the copy
+  of `assert_write_tools`, from `src/xippios/core/testing/adapters.py`, with a check
+  that `confirm` is the last parameter, instead of `from xippios.core.testing import
+  assert_write_tools`. The family check no longer tests the write server; this test does
+  — C8.
+- `tests/test_org_lock.py` — follows the wrapper: a call names no other organisation
+  than the one the server binds, so the refusal texts it asserts ("this server is locked
+  to org=...; the call named another tenant", "...; the call did not name the tenant")
+  and the instructions sentence it asserts change with the wrapper;
+  `tests/test_registry.py` — against the package's own registry — C8.
 - `scripts/record_fixture.py` — `scrub(key)`'s `Scrub(host=REPLAY_HOST, secrets=[...],
   rewrite=scrub_text, allow_binary=False)` → `Scrub(secrets=[...])`, and a step of the
   recorder's own on the `Fixture` that `fixture_from_response` returns, before its one
@@ -700,7 +732,7 @@ No other source imports a moved name.
   header values and the bodies, so `scrub_request_url` folds into it;
   `redacted_a_secret`, which scrubs again with `Scrub(host=..., rewrite=...)`, compares
   through the same step; `main`'s prefix before core's binary-body refusal meets the new
-  text — C9, rows 1, 23, 24 a, 26 c.
+  text — C9, ADR-0024, decision 4.
 - `tests/test_record_fixture.py` — `test_a_key_the_scrub_cannot_reach_is_never_written`
   asserts that core's JSON verify refuses a key behind a JSON escape ("secret value"):
   core no longer decodes, so the recorder's own verify answers it, in its own words;
@@ -711,10 +743,76 @@ No other source imports a moved name.
   itself — C9.
 - `CLAUDE.md` ("Organisations", "How to record a fixture") — the registry,
   `list_organisations` and the `--org` lock as the package's own; the recorder's
-  `Scrub(secrets=[key, its basic-auth token])` with its own host, JSON and percent-encoded
-  checks; core's verify searches plain values only — ADR-0024.
+  `Scrub(secrets=[key, its basic-auth token])` with its own host, JSON and
+  percent-encoded checks; core's verify searches plain values only — ADR-0024.
+- `src/xippios/cashctrl/_client.py`, `src/xippios/cashctrl/api/_form.py`,
+  `tests/test_errors.py` — `from xippios.core.errors import BODY_LIMIT,
+  error_from_response` may become `from xippios.core import ...` — the names are
+  exported now; the module path keeps working (C5).
+- `src/xippios/cashctrl/_cli.py` — its module docstring names
+  `xippios.core.mcp.quiet_request_logging`, which is importable from
+  `xippios.core.mcp.server` only → name that path — docstring only, nothing breaks (C5).
+- Where it imports `xippios.core.models.REDACTED` and `xippios.core.testing.REDACTED` —
+  nothing: both keep working, one object — C10.
+- A test that asserted a capped note of an offset-paged list task in full — the note
+  ends `; resume with start=<n>` — ADR-0016, amendment 2026-10-27.
 - Every task's `ResultMeta(tenant=org)` — nothing: `ResultMeta.tenant` stays — ADR-0024,
   decision 2.
+
+#### sdk-usda-esr
+
+- `src/xippios/usda/esr/tasks.py` — the `ResultCap` import, as for sdk-usda-nass.
+- `src/xippios/usda/esr/_client.py` — the gateway block → `gateway = Gateway(SOURCE)`,
+  as for sdk-usda-psd, `classify` keeping esr's 400 after `gateway.classify`;
+  `parse_retry_after` and the module docstring as there — C14, C6.
+- `tests/test_client.py` and `CLAUDE.md`'s rate-limit row — as for sdk-usda-psd — C6,
+  C14.
+- `src/xippios/usda/esr/params.py` — the `PackagedList` class and `packaged_values` →
+  `PackagedList.load(PACKAGE, name)`, `_codes` as for sdk-usda-psd; esr keeps its
+  integer-nearest `_closest` — C13, ADR-0023, decision 4.
+- `src/xippios/usda/esr/errors.py` — `UnknownCode` → `xippios.core.UnknownCode`, as for
+  sdk-usda-psd — ADR-0022, amendment 2026-10-27.
+- `src/xippios/usda/esr/tasks.py` — `_packaged`, `_packaged_meta` and `_matches`, as for
+  sdk-usda-psd — ADR-0022, rule 1.
+- `src/xippios/usda/esr/tasks.py` — `published_at` from its naive release times with
+  `published_at_naive=published_at is not None`, since the flag without a time is
+  refused; `vintage` keeps the release text as upstream prints it — ADR-0022, rule 2.
+- `scripts/refresh_reference.py` — `upstream_record(record)` → `record.dump_upstream()`;
+  `render_enums` takes the fetch day as text; the refusal of a value list and an id list
+  together and `--render-only`'s refusal of lists fetched on different days go —
+  `dump_upstream`, C7.
+
+#### sdk-usda-gats
+
+- `src/xippios/usda/gats/tasks.py` — the `ResultCap` import, as for sdk-usda-nass.
+- `src/xippios/usda/gats/_client.py` — the gateway block → `gateway = Gateway(SOURCE)`,
+  as for sdk-usda-psd; `parse_retry_after` and the module docstring as there — C14, C6.
+- `tests/test_client.py` and `CLAUDE.md`'s rate-limit row — as for sdk-usda-psd — C6,
+  C14; the autouse cache-clearing fixture of `tests/test_client.py` — deleted: the
+  plugin clears every `MemoryCache` around each offline test — ADR-0013, amendment
+  2026-10-27.
+- `tests/test_tasks.py`, the 429 test of `get_census_export_series` —
+  `info.value.retry_after == 3151.0` is read through the client, so it becomes the
+  snapshot's wait, a fraction under 3151: bracket it with `CLOCK_SLACK` — C14.
+- `src/xippios/usda/gats/params.py` — the `PackagedList` class and `packaged_values` →
+  `PackagedList.load(PACKAGE, name)`, `_codes` as for sdk-usda-psd; gats keeps its
+  three-letter pass in front of `closest` and its `_nearest` and `_sharing_digits` —
+  C13, ADR-0023, decision 4.
+- `src/xippios/usda/gats/errors.py` — `UnknownCode` → `xippios.core.UnknownCode`, as for
+  sdk-usda-psd; gats passes its example codes as `hint=` only when `closest` is empty,
+  since a `hint` wins over `closest` — ADR-0022, amendment 2026-10-27.
+- `src/xippios/usda/gats/tasks.py` — `_packaged`, `_packaged_meta` and `_matches`, as
+  for sdk-usda-psd — ADR-0022, rule 1.
+- `src/xippios/usda/gats/api/` — the five wrappers that return `(records, stored_at)` →
+  `client.get_answer(path)`, its `retrieved_at` the task's `meta.retrieved_at` on a hit
+  and a miss alike; `_client.stored_at` goes — ADR-0015, decision 5, amended 2026-10-27.
+- `src/xippios/usda/gats/tasks.py` — `published_at` with `published_at_naive`, as for
+  sdk-usda-esr — ADR-0022, rule 2.
+- `src/xippios/usda/gats/tasks.py`, `get_census_export_series`,
+  `get_census_import_series` and `get_census_reexport_series` — nothing: they already
+  refuse a range with an unreleased month with `NotFoundError` naming the released
+  months, and their docstrings say so — ADR-0022, amendment (6) and (7).
+- `scripts/refresh_reference.py` — as for sdk-usda-esr — `dump_upstream`, C7.
 
 ## [0.2.1] - 2026-10-27
 
