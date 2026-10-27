@@ -1,17 +1,7 @@
-"""pytest plugin: the ``live`` gate, offline guarantees, and fixture-replay helpers.
+"""pytest plugin: the ``live`` gate, the offline guarantees and fixture replay (conventions §10).
 
-Enable it from ``tests/conftest.py`` with ``pytest_plugins = ["xippios.core.testing.plugin"]``.
-
-The whole session runs offline (ADR-0013): from ``pytest_configure`` on, while test
-modules are collected, in a fixture of any scope and in a test, a request through
-httpx's default transports is refused unless a test marked ``network`` or ``live`` is
-being set up, run or torn down (``_NetworkGuard`` states the edges). Every test not
-marked ``live`` also gets a rate limiter and quota policies that never wait or refuse
-unless it is marked ``rate_limited``, quota snapshots reset before and after it, and
-every ``EnvKeyAuth`` sending ``PLACEHOLDER_KEY`` (``placeholder_api_key``). A ``live``
-test is skipped unless ``XIPPIOS_LIVE_TESTS=1``.
-Every test, ``live`` or not, gets the ``httpx`` and ``httpcore`` logger levels back
-when it ends, and ``anyio`` tests run on asyncio (``anyio_backend``).
+ADR-0013 decides each guarantee and lists its edges; ``pytest_plugins =
+["xippios.core.testing.plugin"]`` in ``tests/conftest.py`` enables it.
 """
 
 import asyncio
@@ -27,7 +17,8 @@ import pytest
 import respx
 
 from xippios.core.client.auth import EnvKeyAuth
-from xippios.core.client.quota import QuotaPolicy, _reset_every_policy
+from xippios.core.client.cache import _clear_every_cache
+from xippios.core.client.quota import QuotaPolicy, _every_policy, _reset_every_policy
 from xippios.core.client.ratelimit import TokenBucket
 from xippios.core.testing.fixtures import fixture_path
 from xippios.core.testing.replay import ReplayFixture, replay
@@ -44,7 +35,8 @@ _REQUEST_LOGGERS = ("httpx", "httpcore")
 _MARKERS = (
     "live: hits the real upstream; skipped unless XIPPIOS_LIVE_TESTS=1",
     "network: may reach the network through httpx's default transports; refused otherwise",
-    "rate_limited: the rate limiter waits as configured; offline tests skip its waits otherwise",
+    "rate_limited: the rate limiter waits and the quota policy pauses as configured; offline "
+    "tests skip both otherwise",
 )
 
 
@@ -62,37 +54,9 @@ def _refused(method: str, path: str) -> RuntimeError:
 
 
 class _NetworkGuard:
-    """httpx's default transports and httpcore's pools, refusing for the whole session.
+    """httpcore's connection pools, patched once to refuse the network for the session.
 
-    ``install`` patches ``httpx.HTTPTransport.handle_request``,
-    ``httpx.AsyncHTTPTransport.handle_async_request``,
-    ``httpcore.ConnectionPool.handle_request`` and
-    ``httpcore.AsyncConnectionPool.handle_async_request`` once, when pytest is
-    configured; while ``refusing`` is set, each raises ``RuntimeError`` naming the
-    request's method and path, never its host or query (ADR-0005). Otherwise each hands
-    the request to the method it replaced. ``pytest_runtest_setup`` sets ``refusing``
-    for each test before its fixtures, cleared for a test marked ``network`` or
-    ``live``, and ``pytest_runtest_teardown`` sets it again after them.
-
-    ``respx``'s default mocker patches the same httpcore pool methods when a router
-    starts, on top of these: a mocked or replayed request is answered by respx and never
-    reaches them, and a route that passes through (``route.pass_through()``) lands on
-    the refusal unless the test is marked ``network``. The transport methods refuse
-    themselves only when nothing sits on top of the pool's; otherwise they hand the
-    request down. A transport a test passes itself (``httpx.MockTransport``, FastAPI's
-    ``TestClient``) never reaches any of them.
-
-    That is exactly what is guaranteed, with these edges:
-
-    - The refusal's message names the method and path only. pytest's own failure report
-      may still print httpx's request repr, query included; offline, the key in it is
-      the placeholder.
-    - The guard is active from ``pytest_configure`` on: a request made while a
-      ``conftest.py`` is imported, before the plugin is configured, is not refused.
-    - A fixture of wider scope runs under the marking of the test that sets it up, and
-      its teardown under the marking of the last test that uses it. A live clean-up
-      fixture is therefore function-scoped, or runs in the separate nightly
-      ``-m live`` job.
+    ADR-0013, decision 1, as amended 2026-10-27: the two pool methods, nothing of httpx's.
     """
 
     def __init__(self) -> None:
@@ -100,23 +64,17 @@ class _NetworkGuard:
         self._saved: list[tuple[type[Any], str, Any]] = []
 
     def install(self) -> None:
-        """Patch the four methods; each replacement keeps the name respx looks for."""
-        pool = _pool_guard(self, httpcore.ConnectionPool.handle_request)
-        pool_async = _pool_guard_async(self, httpcore.AsyncConnectionPool.handle_async_request)
+        """Patch the two pool methods; each replacement keeps the name respx looks for."""
         patches: list[tuple[type[Any], str, Any]] = [
-            (httpcore.ConnectionPool, "handle_request", pool),
-            (httpcore.AsyncConnectionPool, "handle_async_request", pool_async),
             (
-                httpx.HTTPTransport,
+                httpcore.ConnectionPool,
                 "handle_request",
-                _transport_guard(self, httpx.HTTPTransport.handle_request, pool),
+                _pool_guard(self, httpcore.ConnectionPool.handle_request),
             ),
             (
-                httpx.AsyncHTTPTransport,
+                httpcore.AsyncConnectionPool,
                 "handle_async_request",
-                _transport_guard_async(
-                    self, httpx.AsyncHTTPTransport.handle_async_request, pool_async
-                ),
+                _pool_guard_async(self, httpcore.AsyncConnectionPool.handle_async_request),
             ),
         ]
         for owner, name, replacement in patches:
@@ -131,6 +89,8 @@ class _NetworkGuard:
 
 
 _GUARD = pytest.StashKey[_NetworkGuard]()
+_QUOTA_LEFT = pytest.StashKey[dict[int, tuple[str, str]]]()
+"""Per live policy, its source and its last quota reading after a ``live`` test."""
 
 _PoolSend = Callable[[httpcore.ConnectionPool, httpcore.Request], httpcore.Response]
 _AsyncPoolSend = Callable[
@@ -166,36 +126,6 @@ def _pool_guard_async(guard: _NetworkGuard, original: _AsyncPoolSend) -> _AsyncP
     return handle_async_request
 
 
-def _transport_guard(
-    guard: _NetworkGuard,
-    original: Callable[[httpx.HTTPTransport, httpx.Request], httpx.Response],
-    pool: _PoolSend,
-) -> Callable[[httpx.HTTPTransport, httpx.Request], httpx.Response]:
-    def handle_request(self: httpx.HTTPTransport, request: httpx.Request) -> httpx.Response:
-        __tracebackhide__ = True
-        if guard.refusing and httpcore.ConnectionPool.handle_request is pool:
-            raise _refused(request.method, request.url.path)
-        return original(self, request)
-
-    return handle_request
-
-
-def _transport_guard_async(
-    guard: _NetworkGuard,
-    original: Callable[[httpx.AsyncHTTPTransport, httpx.Request], Awaitable[httpx.Response]],
-    pool: _AsyncPoolSend,
-) -> Callable[[httpx.AsyncHTTPTransport, httpx.Request], Awaitable[httpx.Response]]:
-    async def handle_async_request(
-        self: httpx.AsyncHTTPTransport, request: httpx.Request
-    ) -> httpx.Response:
-        __tracebackhide__ = True
-        if guard.refusing and httpcore.AsyncConnectionPool.handle_async_request is pool:
-            raise _refused(request.method, request.url.path)
-        return await original(self, request)
-
-    return handle_async_request
-
-
 def pytest_addoption(parser: pytest.Parser) -> None:
     """Register the ini options ``xippios_placeholder_key_envs`` and ``xippios_package``."""
     parser.addini(
@@ -222,6 +152,7 @@ def pytest_configure(config: pytest.Config) -> None:
     guard = _NetworkGuard()
     guard.install()
     config.stash[_GUARD] = guard
+    config.stash[_QUOTA_LEFT] = {}
 
 
 def pytest_unconfigure(config: pytest.Config) -> None:
@@ -249,13 +180,39 @@ def pytest_runtest_setup(item: pytest.Item) -> Generator[None, None, None]:
 def pytest_runtest_teardown(
     item: pytest.Item, nextitem: pytest.Item | None
 ) -> Generator[None, None, None]:
-    """Refuse the network again once the test's fixtures are torn down."""
+    """Refuse the network again once the test's fixtures are torn down.
+
+    After a ``live`` test that ran, keep every quota policy's reading for the summary.
+    """
     try:
         return (yield)
     finally:
         guard = item.config.stash.get(_GUARD, None)
         if guard is not None:
             guard.refusing = True
+        if live_enabled() and item.get_closest_marker("live") is not None:
+            _keep_quota_left(item.config)
+
+
+def _keep_quota_left(config: pytest.Config) -> None:
+    """Each policy's source and ``describe()``, kept past the resets of later offline tests."""
+    kept = config.stash.setdefault(_QUOTA_LEFT, {})
+    for policy in _every_policy():
+        snapshot = policy.snapshot()
+        if snapshot is not None:
+            kept[id(policy)] = (policy.source or "(no source)", snapshot.describe())
+
+
+def pytest_terminal_summary(
+    terminalreporter: pytest.TerminalReporter, exitstatus: int, config: pytest.Config
+) -> None:
+    """After a live run, one line per quota policy: what the live tests left of the quota.
+
+    Times, counts and the policy's source only, never a key, a host or a query
+    (ADR-0013, amended 2026-10-27).
+    """
+    for source, left in config.stash.get(_QUOTA_LEFT, {}).values():
+        terminalreporter.write_line(f"quota after the live run: {source}: {left}")
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
@@ -284,14 +241,9 @@ async def _acquire_without_waiting(
 
 @pytest.fixture(autouse=True)
 def _skip_rate_limit_waits(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Let a client's rate limiter never wait in a test not marked ``live``.
+    """A client's rate limiter neither waits nor takes a token in a test not marked ``live``.
 
-    ``TokenBucket.acquire`` returns ``0.0`` at once, without taking a token: replayed
-    requests need no pace, and a source paced at one request a second waited a second
-    per replayed request (sdk-comtrade, sdk-usda-psd). No token is taken either, so a
-    limiter a source shares across its tests holds no debt from the replays when a
-    ``live`` test in the same run uses it. Marked ``rate_limited`` or ``live``, a test
-    keeps the limiter as configured.
+    ADR-0013, decision 2; a test marked ``rate_limited`` keeps the limiter.
     """
     if _marked(request, "live") or _marked(request, "rate_limited"):
         return
@@ -306,32 +258,9 @@ async def _pause_without_waiting(self: QuotaPolicy, request: httpx.Request) -> N
 def _skip_quota_pauses(
     request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
 ) -> Iterator[None]:
-    """Let no quota policy pause or refuse, and none stay spent, in a test not marked ``live``.
+    """No quota policy pauses, refuses or stays spent in a test not marked ``live``.
 
-    Every ``QuotaPolicy``'s snapshot is forgotten before and after the test, so a
-    replayed 429 cannot leave a source's module-level policy spent for the tests after
-    it, a live one included, nor the policy every api.data.gov source shares
-    (``xippios.core.data_gov``). Unless the test is marked ``rate_limited``, the policy's
-    pause does nothing either: ``before_request``, the hook ``install`` sets, returns
-    at once without waiting or raising ``RateLimitError``, so a test that replays a
-    spent quota and then calls again gets its fixture, not a refusal. ``observe`` still
-    keeps the snapshot during the test, for a test that asserts it. A ``live`` test
-    keeps every policy as it is.
-
-    That is exactly what is guaranteed, with these edges (ADR-0013, ADR-0015):
-
-    - Consecutive live tests share every policy's snapshot: a quota one live test spends
-      makes the next one wait within the cap, or raise ``RateLimitError`` without
-      sending.
-    - This fixture is function-scoped, so the reset runs after the fixtures of wider
-      scope are set up: a policy one of those spends while it is set up is forgotten in
-      the setup of the first test not marked ``live`` from then on, the one that set it
-      up included, and never reaches that test's body. A fixture that hands an offline
-      test a spent quota is function-scoped.
-    - The pause is turned off by replacing ``QuotaPolicy._pause``, which
-      ``before_request``, the hook ``install`` sets, calls. A subclass that overrides
-      ``before_request`` opts out for any wait or refusal of its own: ``install`` sets
-      the override as the hook, and only the pause step it calls is turned off.
+    ADR-0013, decision 4 (ADR-0015); a test marked ``rate_limited`` keeps the pause.
     """
     if _marked(request, "live"):
         yield
@@ -343,6 +272,20 @@ def _skip_quota_pauses(
     _reset_every_policy()
 
 
+@pytest.fixture(autouse=True)
+def _clear_response_caches(request: pytest.FixtureRequest) -> Iterator[None]:
+    """Every ``MemoryCache`` starts and ends a test not marked ``live`` empty.
+
+    ADR-0013, amended 2026-10-27; a ``CacheBackend`` of the source's own is not cleared.
+    """
+    if _marked(request, "live"):
+        yield
+        return
+    _clear_every_cache()
+    yield
+    _clear_every_cache()
+
+
 def _placeholder_key(self: EnvKeyAuth) -> str:
     return PLACEHOLDER_KEY
 
@@ -351,31 +294,10 @@ def _placeholder_key(self: EnvKeyAuth) -> str:
 def placeholder_api_key(
     request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
 ) -> str | None:
-    """Every test but a live one sends the placeholder key, whatever the shell holds.
+    """Every test but a live one sends ``PLACEHOLDER_KEY``, whatever the shell holds.
 
-    The variables the ini option ``xippios_placeholder_key_envs`` names (e.g.
-    ``xippios_placeholder_key_envs = COMTRADE_API_KEY``) are set to ``PLACEHOLDER_KEY``,
-    and ``EnvKeyAuth.key``, through which every ``xippios.core`` auth class reads its
-    key, returns it; both come back after the test.
-
-    The key is pinned on the class, not on an auth object. A source may hold one auth
-    object per tenant (sdk-cashctrl builds a ``BasicKeyAuth`` per organisation) and no
-    module-level ``auth`` to patch, and an auth object resolves its key once and caches
-    it, so a live test earlier in the run may have cached the real key on any of them;
-    setting the variables alone would leave that key in place. A subclass that overrides
-    ``key`` itself is not pinned.
-
-    A ``live`` test is exempt: nothing is set or pinned, and it uses the key in the
-    environment. There is no marker to lift the pin for one test: a test that needs
-    real key resolution (a missing key raising ``ConfigError``, an explicit key winning)
-    lives in a module that overrides this fixture with one that pins nothing::
-
-        @pytest.fixture
-        def placeholder_api_key() -> None:
-            return None  # the tests in this module resolve keys themselves
-
-    A ``placeholder_api_key`` fixture in a source's ``conftest.py`` overrides this one
-    the same way, as pytest overrides any fixture by name.
+    ADR-0013, decision 3: the variables ``xippios_placeholder_key_envs`` names hold it and
+    ``EnvKeyAuth.key`` returns it; a module overrides this fixture to resolve keys itself.
 
     Returns:
         ``PLACEHOLDER_KEY``, or ``None`` in a live test, which uses the key in the
@@ -393,11 +315,7 @@ def placeholder_api_key(
 def _restore_request_logger_levels() -> Iterator[None]:
     """Give the ``httpx`` and ``httpcore`` loggers their levels back after every test.
 
-    Building an MCP server sets both to ``WARNING`` (``quiet_request_logging``), so a
-    test that builds one left them there for the rest of the run (sdk-cashctrl). Live
-    tests included: restoring a level reaches nothing outside the process. The levels
-    are saved per test, after fixtures of wider scope are set up, so one of those that
-    changes a level leaves it behind.
+    ADR-0013, the paragraph after decision 4: live tests included.
     """
     saved = {name: logging.getLogger(name).level for name in _REQUEST_LOGGERS}
     yield

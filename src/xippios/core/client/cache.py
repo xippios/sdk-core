@@ -3,6 +3,7 @@
 import hashlib
 import threading
 import time
+import weakref
 from collections import OrderedDict
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -75,8 +76,24 @@ def cache_key(method: str, url: httpx.URL) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
 
 
+_CACHES: "weakref.WeakSet[MemoryCache]" = weakref.WeakSet()
+"""Every live ``MemoryCache``, for the testing plugin's clearing between tests (ADR-0013)."""
+_CACHES_LOCK = threading.Lock()
+
+
+def _clear_every_cache() -> None:
+    """Drop every live ``MemoryCache``'s entries; the testing plugin calls it around each test."""
+    with _CACHES_LOCK:
+        caches = list(_CACHES)
+    for cache in caches:
+        cache.clear()
+
+
 class MemoryCache:
     """In-memory LRU cache with a TTL, shareable across threads and event loops.
+
+    The testing plugin clears every instance before and after each test not marked
+    ``live`` (ADR-0013).
 
     Args:
         ttl: Seconds an entry stays valid; ``None`` keeps entries until evicted.
@@ -98,6 +115,8 @@ class MemoryCache:
         self._clock = clock
         self._items: OrderedDict[str, CachedResponse] = OrderedDict()
         self._lock = threading.Lock()
+        with _CACHES_LOCK:
+            _CACHES.add(self)
 
     def get(self, key: str) -> CachedResponse | None:
         """Return a live entry for ``key``, dropping it when its TTL has passed."""

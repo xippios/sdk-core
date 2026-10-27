@@ -2,7 +2,6 @@ import logging
 from pathlib import Path
 
 import httpcore
-import httpx
 import pytest
 
 from xippios.core.client import QuotaPolicy
@@ -21,8 +20,6 @@ def placeholder_api_key() -> None:
     """The outer test pins no key; an inner run pins it itself."""
 
 
-SEND = httpx.HTTPTransport.handle_request
-SEND_ASYNC = httpx.AsyncHTTPTransport.handle_async_request
 POOL_SEND = httpcore.ConnectionPool.handle_request
 POOL_SEND_ASYNC = httpcore.AsyncConnectionPool.handle_async_request
 ACQUIRE = TokenBucket.acquire
@@ -262,9 +259,7 @@ def test_offline_tests_cannot_reach_the_network(
     pytester.makepyfile(OFFLINE_TESTS)
     result = pytester.runpytest("-p", "xippios.core.testing.plugin", "--strict-markers")
     result.assert_outcomes(passed=15)
-    # The inner session gave back what it patched: the outer session's own guard.
-    assert httpx.HTTPTransport.handle_request is SEND
-    assert httpx.AsyncHTTPTransport.handle_async_request is SEND_ASYNC
+    # The inner session gave back the two pool methods it patched: the outer session's guard.
     assert httpcore.ConnectionPool.handle_request is POOL_SEND
     assert httpcore.AsyncConnectionPool.handle_async_request is POOL_SEND_ASYNC
 
@@ -431,6 +426,94 @@ def test_a_replayed_429_leaves_no_quota_spent_for_later_tests(
     result = pytester.runpytest("-p", "xippios.core.testing.plugin", "--strict-markers")
     result.assert_outcomes(passed=5)
     assert QuotaPolicy._pause is PAUSE
+
+
+CACHE_TESTS = """
+import pytest
+
+from xippios.core.client import MemoryCache
+from xippios.core.client.cache import CachedResponse
+
+CACHE = MemoryCache()  # module-level, as a source keeps its client's
+ENTRY = CachedResponse(status=200, headers=(), content=b"{}", stored_at=0.0)
+
+
+def test_an_offline_test_stores_an_entry():
+    CACHE.set("k", ENTRY)
+    assert len(CACHE) == 1
+
+
+def test_the_next_test_starts_without_it():
+    assert len(CACHE) == 0
+
+
+@pytest.mark.live
+def test_a_live_test_keeps_what_it_stores():
+    CACHE.set("k", ENTRY)
+
+
+@pytest.mark.live
+def test_so_the_next_live_test_finds_it():
+    assert len(CACHE) == 1
+
+
+def test_an_offline_test_after_them_starts_without_it():
+    assert len(CACHE) == 0
+"""
+
+
+def test_every_memory_cache_is_empty_around_an_offline_test(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Row 39 b (sdk-usda-gats, sdk-comtrade): each source cleared its caches by hand.
+    monkeypatch.setenv(LIVE_ENV, "1")
+    pytester.makepyfile(CACHE_TESTS)
+    result = pytester.runpytest("-p", "xippios.core.testing.plugin", "--strict-markers")
+    result.assert_outcomes(passed=5)
+
+
+SUMMARY_TESTS = """
+import httpx
+import pytest
+
+from xippios.core import QuotaPolicy
+
+POLICY = QuotaPolicy(source="example")
+QUIET = QuotaPolicy(source="unused")  # no reading: no line
+
+
+@pytest.mark.live
+def test_a_live_call_reads_the_quota():
+    POLICY.observe(
+        httpx.Response(
+            200,
+            headers={"x-ratelimit-limit": "1000", "x-ratelimit-remaining": "998"},
+            request=httpx.Request("GET", "https://tenant.example.test/v1?key=SECRET"),
+        )
+    )
+
+
+def test_an_offline_test_after_it_resets_the_snapshot():
+    assert POLICY.snapshot() is None
+"""
+
+
+@pytest.mark.parametrize(("gate", "lines"), [("1", 1), ("0", 0)])
+def test_a_live_run_ends_with_the_quota_left(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch, gate: str, lines: int
+) -> None:
+    # Row 44 b (sdk-usda-esr): a release PR reports the quota a live run left.
+    monkeypatch.setenv(LIVE_ENV, gate)
+    pytester.makepyfile(SUMMARY_TESTS)
+    result = pytester.runpytest("-p", "xippios.core.testing.plugin", "--strict-markers")
+    printed = [line for line in result.outlines if line.startswith("quota after the live run")]
+    assert len(printed) == lines
+    if lines:
+        assert printed[0].startswith(
+            "quota after the live run: example: 998 of 1000 requests left as of "
+        )
+        assert "tenant" not in result.stdout.str()
+        assert "SECRET" not in result.stdout.str()
 
 
 PLACEHOLDER_TESTS = """

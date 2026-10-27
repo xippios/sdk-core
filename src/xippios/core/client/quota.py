@@ -44,11 +44,15 @@ _POLICIES: "weakref.WeakSet[QuotaPolicy]" = weakref.WeakSet()
 _POLICIES_LOCK = threading.Lock()
 
 
+def _every_policy() -> list["QuotaPolicy"]:
+    """Every live policy, for the testing plugin (ADR-0013)."""
+    with _POLICIES_LOCK:
+        return list(_POLICIES)
+
+
 def _reset_every_policy() -> None:
     """Forget every live policy's snapshot; the testing plugin calls it around each test."""
-    with _POLICIES_LOCK:
-        policies = list(_POLICIES)
-    for policy in policies:
+    for policy in _every_policy():
         policy.reset()
 
 
