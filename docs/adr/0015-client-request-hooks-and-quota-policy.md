@@ -224,3 +224,9 @@ reads the wait for a 429 from `snapshot()`'s `resumes_at`, since `observe` ran b
 sharing a key in one process keep a snapshot each no longer holds for api.data.gov:
 `xippios.core.data_gov` shares one policy per process (queue row 30 d). Conventions 1.17
 states the cap and `install`'s contract in §6.
+
+Amended by ADR-0022's amendment of 2026-10-27 (core 0.3.0): decision 5's wrapper that
+"calls `get` and then `decode_json`" has `AsyncClient.get_answer` beside it, which
+returns `Answer(payload, retrieved_at)`, a hit's stored time read from
+`xippios_cache_stored_at` or the time the answer arrived, and takes decision 4's `auth=`
+as `get_json` does; `get`, `decode_json` and `get_json` stay.

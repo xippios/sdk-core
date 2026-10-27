@@ -47,3 +47,53 @@ the same way.
   `published_at` empty (`load_time` is a load time, not a release time). psd omits
   `None` filters (rule 3).
 - Conventions §4: the two paragraphs and the field; the version bumps with the ADR.
+
+## Amendment 2026-10-27
+
+Johannes decided five points of the code on 2026-10-27, in the interview before core
+0.3.0's PR 3, which carries this ADR's code.
+
+1. **`fetched` is a time.** `PackagedList.fetched` is a timezone-aware UTC datetime,
+   rule 1's `retrieved_at`. From template v0.3.0 on, the refresh scripts write
+   `datetime.now(UTC)` to the second; a file whose `fetched` is a bare date, every file
+   written before, reads as 00:00 UTC of that day, the start of the day the old scripts
+   truncated the time to, and the source's next reference refresh writes the full time.
+   A time without a zone is refused.
+2. **One model.** `PackagedList(param, endpoint, fetched, records)`, frozen, with
+   `PackagedList.load(package, name)` on `load_json`, `.meta(source, *, request, vintage,
+   published_at, published_at_naive)` building rule 1's meta, `.parse(model, *,
+   source)` validating the records, and `.write(path)` writing the file
+   (`{"param", "endpoint", "fetched", "records"}`, indented, non-ASCII text kept) for the
+   refresh scripts. A list of values is records of one field named by the upstream
+   parameter, and a table records of its columns: usda-nass's value files and
+   sdk-comtrade's value files and CSV tables become such files in their adoptions,
+   without network, their list tasks still returning strings. `endpoint` names the
+   upstream operation, an operationId or a URL path; comtrade's
+   `files/v1/app/reference/<file>.json` is a URL path and qualifies.
+3. **The helpers.** `matches(search, *fields)` is the `search` filter of the list
+   tasks, `closest(value, codes, *, n=3)` the two `difflib` passes of sdk-usda-psd (by
+   code, then by name), and `UnknownCode(param, value, *, list_name, fetched, closest,
+   hint, reason, source)`, an `InvalidRequestError`, the refusal of a code the packaged
+   list lacks, with the copies' common message. A source with a strategy of its own for
+   the closest codes (sdk-usda-gats's ISO codes, sdk-usda-esr's nearest integers) keeps
+   it and passes its result, one consumer each (ADR-0023, decision 4).
+4. **A cached answer's time.** `AsyncClient.get_answer(path, *, params, headers, auth)`
+   returns `Answer(payload, retrieved_at)`: on a cache hit the time the entry was stored,
+   else the time the answer arrived (ADR-0015, decision 5). sdk-usda-gats drops its
+   `(records, stored_at)` tuples for it (queue row 39 a); `get_json` stays.
+5. **Frozen series.** A series upstream no longer updates is marked in the README status
+   table, by a status that names the last release, and in its task's docstring;
+   `vintage` holds the last release's identifier. `ResultMeta` gains no field (queue row
+   39 h).
+
+With them, three rules of the code. Rule 2: the flag with an aware `published_at`, or
+with none, is refused, since the flag says upstream printed a time without a zone. Rule
+3: `ResultMeta` drops a top-level `None` from `request` at construction, before the
+credential rule, so a credential left `None` is not recorded as sent; a `None` inside a
+nested mapping is kept as given. And conventions §4 gains the period series of queue row
+39 i: a task that assembles a series from one call per period states its ceiling, the
+newest period upstream has released; `vintage` is the newest release among the periods;
+a period beyond the ceiling is refused naming the ceiling; what a period inside the range
+that upstream has not released answers is stated in the task's docstring, never an empty
+page passed off as no data. Conventions 1.19 states the five points and the period
+series in §3 to §6.

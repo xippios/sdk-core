@@ -57,3 +57,8 @@ Amended 2026-10-27 (core 0.3.0, ADR-0019): `redaction`, the one credential rule,
 module at the bottom beside `errors`, imported by `models`, `client` and `testing` and
 importing nothing of core's; `client/download.py` holds `Downloaded` and the streaming
 `AsyncClient.download` is built from.
+
+Amended 2026-10-27 (core 0.3.0, ADR-0022 and ADR-0012's amendments of that date):
+`ResultMeta` stays a `BaseModel` but refuses unknown fields, where `UpstreamModel`
+ignores them; `reference` holds `PackagedList`, `matches` and `closest`, and imports
+`models`, below it.
