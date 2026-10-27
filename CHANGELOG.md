@@ -78,8 +78,9 @@ renderer tests went.
   `quiet_request_logging` and `register_tasks` from `xippios.core.mcp`;
   `PROBLEM_MEDIA_TYPE`, `STATUS_BY_ERROR`, `install_error_handlers` and
   `problem_response` from `xippios.core.http`. With the six deleted names above, the
-  five lists go from 113 entries (98 names) to 81 (69 names). No source imports a
-  removed name from a package.
+  five lists go from 113 entries (98 names) to 81 (69 names); with the names added below
+  and the three that move out, 88 (74) at 0.3.0. No source imports a removed name from a
+  package.
 - **`QuotaPolicy`'s `reset_header`, with the reset header's three formats** (the family
   review's C6, a slimmer `QuotaPolicy`; ADR-0015, amendment 2026-10-27; no source sets
   it, and api.data.gov sends no reset header): delay-seconds, epoch seconds and an
@@ -148,8 +149,9 @@ renderer tests went.
   `_plain_or_encoded`, the host forms, `_json_strings` and `_strings`. At that commit:
   `src/xippios/core/testing/scrub.py`, tested in `tests/testing/test_scrub.py`,
   `tests/testing/test_fixtures.py` and `tests/testing/test_record_replay.py`. With the
-  three names above, the export lists hold 41 names in `xippios.core`, 7 in
-  `xippios.core.mcp` and 19 in `xippios.core.testing`.
+  three names above, the five export lists hold 41 names in `xippios.core`, 18 in
+  `xippios.core.client`, 7 in `xippios.core.mcp`, 3 in `xippios.core.http` and 19 in
+  `xippios.core.testing`: 88 entries, 74 names.
 
 ### Changed (breaking)
 
@@ -192,8 +194,8 @@ renderer tests went.
   sdk-usda-psd): `ResultMeta` drops a top-level `None` at construction, before the
   credential rule, so a task passes its parameters as they are and a credential left
   `None` is not recorded as sent; a `None` inside a nested mapping is kept as given.
-- **Parse failures print no payload** (ADR-0017, sensitive upstream fields; found by
-  sdk-cashctrl in a live test's traceback): `parse`, `UpstreamModel.project`,
+- **Parse failures print no payload** (conventions §5: errors never leak tracebacks;
+  found by sdk-cashctrl in a live test's traceback): `parse`, `UpstreamModel.project`,
   `load_table`, `PackagedList.load`, `decode_json`, `decode_text` and `decode_csv` build
   their `ValidationError` and raise it `from None` through a private helper whose frame
   holds the error alone. The text folds in the cause's location, error type and message
@@ -710,10 +712,13 @@ imports a moved name.
   for the organisation list, and the instructions sentence (`_lock_sentence`) reworded
   for a bound `org`; the middleware's functions (`_lock_middleware`, `_declares`,
   `_refusal`, `_check_lock`, `_defaulted`) have no part in it — C8.
-- `tests/test_adapters.py` (`test_the_write_server_serves_write_tasks_only`) — `from
-  xippios.core.testing import assert_write_tools` → its copy, from
-  `src/xippios/core/testing/adapters.py`, with a check that `confirm` is the last
-  parameter. The family check no longer tests the write server; this test does — C8.
+- `tests/test_adapters.py`, which the update from template v0.2.0 deletes
+  (`test_the_write_server_serves_write_tasks_only`) — the write-server test moves to a
+  test file of cashctrl's own, such as `tests/test_tasks_write.py`, and calls the copy
+  of `assert_write_tools`, from `src/xippios/core/testing/adapters.py`, with a check
+  that `confirm` is the last parameter, instead of `from xippios.core.testing import
+  assert_write_tools`. The family check no longer tests the write server; this test does
+  — C8.
 - `tests/test_org_lock.py` — follows the wrapper: a call names no other organisation
   than the one the server binds, so the refusal texts it asserts ("this server is locked
   to org=...; the call named another tenant", "...; the call did not name the tenant")

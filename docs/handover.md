@@ -414,8 +414,9 @@ After its own adoption of 0.2.0 (`chore/template-update-v0.2.0`):
   `test_write_tools_are_the_write_tasks_with_their_parameters` and
   `test_the_order_categories_are_on_the_read_server_and_the_router` are cashctrl's own
   and move to `tests/test_tasks_write.py` or `tests/test_tasks.py`. From 0.3.0 the family
-  check no longer tests the write server (ADR-0024): cashctrl keeps that test with its
-  own copy of `assert_write_tools`, as "Adopting core 0.3.0" says.
+  check no longer tests the write server (ADR-0024): cashctrl moves that test to a test
+  file of its own, with its own copy of `assert_write_tools`, as "Adopting core 0.3.0"
+  says.
 - `anyio_backend` in `tests/conftest.py` → the plugin's.
 
 ### Template v0.2.1: the two family checks that are CI steps
@@ -500,17 +501,18 @@ against the family review's target of about 4,500 to 5,000; the lead of the CHAN
 
 ## Adopting core 0.3.0
 
-Each source adopts core 0.3.0, and template v0.3.0 once it is tagged, in one adoption
-PR, a `chore/template-update*` PR, before its next release (conventions §12 and §15,
-ADR-0018), with `/adopt-release`; the reviewer judges it against the definition of
-done's Adoption PR block and nothing else. The rules of ADR-0019 and ADR-0022, and the
-renderer rule of conventions 1.20, bind a source from this adoption (conventions, header
-of 1.21). Pre-filled below from the CHANGELOG's `[0.3.0]` section, whose Hand-apply list
-names the files and the changed texts, and from the family review's per-source items;
-the adoption PR confirms every item against the source as it is then. A source that has
-not adopted core 0.2.1 by then carries "Adopting core 0.2.1" into the same PR, since the
-update from its template release brings v0.2.1's and v0.2.2's changes too, as the
-template's CHANGELOG says for a repository still on v0.2.0.
+Each source adopts core 0.3.0 and template v0.3.0, which tags with it (`docs/roadmap.md`
+§3), in one adoption PR, a `chore/template-update*` PR, before its next release
+(conventions §12 and §15, ADR-0018), with `/adopt-release`; the reviewer judges it
+against the definition of done's Adoption PR block and nothing else. The rules of
+ADR-0019 and ADR-0022, and the renderer rule of conventions 1.20, bind a source from
+this adoption (conventions, header of 1.21). Pre-filled below from the CHANGELOG's
+`[0.3.0]` section, whose Hand-apply list names the files and the changed texts, and from
+the family review's per-source items; the adoption PR confirms every item against the
+source as it is then. A source that has not adopted core 0.2.1 by then carries "Adopting
+core 0.2.1" into the same PR, since the update from its template release brings v0.2.1's
+and v0.2.2's changes too, as the template's CHANGELOG says for a repository still on
+v0.2.0.
 
 ### Every source
 
@@ -518,11 +520,9 @@ template's CHANGELOG says for a repository still on v0.2.0.
   `[http]` and `[testing]` extras likewise, from PyPI, with no git pin left in
   `[tool.uv.sources]` (`core_git_ref` `''`) and `uv.lock` updated. Core no longer
   depends on `pydantic-settings`: a source that imports it declares it itself.
-- Item 2, `copier update` to template v0.3.0 once it is tagged; its CHANGELOG lists what
-  it renders and its own Hand-apply, the one-time `CLAUDE.md` split among them. Until it
-  is tagged, the core adoption goes first, item 2 unticked with that reason, and the
-  template update follows in its own `chore/template-update*` PR, judged against the
-  items it touches (§15).
+- Item 2, `copier update` to template v0.3.0 in the same adoption PR: the template tags
+  with core 0.3.0, and a source waits for that tag. Its CHANGELOG lists what it renders
+  and its own Hand-apply, the one-time `CLAUDE.md` split among them.
 - Items 3 and 4, the local helpers each core change replaced, deleted with their tests,
   and the core change named for each in the PR description:
   - the api.data.gov gateway block of `_client.py` (`API_KEY_ENV`, the module's
@@ -567,23 +567,26 @@ template's CHANGELOG says for a repository still on v0.2.0.
   "Values of ``<key>`` (fetched <date>).", which a tool's input schema shows the agent
   (conventions §8).
 - Item 7, unchanged: `files = ["src", "tests", "scripts"]` under `[tool.mypy]`.
-- Item 8, conventions 1.21, from 1.15 (the 0.2.1 adoption's). Binding from this
-  adoption: the fixture files a PR adds or changes under 256 KiB, a cut one marked
-  `truncated` (§10; template v0.3.0's fixture-cap step fails), `BULK_TASKS` (§8), the
-  packaged-list file `reference/<name>.json` (§3), `published_at_naive`, the `None`
-  rule, `get_answer` for a cache hit's `retrieved_at`, `matches`, the frozen and the
-  period series (§4), `UnknownCode` (§5), `render_enums` and the module committed as
-  formatted (§3), and what an enum's class docstring holds (§8). Changed since 1.15 as
-  well: the environment read through the `EnvKeyAuth` helpers and
+- Item 8, conventions 1.21. The existing sources apply 1.13 on 2026-10-27 (comtrade,
+  until its 0.2.0 adoption, an earlier version): one that adopts 0.2.1 first goes from
+  1.15; one that carries "Adopting core 0.2.1" into this PR goes from 1.13 and takes the
+  rules changed in 1.14 and 1.15 as well (the CHANGELOG's `[0.2.1]` section; "Adopting
+  core 0.2.1", item 8). Binding from this adoption: the fixture files a PR adds or
+  changes under 256 KiB, a cut one marked `truncated` (§10; template v0.3.0's
+  fixture-cap step fails), `BULK_TASKS` (§8), the packaged-list file
+  `reference/<name>.json` (§3), `published_at_naive`, the `None` rule, `get_answer` for
+  a cache hit's `retrieved_at`, `matches`, the frozen and the period series (§4),
+  `UnknownCode` (§5), `render_enums` and the module committed as formatted (§3), and
+  what an enum's class docstring holds (§8). Changed since 1.15 as well, for every
+  source: the environment read through the `EnvKeyAuth` helpers and
   `xippios.core.data_gov` for the sources behind api.data.gov (§7), the quota pause
   bounded by `pause_cap` and `install` replacing the config's hooks (§6), the credential
   rule without a bare `key` (§4), refused arguments as `InvalidRequestError` text and
   the resume hint (§8), the workflow hardening for a source's own workflows (§13), and a
   multi-tenant source carrying its tenant registry and its recorder's rewrite (§1, §3,
   §7, §8, §10).
-- Item 9: `CHANGELOG.md` has a line under Unreleased naming core 0.3.0, the template
-  release adopted (v0.3.0, or the one the source stays on while item 2 waits) and
-  conventions 1.21.
+- Item 9: `CHANGELOG.md` has a line under Unreleased naming core 0.3.0, template v0.3.0
+  and conventions 1.21.
 - Every source's tests meet the texts and refusals the CHANGELOG's Hand-apply list names
   under "Every source": the credential rule, unknown `ResultMeta` fields, refused tool
   arguments, parse failures.
@@ -699,10 +702,10 @@ Then, by the CHANGELOG's Hand-apply list:
   binary-body text; `CLAUDE.md` ("Organisations", "How to record a fixture") describes
   the registry, `list_organisations`, the `--org` lock and the recorder's checks as the
   package's own.
-- The write server: the family check no longer tests it.
-  `test_the_write_server_serves_write_tasks_only` calls the copied `assert_write_tools`;
-  where the 0.2.1 adoption deleted it with `tests/test_adapters.py`, as the family check
-  then made it, this adoption puts it back in a test file of cashctrl's own.
+- The write server: the family check no longer tests it. cashctrl is on template v0.2.0,
+  so the update to v0.3.0 deletes `tests/test_adapters.py`;
+  `test_the_write_server_serves_write_tasks_only` moves to a test file of cashctrl's
+  own, such as `tests/test_tasks_write.py`, and calls the copied `assert_write_tools`.
 - Unchanged: every task's `ResultMeta(tenant=org)` (`ResultMeta.tenant` stays, ADR-0024,
   decision 2), its `REDACTED` imports, the `confirm` check and the loopback rule.
   `BODY_LIMIT` and `error_from_response` may come from `xippios.core`; `_cli.py`'s
