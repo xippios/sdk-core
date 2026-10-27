@@ -17,7 +17,9 @@ It gives a source package the things that should be identical across the family:
   (`json=`) or form-encoded (`data=`). Two hooks, `before_request` and `observe`, see
   each call and each response; `QuotaPolicy` uses them to wait out or refuse a request
   into a spent quota.
-  `auth=None` sends one call without the client's key.
+  `auth=None` sends one call without the client's key. A file is streamed to disk with
+  `download`, never held in memory; `decode_text` and `decode_csv` read text and CSV
+  next to `decode_json`; the cache stores no body over `cache_max_bytes` (8 MiB).
 - **Auth helpers** that read the key from the environment on the first request:
   query parameter, header, bearer token or basic auth. A source's documented error
   shapes go into `ClientConfig.classify`, consulted on every response.
@@ -118,8 +120,12 @@ get_series = sync(get_series_async)  # same signature, same docstring, blocks un
 ```
 
 `meta.request` is provenance, not a copy of the call: `ResultMeta` redacts any key that
-looks like a credential (`key`, `token`, `secret`, ...) so an envelope is safe to hand
-to an agent or return over HTTP.
+names a credential (`api_key`, `token`, `secret`, ... as whole words) so an envelope is
+safe to hand to an agent or return over HTTP. A bare `key` is a credential only where a
+`QueryKeyAuth` sends the key under that name, as above, which registers it for the
+process; elsewhere it is data, as Eurostat's SDMX series `key` is, and so is a
+`sort_key`. The fixture recorder and the replay helpers redact by the same rule
+(`xippios.core.redaction`).
 
 Upstream failures arrive as taxonomy errors, never as raw `httpx` exceptions:
 
@@ -230,6 +236,47 @@ any other error it returns, an `AuthError` say, ends them.
 for one call: `None` sends none, for a keyless endpoint on the same host, and another
 `httpx.Auth` replaces them. `None` and the default share the cache; a call with an
 `httpx.Auth` of its own bypasses it, neither looked up nor stored.
+
+## Files: download and decode
+
+An upstream that publishes files (a bulk dataset, a release's CSV or XLS) is read with
+`download`, which streams the body to disk under a temporary name and renames it when it
+is complete; the limiter, the hooks, `classify` and the retries apply as for `get()`, a
+retry restarting the file, and the response cache is never touched:
+
+```python
+from pathlib import Path
+
+from xippios.core import Downloaded, Result, ResultMeta
+from xippios.core.client import decode_csv
+
+BULK_TASKS = frozenset({"download_crops"})  # in tasks.py beside MCP_CAPS: Python only
+
+
+async def download_crops_async(dest: Path) -> Result[Downloaded]:
+    """Download the crops file of the current release.
+
+    Args:
+        dest: The file to write, e.g. ``Path("qs.crops.txt")``.
+    """
+    url = "https://files.example.org/bulk/qs.crops.txt"  # a link from the catalog
+    got = await client.download(url, dest, auth=None)  # another host: no key sent there
+    meta = ResultMeta(source="example", endpoint="qs.crops", request={"url": url})
+    return Result(data=got, meta=meta)
+
+
+for row in decode_csv(Path("qs.crops.txt"), delimiter="\t"):  # row by row, never whole
+    print(row["COMMODITY_DESC"], row["VALUE"])  # headers as upstream prints them
+```
+
+`Downloaded` carries the path, the size, the content type, the file name from
+`Content-Disposition`, the `ETag`, the `Last-Modified` text and when the file was
+complete. `decode_text(response)` reads a text answer in the charset of its
+`Content-Type` (UTF-8 by default, a byte order mark stripped), and `decode_csv` takes a
+downloaded file or a response. A gzip or zip file is opened with the stdlib; core ships
+no XML, spreadsheet or PDF parser. `register_tasks` and `router_from_tasks` skip a task
+its `tasks.py` names in `BULK_TASKS`, so no tool or route returns a file path. A body
+over `ClientConfig.cache_max_bytes` (8 MiB by default) is returned and not cached.
 
 ## Multi-tenant sources
 
@@ -371,6 +418,8 @@ A write server (`build_server(..., read_only=False)`) refuses, with `ValueError`
 that does not take `confirm: bool = False`, and `--http` serves it on a loopback
 `--host` only (`127.0.0.1`, `localhost`, `::1`): it carries no authentication.
 `--allow-remote` serves it beyond loopback, behind a gateway that adds it.
+A task named in its `tasks.py`'s `BULK_TASKS` is skipped, so `mcp.py` may pass every name
+of `tasks.__all__`; a cap named for it is refused.
 Request URLs are not logged: `build_server` and `main` set the `httpx` and `httpcore`
 loggers to `WARNING` (`quiet_request_logging`), because a URL can carry an API key or a
 tenant host.
@@ -502,7 +551,11 @@ xippios_placeholder_key_envs = ["EXAMPLE_API_KEY"]
   with credentials scrubbed. Never hand-write a fixture. `json=` or `data=` (a form) send
   a body, recorded with its content type. The recording goes through the client as it
   is configured; one that must not retry a 5xx goes through a client whose config says
-  `RetryPolicy(max_attempts=1)`.
+  `RetryPolicy(max_attempts=1)`. `max_bytes=` keeps a large answer under the 256 KiB
+  fixture cap: a JSON array keeps its first whole elements, a text its first bytes, and
+  the fixture is marked `truncated` with the whole body's size and sha256 (and an
+  array's length); a JSON object, XML, ZIP, XLSX, gzip, XLS or a body that is not UTF-8
+  text is refused: record a small real answer or sample instead.
 
 `mcp_call(server, "example_get_series", {...})` calls a tool through an in-process MCP
 client, so the server's middleware, a tenant lock included, runs as for a real client;
@@ -550,16 +603,17 @@ changed, breaking changes first.
 
 | Module | What | Status |
 | --- | --- | --- |
-| `xippios.core.client` | httpx client, retries, rate limit, cache, quota policy, request hooks, env-key auth | alpha |
+| `xippios.core.client` | httpx client, retries, rate limit, cache with a byte bound, quota policy, request hooks, env-key auth, `download`, `decode_text`, `decode_csv` | alpha |
 | `xippios.core.errors` | taxonomy and response classification | alpha |
 | `xippios.core.data_gov` | `Gateway`: the api.data.gov key, the gateway's `classify`, one quota policy per process | alpha |
+| `xippios.core.redaction` | the one credential rule of the envelope, the recorder and replay | alpha |
 | `xippios.core.models` | `UpstreamModel`, `Result`, `ResultMeta`, `ResultCap`, `parse` | alpha |
 | `xippios.core.reference` | packaged CSV/JSON loaders, generated `StrEnum`/`IntEnum` modules | alpha |
 | `xippios.core.pagination` | `paginate_offset` (a page-numbered endpoint maps the offset to its page), `collect` | alpha |
 | `xippios.core.tenants` | `Tenants`, `list_task`: tenants from the environment, one client each | alpha |
 | `xippios.core.mcp` | tool registration, result caps, error text, CLI, quiet request log | alpha |
 | `xippios.core.http` | router factory, problem details | alpha |
-| `xippios.core.testing` | live gate, offline run, record, replay, scrub, write checks, family check | alpha |
+| `xippios.core.testing` | live gate, offline run, record (with `max_bytes=`), replay, scrub, write checks, family check | alpha |
 
 Alpha: while core is 0.x, a new minor version may change the public surface, with no
 backward compatibility across minors; patch releases stay compatible. A source depends

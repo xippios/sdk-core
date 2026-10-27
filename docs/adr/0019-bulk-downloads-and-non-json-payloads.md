@@ -73,3 +73,38 @@ three sources wrote the api.data.gov gateway client (ADR-0015, review C14).
   fixture rule in `record-fixture.md` (template cleanup, tagged with core 0.3.0).
 - Not decided here: XML for Eurostat (its design round); resumable downloads (none; a
   retry restarts the file).
+
+## Amendment 2026-10-27
+
+Core 0.3.0 implements this ADR; Johannes decided on 2026-10-27 the shape of decision 5's
+recorder option and of decision 6, and, at gate 5 of the same day, the JSON-object rule
+(queue row 48).
+
+- **Decision 1**: the default of `auth=` is the client's own credentials, core's own
+  sentinel as on `request`, `get` and `get_json`, not httpx's `USE_CLIENT_DEFAULT`, which
+  core no longer names (ADR-0015, amendment 2026-10-27): `download(url, dest, *,
+  auth=<the client's>) -> Downloaded`.
+- **Decision 5**: one `max_bytes=`, on `record`, `record_sync` and
+  `fixture_from_response`, cuts texts and JSON arrays alike. A JSON array (a
+  `Content-Type` of `application/json` or `...+json`, or a body that parses as JSON)
+  keeps its first whole elements whose compact JSON text fits in `max_bytes` bytes, and
+  `original_count` records its length; another text is cut at `max_bytes` bytes, back to
+  a whole UTF-8 character. A cut is marked `truncated` with `original_bytes` and
+  `sha256`, both of the whole body before the scrub, which then runs on what is kept. A
+  JSON object is refused: the source records a small real answer, since an object's
+  parts are no list to take the first of. XML is refused for the reason that a cut-off
+  XML document is not well-formed; ZIP, XLSX, gzip, XLS and a body that is not UTF-8
+  text for the reason above. A body within `max_bytes` is kept whole and unmarked. Queue
+  rows 43 (sdk-usda-gats) and 48 are served by this.
+- **Decision 6**, the mechanism: the one rule lives in `xippios.core.redaction`. A name
+  is a credential when a whole word of it, between `_`, `-` or the ends, is `api_key`
+  (also `apikey`, `api-key`), `token`, `secret`, `password`, `passwd`, `auth`,
+  `authorization`, `signature`, `credential` or `credentials`; a bare `key` is not. A
+  `QueryKeyAuth(param, ...)` registers `param` when it is built, and the name is a
+  credential from then on in the whole process, matched exactly in any letter case: USDA
+  NASS's `QueryKeyAuth("key", ...)` makes `key` one, and Eurostat, keyless, keeps its
+  SDMX `key` as data. A process that imports both treats `key` as a credential for both.
+  `ResultMeta.request`, the recorder's scrub, `sent_urls`, `sent_query`,
+  `recorded_query` and `mount_fixture` read the one rule; the recorder's broader
+  substring pattern is gone (ADR-0005, amendment 2026-10-27), so `sort_key` and
+  `keyword` are data everywhere.

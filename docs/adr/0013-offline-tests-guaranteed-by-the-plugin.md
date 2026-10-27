@@ -165,3 +165,10 @@ with the core update, as the guarantees above do. The plugin registers the ini o
 than one `tasks.py`. Johannes decided on 2026-10-26 that a family conformance check ships
 in core's `testing` extra and runs in every source's CI; conventions §10 names it from
 1.15 on.
+
+Amended 2026-10-27 (core 0.3.0, ADR-0019): `AsyncClient.download` streams through the
+client's pool and httpx's default transport, so decision 1 covers it unchanged: an
+unmocked download in an offline test is refused with the same `RuntimeError`, and a
+`respx` route answers a mocked one. Replay serves a fixture's body as recorded, a body
+the recorder cut (`truncated`) included. `sent_urls`, `sent_query` and `recorded_query`
+redact by the one rule of `xippios.core.redaction` (ADR-0005, amendment 2026-10-27).

@@ -59,6 +59,17 @@ All notable changes to this project are documented here. The format follows
   its own; `pause_cap=None` and the 30 s of a `before_request` called directly go with
   them (Changed, below).
 
+- **The recorder's substring credential pattern** (the family review's C10; ADR-0005
+  and ADR-0019, amendments 2026-10-27; found in the Eurostat design round, ADR-0019's
+  context: its SDMX series `key` would have been redacted): `scrub_params`, `scrub_url`
+  and every recording no longer redact a query parameter whose name merely contains
+  `key`, `pass`, `auth`, `sig`, `cred`, `token` or `secret` (`keyword`, `passport`,
+  `author`, `design`); they read the whole-word rule of `xippios.core.redaction`
+  (Changed, below).
+- **`is_credential_key` and `redact_credentials` leave `xippios.core.models`** (ADR-0023,
+  decision 5; no consumer): the rule's functions live in `xippios.core.redaction`, as
+  `is_credential_name` and `redact_credentials`. `xippios.core.models.REDACTED` stays.
+
 ### Changed
 
 - **`pause_cap` is the one bound of a quota pause** (C6; ADR-0010, decision 4, and
@@ -92,6 +103,25 @@ All notable changes to this project are documented here. The format follows
 - `gates.yml` calls the gates repository under its new name `xippios/sdk-gates` (renamed
   from `.github` on 2026-10-27).
 
+- **`key` is a credential only where a `QueryKeyAuth` sends it** (the family review's
+  C10; ADR-0019, decision 6, amended 2026-10-27; found in the Eurostat design round,
+  ADR-0019's context). The one rule of `xippios.core.redaction` names credentials by
+  whole words between `_`, `-` or the ends: `api_key` (`apikey`, `api-key`), `token`,
+  `secret`, `password`, `passwd`, `auth`, `authorization`, `signature`, `credential`,
+  `credentials`, and no bare `key`; `QueryKeyAuth(param, ...)` registers `param` when it
+  is built, a credential from then on in the whole process, in any letter case. USDA
+  NASS's `QueryKeyAuth("key", ...)` keeps its `key` redacted; Eurostat, keyless, keeps
+  its SDMX `key` as data; a `sort_key` is data everywhere. A process that imports both
+  redacts `key` for both.
+- **One rule for the envelope, the recorder and replay** (C10, ADR-0005, amended
+  2026-10-27): `ResultMeta.request`, the recorder's scrub, `sent_urls`, `sent_query`,
+  `recorded_query` and `mount_fixture` read `xippios.core.redaction`; `scrub_params`,
+  `scrub_url` and `scrub_headers` move there (the header list unchanged) and stay
+  importable from `xippios.core.testing.scrub`; `models.REDACTED`,
+  `testing.REDACTED` and `redaction.REDACTED` are one object. `recorded_query` reads the
+  recorded URL through `scrub_url` again, and `match_params` naming a credential is
+  refused by name ("names a credential") before its value is looked at.
+
 ### Added
 
 - **`BODY_LIMIT`, `error_from_response` and `parse_retry_after` exported from
@@ -115,6 +145,45 @@ All notable changes to this project are documented here. The format follows
   template's api.data.gov gateway answer of v0.3.0. Imported from its module;
   `xippios.core` does not re-export it.
 
+- **`AsyncClient.download(url, dest, *, auth=)` and `Downloaded`** (the family review's
+  C15; ADR-0019, decision 1; queue row 46, found by sdk-usda-nass): a GET through the
+  client's pool, streamed to a temporary file beside `dest` and renamed when complete,
+  removed on any failure, never cached and never held in memory. `before_request`, the
+  limiter, `observe`, `classify` (a success's status and headers; its body goes to the
+  file unread) and the retry rule of ADR-0011 apply as for `get()`, a retry restarting
+  the file; an error answer is read up to `BODY_LIMIT` bytes and raised through the
+  taxonomy; a 1xx or 3xx raises `UpstreamError`, since redirects are not followed.
+  `Downloaded` carries `path`, `bytes`, `content_type`, `filename` (from
+  `Content-Disposition`), `etag`, `last_modified` (the header's text) and `retrieved_at`;
+  exported from `xippios.core` and `xippios.core.client`. Consumers, named by ADR-0019:
+  sdk-usda-esmis, sdk-usda-wasde, sdk-usda-nass's bulk datasets, sdk-eurostat and
+  sdk-faostat.
+- **`decode_text` and `decode_csv`** (C15; ADR-0019, decision 2; row 46), exported from
+  `xippios.core.client` beside `decode_json`: the text in the `Content-Type` charset,
+  UTF-8 by default, a byte order mark stripped; and `csv.DictReader` rows from a
+  downloaded file or a response, headers as upstream prints them, a generator that reads
+  a file row by row and closes it when it ends.
+- **`ClientConfig.cache_max_bytes`** (C15; ADR-0019, decision 3; row 46): 8 MiB by
+  default; a larger body is returned and not stored; a value below 1 is refused.
+- **`BULK_TASKS`** (C15; ADR-0019, decision 4): `register_tasks` and `router_from_tasks`
+  skip a task whose defining module names it in `BULK_TASKS`, so the rendered adapters
+  may pass `tasks.__all__` whole, and the family check's "`tasks.__all__` minus
+  `BULK_TASKS`" holds for them; a cap in `caps` for a bulk task is refused as naming no
+  task, and the refusal now says that a task in `BULK_TASKS` is no tool.
+- **The recorder's `max_bytes=`** on `record`, `record_sync` and `fixture_from_response`
+  (C15; ADR-0019, decision 5, amended 2026-10-27; queue row 43, found by sdk-usda-gats,
+  and row 48, the family's): a JSON array keeps its first whole elements whose compact
+  JSON text fits, a text is cut at a UTF-8 character boundary; a JSON object, XML, ZIP,
+  XLSX, gzip, XLS and a body that is not UTF-8 text are refused with the reason. A cut
+  response is marked `truncated` with `original_bytes`, `sha256` (of the whole body,
+  before the scrub) and, for an array, `original_count`, new optional fields of
+  `FixtureResponse`; a fixture without a cut is written without them, so every existing
+  fixture loads and re-records unchanged. Replay serves the body as recorded.
+- **`xippios.core.redaction`** (C10; ADR-0019, decision 6; ADR-0023, decision 3 (b),
+  credential redaction): the one `REDACTED`, `is_credential_name`,
+  `register_credential_name`, `redact_credentials` and the three `scrub_*` functions, at
+  the bottom of the package. Imported from its module; not re-exported.
+
 ### Documentation
 
 - **ADR-0002, amendment 2026-10-27**: `pydantic-settings` and `xippios.core.config` are
@@ -132,11 +201,21 @@ All notable changes to this project are documented here. The format follows
   that `install` replaces the config's hooks; §7 names `xippios.core.data_gov` for the
   sources behind api.data.gov.
 
+- **ADR-0019, amendment 2026-10-27**: decision 1's `auth=` default is the client's own
+  credentials; decision 5's one `max_bytes=` for texts and arrays, the JSON-object
+  refusal and the XML reason ("a cut-off XML document is not well-formed"); decision 6's
+  mechanism. **ADR-0005** (the list without a bare `key`, no second pattern for
+  fixtures), **ADR-0013** (the guard covers `download`; replay of a cut body) and
+  **ADR-0004** (`redaction` at the bottom, `client/download.py`) get a dated line each.
+- **Conventions 1.18**: §4 states the one rule and when `key` is a credential; §10 the
+  scrub's rule, the JSON-object refusal, the XML reason and `original_count`.
+
 ### Hand-apply for sources
 
 What a source's adoption of 0.3.0 changes because of the changes above. No source
 imports a deleted name; the tests of the api.data.gov sources read a deleted attribute
-and texts that change, listed here.
+and texts that change, and every source's tests meet the narrower credential rule,
+listed here.
 
 - `src/xippios/usda/nass/tasks.py`, `src/xippios/usda/psd/tasks.py`,
   `src/xippios/usda/esr/tasks.py`, `src/xippios/usda/gats/tasks.py` — the
@@ -181,6 +260,25 @@ and texts that change, listed here.
   (30 s by default)" → "within the policy's `pause_cap` (30 s by default)", and the
   gateway's key, answers and quota named as `xippios.core.data_gov`'s — ADR-0010,
   decision 4, amended 2026-10-27.
+
+- `src/xippios/usda/nass/` — nothing: its `QueryKeyAuth("key", ...)` registers `key`, so
+  `meta.request`, `sent_urls`, `sent_query`, `recorded_query` and every recording keep
+  `key=REDACTED` — C10.
+- sdk-cashctrl, where it imports `xippios.core.models.REDACTED` and
+  `xippios.core.testing.REDACTED` — nothing: both keep working, one object — C10.
+- Every source, tests — a test that expected a name without a credential word redacted
+  (a whole-word `key` its own `QueryKeyAuth` does not send, `sort_key`, or a substring
+  match such as `keyword` or `author`), in `meta.request`, `sent_urls`, `sent_query` or a
+  newly recorded fixture, now sees the value → assert the value; a fixture recorded with
+  the substring rule keeps `REDACTED` for such a name, so a `sent_query(route) ==
+  recorded_query(fixture)` comparison differs on it until the fixture is re-recorded; a
+  test that matched the text "was recorded as REDACTED" for a credential named in
+  `match_params` → "names a credential" — C10.
+- `src/xippios/<pkg>/tasks.py` of a source with a bulk task — `BULK_TASKS =
+  frozenset({...})` beside `MCP_CAPS`; `mcp.py` and `http.py` may pass `tasks.__all__`
+  whole. Template v0.3.0 renders the `BULK_TASKS = frozenset()` scaffold — C15.
+- A source that caches an answer over 8 MiB (none known) — raise
+  `ClientConfig(cache_max_bytes=...)` and say why in `CLAUDE.md` — ADR-0019, decision 3.
 
 sdk-comtrade's planned `QuotaPolicy(limit_header=None, remaining_header=None,
 window=86400, spent=...)` is unaffected: `spent=` stays.

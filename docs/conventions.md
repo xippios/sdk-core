@@ -1,6 +1,6 @@
 # xippios SDK family — conventions
 
-Version 1.17 · 2026-10-27 · applies to every `sdk-*` repository under github.com/xippios.
+Version 1.18 · 2026-10-27 · applies to every `sdk-*` repository under github.com/xippios.
 Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 The rules of ADR-0019 and ADR-0022, all of them (the download and decode calls, the
 cache bound, `BULK_TASKS`, the fixture cap and the `truncated` marker, the file-fixture
@@ -176,13 +176,16 @@ the file's URL or release id plus the filters applied in Python (ADR-0020).
 
 `request` records what was sent: a parameter the caller left `None` is omitted
 (ADR-0022). It never carries credentials (ADR-0005). `ResultMeta` redacts the value of
-any key that looks like one (`key`, `api_key`, `token`, `secret`, `password`, `auth`,
-`signature`, `credential`) to `"REDACTED"` at construction, so an envelope is safe to
-hand to an agent, return over HTTP, or write to a store; personal identifiers in
-upstream data stay out of it by §3's rule for projections (ADR-0017). A parameter named
-`key` is spared when the client's auth is not a query key (`api_key_location !=
-query`): then it is data, as Eurostat's SDMX series `key` is (ADR-0019). A task that
-wants the credential's provenance records the variable name, never the value.
+any key that names one, at any depth, to `"REDACTED"` at construction, by the one rule
+of `xippios.core.redaction` (a whole word `api_key`, `token`, `secret`, `password`,
+`auth`, `authorization`, `signature` or `credential`, between `_`, `-` or the ends of
+the name), so an envelope is safe to hand to an agent, return over HTTP, or write to a
+store; personal identifiers in upstream data stay out of it by §3's rule for
+projections (ADR-0017). A bare `key` is not on the list: it is a credential in a process
+where a `QueryKeyAuth` sends the key under that name (USDA NASS), which registers it
+when built, and data elsewhere, as Eurostat's SDMX series `key` is (ADR-0019, amendment
+2026-10-27). A task that wants the credential's provenance records the variable name,
+never the value.
 
 `tenant` is the name of the tenant a multi-tenant source served the data for (§7),
 never a credential, a host or another of the tenant's values; `None` for a
@@ -383,11 +386,13 @@ route: `router_from_tasks` skips it, and no route returns a file path (ADR-0019)
   `truncated: true` and keeps `original_bytes` and the sha256 of the full file. An XML,
   ZIP, gzip, XLS or XLSX fixture is a small real sample (a short query, one member of
   the archive, a few rows), never a byte-truncated file, since a cut-off binary or
-  compressed file cannot be parsed; byte truncation (`max_bytes=`) applies to text
-  bodies, and the recorder refuses it for those formats; a JSON array is truncated by
-  elements: the recorder keeps the first N, marks `truncated: true` and records the full
-  count and the sha256. A test on a sample or a truncated fixture asserts the parser's
-  shape, never a size.
+  compressed file cannot be parsed and a cut-off XML document is not well-formed; byte
+  truncation (`max_bytes=`) applies to text bodies, and the recorder refuses it for those
+  formats and for a body that is not UTF-8 text; a JSON array is truncated by elements:
+  the recorder keeps the first N whose compact JSON text fits, marks `truncated: true`
+  and records the full count (`original_count`) and the sha256; a JSON object is
+  refused, and the source records a small real answer (ADR-0019, amendment 2026-10-27).
+  A test on a sample or a truncated fixture asserts the parser's shape, never a size.
 - A file-distributed source keeps a sample of each file kind under
   `tests/fixtures/files/<file_kind>/<case>.*` with a provenance line: the release id, the
   URL, the sha256 and bytes of the full file, and the fetched time in UTC with `Z`
@@ -414,8 +419,8 @@ route: `router_from_tasks` skips it, and no route returns a file path (ADR-0019)
   of the definition of done.
   A body that is not UTF-8 text cannot be scrubbed and is refused unless the recording
   flags it (`allow_binary=True`, stored base64 with `body_base64`).
-  The scrub spares a parameter named `key` when the client's auth is not a query key
-  (`api_key_location != query`), as `ResultMeta` does (§4, ADR-0019).
+  The scrub redacts credentials by the rule `ResultMeta` applies (§4): a parameter named
+  `key` is data unless a `QueryKeyAuth` sends the key under that name (ADR-0019).
 - Live tests are marked `@pytest.mark.live`, skipped unless `XIPPIOS_LIVE_TESTS=1`,
   and run in CI only in the one live workflow, `.github/workflows/live.yml`, in the shape
   the template renders (a source whose secrets differ keeps that shape): one job,
