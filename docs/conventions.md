@@ -1,6 +1,6 @@
 # xippios SDK family — conventions
 
-Version 1.16 · 2026-10-27 · applies to every `sdk-*` repository under github.com/xippios.
+Version 1.17 · 2026-10-27 · applies to every `sdk-*` repository under github.com/xippios.
 Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 The rules of ADR-0019 and ADR-0022, all of them (the download and decode calls, the
 cache bound, `BULK_TASKS`, the fixture cap and the `truncated` marker, the file-fixture
@@ -248,19 +248,21 @@ the query can carry a key (ADR-0005).
   `Retry-After`, the quota headers or a documented fallback), the client keeps a
   quota snapshot from the quota headers (`QuotaPolicy`, ADR-0015), and retries honour
   `retry_after` up to `backoff_max`. A request into a quota the snapshot shows spent
-  waits it out inside the call, logged, when the wait is within `backoff_max`, and
-  otherwise raises `RateLimitError` with `retry_after` without sending; a pause handed
-  back to the caller is stated in the error text.
+  waits it out inside the call, logged, when the wait is within the policy's
+  `pause_cap` (30 s by default), and otherwise raises `RateLimitError` with
+  `retry_after` without sending; a pause handed back to the caller is stated in the
+  error text.
 - Two hooks on `ClientConfig` see what passes through the client (ADR-0015):
   `before_request`, called once per call after the cache lookup and before the rate
   limiter, may wait or raise a taxonomy error, and then nothing is sent; `observe` sees
   every response from the wire, retried attempts and raw responses included and a cache
-  hit never, before `classify`. `QuotaPolicy(...).install(config)` sets both and is the
-  family's implementation of the quota rules above (ADR-0010); a source whose answer to
-  a spent limit is not a 429 passes `spent=`, which reads that answer. No source
-  subclasses `AsyncClient` for them. Before a 429 or 5xx is retried, the client asks
-  `classify`: a `RateLimitError` sets the wait from its `retry_after`; an
-  `UpstreamError` for a 5xx changes nothing; any other error ends the retries.
+  hit never, before `classify`. `QuotaPolicy(...).install(config)` sets both to the
+  policy's own, replacing any the config had, and is the family's implementation of the
+  quota rules above (ADR-0010); a source whose answer to a spent limit is not a 429
+  passes `spent=`, which reads that answer. No source subclasses `AsyncClient` for them.
+  Before a 429 or 5xx is retried, the client asks `classify`: a `RateLimitError` sets the
+  wait from its `retry_after`; an `UpstreamError` for a 5xx changes nothing; any other
+  error ends the retries.
 - Optional response cache (in-memory by default, pluggable) keyed on method+URL+params.
   A body larger than `ClientConfig.cache_max_bytes` (default 8 MiB) passes through and
   is not stored; `cache_filter` stays for finer rules. A source that wants a larger
@@ -294,7 +296,11 @@ The environment is read through the `EnvKeyAuth` helpers (`QueryKeyAuth`,
 `<SOURCE>_API_KEY`, or the issuer's variable where ADR-0009 applies, overridable by
 constructor argument (`key=`; ADR-0002, amendment 2026-10-27). No config files, no dotenv
 loading inside the package — the environment is the contract (direnv in development,
-secrets in CI).
+secrets in CI). A source behind api.data.gov takes its key, its gateway answers and its
+quota from `xippios.core.data_gov`: `Gateway(SOURCE)` gives the `auth` on
+`DATA_GOV_API_KEY`, the `classify` its own `classify` asks first, and `install`, which puts
+the one `QuotaPolicy` per process for that key on its config (ADR-0009, amendment
+2026-10-27).
 
 A multi-tenant source, whose upstream serves each tenant from a host or under a key of
 its own (CashCtrl's organisations), declares its tenants with `xippios.core.Tenants`

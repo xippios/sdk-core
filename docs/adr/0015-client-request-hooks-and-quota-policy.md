@@ -204,3 +204,23 @@ from `derive` keeps its parent's hooks and cap" goes with `AsyncClient.derive`; 
 copied with `dataclasses.replace` keeps both. `QuotaSnapshot` is importable from
 `xippios.core.client.quota`, no longer exported from `xippios.core` or
 `xippios.core.client`.
+
+Amended 2026-10-27 (core 0.3.0; the family review's C6, decided by Johannes on 2026-10-27,
+with the gateway module of ADR-0009's amendment of that date): decision 2's `QuotaPolicy`
+loses `reset_header`, with the reset header's three formats (delay-seconds, epoch seconds,
+an HTTP-date), and `mark_spent`; `resumes_at` is a 429's `Retry-After`, or the seconds
+`spent` names, else `window` from now, cut to `window`, and `spent=` stays. `pause_cap`,
+30.0 by default, the default `backoff_max`, is the one bound of the pause, as the hook and
+called directly. `install(config)` returns `dataclasses.replace(config,
+before_request=self.before_request, observe=self.observe)`: it reads nothing from the
+config, binds nothing per config and no longer refuses a config with hooks of its own,
+which a source composes itself; installing again changes nothing. So the per-config cap,
+"one policy on two configs pauses each within its own bound", the `ValueError` for another
+hook and the 30 s of a direct call no longer hold, and since the hook `install` sets is
+`before_request` itself, a subclass's override is called through it, reversing the edge
+ADR-0016 recorded; the testing plugin still turns off the pause step alone. A `classify`
+reads the wait for a 429 from `snapshot()`'s `resumes_at`, since `observe` ran before it
+(decision 1), so no `wait_for` is added (queue row 30 c). The consequence that packages
+sharing a key in one process keep a snapshot each no longer holds for api.data.gov:
+`xippios.core.data_gov` shares one policy per process (queue row 30 d). Conventions 1.17
+states the cap and `install`'s contract in §6.

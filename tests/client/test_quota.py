@@ -141,22 +141,6 @@ def test_header_reading_can_be_turned_off() -> None:
     )
 
 
-def test_without_headers_spent_and_mark_spent_still_mark_the_quota() -> None:
-    policy = QuotaPolicy(
-        limit_header=None, remaining_header=None, spent=comtrade_spent, window=86_400.0,
-        clock=Clock(),
-    )  # fmt: skip
-    policy.observe(quota_403("02:00:00"))
-    snapshot = policy.snapshot()
-    assert snapshot is not None
-    assert snapshot.resumes_at == NOW + timedelta(hours=2)
-    policy.reset()
-    policy.mark_spent(30.0)
-    snapshot = policy.snapshot()
-    assert snapshot is not None
-    assert snapshot.resumes_at == NOW + timedelta(seconds=30)
-
-
 @pytest.mark.parametrize("value", ["", "many", "-1", "1.5", "²", "٣", "1²", "9" * 19, "9" * 5000])
 def test_a_header_that_is_no_count_is_ignored(value: str) -> None:
     # "²" and "٣" pass str.isdigit(), and int("²") raised; int() refuses 5,000 digits.
@@ -165,23 +149,13 @@ def test_a_header_that_is_no_count_is_ignored(value: str) -> None:
     assert policy.snapshot() is None
 
 
-@pytest.mark.parametrize("value", ["²", "9" * 400])
+@pytest.mark.parametrize(
+    "value", ["²", "9" * 400, "Fri, 23 Oct 2026 08:00:00 +9999999999999999999999999"]
+)
 def test_a_retry_after_that_is_no_number_falls_back_to_the_window(value: str) -> None:
+    # parsedate_to_datetime raised OverflowError for a huge zone offset, out of observe.
     policy = QuotaPolicy(window=600.0, clock=Clock())
     policy.observe(answer(429, {"Retry-After": value}))
-    snapshot = policy.snapshot()
-    assert snapshot is not None
-    assert snapshot.resumes_at == NOW + timedelta(minutes=10)
-
-
-@pytest.mark.parametrize(
-    "header", ["Retry-After", "x-ratelimit-reset"], ids=["retry-after", "reset"]
-)
-def test_a_date_that_overflows_falls_back_to_the_window(header: str) -> None:
-    # parsedate_to_datetime raised OverflowError for a huge zone offset, out of observe.
-    value = "Fri, 23 Oct 2026 08:00:00 +9999999999999999999999999"
-    policy = QuotaPolicy(reset_header="x-ratelimit-reset", window=600.0, clock=Clock())
-    policy.observe(answer(429, {header: value}))
     snapshot = policy.snapshot()
     assert snapshot is not None
     assert snapshot.resumes_at == NOW + timedelta(minutes=10)
@@ -205,37 +179,6 @@ async def test_a_503_with_an_overflowing_retry_after_is_retried(
 def test_a_huge_retry_after_is_cut_to_the_window() -> None:
     policy = QuotaPolicy(window=3600.0, clock=Clock())
     policy.observe(answer(429, {"Retry-After": str(10**12)}))
-    snapshot = policy.snapshot()
-    assert snapshot is not None
-    assert snapshot.resumes_at == NOW + timedelta(hours=1)
-
-
-@pytest.mark.parametrize(
-    ("offset", "resumes_after"),
-    [(timedelta(minutes=15), timedelta(minutes=15)), (-timedelta(minutes=1), timedelta(0))],
-)
-def test_an_epoch_reset_is_read_as_a_time(offset: timedelta, resumes_after: timedelta) -> None:
-    # GitHub's x-ratelimit-reset is epoch seconds; read as a delay it would be 56 years.
-    epoch = str(int((NOW + offset).timestamp()))
-    policy = QuotaPolicy(reset_header="x-ratelimit-reset", window=3600.0, clock=Clock())
-    policy.observe(answer(headers={**SPENT, "x-ratelimit-reset": epoch}))
-    snapshot = policy.snapshot()
-    assert snapshot is not None
-    assert snapshot.resumes_at == NOW + resumes_after
-
-
-def test_ten_years_of_seconds_is_still_a_delay() -> None:
-    policy = QuotaPolicy(reset_header="x-ratelimit-reset", window=315_360_000.0, clock=Clock())
-    policy.observe(answer(headers={**SPENT, "x-ratelimit-reset": "315360000"}))
-    snapshot = policy.snapshot()
-    assert snapshot is not None
-    assert snapshot.resumes_at == NOW + timedelta(seconds=315_360_000)
-
-
-@pytest.mark.parametrize("value", [str(10**12), "9" * 400, "²", "Fri, 31 Dec 9999 23:59:59 GMT"])
-def test_a_huge_or_unreadable_reset_is_cut_to_the_window(value: str) -> None:
-    policy = QuotaPolicy(reset_header="x-ratelimit-reset", window=3600.0, clock=Clock())
-    policy.observe(answer(headers={**SPENT, "x-ratelimit-reset": value}))
     snapshot = policy.snapshot()
     assert snapshot is not None
     assert snapshot.resumes_at == NOW + timedelta(hours=1)
@@ -274,21 +217,6 @@ def test_a_200_that_leaves_nothing_counts_the_window() -> None:
     assert snapshot.resumes_at == NOW + timedelta(minutes=10)
 
 
-@pytest.mark.parametrize(
-    ("value", "seconds"), [("120", 120), ("Fri, 23 Oct 2026 08:30:00 GMT", 1800)]
-)
-def test_the_reset_header_names_the_time_when_given(value: str, seconds: int) -> None:
-    policy = QuotaPolicy(reset_header="x-ratelimit-reset", window=3600.0, clock=Clock())
-    policy.observe(answer(headers={**SPENT, "x-ratelimit-reset": value}))
-    snapshot = policy.snapshot()
-    assert snapshot is not None
-    assert snapshot.resumes_at == NOW + timedelta(seconds=seconds)
-    policy.observe(answer(429, {"Retry-After": "7", "x-ratelimit-reset": value}))
-    snapshot = policy.snapshot()
-    assert snapshot is not None
-    assert snapshot.resumes_at == NOW + timedelta(seconds=7), "Retry-After wins on a 429"
-
-
 def test_requests_left_again_clear_the_pause() -> None:
     policy = QuotaPolicy(clock=Clock())
     policy.observe(answer(429))
@@ -296,14 +224,6 @@ def test_requests_left_again_clear_the_pause() -> None:
     snapshot = policy.snapshot()
     assert snapshot is not None
     assert (snapshot.remaining, snapshot.resumes_at) == (999, None)
-
-
-def test_a_cache_hit_is_never_observed() -> None:
-    policy = QuotaPolicy(clock=Clock())
-    hit = answer(headers=SPENT)
-    hit.extensions["xippios_cache"] = "hit"
-    policy.observe(hit)
-    assert policy.snapshot() is None
 
 
 def test_reset_forgets_the_snapshot() -> None:
@@ -328,7 +248,7 @@ def test_describe_names_numbers_and_times_only() -> None:
     assert "api.example.test" not in text
 
 
-# -- spent and mark_spent -----------------------------------------------------------------
+# -- spent --------------------------------------------------------------------------------
 
 _REPLENISHED = re.compile(r"replenished in (\d+):(\d{2}):(\d{2})")
 
@@ -409,39 +329,6 @@ async def test_after_a_documented_refusal_the_next_request_is_not_sent() -> None
     assert upstream.sent == 1
 
 
-def test_mark_spent_keeps_the_limit_and_cuts_the_wait() -> None:
-    clock = Clock()
-    policy = QuotaPolicy(window=3600.0, clock=clock)
-    policy.mark_spent(120.0)
-    assert policy.snapshot() == QuotaSnapshot(
-        limit=None, remaining=0, observed_at=NOW, resumes_at=NOW + timedelta(minutes=2)
-    )
-    policy.observe(answer(headers=QUOTA))
-    clock.now += timedelta(minutes=1)
-    policy.mark_spent(10**12)
-    snapshot = policy.snapshot()
-    assert snapshot is not None
-    assert (snapshot.limit, snapshot.remaining) == (1000, 0)
-    assert snapshot.resumes_at == clock.now + timedelta(hours=1)
-    policy.mark_spent(-5.0)
-    snapshot = policy.snapshot()
-    assert snapshot is not None
-    assert snapshot.resumes_at == clock.now
-    with pytest.raises(ValueError, match="not NaN"):
-        policy.mark_spent(float("nan"))
-
-
-@pytest.mark.anyio
-@pytest.mark.rate_limited
-async def test_mark_spent_pauses_the_next_request() -> None:
-    events: list[str] = []
-    clock = Clock()
-    policy = QuotaPolicy(clock=clock, sleep=Sleeper(events, clock))
-    policy.mark_spent(12.0)
-    await policy.before_request(httpx.Request("GET", f"{BASE}/v1/x"))
-    assert events == ["sleep 12"]
-
-
 @pytest.mark.parametrize(
     ("arguments", "match"),
     [
@@ -457,72 +344,44 @@ def test_impossible_waits_are_refused(arguments: dict[str, float], match: str) -
         QuotaPolicy(**arguments)  # type: ignore[arg-type]
 
 
-# -- install ------------------------------------------------------------------------------
+# -- install and the one cap --------------------------------------------------------------
 
 
-def test_install_sets_both_hooks_on_a_copy() -> None:
-    config = make_config(retry=RetryPolicy(backoff_max=12.0))
+def test_install_sets_the_policy_s_own_hooks_on_a_copy() -> None:
     policy = QuotaPolicy()
+    config = make_config(observe=lambda response: None, before_request=lambda request: None)
     installed = policy.install(config)
-    assert installed.before_request is not None
-    assert installed.observe == policy.observe
-    assert dataclasses.replace(installed, before_request=None, observe=None) == config
-    assert config.before_request is None
-    assert config.observe is None
-    assert policy.pause_cap is None, "the cap is bound to the config, not written back"
-
-
-def test_installing_the_same_policy_again_is_allowed() -> None:
-    policy = QuotaPolicy()
-    once = policy.install(make_config())
-    assert policy.install(once) == once
-    by_hand = make_config(before_request=policy.before_request, observe=policy.observe)
-    assert policy.install(by_hand).observe == policy.observe
-
-
-@pytest.mark.parametrize(
-    ("hooks", "named"),
-    [
-        ({"observe": lambda response: None}, "(observe)"),
-        ({"before_request": lambda request: None}, "(before_request)"),
-        (
-            {"before_request": lambda request: None, "observe": lambda response: None},
-            "(before_request, observe)",
-        ),
-    ],
-)
-def test_install_refuses_a_config_with_hooks_of_its_own(
-    hooks: dict[str, object], named: str
-) -> None:
-    with pytest.raises(ValueError, match=re.escape(f"hooks of its own {named}")):
-        QuotaPolicy().install(make_config(**hooks))
-
-
-async def pause(config: ClientConfig) -> None:
-    """Run the installed ``before_request`` hook as the client would."""
-    assert config.before_request is not None
-    outcome = config.before_request(httpx.Request("GET", f"{BASE}/v1/x"))
-    assert outcome is not None
-    await outcome
+    assert (installed.before_request, installed.observe) == (
+        policy.before_request,
+        policy.observe,
+    ), "the config's own hooks are replaced; a source composes them itself"
+    assert dataclasses.replace(installed, before_request=None, observe=None) == (
+        dataclasses.replace(config, before_request=None, observe=None)
+    )
+    assert config.observe is not None, "the config given is unchanged"
+    assert policy.install(installed) == installed, "installing again changes nothing"
 
 
 @pytest.mark.anyio
 @pytest.mark.rate_limited
-async def test_each_installed_config_pauses_within_its_own_backoff_max() -> None:
+async def test_the_pause_is_bounded_by_pause_cap_alone() -> None:
+    # ADR-0010 decision 4, amended 2026-10-27: the policy's cap, not the config's backoff.
+    assert QuotaPolicy().pause_cap == RetryPolicy().backoff_max == 30.0
     events: list[str] = []
     clock = Clock()
-    policy = QuotaPolicy(window=20.0, clock=clock, sleep=Sleeper(events))
+    policy = QuotaPolicy(window=31.0, clock=clock, sleep=Sleeper(events, clock))
     policy.observe(answer(headers=SPENT))
-    short = policy.install(make_config(retry=RetryPolicy(backoff_max=12.0)))
     patient = policy.install(make_config(retry=RetryPolicy(backoff_max=60.0)))
-    with pytest.raises(RateLimitError, match=r"\(12 s\)"):
-        await pause(short)
-    await pause(patient)
-    assert events == ["sleep 20"]
-    explicit = QuotaPolicy(window=20.0, pause_cap=5.0, clock=clock)
-    explicit.observe(answer(headers=SPENT))
-    with pytest.raises(RateLimitError, match=r"\(5 s\)"):
-        await pause(explicit.install(make_config(retry=RetryPolicy(backoff_max=60.0))))
+    assert patient.before_request is not None
+    outcome = patient.before_request(httpx.Request("GET", f"{BASE}/v1/x"))
+    assert outcome is not None
+    with pytest.raises(RateLimitError, match=r"\(30 s\)"):
+        await outcome
+    clock.now += timedelta(seconds=2)
+    await policy.before_request(httpx.Request("GET", f"{BASE}/v1/x"))
+    assert events == ["sleep 29"]
+    await policy.before_request(httpx.Request("GET", f"{BASE}/v1/x"))
+    assert events == ["sleep 29"], "the quota is expected back by now"
 
 
 # -- the pause, through the client --------------------------------------------------------
@@ -648,19 +507,3 @@ async def test_raw_answers_and_retried_attempts_update_the_snapshot() -> None:
     snapshot = policy.snapshot()
     assert snapshot is not None
     assert (snapshot.limit, snapshot.remaining) == (1000, 42)
-
-
-@pytest.mark.anyio
-@pytest.mark.rate_limited
-async def test_before_request_alone_uses_a_30_s_cap() -> None:
-    events: list[str] = []
-    clock = Clock()
-    policy = QuotaPolicy(window=31.0, clock=clock, sleep=Sleeper(events, clock))
-    policy.observe(answer(headers=SPENT))
-    with pytest.raises(RateLimitError, match=r"\(30 s\)"):
-        await policy.before_request(httpx.Request("GET", f"{BASE}/v1/x"))
-    clock.now += timedelta(seconds=2)
-    await policy.before_request(httpx.Request("GET", f"{BASE}/v1/x"))
-    assert events == ["sleep 29"]
-    await policy.before_request(httpx.Request("GET", f"{BASE}/v1/x"))
-    assert events == ["sleep 29"], "the quota is expected back by now"

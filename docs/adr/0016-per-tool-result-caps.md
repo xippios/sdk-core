@@ -110,3 +110,8 @@ commodity classification), and a tool that needs more rows need not be named `li
   whole list an agent needs, where a source keeps its caps (`MCP_CAPS` in `tasks.py`),
   and that the note never promises a filter the tool lacks; §10 points to the edges of
   the quota guarantee.
+
+Amended by ADR-0015's amendment of 2026-10-27 (core 0.3.0): the third edge no longer holds
+as written. `install` sets `before_request` itself as the hook, so a subclass's override
+is called through it; the testing plugin still turns off the pause step alone, not a wait
+or refusal of the override's own.

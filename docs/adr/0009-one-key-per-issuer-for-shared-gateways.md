@@ -68,3 +68,22 @@ together.
 Amended by ADR-0002's amendment of 2026-10-27 (core 0.3.0): `resolve_api_key` is no
 longer public; core reads whatever variable a source names through the `EnvKeyAuth`
 helpers alone.
+
+Amended 2026-10-27 (core 0.3.0; the family review's C14, decided by Johannes on
+2026-10-27): `xippios.core.data_gov` is the code side of one key per issuer. Its
+`Gateway(source)` gives a source behind api.data.gov the key from `DATA_GOV_API_KEY` in the
+`X-Api-Key` header, the gateway's `classify` (its `API_KEY_*`, 429 and `NOT_FOUND` answers
+as taxonomy errors in the source's name) and `Gateway.policy`, one `QuotaPolicy` per
+process for the key in `DATA_GOV_API_KEY`, which every source in that process shares: a
+quota one of them spends, the next request of another waits out or is refused without being
+sent (ADR-0010, decision 4). Separate processes still keep a snapshot each. `Gateway` takes
+no key of its own, so the consequence's constructor override no longer gives a separate
+quota: a key passed to a source's client still draws on `Gateway.policy`'s snapshot, and a
+caller with a key of its own, a separate quota, builds its own `HeaderKeyAuth` and
+`QuotaPolicy`. The consequence "Docs only" no longer holds for the gateway: its handling is
+core's. Like `xippios.core.reference`, the module is imported by its path and keeps an
+`__all__` of its own; it is in none of the five export lists of ADR-0004's amendment of
+2026-10-27, which name what consumers import from a package. The consumers are
+sdk-usda-psd, sdk-usda-esr and sdk-usda-gats, which carried the same code as copies, and
+the template's api.data.gov gateway answer, which renders it from template v0.3.0 on
+(ADR-0023). Queue rows 30 d and 39 e are closed. Conventions 1.17 names the module in §7.

@@ -298,7 +298,7 @@ def _skip_rate_limit_waits(request: pytest.FixtureRequest, monkeypatch: pytest.M
     monkeypatch.setattr(TokenBucket, "acquire", _acquire_without_waiting)
 
 
-async def _pause_without_waiting(self: QuotaPolicy, request: httpx.Request, cap: float) -> None:
+async def _pause_without_waiting(self: QuotaPolicy, request: httpx.Request) -> None:
     return None
 
 
@@ -310,8 +310,9 @@ def _skip_quota_pauses(
 
     Every ``QuotaPolicy``'s snapshot is forgotten before and after the test, so a
     replayed 429 cannot leave a source's module-level policy spent for the tests after
-    it, a live one included. Unless the test is marked ``rate_limited``, the policy's
-    pause does nothing either: ``before_request``, and the hook ``install`` sets, return
+    it, a live one included, nor the policy every api.data.gov source shares
+    (``xippios.core.data_gov``). Unless the test is marked ``rate_limited``, the policy's
+    pause does nothing either: ``before_request``, the hook ``install`` sets, returns
     at once without waiting or raising ``RateLimitError``, so a test that replays a
     spent quota and then calls again gets its fixture, not a refusal. ``observe`` still
     keeps the snapshot during the test, for a test that asserts it. A ``live`` test
@@ -328,10 +329,9 @@ def _skip_quota_pauses(
       up included, and never reaches that test's body. A fixture that hands an offline
       test a spent quota is function-scoped.
     - The pause is turned off by replacing ``QuotaPolicy._pause``, which
-      ``before_request`` and the hook ``install`` sets both call. A subclass that
-      overrides ``before_request`` opts out for any wait or refusal of its own, wherever
-      its override runs, called directly or set as the hook by hand; the hook
-      ``install`` sets calls the pause, never the override.
+      ``before_request``, the hook ``install`` sets, calls. A subclass that overrides
+      ``before_request`` opts out for any wait or refusal of its own: ``install`` sets
+      the override as the hook, and only the pause step it calls is turned off.
     """
     if _marked(request, "live"):
         yield

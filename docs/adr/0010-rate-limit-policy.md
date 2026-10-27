@@ -91,3 +91,11 @@ idempotent methods only.
 
 Followed up by ADR-0015 (2026-10-24): the core helper is `QuotaPolicy`, on the client's
 `before_request` and `observe` hooks, and `classify` shapes retries.
+
+Amended 2026-10-27 (core 0.3.0; ADR-0015's amendment of that date): decision 4's "within
+`RetryPolicy.backoff_max` (30 s by default)" and decision 5's "a wait within
+`backoff_max`" read "within the quota policy's `pause_cap`", 30 s by default, the default
+`backoff_max`, one bound wherever the policy is installed; retries still honour
+`retry_after` up to `backoff_max` (decision 3). The open question of the consequences is
+settled for api.data.gov: its snapshot is kept per key, one per process, by
+`xippios.core.data_gov` (ADR-0009, amendment 2026-10-27).
