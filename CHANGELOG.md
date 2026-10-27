@@ -8,6 +8,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [0.2.1] - 2026-10-27
 
+This patch release carries the release train, the family conformance check every source
+runs, and the shared test helpers brought forward from 0.3.0; `gates.yml` ships switched
+off. ADR-0019 to ADR-0023 and conventions 1.14 and 1.15 come as documentation; the code
+of ADR-0019 and ADR-0022 ships in 0.3.0. As a patch, it keeps 0.2.0's compatibility
+(conventions §12). A source adopts it in one adoption PR with `/adopt-release`, moving
+its bound to `xippios-core~=0.2.1` (ADR-0018, amendment (c)); "Hand-apply for sources"
+below lists what that PR changes by hand.
+
 ### Added
 
 - **The release train** (conventions §12; ADR-0018, amendment (b); Johannes's decision

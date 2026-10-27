@@ -54,7 +54,7 @@ uv add "xippios-core[http]~=0.2.1"      # + FastAPI router helpers
 uv add "xippios-core[testing]~=0.2.1"   # + pytest plugin, respx replay, fixture recording
 ```
 
-Python 3.12 or later. A source package depends on one core minor, `~=0.2.0`, and each
+Python 3.12 or later. A source package depends on one core minor, `~=0.2.1`, and each
 extra likewise (conventions §12); see the Alpha note under Status.
 
 ## 30-second example
@@ -519,7 +519,7 @@ changed, breaking changes first.
 
 Alpha: while core is 0.x, a new minor version may change the public surface, with no
 backward compatibility across minors; patch releases stay compatible. A source depends
-on one minor (`xippios-core~=0.2.0`) and adopts the next through conventions §15
+on one minor (`xippios-core~=0.2.1`) and adopts the next through conventions §15
 (ADR-0018).
 
 ## Conventions
