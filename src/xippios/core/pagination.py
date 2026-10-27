@@ -1,17 +1,12 @@
-"""Page and cursor iteration helpers that task functions compose.
+"""Offset iteration that task functions compose, a page-numbered endpoint included.
 
-Each helper is an async generator over items. Task functions drive them and build
-the ``Result`` themselves; the sync facade comes from ``xippios.core.sync``.
+The helper is an async generator over items. Task functions drive it and build the
+``Result`` themselves; the sync facade comes from ``xippios.core.sync``.
 """
 
 from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable, Sequence
 
-__all__ = ["collect", "paginate_cursor", "paginate_offset", "paginate_pages"]
-
-
-def _check_page_size(page_size: int) -> None:
-    if page_size < 1:
-        raise ValueError("page_size must be at least 1")
+__all__ = ["collect", "paginate_offset"]
 
 
 async def paginate_offset[T](
@@ -23,13 +18,28 @@ async def paginate_offset[T](
 ) -> AsyncIterator[T]:
     """Yield items from an offset-paginated endpoint until a short page arrives.
 
+    A page-numbered endpoint maps the offset to its page inside ``fetch``: the offset
+    advances by a full page until the short last one, so the page is
+    ``first_page + offset // page_size``::
+
+        async def fetch(offset: int) -> list[Row]:
+            page = 1 + offset // PAGE_SIZE  # pages 1, 2, 3, ...
+            return await list_rows(page=page, per_page=PAGE_SIZE)
+
+        rows = await collect(paginate_offset(fetch, page_size=PAGE_SIZE))
+
     Args:
         fetch: Async function taking the offset and returning one page of items.
-        page_size: Items requested per page; a page shorter than this ends iteration.
+        page_size: Items requested per page, e.g. ``100``; a page shorter than this ends
+            iteration.
         start: First offset, usually 0.
-        max_items: Stop after this many items; ``None`` yields everything.
+        max_items: Stop after this many items, e.g. ``500``; ``None`` yields everything.
+
+    Raises:
+        ValueError: ``page_size`` is below 1.
     """
-    _check_page_size(page_size)
+    if page_size < 1:
+        raise ValueError("page_size must be at least 1")
     offset = start
     yielded = 0
     while max_items is None or yielded < max_items:
@@ -42,62 +52,6 @@ async def paginate_offset[T](
         if len(page) < page_size:
             return
         offset += len(page)
-
-
-async def paginate_pages[T](
-    fetch: Callable[[int], Awaitable[Sequence[T]]],
-    *,
-    page_size: int,
-    start: int = 1,
-    max_items: int | None = None,
-) -> AsyncIterator[T]:
-    """Yield items from a page-numbered endpoint until a short page arrives.
-
-    Args:
-        fetch: Async function taking the page number and returning one page of items.
-        page_size: Items requested per page; a page shorter than this ends iteration.
-        start: First page number, usually 1.
-        max_items: Stop after this many items; ``None`` yields everything.
-    """
-    _check_page_size(page_size)
-    number = start
-    yielded = 0
-    while max_items is None or yielded < max_items:
-        page = await fetch(number)
-        for item in page:
-            if max_items is not None and yielded >= max_items:
-                return
-            yield item
-            yielded += 1
-        if len(page) < page_size:
-            return
-        number += 1
-
-
-async def paginate_cursor[T](
-    fetch: Callable[[str | None], Awaitable[tuple[Sequence[T], str | None]]],
-    *,
-    max_items: int | None = None,
-) -> AsyncIterator[T]:
-    """Yield items from a cursor-paginated endpoint until no cursor is returned.
-
-    Args:
-        fetch: Async function taking the cursor (``None`` first) and returning the page
-            and the next cursor, or ``None`` when there is no further page.
-        max_items: Stop after this many items; ``None`` yields everything.
-    """
-    cursor: str | None = None
-    yielded = 0
-    while max_items is None or yielded < max_items:
-        page, next_cursor = await fetch(cursor)
-        for item in page:
-            if max_items is not None and yielded >= max_items:
-                return
-            yield item
-            yielded += 1
-        if next_cursor is None or next_cursor == cursor:
-            return
-        cursor = next_cursor
 
 
 async def collect[T](items: AsyncIterable[T], *, limit: int | None = None) -> list[T]:

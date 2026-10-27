@@ -14,7 +14,7 @@ EXPECTED = {
     "TransportError", "UpstreamError", "ValidationError", "XippiosError",
     # models, helpers
     "Result", "ResultMeta", "UpstreamModel", "parse", "parse_decimal", "Tenants",
-    "collect", "paginate_cursor", "paginate_offset", "paginate_pages",
+    "collect", "paginate_offset",
     "load_csv", "load_json", "load_table",
     "sync", "__version__",
 }  # fmt: skip
