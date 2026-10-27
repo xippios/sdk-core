@@ -82,6 +82,38 @@ All notable changes to this project are documented here. The format follows
   ADR-0013, amendment 2026-10-27): `httpx.HTTPTransport.handle_request` and
   `httpx.AsyncHTTPTransport.handle_async_request` are no longer patched (Changed, below).
 
+- **`Tenants` and `list_task` move to sdk-cashctrl** (the family review's C8; ADR-0024,
+  superseding ADR-0014's decisions 1 to 4, 6 and 11; Johannes's decision of 2026-10-25
+  that sdk-cashctrl stands alone; queue rows 3 and 24 b, found by sdk-cashctrl):
+  `xippios.core.tenants` is deleted and `Tenants` leaves `xippios.core`'s export list. The
+  last commit that holds the code is `7814062`: `git show
+  7814062:src/xippios/core/tenants.py`, tested in `tests/test_tenants.py`.
+  `ResultMeta.tenant` stays.
+- **`TenantLock` moves to sdk-cashctrl** (C8; ADR-0024, superseding ADR-0014's decision
+  7): `build_server` and `register_tasks` lose `tenant_lock=`, and the lock's middleware,
+  the refusal of a tenant parameter with a default on a locked server, the instructions
+  sentence and the narrowing of a `list_task` tool go with it. At `7814062`:
+  `src/xippios/core/mcp/server.py` (`TenantLock`, `_lock_middleware`, `_check_lock`,
+  `_defaulted`, `_declares`, `_refusal`, `_lock_sentence`, `_only_the_locked_tenant`, the
+  `narrow` argument of `_as_tool`), tested in `tests/mcp/test_lock.py`. `TenantLock`
+  leaves `xippios.core.mcp`'s export list. The `confirm` check, `is_write_server`,
+  `main`'s loopback rule and option hooks, and `mcp_call` and `mcp_call_text` stay.
+- **`assert_write_tools` moves to sdk-cashctrl** (C8; ADR-0024; queue rows 7, its write
+  parts, and 26 f, found by sdk-cashctrl): with `_tool_names` and `_serves`, at
+  `7814062` in `src/xippios/core/testing/adapters.py`, tested in
+  `tests/testing/test_adapters.py`; it leaves `xippios.core.testing`'s export list, and
+  the family check's write-server test, which called it, goes (Changed, below).
+- **`Scrub(host=...)`, `Scrub(rewrite=...)`, the percent-encoded matching of secrets and
+  the JSON-decoded verify move to sdk-cashctrl** (the family review's C9; ADR-0024;
+  ADR-0023, decision 3 (b): a recorder's pre-write hooks are the source's; queue rows 1,
+  its host part, 23 and 26 c, found by sdk-cashctrl): `host` with its checks and the
+  placeholder it wrote into the URL, the headers and the bodies, `rewrite`,
+  `_plain_or_encoded`, the host forms, `_json_strings` and `_strings`. At `7814062`:
+  `src/xippios/core/testing/scrub.py`, tested in `tests/testing/test_scrub.py`,
+  `tests/testing/test_fixtures.py` and `tests/testing/test_record_replay.py`. With the
+  three names above, the export lists hold 41 names in `xippios.core`, 7 in
+  `xippios.core.mcp` and 19 in `xippios.core.testing`.
+
 ### Changed
 
 - **`pause_cap` is the one bound of a quota pause** (C6; ADR-0010, decision 4, and
@@ -172,6 +204,25 @@ All notable changes to this project are documented here. The format follows
   refusal, and a transport a test passes itself bypasses it. The plugin's docstrings name
   the decision of ADR-0013 they implement instead of restating it, and the
   `rate_limited` marker's text names the quota pause it keeps as well.
+
+- **Core's recording verify is plain** (C9; ADR-0024, decision 3; ADR-0005, amended
+  2026-10-27): `Scrub(secrets=...)` replaces each value as given, the longest first, in
+  the letter case given, and before anything is kept or written the verify searches the
+  URL, every header value and both text bodies for each value as given. A hit refuses the
+  exchange with "the scrubbed fixture still holds a secret value in the <location>; it is
+  refused before anything is written", the location `request URL` (it read `url`),
+  `request header '<name>'`, `response header '<name>'`, `request body` or `response
+  body`, never the value. A value percent-encoded or behind a JSON escape is no longer
+  found by core, and header names are scrubbed but no longer searched.
+- **The binary-body refusal is neutral** (queue row 24 a, found by sdk-cashctrl): "a
+  binary body cannot be scrubbed; the recording is refused unless
+  Scrub(allow_binary=True) stores it base64, flagged", which no longer tells every caller
+  to pass the flag.
+- **The family check has ten tests** (C8; ADR-0024):
+  `test_family_write_server_serves_the_write_tasks` is gone, and a source's write server
+  is its own to test. The write tasks of `tasks_write` stay in
+  `test_family_tasks_return_results`, `test_family_tasks_carry_agent_docstrings` and the
+  README status table.
 
 ### Added
 
@@ -404,6 +455,23 @@ All notable changes to this project are documented here. The format follows
 - `publish.yml`'s `tag` job says in a comment that its checkout keeps its credentials,
   since it pushes the tag with the token (conventions §13).
 
+- **ADR-0024**: sdk-cashctrl stands alone; tenants, the tenant lock, `assert_write_tools`
+  and the recorder's host placeholder, encoded matching, JSON verify and `rewrite` leave
+  core, while `ResultMeta.tenant`, the `confirm` check, the loopback rule and the plain
+  verify stay as family invariants and secret scrubbing (ADR-0023, decision 3 (a) and
+  (b)). **ADR-0014** is superseded in part (decisions 1 to 4, 6, 7 and 11 and the
+  `assert_write_tools` consequence; 5, 8, 9 and 10 stand); **ADR-0005** (the verify's
+  scope), **ADR-0013** (the placeholder host and the verify's forms), **ADR-0017**
+  (`rewrite`) and **ADR-0023** (which of "the write checks" left) get a dated line each.
+  The template's `multi_tenant` question ADR-0014 announced (queue row 25, found by
+  sdk-cashctrl) is not built.
+- **Conventions 1.21**: §1 names a multi-tenant source's key variables as its own scheme;
+  §3 makes the rewrite by key the source's recorder step; §7 has a multi-tenant source
+  carry its tenant registry and keep `ResultMeta.tenant`; §8 loses the tenant list and
+  the lock and keeps the write server's rules; §10 loses the placeholder host and the
+  JSON-aware verify, keeps the plain verify and `allow_binary`, and the family check no
+  longer names the write server.
+
 ### Hand-apply for sources
 
 What a source's adoption of 0.3.0 changes because of the changes above. No source
@@ -578,6 +646,59 @@ window=86400, spent=...)` is unaffected: `spent=` stays.
   the note ends `; resume with start=<n>` — row 21 b.
 - Every source's own workflows (a `siblings.yml`, a `live.yml` of its own) — checked
   against conventions §13's hardening — row 51.
+
+sdk-cashctrl receives what leaves core in its 0.3.0 adoption, copied from the last commit
+that holds it, `git show 7814062:<path>` (ADR-0024); no other source imports a moved name.
+
+- `src/xippios/cashctrl/_client.py` (the `Tenants` import, `TENANTS = Tenants(...)`,
+  `client_for`) — `Tenants` → a module of its own copied from
+  `src/xippios/core/tenants.py`; `client_for` keeps its shape. The copy keeps the
+  replaced client dropped without closing (row 24 b) until cashctrl decides otherwise —
+  C8.
+- `src/xippios/cashctrl/tasks.py` (the module docstring's `xippios.core.tenants.list_task`,
+  `from xippios.core.tenants import list_task`, `list_organisations = list_task(...)`) →
+  the copy's `list_task` — C8.
+- `src/xippios/cashctrl/_cli.py`, `src/xippios/cashctrl/mcp.py`,
+  `src/xippios/cashctrl/mcp_write.py` — `from xippios.core.mcp import TenantLock` and
+  `build_server(..., tenant_lock=...)` → the lock of its own, copied from
+  `src/xippios/core/mcp/server.py` (`TenantLock`, `_lock_middleware`, `_check_lock`,
+  `_defaulted`, `_declares`, `_refusal`, `_lock_sentence`, `_only_the_locked_tenant`),
+  as a wrapper that binds `org` or as a middleware of its own, its choice: ADR-0014's
+  decision 7 no longer binds it. A middleware goes ahead of core's argument check,
+  `server.middleware.insert(0, ...)`, since the `mcp` SDK runs middleware outermost first
+  and `register_tasks` appends the check: so a call without `org` keeps the lock's text
+  instead of "org: Field required". The instructions sentence and the narrowed
+  organisation list come with the copy — C8.
+- `tests/test_adapters.py` (`test_the_write_server_serves_write_tasks_only`) — `from
+  xippios.core.testing import assert_write_tools` → its copy, from
+  `src/xippios/core/testing/adapters.py`, with a check that `confirm` is the last
+  parameter (row 26 f). The family check no longer tests the write server; this test
+  does — C8.
+- `tests/test_org_lock.py`, `tests/test_registry.py` — against the package's own lock and
+  registry; the texts they assert stay as they were — C8.
+- `scripts/record_fixture.py` — `scrub(key)`'s `Scrub(host=REPLAY_HOST, secrets=[...],
+  rewrite=scrub_text, allow_binary=False)` → `Scrub(secrets=[...])`, and a step of the
+  recorder's own on the `Fixture` that `fixture_from_response` returns, before its one
+  write: the host placeholder, the percent-encoded matching and the JSON-decoded verify,
+  copied from `src/xippios/core/testing/scrub.py`, and `scrub_text` over the URL, the
+  header values and the bodies, so `scrub_request_url` folds into it;
+  `redacted_a_secret`, which scrubs again with `Scrub(host=..., rewrite=...)`, compares
+  through the same step; `main`'s prefix before core's binary-body refusal meets the new
+  text — C9, rows 1, 23, 24 a, 26 c.
+- `tests/test_record_fixture.py` — `test_a_key_the_scrub_cannot_reach_is_never_written`
+  asserts that core's JSON verify refuses a key behind a JSON escape ("secret value"):
+  core no longer decodes, so the recorder's own verify answers it, in its own words;
+  `test_a_binary_body_is_refused` matches "binary body cannot be scrubbed" right after
+  the recorder's reason → "a binary body cannot be scrubbed; the recording is refused
+  unless Scrub(allow_binary=True) stores it base64, flagged";
+  `test_nothing_unscrubbed_touches_disk` holds once the recorder replaces the host
+  itself — C9.
+- `CLAUDE.md` ("Organisations", "How to record a fixture") — the registry,
+  `list_organisations` and the `--org` lock as the package's own; the recorder's
+  `Scrub(secrets=[key, its basic-auth token])` with its own host, JSON and percent-encoded
+  checks; core's verify searches plain values only — ADR-0024.
+- Every task's `ResultMeta(tenant=org)` — nothing: `ResultMeta.tenant` stays — ADR-0024,
+  decision 2.
 
 ## [0.2.1] - 2026-10-27
 

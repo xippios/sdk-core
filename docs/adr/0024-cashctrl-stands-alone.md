@@ -1,4 +1,4 @@
-# ADR-0024: cashctrl stands alone — tenants, the tenant lock, the write-server check and the recorder extras leave core
+# ADR-0024: cashctrl stands alone — tenants, the tenant lock and the recorder extras leave core
 
 Status: Accepted · Date: 2026-10-27 · Decided by Johannes on 2026-10-25 (sdk-cashctrl
 stands alone on one core minor) and on 2026-10-27 (the family check's write-server test,
