@@ -7,8 +7,10 @@ else the server's (ADR-0016).
 
 A task its ``tasks.py`` names in ``BULK_TASKS`` is no tool and is skipped (ADR-0019).
 
-A server can be locked to one tenant (``TenantLock``): a middleware refuses every tool
-call naming another before the tool runs. A server whose tasks were registered with
+Every server answers arguments a tool's schema refuses in conventions §8's form, through
+one middleware ``register_tasks`` installs before the tool runs, instead of the SDK's
+MCP error. A server can be locked to one tenant (``TenantLock``): a middleware refuses
+every tool call naming another before the tool runs. A server whose tasks were registered with
 ``read_only=False`` is a write server (``is_write_server``), which ``main`` keeps on
 loopback unless told otherwise.
 
@@ -24,13 +26,15 @@ from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+import pydantic
 from mcp.server.context import CallNext, HandlerResult, ServerMiddleware, ServerRequestContext
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.utilities.func_metadata import FuncMetadata, func_metadata
 from mcp.types import CallToolResult, TextContent, ToolAnnotations
 
 from xippios.core._loop import as_async, is_bulk_task
 from xippios.core.errors import InvalidRequestError, XippiosError
-from xippios.core.mcp.errors import error_to_text
+from xippios.core.mcp.errors import _refused_arguments, error_to_text
 from xippios.core.mcp.results import cap_result
 from xippios.core.models import Result, ResultCap
 from xippios.core.tenants import _LISTS_TENANTS
@@ -116,11 +120,15 @@ class TenantLock:
 
 @dataclass(slots=True)
 class _ServerRecord:
-    """What ``register_tasks`` knows about a server: its lock, its tasks' defaults."""
+    """What ``register_tasks`` knows about a server: its lock, its tools' arguments."""
 
     lock: TenantLock | None = None
     defaulted: dict[str, frozenset[str]] = field(default_factory=dict)
     """Per tool name, the task's parameters that have a default."""
+    arguments: dict[str, FuncMetadata] = field(default_factory=dict)
+    """Per tool name, the argument model the SDK validates a call against."""
+    checking: ServerMiddleware[Any] | None = None
+    """The argument middleware, installed once per server."""
 
 
 _RECORDS: weakref.WeakKeyDictionary[MCPServer, _ServerRecord] = weakref.WeakKeyDictionary()
@@ -141,8 +149,9 @@ def _lock_sentence(lock: TenantLock) -> str:
 
 def _refusal(lock: TenantLock, reason: str) -> CallToolResult:
     """The family's error text for a call the lock refuses; not an MCP protocol error."""
-    error = InvalidRequestError(f"this server is locked to {lock.param}={lock.value}; {reason}")
-    return CallToolResult(content=[TextContent(type="text", text=error_to_text(error))])
+    return _answer(
+        InvalidRequestError(f"this server is locked to {lock.param}={lock.value}; {reason}")
+    )
 
 
 async def _declares(server: MCPServer, tool: object, param: str) -> bool:
@@ -186,6 +195,50 @@ def _lock_middleware(server: MCPServer, lock: TenantLock) -> ServerMiddleware[An
         return await call_next(ctx)
 
     return tenant_lock
+
+
+def _answer(error: XippiosError) -> CallToolResult:
+    """The family's error text as a tool's answer, not an MCP error (conventions §8)."""
+    return CallToolResult(content=[TextContent(type="text", text=error_to_text(error))])
+
+
+def _arguments_middleware(record: _ServerRecord) -> ServerMiddleware[Any]:
+    """The pre-call middleware that answers refused arguments as ``InvalidRequestError``.
+
+    For a tool ``register_tasks`` registered, the call's arguments are validated against
+    the argument model the SDK builds for it (``func_metadata``), before the SDK does; a
+    refusal is answered as ``error: InvalidRequestError: <argument>: <message>``, where
+    the SDK would answer an MCP error quoting pydantic's text, the input value included
+    (queue row 41 a). Every other call, request and failure reaches the SDK unchanged.
+    """
+
+    async def check_arguments(
+        ctx: ServerRequestContext[Any, Any], call_next: CallNext
+    ) -> HandlerResult:
+        if ctx.method == "tools/call":
+            params = ctx.params or {}
+            name = params.get("name")
+            metadata = record.arguments.get(name) if isinstance(name, str) else None
+            arguments = params.get("arguments")
+            arguments = {} if arguments is None else arguments
+            if metadata is not None and isinstance(arguments, Mapping):
+                refused = _refusal_of(metadata, dict(arguments))
+                if refused is not None:
+                    return refused
+        return await call_next(ctx)
+
+    return check_arguments
+
+
+def _refusal_of(metadata: FuncMetadata, arguments: dict[str, Any]) -> CallToolResult | None:
+    """The answer to ``arguments`` the argument model refuses, or ``None`` to go on."""
+    try:
+        metadata.validate_arguments(arguments)
+    except pydantic.ValidationError as exc:
+        return _answer(_refused_arguments(exc))
+    except Exception:
+        return None  # a validator that crashes: the SDK answers it as it does
+    return None
 
 
 def _defaulted(fn: Callable[..., Any]) -> frozenset[str]:
@@ -318,6 +371,10 @@ def register_tasks(
 ) -> list[str]:
     """Add each task function to ``server`` as a tool and return the tool names.
 
+    Arguments a tool's schema refuses are answered as ``error: InvalidRequestError:
+    <argument>: <message>`` before the tool runs, by a middleware installed once per
+    server (conventions §8), never with pydantic's text and the input value.
+
     A task the module that defines it names in ``BULK_TASKS`` (``tasks.py``, beside
     ``MCP_CAPS``) is skipped: a bulk task returns a file, or a list read from one, and is
     Python-only; no tool returns a file path to an agent (conventions §8, ADR-0019). So
@@ -375,9 +432,14 @@ def register_tasks(
                 )
     lock = _check_lock(server, source, tasks, tenant_lock)
     record = _RECORDS.setdefault(server, _ServerRecord())
+    if record.checking is None:
+        record.checking = _arguments_middleware(record)
+        server.middleware.append(record.checking)
     if lock is not None and record.lock is None:
         record.lock = lock
-        server.middleware.append(_lock_middleware(server, lock))
+        # Outside the argument check: a call naming another tenant is the lock's to refuse.
+        position = server.middleware.index(record.checking)
+        server.middleware.insert(position, _lock_middleware(server, lock))
     if not read_only:
         _WRITE_SERVERS.add(server)
     annotations = ToolAnnotations(
@@ -391,14 +453,16 @@ def register_tasks(
         name = tool_name(source, fn)
         lists_tenants = getattr(fn, _LISTS_TENANTS, False) is True
         narrow = functools.partial(_only_the_locked_tenant, server) if lists_tenants else None
+        tool = _as_tool(fn, caps.get(fn.__name__, cap), narrow)
         server.add_tool(
-            _as_tool(fn, caps.get(fn.__name__, cap), narrow),
+            tool,
             name=name,
             description=inspect.getdoc(fn) or "",
             annotations=annotations,
             structured_output=False,
         )
         record.defaulted[name] = _defaulted(fn)
+        record.arguments[name] = func_metadata(tool, structured_output=False)
         names.append(name)
     return names
 

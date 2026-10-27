@@ -3,13 +3,14 @@ import sys
 import types
 from collections.abc import Callable
 from datetime import datetime
+from enum import StrEnum
 from typing import Annotated, Any
 
 import httpx
 import pytest
 
 from xippios.core import sync
-from xippios.core.errors import NotFoundError
+from xippios.core.errors import InvalidRequestError, NotFoundError
 from xippios.core.mcp import ResultCap, TenantLock, build_server, tool_name
 from xippios.core.mcp.server import is_write_server, quiet_request_logging, register_tasks
 from xippios.core.models import Result, ResultMeta, UpstreamModel
@@ -241,6 +242,50 @@ async def test_taxonomy_errors_become_text_not_errors() -> None:
     server = build_server("example", [get_series])
     text = await mcp_call_text(server, "example_get_series", {"series_id": "missing"})
     assert text == "error: NotFoundError: no series missing"  # mcp_call_text: not is_error
+
+
+class Measure(StrEnum):
+    """Values of ``field`` (fetched 2026-10-27)."""
+
+    QUANTITY = "quantity"
+    VALUE = "value"
+
+
+def get_top(field: Measure, year: int = 2024) -> dict[str, str]:
+    """Rank by one field.
+
+    Args:
+        field: What to rank by, e.g. ``"value"``.
+        year: Marketing year from 2000, e.g. ``2024``.
+    """
+    if year < 2000:
+        raise InvalidRequestError("year: there is no data before 2000")
+    return {"field": field.value}
+
+
+@pytest.mark.parametrize(
+    ("arguments", "expected"),
+    [
+        ({"field": "volume"}, "field: Input should be 'quantity' or 'value'"),
+        ({"field": "value", "year": "soon"},
+         "year: Input should be a valid integer, unable to parse string as an integer"),
+        ({"year": "soon"}, "field: Field required (the first of 2 errors)"),
+        ({"field": "value", "year": 1999}, "year: there is no data before 2000"),  # the task's
+    ],
+)  # fmt: skip
+@pytest.mark.anyio
+async def test_arguments_the_schema_refuses_are_answered_in_the_family_form(
+    arguments: dict[str, Any], expected: str
+) -> None:
+    # Row 41 a (sdk-usda-esr): the SDK answered "Error executing tool ...", pydantic's text.
+    server = build_server("example", [get_top])
+    register_tasks(server, "example", [plain])  # the middleware is installed once
+    names = [getattr(middleware, "__name__", "") for middleware in server.middleware]
+    assert names.count("check_arguments") == 1
+    text = await mcp_call_text(server, "example_get_top", arguments)  # not is_error
+    assert text == f"error: InvalidRequestError: {expected}"
+    assert not {"volume", "soon", "pydantic", "input_value"} & set(text.replace(",", " ").split())
+    assert await mcp_call(server, "example_get_top", {"field": "value"}) == {"field": "value"}
 
 
 @pytest.mark.anyio
