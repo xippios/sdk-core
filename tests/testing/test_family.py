@@ -222,13 +222,14 @@ def test_bulk_tasks_stay_off_the_adapters_and_in_the_table(pytester: pytest.Pyte
     changes: dict[str, str | None] = {"src/xippios/example/tasks.py": bulk, "README.md": table}
     result = run_family(pytester, changes)
     result.assert_outcomes(passed=FAMILY_TESTS - 1, skipped=1)
-    served = SOURCE["src/xippios/example/mcp.py"].replace(
-        SERVED, "[getattr(tasks, n) for n in tasks.__all__]"
-    )
-    result = run_family(pytester, {**changes, "src/xippios/example/mcp.py": served})
-    result.stdout.fnmatch_lines(
-        ["*- tool example_download_series serves no task of tasks.__all__ minus BULK_TASKS*"]
-    )
+    # register_tasks and router_from_tasks skip it themselves (ADR-0019, decision 4).
+    every = "[getattr(tasks, n) for n in tasks.__all__]"
+    adapters = {
+        path: SOURCE[path].replace(SERVED, every)
+        for path in ("src/xippios/example/mcp.py", "src/xippios/example/http.py")
+    }
+    result = run_family(pytester, {**changes, **adapters})
+    result.assert_outcomes(passed=FAMILY_TESTS - 1, skipped=1)
 
 
 def test_a_task_without_the_envelope_or_the_docstring_fails(pytester: pytest.Pytester) -> None:

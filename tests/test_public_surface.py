@@ -12,7 +12,7 @@ EXPORTS = {
         # client
         "AsyncClient", "ClientConfig", "MemoryCache", "QuotaPolicy", "RateLimit",
         "RetryPolicy", "Timeouts", "QueryKeyAuth", "HeaderKeyAuth", "BearerAuth",
-        "BasicKeyAuth",
+        "BasicKeyAuth", "Downloaded",
         # errors
         "AuthError", "ConfigError", "InvalidRequestError", "NotFoundError", "RateLimitError",
         "TransportError", "UpstreamError", "ValidationError", "XippiosError",
@@ -25,7 +25,8 @@ EXPORTS = {
     "xippios.core.client": {
         "AsyncClient", "BasicKeyAuth", "BearerAuth", "CachedResponse", "ClientConfig",
         "HeaderKeyAuth", "MemoryCache", "QueryKeyAuth", "QuotaPolicy", "RateLimit",
-        "RetryPolicy", "Timeouts", "cache_key", "decode_json",
+        "RetryPolicy", "Timeouts", "cache_key", "decode_json", "decode_text", "decode_csv",
+        "Downloaded",
     },
     "xippios.core.testing": {
         "CLOCK_SLACK", "REDACTED", "Fixture", "FixtureResponse", "ReplayFixture", "Scrub",

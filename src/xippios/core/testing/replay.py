@@ -7,8 +7,8 @@ from typing import Any, Protocol
 import httpx
 import respx
 
+from xippios.core.redaction import REDACTED, is_credential_name, scrub_url
 from xippios.core.testing.fixtures import Fixture, _query_of, load_fixture
-from xippios.core.testing.scrub import REDACTED, scrub_url
 
 __all__ = ["ReplayFixture", "mount_fixture", "replay", "sent_query", "sent_urls"]
 
@@ -67,8 +67,10 @@ def mount_fixture(
 
     Raises:
         ValueError: A name in ``match_params`` is not a query parameter of the URL served
-            (the recorded one, or ``url``), or its value holds ``REDACTED`` (whole, or a
-            scrubbed secret inside it); the message names the parameter.
+            (the recorded one, or ``url``), names a credential by the rule of
+            ``xippios.core.redaction`` (``api_key``; ``key`` where a ``QueryKeyAuth``
+            sends it), or its value holds ``REDACTED`` (whole, or a scrubbed secret
+            inside it); the message names the parameter.
         TypeError: ``match_params`` is one string instead of a collection of names.
     """
     served = httpx.URL(fixture.request.url if url is None else url)
@@ -86,6 +88,11 @@ def mount_fixture(
             if not values:
                 where = "the recorded request" if url is None else "the URL given"
                 raise ValueError(f"match_params: {name!r} is not a query parameter of {where}")
+            if is_credential_name(name):
+                raise ValueError(
+                    f"match_params: {name!r} names a credential, which a fixture holds as "
+                    f"{REDACTED}; it cannot be matched"
+                )
             if any(REDACTED in value for value in values):
                 raise ValueError(
                     f"match_params: {name!r} was recorded as {REDACTED}, in whole or in part; "
@@ -119,8 +126,9 @@ def replay(
 def sent_urls(route: respx.Route) -> list[str]:
     """The URLs ``route`` received, oldest first, as text with credentials redacted.
 
-    Each URL goes through ``scrub_url``, so a key sent as a query parameter reads
-    ``REDACTED``. A test compares these strings instead of keeping a request from
+    Each URL goes through ``scrub_url``, the rule of ``xippios.core.redaction``, so a key
+    sent as a query parameter reads ``REDACTED`` (``key`` where a ``QueryKeyAuth`` sends
+    it, ``api_key`` always). A test compares these strings instead of keeping a request from
     ``route.calls`` in its own frame, where a failing assertion or ``pytest -l`` would
     print it with its URL, key included.
 

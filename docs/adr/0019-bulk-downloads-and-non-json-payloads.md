@@ -73,3 +73,61 @@ three sources wrote the api.data.gov gateway client (ADR-0015, review C14).
   fixture rule in `record-fixture.md` (template cleanup, tagged with core 0.3.0).
 - Not decided here: XML for Eurostat (its design round); resumable downloads (none; a
   retry restarts the file).
+
+## Amendment 2026-10-27
+
+Core 0.3.0 implements this ADR. Decision 5's recorder option rests on Johannes's
+decisions of 2026-10-27, its shape first and then the cut of a JSON array as upstream's
+original text; decision 6's mechanism on his decision of the same day; the JSON-object
+rule on gate 5 of the same day (queue row 48).
+
+- **Decision 1**: the default of `auth=` is the client's own credentials, core's own
+  sentinel as on `request`, `get` and `get_json`, not httpx's `USE_CLIENT_DEFAULT`, which
+  core no longer names (ADR-0015, amendment 2026-10-27): `download(url, dest, *,
+  auth=<the client's>) -> Downloaded`. Two things differ from `get()`: a success's body
+  goes to the file unread, so `observe` and `classify` see its status and headers only (a
+  hook that reads the body finds it unread, which counts as nothing observed and as
+  `None`), and a 1xx or 3xx answer raises `UpstreamError` where `get()` returns it, since
+  redirects are not followed (queue row 82 asks whether a download should follow them).
+  `dest` names a file in a directory that exists: a directory, or a missing one, is
+  refused with `ValueError` before anything is sent.
+- **Decision 2**: `decode_csv(data, *, delimiter=",", source=None)`. The positional
+  parameter is `data`, a path (`Path` or `str`) or a response, so that it does not
+  collide with the `source=` slug its errors carry, as `decode_json`'s and
+  `decode_text`'s do.
+- **Decision 5**: one `max_bytes=`, on `record`, `record_sync` and
+  `fixture_from_response`, cuts texts and JSON arrays alike; it bounds the body, not the
+  fixture file, which escapes the body as a JSON string. A JSON array (a `Content-Type`
+  of `application/json` or `...+json`, or a body that parses as JSON, a byte order mark
+  allowed) is cut at an element boundary in its original text, never re-serialised: the
+  first whole elements that fit in `max_bytes` bytes with a closing `]`, numbers and
+  spacing as upstream wrote them, the boundaries found with `json.JSONDecoder.raw_decode`
+  (Johannes's decision of 2026-10-27, which replaced the re-serialised cut decided
+  earlier that day), and `original_count` records its length. Another text
+  is cut at `max_bytes` bytes, back to a whole UTF-8 character and back to the start of
+  a secret value or of the request host the cut would split, so no part of one is kept.
+  A cut is marked `truncated` with `original_bytes` and `sha256`, both of the whole body
+  before the scrub, which then runs on what is kept. A JSON object is refused: the
+  source records a small real answer, since an object's parts are no list to take the
+  first of; so is a body declared JSON that does not parse, an array whose first element
+  alone does not fit, and a text cut that keeps nothing, since an empty sample tells a
+  parser test nothing. XML is refused for the reason that a cut-off XML document is not
+  well-formed; ZIP, XLSX, gzip, XLS and a body that is not UTF-8 text for the reason
+  above. A body within `max_bytes` is kept whole and unmarked, and a fixture that was
+  not cut is written without the four fields, as fixtures were before them. Queue row 43
+  (sdk-usda-gats) and the family's finding that a cut-off JSON object, a JSON-stat cube,
+  does not decode on replay (row 48) are served by this.
+- **Decision 6**, the mechanism: the one rule lives in `xippios.core.redaction`. A name
+  is a credential when a whole word of it, between `_`, `-` or the ends, is `api_key`
+  (also `apikey`, `api-key`), `token`, `secret`, `password`, `passwd`, `pwd`, `auth`,
+  `authorization`, `sig`, `signature`, `credential` or `credentials`; a bare `key` is
+  not. `sig` and `pwd` are on the list because catalog file links can arrive as
+  pre-signed URLs (an Azure SAS carries `sig=`; queue row 84). A
+  `QueryKeyAuth(param, ...)` registers `param` when it is built, and the name is a
+  credential from then on in the whole process, matched exactly in any letter case: USDA
+  NASS's `QueryKeyAuth("key", ...)` makes `key` one, and Eurostat, keyless, keeps its
+  SDMX `key` as data. A process that imports both treats `key` as a credential for both.
+  `ResultMeta.request`, the recorder's scrub, `sent_urls`, `sent_query`,
+  `recorded_query` and `mount_fixture` read the one rule; the recorder's broader
+  substring pattern is gone (ADR-0005, amendment 2026-10-27), so `sort_key` and
+  `keyword` are data everywhere.

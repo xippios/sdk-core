@@ -1,3 +1,5 @@
+import sys
+import types
 from collections.abc import Mapping
 from datetime import date
 from decimal import Decimal
@@ -45,6 +47,15 @@ def list_things() -> list[str]:
     return ["a", "b"]
 
 
+async def download_series_async(series_id: str) -> Result[list[Series]]:
+    """Download every year of one series."""
+    raise NotImplementedError
+
+
+download_series_async.__module__ = "example_bulk_tasks"
+download_series = sync(download_series_async)
+
+
 def make_client() -> TestClient:
     app = FastAPI()
     app.include_router(router_from_tasks("example", [get_series, list_things]))
@@ -61,6 +72,15 @@ def test_routes_return_the_envelope() -> None:
     assert payload["meta"]["request"] == {"year": 2010}
     assert payload["meta"]["retrieved_at"].endswith("Z")
     assert payload["meta"]["total"] is None
+
+
+def test_a_task_in_bulk_tasks_gets_no_route(monkeypatch: pytest.MonkeyPatch) -> None:
+    # ADR-0019, decision 4: the rendered http.py passes every name of tasks.__all__.
+    tasks = types.ModuleType("example_bulk_tasks")
+    tasks.BULK_TASKS = frozenset({"download_series"})  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, tasks.__name__, tasks)
+    router = router_from_tasks("example", [get_series, download_series])
+    assert [route.path for route in router.routes] == ["/example/get_series"]  # type: ignore[attr-defined]
 
 
 def test_defaults_and_plain_functions() -> None:

@@ -1,5 +1,6 @@
 import base64
 import gzip
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -20,7 +21,7 @@ def _response(
 ) -> httpx.Response:
     request = httpx.Request(
         "GET",
-        "https://api.example.test/v1/x?key=SECRET&year=2024",
+        "https://api.example.test/v1/x?api_key=SECRET&year=2024",
         headers={"Authorization": "Bearer SECRET"},
     )
     return httpx.Response(
@@ -44,7 +45,7 @@ def test_write_scrubs_and_round_trips(tmp_path: Path) -> None:
     raw = json.loads(text)
     assert raw["request"] == {
         "method": "GET",
-        "url": f"https://api.example.test/v1/x?key={REDACTED}&year=2024",
+        "url": f"https://api.example.test/v1/x?api_key={REDACTED}&year=2024",
         "body": None,
         "body_base64": False,
         "content_type": None,
@@ -139,6 +140,98 @@ def test_a_fixture_written_by_0_1_0_still_loads(tmp_path: Path) -> None:
     assert (fixture.request.body, fixture.request.body_base64) == (None, False)
     assert fixture.request.content_type is None
     assert fixture.response.content == b'{"ok": true}'
+
+
+def _answer(content: bytes, content_type: str) -> httpx.Response:
+    request = httpx.Request("GET", "https://api.example.test/v1/file")
+    headers = {"Content-Type": content_type}
+    return httpx.Response(200, content=content, headers=headers, request=request)
+
+
+def test_max_bytes_cuts_a_text_at_a_character_boundary(tmp_path: Path) -> None:
+    # Row 46 (sdk-usda-nass): a bulk text file of hundreds of MB as a fixture.
+    full = "Région\tValue\n" + "Île-de-France\t1\n" * 50
+    fixture = fixture_from_response(_answer(full.encode(), "text/plain"), max_bytes=15)
+    assert fixture.response.body == "Région\tValue\n"  # 14 bytes: byte 15 is half of "Î"
+    response = fixture.response
+    assert (response.truncated, response.original_bytes) == (True, len(full.encode()))
+    assert response.sha256 == hashlib.sha256(full.encode()).hexdigest()
+    assert response.original_count is None
+    path = tmp_path / "f.json"
+    path.write_text(json.dumps(fixture.model_dump(mode="json")))
+    assert load_fixture(path) == fixture
+
+
+def test_max_bytes_cuts_a_json_array_at_an_element_boundary_of_its_text() -> None:
+    # Row 43 (sdk-usda-gats): list fixtures over the 256 KiB cap. Upstream's text is kept:
+    # 1.50 stays 1.50 and a long figure keeps its digits, as a Decimal parser needs.
+    body = '\ufeff[\n  {"id": 0, "v": 1.50},\n  {"id": 1, "v": 12345678901234567890.1},\n'
+    body += "".join(f'  {{"id": {i}, "v": 2.00}},\n' for i in range(2, 50)) + '  {"id": 50}\n]'
+    fixture = fixture_from_response(_answer(body.encode(), "application/json"), max_bytes=80)
+    kept = '\ufeff[\n  {"id": 0, "v": 1.50},\n  {"id": 1, "v": 12345678901234567890.1}]'
+    assert fixture.response.body == kept  # 75 bytes; the third element would end at 101
+    assert (fixture.response.truncated, fixture.response.original_count) == (True, 51)
+    assert httpx.Response(200, content=kept.encode()).json()[1]["v"] == 12345678901234567890.1
+    with pytest.raises(ValueError, match=r"^max_bytes: the JSON array's first element alone"):
+        fixture_from_response(_answer(body.encode(), "application/json"), max_bytes=20)
+
+
+def test_max_bytes_never_keeps_part_of_a_secret_or_of_the_host() -> None:
+    request = httpx.Request("GET", f"https://{TENANT}/v1/export")
+    text = "name\nacme-tenant\n" + f"https://{TENANT}/x\n" * 20
+    answer = httpx.Response(200, content=text.encode(), request=request)
+    scrub = Scrub(host=PLACEHOLDER, secrets=["acme-tenant"])
+    fixture = fixture_from_response(answer, scrub=scrub, max_bytes=13)  # "...\nacme-ten"
+    assert fixture.response.body == "name\n"
+    fixture = fixture_from_response(answer, scrub=scrub, max_bytes=30)  # "...https://acme.exa"
+    assert fixture.response.body == f"name\n{REDACTED}\nhttps://"
+    first = httpx.Response(200, content=b"acme-tenant\n" * 20, request=request)
+    with pytest.raises(ValueError, match=r"^max_bytes: a cut at 5 bytes keeps nothing"):
+        fixture_from_response(first, scrub=scrub, max_bytes=5)
+    with pytest.raises(ValueError, match=r"^max_bytes: a cut at 1 bytes keeps nothing"):
+        fixture_from_response(_answer("Île".encode() * 10, "text/plain"), max_bytes=1)
+
+
+@pytest.mark.parametrize(
+    ("content", "content_type", "reason"),
+    [
+        (
+            json.dumps({"data": list(range(30))}).encode(),
+            "application/json",
+            "a JSON body that is not an array",
+        ),
+        (b"[1, 2, 3" + b", 4" * 20, "application/json", "the body is declared application/json"),
+        (b"<data>" + b"<row/>" * 20 + b"</data>", "application/xml", "an XML body"),
+        (b"<?xml version='1.0'?><data/>" + b" " * 50, "text/plain", "an XML body"),
+        (b"PK\x03\x04" + b"\x00" * 60, "application/zip", "a ZIP body"),
+        (
+            b"PK\x03\x04" + b"\x00" * 60,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "an XLSX body",
+        ),
+        (gzip.compress(b"a\tb\n" * 100), "application/gzip", "a gzip body"),
+        (b"\xd0\xcf\x11\xe0" + b"\x00" * 60, "application/vnd.ms-excel", "an XLS body"),
+        (b"\xff\xfe" + "a,b\n".encode("utf-16-le") * 20, "text/csv", "a body that is not UTF-8"),
+    ],
+)
+def test_max_bytes_refuses_what_a_cut_would_break(
+    content: bytes, content_type: str, reason: str
+) -> None:
+    # ADR-0019, decision 5, as amended: a small real answer or sample instead.
+    with pytest.raises(ValueError, match=f"^max_bytes: {reason}"):
+        fixture_from_response(_answer(content, content_type), max_bytes=20)
+
+
+def test_max_bytes_at_or_above_the_size_keeps_the_body_unmarked(tmp_path: Path) -> None:
+    for max_bytes in (12, 13):  # the body is 12 bytes
+        whole = fixture_from_response(_response(), max_bytes=max_bytes)
+        assert whole.response.body == '{"ok": true}'
+        assert (whole.response.truncated, whole.response.sha256) == (False, None)
+    write_fixture(_response(), tmp_path / "f.json")
+    written = json.loads((tmp_path / "f.json").read_text())["response"]
+    assert not {"truncated", "original_bytes", "original_count", "sha256"} & written.keys()
+    with pytest.raises(ValueError, match="max_bytes must be at least 1"):
+        fixture_from_response(_response(), max_bytes=0)
 
 
 def test_placeholder_host_leaves_no_trace_of_the_tenant(tmp_path: Path) -> None:

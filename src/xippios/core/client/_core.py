@@ -1,23 +1,43 @@
 """The async client: one request path with retries, rate limiting, caching and errors."""
 
 import asyncio
+import contextlib
+import csv
 import inspect
+import io
+import os
+import tempfile
 import threading
 import time
 import weakref
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Iterator, Mapping
+from datetime import UTC, datetime
+from pathlib import Path
 from types import TracebackType
-from typing import Any, Final, Self, final
+from typing import IO, Any, Final, Self, final
 
 import httpx
 
 from xippios.core.client.cache import CachedResponse, cache_key, strip_wire_headers
 from xippios.core.client.config import ClientConfig
+from xippios.core.client.download import (
+    Downloaded,
+    content_disposition_filename,
+    head_of,
+    stream_to,
+    unread_is_none,
+)
 from xippios.core.client.ratelimit import TokenBucket
 from xippios.core.client.retry import send_with_retries
-from xippios.core.errors import BODY_LIMIT, ValidationError, XippiosError, raise_for_status
+from xippios.core.errors import (
+    BODY_LIMIT,
+    UpstreamError,
+    ValidationError,
+    XippiosError,
+    raise_for_status,
+)
 
-__all__ = ["AsyncClient", "Params", "decode_json"]
+__all__ = ["AsyncClient", "Params", "decode_csv", "decode_json", "decode_text"]
 
 Params = Mapping[str, Any] | None
 
@@ -122,7 +142,8 @@ class AsyncClient:
         """Send one request and return the response.
 
         Retries, rate limiting and caching (GET only, narrowed by
-        ``ClientConfig.cache_filter``) apply as configured. A cache hit returns at once;
+        ``ClientConfig.cache_filter``, a body over ``ClientConfig.cache_max_bytes`` not
+        stored) apply as configured. A cache hit returns at once;
         otherwise ``ClientConfig.before_request`` runs once, before the rate limiter, and
         ``ClientConfig.observe`` sees every response from the wire, retried attempts
         included. The source's ``classify`` hook, if any, is asked before a 429 or 5xx
@@ -206,7 +227,12 @@ class AsyncClient:
                 if classified is not None:
                     raise classified
             raise_for_status(response, source=self.source)
-        if key is not None and self.config.cache is not None and response.status_code == 200:
+        if (
+            key is not None
+            and self.config.cache is not None
+            and response.status_code == 200
+            and len(response.content) <= self.config.cache_max_bytes
+        ):
             # The content is already decoded: keeping content-encoding would make the
             # replay decode it a second time (httpx.DecodingError on a gzip answer).
             self.config.cache.set(
@@ -247,6 +273,135 @@ class AsyncClient:
         """
         response = await self.get(path, params=params, headers=headers, auth=auth)
         return decode_json(response, source=self.source, path=path)
+
+    async def download(
+        self,
+        url: str,
+        dest: str | os.PathLike[str],
+        *,
+        auth: httpx.Auth | _ClientAuth | None = _CLIENT_AUTH,
+    ) -> Downloaded:
+        """Stream a file to ``dest`` with a GET, never holding its body in memory (ADR-0019).
+
+        The body is written chunk by chunk to a temporary file in ``dest``'s directory
+        and renamed to ``dest`` once complete, replacing a file there; on any failure the
+        temporary file is removed and ``dest`` is left as it was. The response cache is
+        neither looked up nor stored. Otherwise it goes as ``get()`` goes:
+        ``ClientConfig.before_request`` runs once, before the rate limiter; the limiter
+        paces every attempt; ``ClientConfig.observe`` sees every response from the wire;
+        the retry rule of ADR-0011 applies to a GET, so a 429, a 5xx or a transport
+        failure, one in the middle of the body included, is retried and the retry
+        restarts the file. An error answer is read up to ``BODY_LIMIT`` bytes, for
+        ``observe``, ``classify`` and the error's text, and raised through the taxonomy
+        as ``get()`` raises it. Two things differ from ``get()``. A success's body goes
+        to the file unread, so ``observe`` and ``classify`` see its status and headers
+        only: a hook that reads the body finds it unread (``httpx.ResponseNotRead``),
+        which counts as nothing observed and as ``None``, and an error ``classify``
+        returns is raised before anything is written. And redirects are not followed,
+        as for ``get()``, but a 1xx or 3xx answer raises ``UpstreamError`` where
+        ``get()`` returns it.
+
+        Args:
+            url: An absolute URL, e.g. a file link from a catalog, or a path joined onto
+                the base URL, e.g. ``"/files/qs.crops_20261027.txt.gz"``.
+            dest: The file to write, e.g. ``tmp_path / "qs.crops.txt.gz"``, in a directory
+                that exists.
+            auth: Credentials for this download, every retry included, as for
+                ``request``: the client's by default, ``None`` for none, an
+                ``httpx.Auth`` to replace them. The default sends the client's key to an
+                absolute URL on another host too; pass ``None`` for a file link there.
+
+        Returns:
+            The ``Downloaded`` file: path, size, content type, file name, ``ETag``,
+            ``Last-Modified`` and when it was complete.
+
+        Raises:
+            ValueError: ``dest`` is a directory, or its directory does not exist;
+                nothing is sent.
+            XippiosError: The taxonomy error for the answer (``classify`` first, then the
+                status), ``UpstreamError`` for a 1xx or 3xx, ``TransportError`` for a
+                transport failure that is not retried; ``dest`` is untouched.
+        """
+        target = Path(dest)
+        if target.is_dir():
+            raise ValueError("dest is a directory; name the file to write")
+        if not target.parent.is_dir():
+            raise ValueError("dest's directory does not exist; create it first")
+        pool = self._pool()
+        sent_auth = httpx.USE_CLIENT_DEFAULT if isinstance(auth, _ClientAuth) else auth
+        handle, name = tempfile.mkstemp(
+            dir=target.parent, prefix=f".{target.name}.", suffix=".part"
+        )
+        os.close(handle)
+        partial = Path(name)
+        try:
+            before_request = self.config.before_request
+            if before_request is not None:
+                outcome = before_request(pool.build_request("GET", url))
+                if inspect.isawaitable(outcome):
+                    await outcome
+            observe = self.config.observe
+            classify = (
+                None
+                if self.config.classify is None
+                else _ClassifyOnce(unread_is_none(self.config.classify))
+            )
+            written = 0
+
+            async def send() -> httpx.Response:
+                nonlocal written
+                if self._bucket is not None:
+                    await self._bucket.acquire(self._sleep)
+                request = pool.build_request("GET", url)
+                streamed = await pool.send(request, auth=sent_auth, stream=True)
+                try:
+                    response = streamed if streamed.is_success else await head_of(streamed)
+                    if observe is not None:
+                        # A success's body goes to the file unread: a hook reading it sees
+                        # nothing, as classify does (unread_is_none).
+                        with contextlib.suppress(httpx.ResponseNotRead):
+                            observe(response)
+                    if response.is_success and (classify is None or classify(response) is None):
+                        written = await stream_to(response, partial)
+                finally:
+                    await streamed.aclose()
+                return response
+
+            response = await send_with_retries(
+                send,
+                policy=self.config.retry,
+                method="GET",
+                source=self.source,
+                sleep=self._sleep,
+                classify=classify,
+            )
+            if classify is not None:
+                classified = classify(response)
+                if classified is not None:
+                    raise classified
+            raise_for_status(response, source=self.source)
+            if not response.is_success:
+                raise UpstreamError(
+                    f"{response.status_code} from GET {response.request.url.path}: a download "
+                    "writes a 2xx answer only, and redirects are not followed",
+                    status=response.status_code,
+                    body=response.text[:BODY_LIMIT],
+                    source=self.source,
+                )
+            partial.replace(target)
+        except BaseException:
+            partial.unlink(missing_ok=True)
+            raise
+        headers = response.headers
+        return Downloaded(
+            path=target,
+            bytes=written,
+            content_type=headers.get("content-type"),
+            filename=content_disposition_filename(headers.get("content-disposition")),
+            etag=headers.get("etag"),
+            last_modified=headers.get("last-modified"),
+            retrieved_at=datetime.now(UTC),
+        )
 
     async def aclose(self) -> None:
         """Close the connection pool bound to the current event loop.
@@ -293,16 +448,101 @@ def decode_json(
     try:
         return response.json()
     except ValueError as exc:
-        if path is None:
-            try:
-                path = response.request.url.path
-            except RuntimeError:  # httpx raises it for a response built without a request
-                path = None
-        where = f"response from {path}" if path else "response"
         raise ValidationError(
-            f"{source + ': ' if source else ''}{where} is not JSON",
+            f"{source + ': ' if source else ''}{_where(response, path)} is not JSON",
             raw=response.text[:BODY_LIMIT],
             source=source,
+        ) from exc
+
+
+def _where(response: httpx.Response, path: str | None) -> str:
+    """``response from <path>`` for an error message, the request's path when not given."""
+    if path is None:
+        try:
+            path = response.request.url.path
+        except RuntimeError:  # httpx raises it for a response built without a request
+            path = None
+    return f"response from {path}" if path else "response"
+
+
+def decode_text(
+    response: httpx.Response, *, source: str | None = None, path: str | None = None
+) -> str:
+    """``response``'s body as text, in the charset its ``Content-Type`` names (ADR-0019).
+
+    UTF-8 when the header names none; a leading byte order mark is stripped. For a CSV,
+    TXT or XML answer read through ``get``; a file streamed to disk is read with
+    ``decode_csv(path)`` or by the source.
+
+    Args:
+        response: A response with its body read, e.g. from ``AsyncClient.get``.
+        source: Source slug for the error, e.g. ``"eurostat"``.
+        path: The request path the message names; ``None`` takes the path of the
+            response's request. Never the host or query (conventions §5).
+
+    Raises:
+        ValidationError: The body is not text in that charset, or the charset is
+            unknown; ``raw`` holds the first ``BODY_LIMIT`` bytes.
+    """
+    charset = response.charset_encoding or "utf-8"
+    try:
+        text = response.content.decode(charset)
+    except (LookupError, UnicodeDecodeError) as exc:
+        raise ValidationError(
+            f"{source + ': ' if source else ''}{_where(response, path)} is not {charset} text",
+            raw=response.content[:BODY_LIMIT],
+            source=source,
+        ) from exc
+    return text.removeprefix("\ufeff")
+
+
+def decode_csv(
+    data: Path | str | httpx.Response, *, delimiter: str = ",", source: str | None = None
+) -> Iterator[dict[str, str]]:
+    r"""The rows of a CSV file or answer, one mapping per row, headers as upstream prints them.
+
+    The stdlib's ``csv.DictReader`` reads the first row as the header and each further
+    row as a mapping from header to text; nothing is converted, renamed or stripped
+    (ADR-0003). A row shorter than the header maps the missing columns to ``None``, and
+    a longer one keeps the extra values as a list under ``None``, as ``DictReader``
+    does. A generator: a file of hundreds of MB is read row by row, never whole, and is
+    closed when the generator ends or is closed; ``list(decode_csv(path))`` reads it all.
+
+    Args:
+        data: A downloaded file, as a path, read as UTF-8 with a byte order mark
+            stripped, e.g. ``downloaded.path``; or a response with its body read,
+            decoded by ``decode_text``. A gzip or zip file is opened by the source with
+            the stdlib.
+        delimiter: The field separator, e.g. ``"\t"`` for a tab-separated file.
+        source: Source slug for the error, e.g. ``"usda-nass"``.
+
+    Raises:
+        ValidationError: The text is not UTF-8 (or not in the response's charset), or
+            not CSV the stdlib can read, e.g. a field over its size limit; raised while
+            iterating, at the row where it is found.
+    """
+    if isinstance(data, httpx.Response):
+        text = io.StringIO(decode_text(data, source=source), newline="")
+        yield from _rows(text, delimiter, "response", source)
+        return
+    path = Path(data)
+    with path.open(encoding="utf-8-sig", newline="") as handle:
+        yield from _rows(handle, delimiter, path.name, source)
+
+
+def _rows(
+    handle: IO[str], delimiter: str, name: str, source: str | None
+) -> Iterator[dict[str, str]]:
+    prefix = f"{source}: " if source else ""
+    try:
+        yield from csv.DictReader(handle, delimiter=delimiter)
+    except UnicodeDecodeError as exc:
+        raise ValidationError(
+            f"{prefix}{name} is not UTF-8 text", raw=exc.object[:BODY_LIMIT], source=source
+        ) from exc
+    except csv.Error as exc:
+        raise ValidationError(
+            f"{prefix}{name} is not CSV the csv module reads: {exc}", raw="", source=source
         ) from exc
 
 

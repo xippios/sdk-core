@@ -1,53 +1,16 @@
 import dataclasses
 
-import httpx
 import pytest
 
-from xippios.core.testing import REDACTED, Scrub
-from xippios.core.testing.scrub import scrub_headers, scrub_params, scrub_url
+from xippios.core import redaction
+from xippios.core.testing import Scrub, scrub
 
 
-def test_scrub_params_matches_credential_like_names() -> None:
-    items = [
-        ("key", "s"),
-        ("api_key", "s"),
-        ("access_token", "s"),
-        ("commodity", "corn"),
-        ("x", "1"),
-    ]
-    assert scrub_params(items) == [
-        ("key", REDACTED),
-        ("api_key", REDACTED),
-        ("access_token", REDACTED),
-        ("commodity", "corn"),
-        ("x", "1"),
-    ]
-
-
-def test_scrub_url_keeps_structure() -> None:
-    url = httpx.URL("https://api.example.test/v1/x?key=SECRET&year=2024&client_secret=S2")
-    assert scrub_url(url) == (
-        f"https://api.example.test/v1/x?key={REDACTED}&year=2024&client_secret={REDACTED}"
-    )
-
-
-def test_scrub_url_redacts_userinfo() -> None:
-    cleaned = scrub_url("https://user:pw@api.example.test/v1")
-    assert "pw" not in cleaned
-    assert cleaned.startswith(f"https://{REDACTED}:{REDACTED}@api.example.test/v1")
-
-
-def test_scrub_headers() -> None:
-    items = [
-        ("Authorization", "Bearer x"),
-        ("Content-Type", "application/json"),
-        ("Set-Cookie", "a=b"),
-    ]
-    assert scrub_headers(items) == [
-        ("Authorization", REDACTED),
-        ("Content-Type", "application/json"),
-        ("Set-Cookie", REDACTED),
-    ]
+def test_the_scrub_reads_the_one_rule() -> None:
+    # The substring rule the recorder kept is gone (ADR-0019, decision 6).
+    assert scrub.scrub_params is redaction.scrub_params
+    assert scrub.scrub_url is redaction.scrub_url
+    assert scrub.scrub_headers is redaction.scrub_headers
 
 
 def test_scrub_defaults_keep_the_host_and_refuse_binary_bodies() -> None:

@@ -112,7 +112,10 @@ import socket
 import httpx
 import pytest
 
+from xippios.core.client import AsyncClient, ClientConfig
+
 URL = "https://tenant.example.test/v1/series?key=SECRET"
+TENANT = ClientConfig(source="example", version="1", base_url="https://tenant.example.test")
 
 
 def closed_port():
@@ -185,6 +188,22 @@ async def test_a_mocked_async_request_is_answered(respx_mock):
         assert (await client.post(URL, json={})).status_code == 201
 
 
+@pytest.mark.anyio
+async def test_an_unmocked_download_is_refused(tmp_path):
+    # ADR-0019: download goes through the client's pool, which the guard covers.
+    refused = "^network access in an offline test: GET /v1/files/qs.csv; "
+    with pytest.raises(RuntimeError, match=refused):
+        await AsyncClient(TENANT).download("/v1/files/qs.csv?key=SECRET", tmp_path / "qs.csv")
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.anyio
+async def test_a_mocked_download_writes_the_file(respx_mock, tmp_path):
+    respx_mock.get("https://tenant.example.test/v1/files/qs.csv").respond(200, text="a\\n1\\n")
+    got = await AsyncClient(TENANT).download("/v1/files/qs.csv", tmp_path / "qs.csv")
+    assert (got.bytes, (tmp_path / "qs.csv").read_text()) == (4, "a\\n1\\n")
+
+
 def test_a_transport_of_the_test_is_untouched():
     transport = httpx.MockTransport(lambda request: httpx.Response(204))
     with httpx.Client(transport=transport) as client:
@@ -242,7 +261,7 @@ def test_offline_tests_cannot_reach_the_network(
     monkeypatch.setenv(LIVE_ENV, "1")
     pytester.makepyfile(OFFLINE_TESTS)
     result = pytester.runpytest("-p", "xippios.core.testing.plugin", "--strict-markers")
-    result.assert_outcomes(passed=13)
+    result.assert_outcomes(passed=15)
     # The inner session gave back what it patched: the outer session's own guard.
     assert httpx.HTTPTransport.handle_request is SEND
     assert httpx.AsyncHTTPTransport.handle_async_request is SEND_ASYNC

@@ -5,6 +5,8 @@ schema and the description from them. The body awaits the task's async twin, tur
 taxonomy errors into text and applies the result cap: the tool's own from ``caps``,
 else the server's (ADR-0016).
 
+A task its ``tasks.py`` names in ``BULK_TASKS`` is no tool and is skipped (ADR-0019).
+
 A server can be locked to one tenant (``TenantLock``): a middleware refuses every tool
 call naming another before the tool runs. A server whose tasks were registered with
 ``read_only=False`` is a write server (``is_write_server``), which ``main`` keeps on
@@ -27,6 +29,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp.types import CallToolResult, TextContent, ToolAnnotations
 
 from xippios.core._loop import as_async
+from xippios.core._tasks import is_bulk_task
 from xippios.core.errors import InvalidRequestError, XippiosError
 from xippios.core.mcp.errors import error_to_text
 from xippios.core.mcp.results import cap_result
@@ -262,6 +265,9 @@ def _confirm_problem(fn: Callable[..., Any]) -> str | None:
 def _check_caps(tasks: list[Callable[..., Any]], caps: Mapping[str, ResultCap]) -> None:
     """Refuse a key of ``caps`` that is not the ``__name__`` of one of ``tasks``.
 
+    ``tasks`` are the tools to be, a task in ``BULK_TASKS`` left out: a cap for it is
+    refused as unknown.
+
     Raises:
         ValueError: Naming every such key, sorted.
     """
@@ -269,7 +275,8 @@ def _check_caps(tasks: list[Callable[..., Any]], caps: Mapping[str, ResultCap]) 
     if unknown:
         raise ValueError(
             f"caps names no task among the tasks: {', '.join(unknown)}; a key is the task "
-            "function's __name__, not the tool name with the source prefix"
+            "function's __name__, not the tool name with the source prefix, and a task in "
+            "BULK_TASKS is no tool"
         )
 
 
@@ -312,6 +319,11 @@ def register_tasks(
 ) -> list[str]:
     """Add each task function to ``server`` as a tool and return the tool names.
 
+    A task the module that defines it names in ``BULK_TASKS`` (``tasks.py``, beside
+    ``MCP_CAPS``) is skipped: a bulk task returns a file, or a list read from one, and is
+    Python-only; no tool returns a file path to an agent (conventions §8, ADR-0019). So
+    an adapter may pass every name of ``tasks.__all__``.
+
     With ``read_only=False`` every task must take ``confirm: bool = False`` and return a
     dry-run preview unless it is true (conventions §8); the tasks are checked before any
     is registered, so a task without it registers nothing. The server is then a write
@@ -321,7 +333,8 @@ def register_tasks(
     Args:
         server: The server to register on.
         source: Source slug, e.g. ``"usda-nass"``; prefixes every tool name.
-        tasks: Task functions (sync facades, async functions, or plain functions).
+        tasks: Task functions (sync facades, async functions, or plain functions); one
+            named in its module's ``BULK_TASKS`` is skipped.
         cap: Result cap of every tool without an entry in ``caps``; defaults to 200 rows
             or 64 KB.
         caps: A tool's own result cap, replacing ``cap`` for it, keyed by the task
@@ -342,15 +355,16 @@ def register_tasks(
     Raises:
         ValueError: ``read_only`` is ``False`` and a task has no parameter ``confirm``
             annotated ``bool`` with the default ``False``; the message names the tool.
-            Or a key of ``caps`` is not the ``__name__`` of one of ``tasks``; the message
-            names it. Or ``tenant_lock`` differs from the lock the server already has.
-            Or the server is locked, by ``tenant_lock`` or before, and a task,
-            registered now or earlier, gives the tenant parameter a default. Nothing is
-            registered or installed then.
+            Or a key of ``caps`` is not the ``__name__`` of one of ``tasks`` that becomes a
+            tool, a task in ``BULK_TASKS`` included; the message names it. Or
+            ``tenant_lock`` differs from the lock the server already has. Or the server
+            is locked, by ``tenant_lock`` or before, and a task, registered now or
+            earlier, gives the tenant parameter a default. Nothing is registered or
+            installed then.
     """
     cap = cap or ResultCap()
     caps = caps or {}
-    tasks = list(tasks)
+    tasks = [fn for fn in tasks if not is_bulk_task(fn)]
     _check_caps(tasks, caps)
     if not read_only:
         for fn in tasks:
@@ -411,7 +425,9 @@ def build_server(
 
     Args:
         source: Source slug.
-        tasks: Task functions to expose.
+        tasks: Task functions to expose, e.g. ``[getattr(tasks, n) for n in
+            tasks.__all__]``; a task in its module's ``BULK_TASKS`` is skipped
+            (ADR-0019), no tool returns a file path to an agent.
         name: Server name; defaults to ``xippios-<source>``.
         version: Source package version, shown to clients.
         instructions: Server-level guidance for agents, e.g. which tool to call first.
@@ -428,8 +444,9 @@ def build_server(
 
     Raises:
         ValueError: ``read_only`` is ``False`` and a task does not take
-            ``confirm: bool = False``; or a key of ``caps`` names no task; or, on a
-            locked server, a task gives the tenant parameter a default.
+            ``confirm: bool = False``; or a key of ``caps`` names no task that becomes a
+            tool, a bulk task included; or, on a locked server, a task gives the tenant
+            parameter a default.
     """
     if tenant_lock is not None:
         instructions = " ".join(filter(None, [instructions, _lock_sentence(tenant_lock)]))

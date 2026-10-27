@@ -35,17 +35,24 @@ src/xippios/core/
   py.typed           PEP 561 marker; without it mypy --strict fails in every source repo
   _version.py        __version__ from distribution metadata
   _loop.py           one background event loop; sync() derives sync functions from async
+  _tasks.py          is_bulk_task: what the adapters read from a source's tasks.py (BULK_TASKS)
   errors.py          error taxonomy, response/exception classifiers
-  models.py          UpstreamModel, ResultMeta, Result[T], ResultCap, parse()
+  redaction.py       the one credential rule (REDACTED, the names QueryKeyAuth registers),
+                     scrub_params/url/headers; imports nothing of core's
+  models.py          UpstreamModel, ResultMeta (request redacted by redaction), Result[T],
+                     ResultCap, parse(); re-exports REDACTED
   pagination.py      paginate_offset (page numbers map onto offsets), collect()
   reference.py       loader for packaged reference data (CSV, JSON); StrEnum/IntEnum renderers
   tenants.py         Tenants (tenants declared in the environment, one client each), list_task
   data_gov.py        the api.data.gov gateway: Gateway (key, classify, one QuotaPolicy per process)
-  client/            httpx client: config, retry, ratelimit, cache, quota, auth (env-key helpers), _core
+  client/            httpx client: config, retry, ratelimit, cache, quota, auth (env-key helpers),
+                     download (Downloaded, streaming), _core (AsyncClient with download,
+                     decode_json/decode_text/decode_csv)
   mcp/               MCP server helpers: server, results (caps), errors (to text), cli   [extra: mcp]
   http/              FastAPI helpers: router (from tasks), problems (RFC 9457)          [extra: http]
-  testing/           pytest plugin (live gate, offline guarantees, anyio_backend), fixtures, record, replay, scrub,
-                     adapters, clock (slack for wall-clock reads), family (the conformance check)   [extra: testing]
+  testing/           pytest plugin (live gate, offline guarantees, anyio_backend), fixtures (max_bytes
+                     truncation), record, replay, scrub (Scrub; credentials by redaction), adapters,
+                     clock (slack for wall-clock reads), family (the conformance check)   [extra: testing]
 tests/               mirrors the tree: tests/client/, tests/mcp/, tests/http/, tests/testing/
 docs/
   conventions.md  adr/  definition-of-done.md  handover.md  roadmap.md  review-checklist.md
@@ -66,9 +73,9 @@ Rules of the tree (ADR-0004):
 
 - A concern is a subpackage when it has an optional dependency or more than one
   internal module; otherwise it is a single module. Do not add empty directories.
-- Imports point downward only: `errors` and `models` at the bottom; `client`,
-  `pagination`, `reference`, `tenants`, `data_gov` above; `mcp`, `http`, `testing` on
-  top. Nothing below an adapter imports an adapter.
+- Imports point downward only: `errors`, `redaction`, `_tasks` and `models` at the bottom;
+  `client`, `pagination`, `reference`, `tenants`, `data_gov` above; `mcp`, `http`,
+  `testing` on top. Nothing below an adapter imports an adapter.
 - The MCP adapter targets the official `mcp` SDK 2.x (`mcp.server.mcpserver.MCPServer`).
   `FastMCP` no longer exists there; the standalone `fastmcp` package is not used.
 - Constructing an `MCPServer` configures root logging at `INFO`, and httpx logs every

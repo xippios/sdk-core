@@ -52,3 +52,9 @@ deleted, so it leaves the modules and the middle layer named above; the sync fac
 The public surface is the `__all__` of `xippios.core` and of the four subpackages
 `client`, `mcp`, `http` and `testing`, each exporting what consumers import (ADR-0023,
 decision 5), and the adapters are still never re-exported from `xippios.core`.
+
+Amended 2026-10-27 (core 0.3.0, ADR-0019): `redaction`, the one credential rule, is a
+module at the bottom beside `errors`, imported by `models`, `client` and `testing` and
+importing nothing of core's; `_tasks`, a private module at the bottom, reads a source's
+`BULK_TASKS` for the adapters; `client/download.py` holds `Downloaded` and the streaming
+`AsyncClient.download` is built from.

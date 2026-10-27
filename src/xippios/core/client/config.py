@@ -129,6 +129,11 @@ class ClientConfig:
             ``request.url.params``; credentials from ``auth`` are not on it yet); a GET
             is looked up and stored only when it returns ``True``. ``None`` caches every
             GET. Lets one client cache a reference endpoint and nothing else.
+        cache_max_bytes: The largest body the cache stores, in bytes as ``httpx``
+            decoded them; 8 MiB by default (ADR-0019, decision 3). A larger answer is
+            returned as usual and not stored, so the next call fetches it again. A
+            source that wants a larger answer cached raises the bound and says why in
+            its ``CLAUDE.md``. ``download`` never touches the cache.
         headers: Extra headers sent with every request.
         classify: The source's own error mapping (ADR-0008): called with every response
             before the default status mapping; return a taxonomy error to raise it, or
@@ -151,7 +156,10 @@ class ClientConfig:
             retry decision, also when the caller asked for the raw response
             (``raise_on_error=False``). For reading, e.g. quota headers; it returns
             nothing, and an exception it raises propagates as the programming error it
-            is. ``QuotaPolicy.install`` sets it (ADR-0015).
+            is, except on a ``download``'s success, whose body goes to the file unread:
+            a hook that reads it there is suppressed and counts as nothing observed
+            (``httpx.ResponseNotRead``, ADR-0019). ``QuotaPolicy.install`` sets it
+            (ADR-0015).
     """
 
     source: str
@@ -162,10 +170,15 @@ class ClientConfig:
     rate_limit: RateLimit | None = None
     cache: CacheBackend | None = None
     cache_filter: Callable[[httpx.Request], bool] | None = None
+    cache_max_bytes: int = 8 * 1024 * 1024
     headers: Mapping[str, str] = field(default_factory=dict)
     classify: Callable[[httpx.Response], XippiosError | None] | None = None
     before_request: Callable[[httpx.Request], Awaitable[None] | None] | None = None
     observe: Callable[[httpx.Response], None] | None = None
+
+    def __post_init__(self) -> None:
+        if self.cache_max_bytes < 1:
+            raise ValueError("cache_max_bytes must be at least 1")
 
     @property
     def user_agent(self) -> str:

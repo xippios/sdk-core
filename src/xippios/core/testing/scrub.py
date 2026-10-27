@@ -1,10 +1,12 @@
 """Remove credentials and tenant traces from what gets written into a fixture.
 
-The matching is deliberately broad: a redacted ``keyword`` parameter costs nothing,
-a leaked API key costs a rotation. Credential-like query parameters, userinfo and
-credential headers are always redacted; a ``Scrub`` adds what only the source knows: a
-placeholder for a tenant's host, the secret values themselves, and a rewrite for
-pre-authenticated URLs.
+Credentials are always redacted by the one rule of ``xippios.core.redaction``, the rule
+``ResultMeta.request`` applies (ADR-0005, ADR-0019): a query parameter that names a
+credential (``api_key``, ``token``, ``secret``, ..., and a name a ``QueryKeyAuth``
+registered, such as USDA NASS's ``key``), the userinfo and the credential headers.
+``scrub_params``, ``scrub_url`` and ``scrub_headers`` are that module's, importable from
+here as well. A ``Scrub`` adds what only the source knows: a placeholder for a tenant's
+host, the secret values themselves, and a rewrite for pre-authenticated URLs.
 """
 
 import base64
@@ -16,46 +18,12 @@ from typing import Any
 
 import httpx
 
+from xippios.core.redaction import REDACTED, scrub_headers, scrub_params, scrub_url
+
 __all__ = ["REDACTED", "Scrub", "scrub_headers", "scrub_params", "scrub_url"]
 
-REDACTED = "REDACTED"
-
-_SENSITIVE_PARAM = re.compile(r"key|token|secret|pass|auth|sig|cred", re.IGNORECASE)
-_SENSITIVE_HEADERS = frozenset(
-    {
-        "authorization",
-        "proxy-authorization",
-        "cookie",
-        "set-cookie",
-        "x-api-key",
-        "api-key",
-        "x-auth-token",
-    }
-)
 _HOST_NAME = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?")
 _BINARY_BODY = "binary body cannot be scrubbed; pass allow_binary=True to store it base64, flagged"
-
-
-def scrub_params(items: Iterable[tuple[str, str]]) -> list[tuple[str, str]]:
-    """Redact the value of every query parameter whose name looks like a credential."""
-    return [(name, REDACTED if _SENSITIVE_PARAM.search(name) else value) for name, value in items]
-
-
-def scrub_url(url: httpx.URL | str) -> str:
-    """The URL as text with credential-like query values and userinfo redacted."""
-    parsed = httpx.URL(url)
-    params = httpx.QueryParams(tuple(scrub_params(parsed.params.multi_items())))
-    cleaned = parsed.copy_with(params=params)
-    if parsed.userinfo:
-        cleaned = cleaned.copy_with(username=REDACTED, password=REDACTED)
-    return str(cleaned)
-
-
-def scrub_headers(items: Iterable[tuple[str, str]]) -> list[tuple[str, str]]:
-    """Redact the value of every header that may carry a credential."""
-    return [
-        (name, REDACTED if name.lower() in _SENSITIVE_HEADERS else value) for name, value in items
-    ]
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -145,6 +113,7 @@ class _Scrubber:
     def __init__(self, scrub: Scrub, url: httpx.URL) -> None:
         self._scrub = scrub
         self._host: re.Pattern[str] | None = None
+        forms: set[str] = set()
         if scrub.host is not None:
             forms = {form for form in (url.host, url.raw_host.decode("ascii")) if form}
             if scrub.host.lower() in {form.lower() for form in forms}:
@@ -161,6 +130,32 @@ class _Scrubber:
             re.compile(_plain_or_encoded(value))
             for value in sorted(scrub.secrets, key=len, reverse=True)
         ]
+        # The longest text one of the patterns can match: each character percent-encoded
+        # as up to four bytes, %XX each.
+        values = [*scrub.secrets, *(forms if self._host is not None else ())]
+        self._reach = 12 * max((len(value) for value in values), default=0)
+
+    def spared_end(self, text: str, end: int) -> int:
+        """``end`` moved back to the start of a host or secret occurrence it would split.
+
+        A cut keeping ``text[:end]`` would otherwise keep the first part of one, which
+        neither the scrub nor the verify recognises (``max_bytes=``). Occurrences are
+        those the scrub replaces: the original host, in any letter case, and each secret
+        value, plain or percent-encoded.
+        """
+        patterns = [pattern for pattern in (self._host, *self._secrets) if pattern is not None]
+        split = True
+        while split and end > 0:
+            split = False
+            window = max(0, end - self._reach), end + self._reach
+            for pattern in patterns:
+                for match in pattern.finditer(text, *window):
+                    if match.start() < end < match.end():
+                        end, split = match.start(), True
+                        break
+                if split:
+                    break
+        return end
 
     def text(self, text: str) -> str:
         """``text`` with the original host made the placeholder, then secrets redacted."""

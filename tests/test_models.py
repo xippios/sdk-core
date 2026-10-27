@@ -7,12 +7,10 @@ from pydantic import Field, computed_field
 
 from xippios.core.errors import ValidationError
 from xippios.core.models import (
-    REDACTED,
     Result,
     ResultCap,
     ResultMeta,
     UpstreamModel,
-    is_credential_key,
     parse,
     parse_decimal,
 )
@@ -106,32 +104,6 @@ def test_parse_wraps_validation_error_with_raw() -> None:
     assert info.value.raw is raw
     assert info.value.source == "example"
     assert str(info.value).startswith("example get_thing: 1 validation error(s); first at value:")
-
-
-@pytest.mark.parametrize(
-    ("name", "expected"),
-    [
-        ("key", True), ("api_key", True), ("apikey", True), ("API_KEY", True), ("x-api-key", True),
-        ("access_token", True), ("client_secret", True), ("password", True), ("auth", True),
-        ("Authorization", True), ("signature", True), ("credentials", True), ("sort_key", True),
-        ("keyword", False), ("author", False), ("commodity_desc", False), ("year", False),
-        ("tokens_used", False), ("design", False),
-    ],
-)  # fmt: skip
-def test_is_credential_key(name: str, expected: bool) -> None:
-    assert is_credential_key(name) is expected
-
-
-def test_result_meta_never_carries_credentials() -> None:
-    request = {"key": "SECRET", "commodity_desc": "CORN", "nested": {"ok": [{"token": "T"}, 1]}}
-    meta = ResultMeta(source="usda-nass", endpoint="api_GET", request=request)
-    assert meta.request == {
-        "key": REDACTED,
-        "commodity_desc": "CORN",
-        "nested": {"ok": [{"token": REDACTED}, 1]},  # at any depth
-    }
-    assert request["key"] == "SECRET"  # the caller's mapping is copied, not changed
-    assert "SECRET" not in meta.model_dump_json()
 
 
 class Row(UpstreamModel):
