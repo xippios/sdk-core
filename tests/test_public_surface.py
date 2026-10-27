@@ -19,8 +19,8 @@ EXPORTS = {
         "BODY_LIMIT", "error_from_response", "parse_retry_after",
         # models and helpers
         "Result", "ResultCap", "ResultMeta", "UpstreamModel", "parse", "parse_decimal",
-        "Tenants", "collect", "paginate_offset", "load_json", "load_table",
-        "PackagedList", "matches", "closest", "sync", "__version__",
+        "collect", "paginate_offset", "load_json", "load_table", "PackagedList", "matches",
+        "closest", "sync", "__version__",
     },
     "xippios.core.client": {
         "AsyncClient", "BasicKeyAuth", "BearerAuth", "CachedResponse", "ClientConfig",

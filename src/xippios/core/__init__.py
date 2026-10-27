@@ -49,7 +49,6 @@ from xippios.core.models import (
 )
 from xippios.core.pagination import collect, paginate_offset
 from xippios.core.reference import PackagedList, closest, load_json, load_table, matches
-from xippios.core.tenants import Tenants
 
 __all__ = [
     "BODY_LIMIT",
@@ -74,7 +73,6 @@ __all__ = [
     "ResultCap",
     "ResultMeta",
     "RetryPolicy",
-    "Tenants",
     "Timeouts",
     "TransportError",
     "UnknownCode",

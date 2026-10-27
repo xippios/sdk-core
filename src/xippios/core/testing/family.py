@@ -321,7 +321,7 @@ def test_family_tasks_return_results(family_source: FamilySource) -> None:
 
     Sources expose sync functions (conventions §6); every task returns the envelope with
     its metadata (conventions §2, §4). An ``async_fn`` is not required: conventions §6
-    makes the async variant optional, and core's ``list_task`` has none.
+    makes the async variant optional.
     """
     problems = []
     for name, fn in _every_task(family_source).items():
