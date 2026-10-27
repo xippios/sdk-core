@@ -167,12 +167,11 @@ stays outside it, so a call naming another tenant, or leaving the tenant out, ge
 lock's refusal. The check is appended to `server.middleware` at the first registration,
 and the SDK runs that list outermost-first, so a middleware appended later runs inside the
 check; a source that installs middleware of its own chooses its place in the list, index 0
-being ahead of the SDK's own middleware too. sdk-cashctrl's lock is a binding wrapper with
-no middleware (ADR-0024). So, among the consequences, arguments the tool's schema refuses
-no longer fail `mcp_call_text`: it returns the text, and `mcp_call` raises `AssertionError`
-on it as on every `error:` text; an unknown tool still fails both. It is a family invariant
-(ADR-0023, decision 3 (a)), for every source's schema-typed arguments. Conventions §8
-states it from 1.20 on.
+being ahead of the SDK's own middleware too. So, among the consequences, arguments the
+tool's schema refuses no longer fail `mcp_call_text`: it returns the text, and `mcp_call`
+raises `AssertionError` on it as on every `error:` text; an unknown tool still fails both.
+It is a family invariant (ADR-0023, decision 3 (a)), for every source's schema-typed
+arguments. Conventions §8 states it from 1.20 on.
 
 Superseded in part by ADR-0024 (2026-10-27; core 0.3.0; the family review's C8; decided by
 Johannes on 2026-10-25 and 2026-10-27): decisions 1 to 4 (`Tenants`), 6 (`list_task`), 7

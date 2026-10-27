@@ -675,20 +675,23 @@ No other source imports a moved name.
   the copy's `list_task` — C8.
 - `src/xippios/cashctrl/_cli.py`, `src/xippios/cashctrl/mcp.py`,
   `src/xippios/cashctrl/mcp_write.py` — `from xippios.core.mcp import TenantLock` and
-  `build_server(..., tenant_lock=...)` → the lock of its own, copied from
-  `src/xippios/core/mcp/server.py` (`TenantLock`, `_lock_middleware`, `_check_lock`,
-  `_defaulted`, `_declares`, `_refusal`, `_lock_sentence`, `_only_the_locked_tenant`),
-  which becomes a wrapper that binds `org` on its tools, no middleware, as the family
-  review's C8 has it; ADR-0014's decision 7 no longer binds it. The instructions sentence
-  and the narrowed organisation list come with the copy — C8.
+  `build_server(..., tenant_lock=...)` → a lock of its own that is a wrapper binding `org`
+  on its tools, no middleware, as the family review's C8 has it; ADR-0014's decision 7 no
+  longer binds it. From `src/xippios/core/mcp/server.py` the wrapper keeps `TenantLock`'s
+  validation of the parameter and the tenant, `_only_the_locked_tenant` for the
+  organisation list, and the instructions sentence (`_lock_sentence`) reworded for a bound
+  `org`; the middleware's functions (`_lock_middleware`, `_declares`, `_refusal`,
+  `_check_lock`, `_defaulted`) have no part in it — C8.
 - `tests/test_adapters.py` (`test_the_write_server_serves_write_tasks_only`) — `from
   xippios.core.testing import assert_write_tools` → its copy, from
   `src/xippios/core/testing/adapters.py`, with a check that `confirm` is the last
   parameter (row 26 f). The family check no longer tests the write server; this test
   does — C8.
 - `tests/test_org_lock.py` — follows the wrapper: a call names no other organisation than
-  the one the server binds; `tests/test_registry.py` — against the package's own registry
-  — C8.
+  the one the server binds, so the refusal texts it asserts ("this server is locked to
+  org=...; the call named another tenant", "...; the call did not name the tenant") and the
+  instructions sentence it asserts change with the wrapper; `tests/test_registry.py` —
+  against the package's own registry — C8.
 - `scripts/record_fixture.py` — `scrub(key)`'s `Scrub(host=REPLAY_HOST, secrets=[...],
   rewrite=scrub_text, allow_binary=False)` → `Scrub(secrets=[...])`, and a step of the
   recorder's own on the `Fixture` that `fixture_from_response` returns, before its one
