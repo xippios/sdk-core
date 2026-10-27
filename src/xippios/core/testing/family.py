@@ -27,8 +27,6 @@ than one fails every test here, naming the option. The repository's files (``REA
   and described by its docstring (conventions §8, ADR-0019);
 - ``http.py``'s ``router`` routes the same tasks at ``/<source>/<task>``, ``GET`` when
   every parameter is a scalar and ``POST`` otherwise (conventions §9, ADR-0007);
-- where ``tasks_write`` exists, ``mcp_write.py``'s ``server`` serves exactly
-  ``tasks_write.__all__``, as ``assert_write_tools`` checks (conventions §8, ADR-0014);
 - every task, read and write, is a synchronous function returning ``Result[T]``
   (conventions §2, §6) whose docstring is a one-sentence first line and, when it takes
   parameters, an ``Args:`` block (conventions §8); no ``async_fn`` is required, since
@@ -43,6 +41,9 @@ than one fails every test here, naming the option. The repository's files (``REA
 - ``.copier-answers.yml`` names a template tag, ``_commit: vX.Y.Z`` (conventions §15);
 - ``pyproject.toml`` bounds ``xippios-core`` and each of its extras to one minor,
   ``~=X.Y.Z``, all alike (conventions §12, ADR-0018).
+
+A write server is its source's to test: the family check reads ``tasks_write`` for the
+two task checks and the status table only (ADR-0024).
 
 **Two family checks are CI steps, not tests**, since they read the pull request rather
 than the package; sdk-template's ``ci.yml`` carries them, on ``pull_request`` with the
@@ -87,7 +88,6 @@ __all__ = [
     "test_family_readme_status_table_lists_the_tasks",
     "test_family_tasks_carry_agent_docstrings",
     "test_family_tasks_return_results",
-    "test_family_write_server_serves_the_write_tasks",
 ]
 
 _TAG = re.compile(r"v\d+\.\d+\.\d+")
@@ -288,26 +288,6 @@ def test_family_http_router_routes_the_tasks(family_source: FamilySource) -> Non
         if answered != method:
             problems.append(f"{path} answers {sorted(answered)}, {name} needs {sorted(method)}")
     _fail(problems, "http.py must route exactly tasks.__all__ minus BULK_TASKS:")
-
-
-def test_family_write_server_serves_the_write_tasks(family_source: FamilySource) -> None:
-    """``mcp_write.server`` serves exactly ``tasks_write.__all__``, each with ``confirm``.
-
-    No write tool on the read server and no write route on the router; skipped for a
-    source without ``tasks_write`` (conventions §8, ADR-0014).
-    """
-    from xippios.core.testing.adapters import assert_write_tools
-
-    if family_source.tasks_write is None:
-        pytest.skip(f"{family_source.import_path} has no tasks_write module: no write server")
-    path = family_source.import_path
-    assert_write_tools(
-        importlib.import_module(f"{path}.mcp_write").server,
-        list(family_source.write_tasks().values()),
-        source=family_source.source,
-        read_server=importlib.import_module(f"{path}.mcp").server,
-        router=importlib.import_module(f"{path}.http").router,
-    )
 
 
 def _every_task(family: FamilySource) -> dict[str, Callable[..., Any]]:
