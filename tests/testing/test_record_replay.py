@@ -119,33 +119,16 @@ async def test_record_refuses_json_and_data_together(
 
 
 @pytest.mark.anyio
-async def test_record_a_tenant_and_replay_on_the_placeholder_host(
-    respx_mock: respx.MockRouter, tmp_path: Path
+async def test_record_scrubs_the_named_secrets(
+    respx_mock: respx.MockRouter, config: ClientConfig, tmp_path: Path
 ) -> None:
-    tenant = ClientConfig(
-        source="example",
-        version="1",
-        base_url="https://acme.example.test/api/v1",
-        retry=RetryPolicy(max_attempts=1),
-    )
-    respx_mock.get("https://acme.example.test/api/v1/account/list.json").respond(
-        200, json={"data": [{"id": 1, "link": "https://acme.example.test/a/1"}]}
-    )
+    respx_mock.get(f"{BASE}/v1/account/list.json").respond(200, json={"org": "acme"})
     fixture_file = tmp_path / "account_list" / "one.json"
-    await record(
-        AsyncClient(tenant),
-        "/account/list.json",
-        fixture_file,
-        scrub=Scrub(host="demo.example.test", secrets=["acme"]),
+    fixture = await record(
+        AsyncClient(config), "/v1/account/list.json", fixture_file, scrub=Scrub(secrets=["acme"])
     )
-    assert "acme" not in fixture_file.read_text().lower()
-
-    respx_mock.routes.clear()
-    route = replay(respx_mock, fixture_file)
-    demo = ClientConfig(source="example", version="1", base_url="https://demo.example.test/api/v1")
-    rows = await AsyncClient(demo).get_json("/account/list.json")
-    assert rows == {"data": [{"id": 1, "link": "https://demo.example.test/a/1"}]}
-    assert route.call_count == 1
+    assert fixture.response.body == f'{{"org":"{REDACTED}"}}'
+    assert "acme" not in fixture_file.read_text()
 
 
 @pytest.mark.anyio

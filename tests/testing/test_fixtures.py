@@ -2,7 +2,6 @@ import base64
 import gzip
 import hashlib
 import json
-import re
 from pathlib import Path
 
 import httpx
@@ -10,10 +9,6 @@ import pytest
 
 from xippios.core.testing import REDACTED, Scrub, fixture_path, load_fixture
 from xippios.core.testing.fixtures import fixture_from_response, write_fixture
-from xippios.core.testing.scrub import _Scrubber
-
-TENANT = "acme.example.test"
-PLACEHOLDER = "demo.example.test"
 
 
 def _response(
@@ -70,18 +65,22 @@ def test_wire_headers_are_dropped(tmp_path: Path) -> None:
 
 def test_binary_body_is_refused_then_stored_flagged(tmp_path: Path) -> None:
     path = tmp_path / "f.json"
-    for scrub in (None, Scrub(), Scrub(host=PLACEHOLDER)):
-        with pytest.raises(ValueError, match=r"^binary body cannot be scrubbed; pass allow_binary"):
+    refusal = (
+        r"^a binary body cannot be scrubbed; the recording is refused unless "
+        r"Scrub\(allow_binary=True\) stores it base64, flagged$"
+    )
+    for scrub in (None, Scrub(), Scrub(secrets=["tenant"])):
+        with pytest.raises(ValueError, match=refusal):
             write_fixture(_response(content=b"\xff\xfe\x00"), path, scrub=scrub)
     assert not path.exists()
 
-    fixture = write_fixture(
-        _response(content=b"\xff\xfe\x00"), path, scrub=Scrub(allow_binary=True)
-    )
+    binary = b"\xff\xfe\x00tenant"  # stored as it came: neither scrubbed nor verified
+    scrub = Scrub(secrets=["tenant"], allow_binary=True)
+    fixture = write_fixture(_response(content=binary), path, scrub=scrub)
     assert fixture.response.body_base64 is True
-    assert fixture.response.content == b"\xff\xfe\x00"
+    assert fixture.response.content == binary
     assert json.loads(path.read_text())["response"]["body_base64"] is True
-    assert load_fixture(path).response.content == b"\xff\xfe\x00"
+    assert load_fixture(path).response.content == binary
 
 
 def test_binary_request_body_is_refused_then_stored_flagged() -> None:
@@ -176,15 +175,14 @@ def test_max_bytes_cuts_a_json_array_at_an_element_boundary_of_its_text() -> Non
         fixture_from_response(_answer(body.encode(), "application/json"), max_bytes=20)
 
 
-def test_max_bytes_never_keeps_part_of_a_secret_or_of_the_host() -> None:
-    request = httpx.Request("GET", f"https://{TENANT}/v1/export")
-    text = "name\nacme-tenant\n" + f"https://{TENANT}/x\n" * 20
-    answer = httpx.Response(200, content=text.encode(), request=request)
-    scrub = Scrub(host=PLACEHOLDER, secrets=["acme-tenant"])
+def test_max_bytes_never_keeps_part_of_a_secret() -> None:
+    request = httpx.Request("GET", "https://api.example.test/v1/export")
+    answer = httpx.Response(200, content=b"name\nacme-tenant\n" * 20, request=request)
+    scrub = Scrub(secrets=["acme-tenant"])
     fixture = fixture_from_response(answer, scrub=scrub, max_bytes=13)  # "...\nacme-ten"
     assert fixture.response.body == "name\n"
-    fixture = fixture_from_response(answer, scrub=scrub, max_bytes=30)  # "...https://acme.exa"
-    assert fixture.response.body == f"name\n{REDACTED}\nhttps://"
+    fixture = fixture_from_response(answer, scrub=scrub, max_bytes=19)  # "...-tenant\nna"
+    assert fixture.response.body == f"name\n{REDACTED}\nna"
     first = httpx.Response(200, content=b"acme-tenant\n" * 20, request=request)
     with pytest.raises(ValueError, match=r"^max_bytes: a cut at 5 bytes keeps nothing"):
         fixture_from_response(first, scrub=scrub, max_bytes=5)
@@ -234,263 +232,70 @@ def test_max_bytes_at_or_above_the_size_keeps_the_body_unmarked(tmp_path: Path) 
         fixture_from_response(_response(), max_bytes=0)
 
 
-def test_placeholder_host_leaves_no_trace_of_the_tenant(tmp_path: Path) -> None:
-    # sdk-cashctrl: every organisation is its own subdomain, which names the tenant.
-    request = httpx.Request(
-        "POST",
-        f"https://{TENANT}/api/v1/file/prepare.json",
-        params={"return": "https://ACME.example.test/done"},
-        data={"callback": "https://Acme.Example.Test/hook", "name": "x"},
-    )
-    response = httpx.Response(
-        302,
-        headers={
-            "Location": f"https://{TENANT}/next",
-            "Content-Location": "https://ACME.EXAMPLE.TEST/x",
-            "Link": f"<https://{TENANT}/a>; rel=next",
-        },
-        content=(
-            b'{"self": "https://acme.example.test/api/v1/x",'
-            b' "escaped": "https:\\/\\/acme.example.test\\/y",'
-            b' "encoded": "https%3A%2F%2Facme%2eexample%2Etest%2Fz"}'
-        ),
-        request=request,
-    )
-    path = tmp_path / "f.json"
-    fixture = write_fixture(response, path, scrub=Scrub(host=PLACEHOLDER))
-    text = path.read_text()
-    assert "acme" not in text.lower()
-    assert fixture.request.url.startswith(f"https://{PLACEHOLDER}/api/v1/file/prepare.json?")
-    assert httpx.URL(fixture.request.url).params["return"] == f"https://{PLACEHOLDER}/done"
-    assert fixture.request.body == f"callback=https%3A%2F%2F{PLACEHOLDER}%2Fhook&name=x"
-    headers = dict(fixture.response.headers)
-    assert headers["location"] == f"https://{PLACEHOLDER}/next"
-    assert headers["content-location"] == f"https://{PLACEHOLDER}/x"
-    assert headers["link"] == f"<https://{PLACEHOLDER}/a>; rel=next"
-    assert json.loads(fixture.response.body) == {
-        "self": f"https://{PLACEHOLDER}/api/v1/x",
-        "escaped": f"https://{PLACEHOLDER}/y",
-        "encoded": f"https%3A%2F%2F{PLACEHOLDER}%2Fz",
-    }
-    assert load_fixture(path) == fixture
-
-
-def test_placeholder_host_replaces_the_idna_form_too() -> None:
-    request = httpx.Request("GET", "https://bücher.example.test/v1/x")
-    response = httpx.Response(
-        200,
-        content="bücher.example.test xn--bcher-kva.example.test B%C3%BCcher.example.test".encode(),
-        request=request,
-    )
-    fixture = fixture_from_response(response, scrub=Scrub(host=PLACEHOLDER))
-    assert fixture.request.url == f"https://{PLACEHOLDER}/v1/x"
-    assert fixture.response.body == " ".join([PLACEHOLDER] * 3)
-
-
-def test_placeholder_that_contains_the_original_host_is_set_once() -> None:
-    request = httpx.Request("GET", "https://example.test/v1/x?next=https://example.test/y")
-    response = httpx.Response(200, content=b"https://example.test/z", request=request)
-    fixture = fixture_from_response(response, scrub=Scrub(host=PLACEHOLDER))
-    url = httpx.URL(fixture.request.url)
-    assert url.host == PLACEHOLDER
-    assert url.params["next"] == f"https://{PLACEHOLDER}/y"
-    assert fixture.response.body == f"https://{PLACEHOLDER}/z"
-
-
-@pytest.mark.parametrize(
-    "url", [f"https://{TENANT}/v1/x", "https://Demo.Example.Test/v1/x", "https://bücher.test/"]
-)
-def test_a_placeholder_that_is_the_request_host_is_refused(url: str) -> None:
-    request = httpx.Request("GET", url)
-    response = httpx.Response(200, content=b"{}", request=request)
-    host = httpx.URL(url).host
-    for placeholder in {host, httpx.URL(url).raw_host.decode("ascii"), host.upper()}:
-        if placeholder.isascii():  # Scrub takes a plain ASCII host name
-            with pytest.raises(ValueError, match=r"^Scrub\.host is the request's own host") as info:
-                fixture_from_response(response, scrub=Scrub(host=placeholder))
-            assert host not in str(info.value)
-
-
-def test_no_placeholder_keeps_the_host() -> None:
-    fixture = fixture_from_response(_response(content=b"api.example.test"), scrub=Scrub())
-    assert fixture.request.url.startswith("https://api.example.test/")
-    assert fixture.response.body == "api.example.test"
-
-
-SECRET = "s3cr3t value/x+y"  # pragma: allowlist secret
+SECRET = "tenant-7"
 """Not credential-named anywhere, so only ``Scrub.secrets`` can find it."""
 
 
-def test_secrets_are_redacted_plain_and_percent_encoded(tmp_path: Path) -> None:
+def test_secrets_are_redacted_as_given_in_url_headers_and_bodies(tmp_path: Path) -> None:
     request = httpx.Request(
         "POST",
-        "https://api.example.test/v1/s3cr3t%20value%2Fx+y",
+        f"https://api.example.test/v1/{SECRET}/x",
         params={"org": SECRET},
         data={"note": SECRET},
     )
     response = httpx.Response(
         200,
-        headers={
-            "X-Org": SECRET,
-            "Location": "https://api.example.test/v1/x?org=s3cr3t%20value%2fx%2by",
-        },
-        content=(
-            b'{"plain": "s3cr3t value/x+y", "encoded": "s3cr3t%20value%2Fx%2By",'
-            b' "form": "s3cr3t+value%2Fx%2By", "escaped": "s3cr3t value\\/x+y"}'
-        ),
+        headers={"X-Org": SECRET, "Location": f"/v1/x?org={SECRET}"},
+        content=b'{"org": "tenant-7"}',
         request=request,
     )
     path = tmp_path / "f.json"
     fixture = write_fixture(response, path, scrub=Scrub(secrets=[SECRET]))
-    assert "s3cr3t" not in path.read_text()
-    assert fixture.request.url == f"https://api.example.test/v1/{REDACTED}?org={REDACTED}"
+    assert SECRET not in path.read_text()
+    assert fixture.request.url == f"https://api.example.test/v1/{REDACTED}/x?org={REDACTED}"
     assert fixture.request.body == f"note={REDACTED}"
     headers = dict(fixture.response.headers)
-    assert headers["x-org"] == REDACTED
-    assert headers["location"] == f"https://api.example.test/v1/x?org={REDACTED}"
-    assert json.loads(fixture.response.body) == {
-        "plain": REDACTED,
-        "encoded": REDACTED,
-        "form": REDACTED,
-        "escaped": REDACTED,
-    }
+    assert (headers["x-org"], headers["location"]) == (REDACTED, f"/v1/x?org={REDACTED}")
+    assert json.loads(fixture.response.body) == {"org": REDACTED}
 
 
 def test_secrets_longest_first_and_case_as_given() -> None:
     response = _response(content=b"xabcdefx abc ABC")
     fixture = fixture_from_response(response, scrub=Scrub(secrets=["abc", "abcdef"]))
     assert fixture.response.body == f"x{REDACTED}x {REDACTED} ABC"
-
-
-def test_host_then_secrets_then_rewrite(tmp_path: Path) -> None:
-    # sdk-cashctrl: file/prepare.json answers with signed storage URLs and file/get
-    # redirects to one; the source knows how to neutralise them, core runs its hook.
-    signed = re.compile(r"(https://storage\.example\.test/[^?\s\"]*)\?[^\s\"]*")
-    seen: list[str] = []
-
-    def strip_signature(text: str) -> str:
-        seen.append(text)
-        return signed.sub(rf"\1?signature={REDACTED}", text)
-
-    location = "https://storage.example.test/f/7?X-Sig=abc123&Expires=60"
-    request = httpx.Request(
-        "POST",
-        f"https://{TENANT}/api/v1/file/get.json",
-        params={"id": 7},
-        data={"org": "acme"},
-    )
-    response = httpx.Response(
-        302,
-        headers={"Location": location, "Content-Location": location},
-        content=f'{{"url": "{location}", "home": "https://{TENANT}/"}}'.encode(),
-        request=request,
-    )
-    scrub = Scrub(host=PLACEHOLDER, secrets=["acme"], rewrite=strip_signature)
-    path = tmp_path / "f.json"
-    fixture = write_fixture(response, path, scrub=scrub)
-
-    stripped = f"https://storage.example.test/f/7?signature={REDACTED}"
-    headers = dict(fixture.response.headers)
-    assert headers["location"] == stripped
-    assert headers["content-location"] == stripped
-    assert json.loads(fixture.response.body) == {
-        "url": stripped,
-        "home": f"https://{PLACEHOLDER}/",
-    }
-    assert fixture.request.body == f"org={REDACTED}"
-    assert "abc123" not in path.read_text()
-    # the hook saw request body, header values and response body after host and secrets,
-    # and never the request URL
-    assert fixture.request.url == f"https://{PLACEHOLDER}/api/v1/file/get.json?id=7"
-    assert f"org={REDACTED}" in seen
-    assert fixture.request.url not in seen
-    assert all("acme" not in text.lower() for text in seen)
-    assert any(PLACEHOLDER in text for text in seen)
-
-
-HIDDEN_HOST = (
-    b'{"link": "https://\\u0061cme.example.test/x", "plain": "https://acme.example.test/y"}'
-)
-"""A JSON body naming the tenant host twice: plain, and behind a ``\\u`` escape."""
-
-
-def test_verify_finds_a_host_the_scrub_cannot_see(tmp_path: Path) -> None:
-    # sdk-cashctrl checked its fixtures after the scrub; core does it for every source.
-    request = httpx.Request("GET", f"https://{TENANT}/api/v1/x")
-    response = httpx.Response(200, content=HIDDEN_HOST, request=request)
-    scrubbed, _ = _Scrubber(Scrub(host=PLACEHOLDER), request.url).body(HIDDEN_HOST)
-    assert "\\u0061cme.example.test" in scrubbed  # the scrub misses the escaped form
-    assert "https://acme" not in scrubbed
-    path = tmp_path / "f.json"
-    with pytest.raises(ValueError, match=r"holds the request host in the response body;") as info:
-        write_fixture(response, path, scrub=Scrub(host=PLACEHOLDER))
-    assert "acme" not in str(info.value).lower()
-    assert not path.exists()
-
-
-def test_verify_finds_a_secret_in_a_json_request_body() -> None:
-    request = httpx.Request(
-        "POST",
-        "https://api.example.test/v1/x",
-        content=b'{"org": "\\u0041cme Corp"}',
-        headers={"Content-Type": "application/json"},
-    )
-    response = httpx.Response(200, content=b"{}", request=request)
-    with pytest.raises(ValueError, match=r"holds the secret value in the request body;") as info:
-        fixture_from_response(response, scrub=Scrub(secrets=["Acme"]))
-    assert "Acme" not in str(info.value)
-
-
-def test_verify_names_the_header_a_rewrite_put_a_secret_back_into() -> None:
-    request = httpx.Request("GET", "https://api.example.test/v1/x")
-    response = httpx.Response(200, headers={"Location": "/next"}, content=b"", request=request)
-    scrub = Scrub(secrets=["tenant-7"], rewrite=lambda text: text + " tenant-7")
-    with pytest.raises(ValueError, match=r"secret value in the response header 'location';"):
-        fixture_from_response(response, scrub=scrub)
-
-
-def test_verify_passes_a_clean_fixture() -> None:
-    request = httpx.Request("GET", f"https://{TENANT}/api/v1/x?next=https://{TENANT}/y")
-    response = httpx.Response(
-        200,
-        headers={"Location": f"https://{TENANT}/next"},
-        content=b'{"name": "Caf\\u00e9 ACT", "home": "https://acme.example.test/"}',
-        request=request,
-    )
-    fixture = fixture_from_response(response, scrub=Scrub(host=PLACEHOLDER, secrets=["ACT"]))
-    assert json.loads(fixture.response.body) == {
-        "name": f"Caf\u00e9 {REDACTED}",  # REDACTED itself holds "ACT" and does not count
-        "home": f"https://{PLACEHOLDER}/",
-    }
-    assert dict(fixture.response.headers)["location"] == f"https://{PLACEHOLDER}/next"
-
-
-def test_verify_leaves_a_flagged_binary_body_alone() -> None:
-    request = httpx.Request("GET", f"https://{TENANT}/api/v1/x")
-    response = httpx.Response(200, content=b"\xff" + TENANT.encode(), request=request)
-    fixture = fixture_from_response(response, scrub=Scrub(host=PLACEHOLDER, allow_binary=True))
-    assert fixture.response.body_base64
+    # REDACTED holds "ACT", and the verify does not count it.
+    fixture = fixture_from_response(_response(content=b"ACT"), scrub=Scrub(secrets=["ACT"]))
+    assert fixture.response.body == REDACTED
 
 
 LEAKY_TEST = """
+from pathlib import Path
+
 import httpx
 
-from xippios.core.testing import Scrub, fixture_from_response
+from xippios.core.testing import Scrub
+from xippios.core.testing.fixtures import write_fixture
+from xippios.core.testing.scrub import _Scrubber
 
 
-def test_refused():
-    body = '{"link": "https://' + chr(92) + 'u0061' + 'cme' + '.example' + '.test/x"}'
-    request = httpx.Request("GET", "https://" + "acme" + ".example.test/v1/x")
-    response = httpx.Response(200, content=body.encode(), request=request)
-    fixture_from_response(response, scrub=Scrub(host="demo.example.test"))
+def test_refused(monkeypatch):
+    monkeypatch.setattr(_Scrubber, "text", lambda self, text: text)  # a scrub that misses
+    request = httpx.Request("GET", "https://api.example.test/v1/x")
+    response = httpx.Response(200, content=b'{"org": "tenant' + b'-7"}', request=request)
+    write_fixture(response, Path("f.json"), scrub=Scrub(secrets=["tenant" + "-7"]))
 """
 
 
-def test_a_refusal_does_not_print_the_refused_text(pytester: pytest.Pytester) -> None:
-    # pytest prints the arguments of the frame that raised; verify's frame is hidden.
+def test_the_verify_refuses_a_secret_left_in_a_body(pytester: pytest.Pytester) -> None:
+    # The backstop of ADR-0005: the refusal names where, never the value, not even in the
+    # arguments pytest prints for the frame that raised, and nothing is written.
     pytester.makepyfile(LEAKY_TEST)
     result = pytester.runpytest("--tb=long")
     result.assert_outcomes(failed=1)
     output = result.stdout.str()
-    assert "holds the request host in the response body" in output
-    assert "cme.example.test" not in output
+    assert (
+        "ValueError: the scrubbed fixture still holds a secret value in the response body; "
+        "it is refused before anything is written"
+    ) in output
+    assert SECRET not in output
+    assert not (pytester.path / "f.json").exists()

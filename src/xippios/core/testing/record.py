@@ -42,9 +42,8 @@ async def record(
     it, e.g. on ``dataclasses.replace(config, retry=RetryPolicy(max_attempts=1))``.
 
     A refusal writes nothing. One raised after the request was sent (a binary body, a
-    body ``max_bytes`` cannot cut, or the verify step finding the original host or a
-    secret value) comes after upstream has answered: a write may have been applied all
-    the same.
+    body ``max_bytes`` cannot cut, or the verify step finding a secret value) comes after
+    upstream has answered: a write may have been applied all the same.
 
     Args:
         client: The source's configured client.
@@ -55,9 +54,8 @@ async def record(
         json: JSON body for write methods.
         data: Form body for write methods, sent form-encoded, e.g. ``{"id": 4}``.
         headers: Extra headers for this request only.
-        scrub: What to remove besides credentials, e.g.
-            ``Scrub(host="demo.example.test", secrets=[tenant])``; ``None`` is
-            ``Scrub()``.
+        scrub: What to remove besides credentials, e.g. ``Scrub(secrets=[tenant])``;
+            ``None`` is ``Scrub()``.
         auth: Credentials for this recording only, as for ``AsyncClient.request``:
             ``None`` records a keyless endpoint without the client's key, an
             ``httpx.Auth`` replaces it; the default sends the client's.
@@ -72,11 +70,10 @@ async def record(
     Raises:
         ValueError: Both ``json`` and ``data``, or ``max_bytes`` below 1, before anything
             is sent. After the request: a request or response body that is not UTF-8
-            text without ``Scrub(allow_binary=True)``; the verify step finding the
-            original host ("request host") or a secret value ("secret value") left by
-            the scrub; a ``Scrub.host`` that is the request's own host; a body
-            ``max_bytes`` cannot cut (a JSON object, XML, ZIP, XLSX, gzip, XLS, or not
-            UTF-8 text: record a small real answer or sample instead).
+            text without ``Scrub(allow_binary=True)``; the verify step finding a secret
+            value left by the scrub; a body ``max_bytes`` cannot cut (a JSON object, XML,
+            ZIP, XLSX, gzip, XLS, or not UTF-8 text: record a small real answer or sample
+            instead).
     """
     if max_bytes is not None and max_bytes < 1:
         raise ValueError("max_bytes must be at least 1")

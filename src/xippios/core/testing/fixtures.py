@@ -121,14 +121,15 @@ def fixture_path(root: Path, endpoint: str, case: str) -> Path:
 def fixture_from_response(
     response: httpx.Response, *, scrub: Scrub | None = None, max_bytes: int | None = None
 ) -> Fixture:
-    r"""Build a scrubbed ``Fixture`` in memory from a fully read ``httpx.Response``.
+    """Build a scrubbed ``Fixture`` in memory from a fully read ``httpx.Response``.
 
     Credentials are always scrubbed (``scrub_url``, ``scrub_headers``). ``scrub`` adds
-    the placeholder host, the secret values and the rewrite hook, and decides about a
-    binary body; ``None`` is ``Scrub()``: host kept, nothing else replaced, a binary
-    body refused. With ``host`` or ``secrets`` set, the result is verified before it is
-    returned: the original host or a secret value still present anywhere, a JSON body
-    decoded included (e.g. behind a ``\u`` escape), refuses the exchange.
+    the secret values and decides about a binary body; ``None`` is ``Scrub()``: nothing
+    else replaced, a binary body refused. With ``secrets`` set, the result is verified
+    before it is returned: a secret value still present as given in the URL, a header
+    value or a text body refuses the exchange (conventions §10). A source that rewrites
+    more, a tenant's host or a field by key, does it on the returned ``Fixture`` before
+    it writes it (ADR-0024).
 
     ``max_bytes`` cuts a response body larger than it before the scrub, which then runs
     on what is kept, as the verify does (ADR-0019, decision 5; conventions §10):
@@ -140,9 +141,8 @@ def fixture_from_response(
       ``]``, ``original_count`` the array's length; an array whose first element alone
       does not fit is refused;
     - any other text is cut at ``max_bytes`` bytes, back to the last whole UTF-8
-      character and back to the start of a secret value or of the request host
-      (``scrub``) that the cut would split, so no part of one is kept; a cut that keeps
-      nothing is refused;
+      character and back to the start of a secret value (``scrub``) that the cut would
+      split, so no part of one is kept; a cut that keeps nothing is refused;
     - a JSON object, and a body declared JSON that does not parse, are refused: record
       a small real answer instead (a short date range, one commodity), since an
       object's parts are no list to take the first of;
@@ -159,7 +159,7 @@ def fixture_from_response(
     Args:
         response: The response, with the request that produced it.
         scrub: What else to remove before anything is kept, e.g.
-            ``Scrub(host="demo.example.test", secrets=[tenant])``.
+            ``Scrub(secrets=[tenant])``.
         max_bytes: The most bytes of the response body to keep, e.g. ``80_000``. It
             bounds the body, not the fixture file, which writes the body as a JSON
             string: escaping makes text outside ASCII up to three times as long, so
@@ -167,15 +167,15 @@ def fixture_from_response(
 
     Raises:
         ValueError: The request or response body is not UTF-8 text and ``scrub`` does
-            not set ``allow_binary``; or the original host or a secret value survived
-            the scrub (the message names which and where, never the value); or
+            not set ``allow_binary``; or a secret value survived the scrub (the message
+            names where, never the value); or
             ``max_bytes`` is below 1, or cannot cut this body (the message, starting
             ``max_bytes:``, names the format and what to record instead).
     """
     if max_bytes is not None and max_bytes < 1:
         raise ValueError("max_bytes must be at least 1")
     request = response.request
-    scrubber = _Scrubber(scrub if scrub is not None else Scrub(), request.url)
+    scrubber = _Scrubber(scrub if scrub is not None else Scrub())
     request_body: str | None = None
     request_base64 = False
     if request.content:
@@ -279,8 +279,8 @@ def _cut(
     if not kept:
         raise ValueError(
             f"max_bytes: a cut at {max_bytes} bytes keeps nothing of the body, not one whole "
-            "character, or splits a secret value or the request host at its start; raise "
-            "max_bytes or record a smaller answer"
+            "character, or splits a secret value at its start; raise max_bytes or record a "
+            "smaller answer"
         )
     return kept.encode(), marks
 
@@ -334,8 +334,8 @@ def write_fixture(response: httpx.Response, path: Path, *, scrub: Scrub | None =
         scrub: What else to remove besides credentials; see ``fixture_from_response``.
 
     Raises:
-        ValueError: A binary body without ``Scrub(allow_binary=True)``, or the original
-            host or a secret value left after the scrub; see ``fixture_from_response``.
+        ValueError: A binary body without ``Scrub(allow_binary=True)``, or a secret value
+            left after the scrub; see ``fixture_from_response``.
     """
     return _write(fixture_from_response(response, scrub=scrub), path)
 
