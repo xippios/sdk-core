@@ -1,6 +1,6 @@
 # xippios SDK family — conventions
 
-Version 1.20 · 2026-10-27 · applies to every `sdk-*` repository under github.com/xippios.
+Version 1.21 · 2026-10-27 · applies to every `sdk-*` repository under github.com/xippios.
 Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 The rules of ADR-0019 and ADR-0022, all of them (the download and decode calls, the
 cache bound, `BULK_TASKS`, the fixture cap and the `truncated` marker, the file-fixture
@@ -22,7 +22,7 @@ bound by each rule from its first PR on a pin that carries the rule's code.
 | Import path | `xippios.<source>`; a provider with several APIs nests: `xippios.<provider>.<api>` | `xippios.comtrade`, `xippios.usda.nass` |
 | MCP entry point | `xippios-<source>-mcp` | `xippios-usda-nass-mcp` |
 | MCP tool | `<source>_<verb>_<noun>` | `usda_nass_get_series` |
-| Env var for a key | `<SOURCE>_API_KEY`, or the issuer's variable when one key serves several sources (ADR-0009); per tenant of a multi-tenant source `<SOURCE>_<NAME>_API_KEY`, its other values `<SOURCE>_<NAME>_<FIELD>` (ADR-0014, §7) | `COMTRADE_API_KEY`, `DATA_GOV_API_KEY`, `CASHCTRL_ACME_API_KEY` |
+| Env var for a key | `<SOURCE>_API_KEY`, or the issuer's variable when one key serves several sources (ADR-0009); per tenant of a multi-tenant source in the source's own scheme, sdk-cashctrl's `CASHCTRL_<NAME>_API_KEY` (§7, ADR-0024) | `COMTRADE_API_KEY`, `DATA_GOV_API_KEY`, `CASHCTRL_ACME_API_KEY` |
 
 `<source>` names the data provider and, where one provider has several APIs, the API:
 `usda-nass`, `usda-psd`, `usda-esr`, `usda-gats`, `usda-esmis`, `usda-wasde` (a parser
@@ -118,8 +118,8 @@ skip it (§8, §9; ADR-0019).
   drops an identifier inside a kept list field (`bankAccounts[].iban`) is still parsing
   only in the sense of the projection rule above (ADR-0003, amendment 2026-10-26). The
   endpoint wrappers' read models stay faithful and carry them. Fixtures never carry their
-  values: the recording names them in `Scrub(secrets=...)` or rewrites them by key
-  (`Scrub(rewrite=...)`).
+  values: the recording names them in `Scrub(secrets=...)` or rewrites them by key in
+  its own recorder step, on the `Fixture` before the write (ADR-0017, ADR-0024).
 - **No cross-source normalization.** A USDA `marketing_year` stays a USDA concept.
   Mapping between sources is business logic and lives outside this family.
 - Reference data (commodity codes, country codes, report calendars) ships inside the
@@ -361,17 +361,8 @@ the one `QuotaPolicy` per process for that key on its config (ADR-0009, amendmen
 2026-10-27).
 
 A multi-tenant source, whose upstream serves each tenant from a host or under a key of
-its own (CashCtrl's organisations), declares its tenants with `xippios.core.Tenants`
-(ADR-0014). One variable lists the tenant names, comma-separated, lower-case letters,
-digits and underscores (`CASHCTRL_ORGS=acme,acme_test`); each tenant's values sit in
-`<SOURCE>_<NAME>_<FIELD>`, source and name upper-cased and `-` made `_`
-(`CASHCTRL_ACME_SUBDOMAIN`, `CASHCTRL_ACME_API_KEY`). The reserved test tenant (`demo`)
-is declared by its own variables alone and never listed: it exists when all of them
-are set. Every tenant has one client of its own, with its own rate limiter and no cache
-shared with another tenant, built on first use and rebuilt when one of its values
-changes. A name that is not declared is the caller's mistake, `InvalidRequestError`; a
-missing or malformed variable of a declared tenant is the operator's, `ConfigError`.
-Messages and results name tenants and variables, never a value.
+its own (CashCtrl's organisations), carries its tenant registry itself and names the
+tenant of every result in `ResultMeta.tenant` (§4; ADR-0024).
 
 ## 8. MCP conventions
 
@@ -390,7 +381,7 @@ Messages and results name tenants and variables, never a value.
   registered (ADR-0014). A write server carries no authentication, so `--http` serves
   it on a loopback host only (`127.0.0.1`, `localhost`, `::1`) unless `--allow-remote`
   is passed, with a gateway in front. A write server exposes write tools only;
-  reference tools, the tenant list among them, stay on the read server.
+  reference tools stay on the read server.
 - Result cap: default 200 rows or 64 KB, whichever first, bytes counted in the UTF-8
   encoding of the compact JSON text. Over the cap, return the first page plus a note on
   how to narrow the query. Never truncate silently. A reference tool whose whole list an
@@ -411,14 +402,7 @@ Messages and results name tenants and variables, never a value.
   and release identifiers) and, where the slice fits the result cap, a filtered read of
   the file.
 - Reference lookups are tools too: `<source>_list_<thing>` (commodities, countries,
-  attributes). Agents need them to form valid calls. A multi-tenant source lists its
-  tenants the same way, names only (`list_task`, `cashctrl_list_organisations`).
-- A multi-tenant source's servers take an option that locks them to one tenant
-  (`--org acme`), passed to `build_server` as `TenantLock` (ADR-0014): a tool call
-  naming another tenant is refused with `error: InvalidRequestError: ...` before the
-  tool runs, the instructions name the tenant, and the list tool lists it alone. A tool
-  that takes the tenant parameter must receive it on a locked server; a default is
-  refused.
+  attributes). Agents need them to form valid calls.
 - Errors return as text starting with `error: <ErrorClass>: <message>`; never raise
   through the MCP boundary. Arguments a tool's schema refuses are answered the same way,
   before the tool runs, by a middleware `register_tasks` installs once per server:
@@ -473,17 +457,14 @@ route: `router_from_tasks` skips it, and no route returns a file path (ADR-0019)
   `REDACTED` cannot be matched and is refused by name. A parameter's absence cannot be
   matched: where two fixtures share a path, the more specific one is mounted first,
   since `respx` tries routes in the order they were added.
-- The recorder scrubs in memory and writes once, so nothing unscrubbed touches disk: a
-  multi-tenant source records with a placeholder host that its offline tests replay
-  against, and names the values that must never be written (`xippios.core.testing.Scrub`).
-  A placeholder that contains the original host (`demo.example.test` for
-  `example.test`) is allowed and written as such, never scrubbed again; one that is the
-  original host is refused. The scrubbed exchange is verified before the write, a JSON
-  body also decoded; the original host or a named value still present refuses it, the
-  error naming where.
-  The verify is best effort, one JSON-aware pass over URL, headers and bodies; the
-  backstops are recording only against synthetic or demo tenants and the fixture grep
-  of the definition of done.
+- The recorder scrubs in memory and writes once, so nothing unscrubbed touches disk, and
+  names the values that must never be written (`xippios.core.testing.Scrub(secrets=...)`),
+  each replaced as given. The scrubbed exchange is verified before the write: a named
+  value still present as given in the URL, a header value or a text body refuses it, the
+  error naming where, never the value. The verify is a backstop, with the fixture grep of
+  the definition of done; a form the source's values take that differs from them
+  (percent-encoded, behind a JSON escape), or a tenant's host to replace, the source
+  rewrites in its own recorder step, on the `Fixture` before the write (ADR-0024).
   A body that is not UTF-8 text cannot be scrubbed and is refused unless the recording
   flags it (`allow_binary=True`, stored base64 with `body_base64`).
   The scrub redacts credentials by the rule `ResultMeta` applies (§4): a parameter named
@@ -540,15 +521,15 @@ route: `router_from_tasks` skips it, and no route returns a file path (ADR-0019)
     are set up, so one of those that changes a level leaves it behind.
 - The family conformance check, `xippios.core.testing.family`, tests once, in core, what
   every source shares: the empty namespace levels, `py.typed` and `__version__`; the
-  tasks `mcp.py` and `http.py` serve (`tasks.__all__` minus `BULK_TASKS`) and those the
-  write server serves (`tasks_write.__all__`); every task synchronous, returning
-  `Result[T]`, with an agent docstring; the README status table listing exactly the
-  tasks; the template tag in `.copier-answers.yml`; the core bound of §12. The template
+  tasks `mcp.py` and `http.py` serve (`tasks.__all__` minus `BULK_TASKS`); every task,
+  `tasks_write.__all__` included, synchronous, returning `Result[T]`, with an agent
+  docstring; the README status table listing exactly the tasks; the template tag in `.copier-answers.yml`; the core bound of §12. The template
   renders `tests/test_family.py`, which collects it with one line
   (`from xippios.core.testing.family import *  # noqa: F403`), so it runs in every
   source's CI, and a source keeps no copy of its checks. The plugin's ini option
   `xippios_package` names the package under test where `src/xippios/` holds more than
-  one `tasks.py` (ADR-0013, amendment 2026-10-26).
+  one `tasks.py` (ADR-0013, amendment 2026-10-26). A source's write server is its own to
+  test (ADR-0024).
 - Every task function has at least one fixture-backed test and one live smoke test.
 - Coverage is reported, not gated; mypy strict and ruff are gated.
 
