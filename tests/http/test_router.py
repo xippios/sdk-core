@@ -10,7 +10,8 @@ from fastapi.testclient import TestClient
 
 from xippios.core import sync
 from xippios.core.errors import InvalidRequestError, NotFoundError, RateLimitError
-from xippios.core.http import PROBLEM_MEDIA_TYPE, is_scalar, router_from_tasks
+from xippios.core.http import is_scalar, router_from_tasks
+from xippios.core.http.problems import PROBLEM_MEDIA_TYPE
 from xippios.core.models import Result, ResultMeta, UpstreamModel
 
 

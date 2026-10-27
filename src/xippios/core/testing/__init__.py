@@ -13,6 +13,11 @@ Enable the plugin in a repo's ``tests/conftest.py``::
 
     pytest_plugins = ["xippios.core.testing.plugin"]
 
+This package exports what consumers import. The pieces the plugin and the recorder
+are built from (``replay``, ``mount_fixture``, ``write_fixture``, the ``scrub_*``
+functions, ``LIVE_ENV``, ``PLACEHOLDER_KEY``, ...) are importable from their modules,
+``xippios.core.testing.replay``, ``.fixtures``, ``.scrub`` and ``.plugin``.
+
 Requires the ``testing`` extra: ``uv add "xippios-core[testing]"``.
 """
 
@@ -33,33 +38,21 @@ from xippios.core.testing.adapters import (
 from xippios.core.testing.clock import CLOCK_SLACK, assert_time_between
 from xippios.core.testing.fixtures import (
     Fixture,
-    FixtureRequest,
     FixtureResponse,
     fixture_from_response,
     fixture_path,
     load_fixture,
     recorded_query,
     response_from_fixture,
-    write_fixture,
 )
-from xippios.core.testing.plugin import LIVE_ENV, PLACEHOLDER_KEY, live_enabled
 from xippios.core.testing.record import record, record_sync
-from xippios.core.testing.replay import (
-    ReplayFixture,
-    mount_fixture,
-    replay,
-    sent_query,
-    sent_urls,
-)
-from xippios.core.testing.scrub import REDACTED, Scrub, scrub_headers, scrub_params, scrub_url
+from xippios.core.testing.replay import ReplayFixture, sent_query, sent_urls
+from xippios.core.testing.scrub import REDACTED, Scrub
 
 __all__ = [
     "CLOCK_SLACK",
-    "LIVE_ENV",
-    "PLACEHOLDER_KEY",
     "REDACTED",
     "Fixture",
-    "FixtureRequest",
     "FixtureResponse",
     "ReplayFixture",
     "Scrub",
@@ -68,20 +61,13 @@ __all__ = [
     "assert_write_tools",
     "fixture_from_response",
     "fixture_path",
-    "live_enabled",
     "load_fixture",
     "mcp_call",
     "mcp_call_text",
-    "mount_fixture",
     "record",
     "record_sync",
     "recorded_query",
-    "replay",
     "response_from_fixture",
-    "scrub_headers",
-    "scrub_params",
-    "scrub_url",
     "sent_query",
     "sent_urls",
-    "write_fixture",
 ]

@@ -11,10 +11,10 @@ from xippios.core.client import (
     BasicKeyAuth,
     BearerAuth,
     ClientConfig,
-    EnvKeyAuth,
     HeaderKeyAuth,
     QueryKeyAuth,
 )
+from xippios.core.client.auth import EnvKeyAuth
 from xippios.core.errors import ConfigError
 
 BASE = "https://api.example.test"

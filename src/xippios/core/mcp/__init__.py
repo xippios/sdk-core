@@ -22,6 +22,12 @@ A multi-tenant source adds ``--org`` and locks the server to one tenant (ADR-001
     def run() -> None:
         main(server, add_options=lambda parser: parser.add_argument("--org"), apply_options=lock)
 
+``ResultCap`` is defined in ``xippios.core.models`` and exported from ``xippios.core``
+too, so a source's ``tasks.py`` declares its caps without this extra; it is re-exported
+here for the sources that import it from this package. ``register_tasks``,
+``is_write_server`` and ``quiet_request_logging``, which ``build_server`` and ``main``
+call, are importable from ``xippios.core.mcp.server``.
+
 Requires the ``mcp`` extra: ``uv add "xippios-core[mcp]"``.
 """
 
@@ -32,15 +38,9 @@ except ImportError as exc:  # pragma: no cover - exercised only without the extr
 
 from xippios.core.mcp.cli import build_parser, main
 from xippios.core.mcp.errors import error_to_text
-from xippios.core.mcp.results import ResultCap, cap_result
-from xippios.core.mcp.server import (
-    TenantLock,
-    build_server,
-    is_write_server,
-    quiet_request_logging,
-    register_tasks,
-    tool_name,
-)
+from xippios.core.mcp.results import cap_result
+from xippios.core.mcp.server import TenantLock, build_server, tool_name
+from xippios.core.models import ResultCap
 
 __all__ = [
     "ResultCap",
@@ -49,9 +49,6 @@ __all__ = [
     "build_server",
     "cap_result",
     "error_to_text",
-    "is_write_server",
     "main",
-    "quiet_request_logging",
-    "register_tasks",
     "tool_name",
 ]

@@ -26,8 +26,9 @@ import httpx
 import pytest
 import respx
 
-from xippios.core.client import EnvKeyAuth, QuotaPolicy, TokenBucket
-from xippios.core.client.quota import _reset_every_policy
+from xippios.core.client.auth import EnvKeyAuth
+from xippios.core.client.quota import QuotaPolicy, _reset_every_policy
+from xippios.core.client.ratelimit import TokenBucket
 from xippios.core.testing.fixtures import fixture_path
 from xippios.core.testing.replay import ReplayFixture, replay
 

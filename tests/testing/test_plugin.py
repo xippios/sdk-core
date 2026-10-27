@@ -5,8 +5,10 @@ import httpcore
 import httpx
 import pytest
 
-from xippios.core.client import EnvKeyAuth, QuotaPolicy, TokenBucket
-from xippios.core.testing import LIVE_ENV, PLACEHOLDER_KEY, live_enabled
+from xippios.core.client import QuotaPolicy
+from xippios.core.client.auth import EnvKeyAuth
+from xippios.core.client.ratelimit import TokenBucket
+from xippios.core.testing.plugin import LIVE_ENV, PLACEHOLDER_KEY, live_enabled
 
 # The pytester runs below install the plugin's patches themselves, in process. The outer
 # test lifts its own (the markers here, the placeholder pin by the override below), or
@@ -287,7 +289,8 @@ def test_offline_tests_cannot_reach_the_network(
 LIMITER_TESTS = """
 import pytest
 
-from xippios.core.client import AsyncClient, ClientConfig, RateLimit, TokenBucket
+from xippios.core.client import AsyncClient, ClientConfig, RateLimit
+from xippios.core.client.ratelimit import TokenBucket
 
 ACQUIRE = TokenBucket.acquire
 CONFIG = ClientConfig(
@@ -453,8 +456,9 @@ import os
 import httpx
 import pytest
 
-from xippios.core.client import EnvKeyAuth, HeaderKeyAuth, QueryKeyAuth
-from xippios.core.testing import PLACEHOLDER_KEY
+from xippios.core.client import HeaderKeyAuth, QueryKeyAuth
+from xippios.core.client.auth import EnvKeyAuth
+from xippios.core.testing.plugin import PLACEHOLDER_KEY
 
 KEY = EnvKeyAuth.key
 SHELL = dict(os.environ)  # at collection, before any fixture: what direnv loaded
@@ -545,8 +549,8 @@ def source_auth():
 SOURCE_TESTS = """
 import os
 
-from xippios.core.client import EnvKeyAuth
-from xippios.core.testing import PLACEHOLDER_KEY
+from xippios.core.client.auth import EnvKeyAuth
+from xippios.core.testing.plugin import PLACEHOLDER_KEY
 
 KEY = EnvKeyAuth.key
 SHELL = dict(os.environ)

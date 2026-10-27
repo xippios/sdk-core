@@ -1,8 +1,10 @@
 """xippios-core: the shared foundation of the xippios Python SDK family.
 
-Only names re-exported here are public API. The optional adapters live in their own
-subpackages and are imported explicitly: ``xippios.core.mcp``, ``xippios.core.http``,
-``xippios.core.testing``.
+The names re-exported here are the public API: what consumers import (ADR-0023,
+decision 5). A helper core calls itself and no consumer imports, ``load_csv`` or
+``EnvKeyAuth`` say, stays importable from its own module only. The optional adapters
+live in their own subpackages and are imported explicitly: ``xippios.core.mcp``,
+``xippios.core.http``, ``xippios.core.testing``.
 """
 
 from xippios.core._loop import sync
@@ -11,19 +13,17 @@ from xippios.core.client import (
     AsyncClient,
     BasicKeyAuth,
     BearerAuth,
-    CacheBackend,
     ClientConfig,
-    EnvKeyAuth,
     HeaderKeyAuth,
     MemoryCache,
     QueryKeyAuth,
     QuotaPolicy,
-    QuotaSnapshot,
     RateLimit,
     RetryPolicy,
     Timeouts,
 )
 from xippios.core.errors import (
+    BODY_LIMIT,
     AuthError,
     ConfigError,
     InvalidRequestError,
@@ -33,31 +33,39 @@ from xippios.core.errors import (
     UpstreamError,
     ValidationError,
     XippiosError,
+    error_from_response,
+    parse_retry_after,
 )
-from xippios.core.models import Result, ResultMeta, UpstreamModel, parse, parse_decimal
+from xippios.core.models import (
+    Result,
+    ResultCap,
+    ResultMeta,
+    UpstreamModel,
+    parse,
+    parse_decimal,
+)
 from xippios.core.pagination import collect, paginate_offset
-from xippios.core.reference import load_csv, load_json, load_table
+from xippios.core.reference import load_json, load_table
 from xippios.core.tenants import Tenants
 
 __all__ = [
+    "BODY_LIMIT",
     "AsyncClient",
     "AuthError",
     "BasicKeyAuth",
     "BearerAuth",
-    "CacheBackend",
     "ClientConfig",
     "ConfigError",
-    "EnvKeyAuth",
     "HeaderKeyAuth",
     "InvalidRequestError",
     "MemoryCache",
     "NotFoundError",
     "QueryKeyAuth",
     "QuotaPolicy",
-    "QuotaSnapshot",
     "RateLimit",
     "RateLimitError",
     "Result",
+    "ResultCap",
     "ResultMeta",
     "RetryPolicy",
     "Tenants",
@@ -69,11 +77,12 @@ __all__ = [
     "XippiosError",
     "__version__",
     "collect",
-    "load_csv",
+    "error_from_response",
     "load_json",
     "load_table",
     "paginate_offset",
     "parse",
     "parse_decimal",
+    "parse_retry_after",
     "sync",
 ]

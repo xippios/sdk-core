@@ -16,14 +16,8 @@ import httpx
 import pytest
 import respx
 
-from xippios.core.client import (
-    AsyncClient,
-    ClientConfig,
-    MemoryCache,
-    QuotaPolicy,
-    QuotaSnapshot,
-    RetryPolicy,
-)
+from xippios.core.client import AsyncClient, ClientConfig, MemoryCache, QuotaPolicy, RetryPolicy
+from xippios.core.client.quota import QuotaSnapshot
 from xippios.core.errors import RateLimitError
 from xippios.core.mcp.errors import error_to_text
 

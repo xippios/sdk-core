@@ -2,47 +2,72 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 import xippios.core as core
 
-EXPECTED = {
-    # client
-    "AsyncClient", "CacheBackend", "ClientConfig", "MemoryCache",
-    "QuotaPolicy", "QuotaSnapshot", "RateLimit", "RetryPolicy", "Timeouts",
-    "EnvKeyAuth", "QueryKeyAuth", "HeaderKeyAuth", "BearerAuth", "BasicKeyAuth",
-    # errors
-    "AuthError", "ConfigError", "InvalidRequestError", "NotFoundError", "RateLimitError",
-    "TransportError", "UpstreamError", "ValidationError", "XippiosError",
-    # models, helpers
-    "Result", "ResultMeta", "UpstreamModel", "parse", "parse_decimal", "Tenants",
-    "collect", "paginate_offset",
-    "load_csv", "load_json", "load_table",
-    "sync", "__version__",
+# What consumers import, and nothing else (ADR-0023, decision 5).
+EXPORTS = {
+    "xippios.core": {
+        # client
+        "AsyncClient", "ClientConfig", "MemoryCache", "QuotaPolicy", "RateLimit",
+        "RetryPolicy", "Timeouts", "QueryKeyAuth", "HeaderKeyAuth", "BearerAuth",
+        "BasicKeyAuth",
+        # errors
+        "AuthError", "ConfigError", "InvalidRequestError", "NotFoundError", "RateLimitError",
+        "TransportError", "UpstreamError", "ValidationError", "XippiosError",
+        "BODY_LIMIT", "error_from_response", "parse_retry_after",
+        # models and helpers
+        "Result", "ResultCap", "ResultMeta", "UpstreamModel", "parse", "parse_decimal",
+        "Tenants", "collect", "paginate_offset", "load_json", "load_table",
+        "sync", "__version__",
+    },
+    "xippios.core.client": {
+        "AsyncClient", "BasicKeyAuth", "BearerAuth", "CachedResponse", "ClientConfig",
+        "HeaderKeyAuth", "MemoryCache", "QueryKeyAuth", "QuotaPolicy", "RateLimit",
+        "RetryPolicy", "Timeouts", "cache_key", "decode_json",
+    },
+    "xippios.core.testing": {
+        "CLOCK_SLACK", "REDACTED", "Fixture", "FixtureResponse", "ReplayFixture", "Scrub",
+        "assert_projection", "assert_time_between", "assert_write_tools",
+        "fixture_from_response", "fixture_path", "load_fixture", "mcp_call", "mcp_call_text",
+        "record", "record_sync", "recorded_query", "response_from_fixture", "sent_query",
+        "sent_urls",
+    },
+    "xippios.core.mcp": {
+        "ResultCap", "TenantLock", "build_parser", "build_server", "cap_result",
+        "error_to_text", "main", "tool_name",
+    },
+    "xippios.core.http": {"is_scalar", "router_from_tasks", "status_for"},
 }  # fmt: skip
 
 
-def test_public_surface_is_exactly_what_the_readme_promises() -> None:
-    assert set(core.__all__) == EXPECTED
-    for name in core.__all__:
-        assert getattr(core, name) is not None
+@pytest.mark.parametrize("module", sorted(EXPORTS))
+def test_each_package_exports_exactly_what_consumers_import(module: str) -> None:
+    package = __import__(module, fromlist=["__all__"])
+    assert sorted(package.__all__) == sorted(EXPORTS[module])
+    for name in package.__all__:
+        assert getattr(package, name) is not None
 
 
-def test_the_client_package_exports_its_helpers() -> None:
-    import xippios.core.client as client
+def test_result_cap_is_one_class_without_the_mcp_extra() -> None:
+    import xippios.core.mcp as mcp
+    from xippios.core.models import ResultCap
 
-    for name in ("QuotaPolicy", "QuotaSnapshot", "decode_json"):
-        assert name in client.__all__
-    assert client.QuotaPolicy is core.QuotaPolicy
+    assert core.ResultCap is ResultCap
+    assert mcp.ResultCap is ResultCap
 
 
 def test_optional_adapters_are_not_imported_eagerly() -> None:
     code = (
-        "import sys, xippios.core; "
+        "import sys; from xippios.core import ResultCap; "
         "print(sorted(m for m in sys.modules if m.startswith('xippios.core.')))"
     )
     out = subprocess.run(
         [sys.executable, "-c", code], check=True, capture_output=True, text=True
     ).stdout
     assert "xippios.core.client" in out
+    assert "xippios.core.models" in out
     for adapter in ("xippios.core.mcp", "xippios.core.http", "xippios.core.testing"):
         assert adapter not in out
 

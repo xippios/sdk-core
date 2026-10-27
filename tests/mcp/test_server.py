@@ -7,15 +7,8 @@ import pytest
 
 from xippios.core import sync
 from xippios.core.errors import NotFoundError
-from xippios.core.mcp import (
-    ResultCap,
-    TenantLock,
-    build_server,
-    is_write_server,
-    quiet_request_logging,
-    register_tasks,
-    tool_name,
-)
+from xippios.core.mcp import ResultCap, TenantLock, build_server, tool_name
+from xippios.core.mcp.server import is_write_server, quiet_request_logging, register_tasks
 from xippios.core.models import Result, ResultMeta, UpstreamModel
 from xippios.core.testing import mcp_call, mcp_call_text
 

@@ -9,6 +9,7 @@ from xippios.core.errors import ValidationError
 from xippios.core.models import (
     REDACTED,
     Result,
+    ResultCap,
     ResultMeta,
     UpstreamModel,
     is_credential_key,
@@ -217,3 +218,19 @@ def test_computed_decimal_fields_serialise_as_json_numbers() -> None:
     assert json.loads(priced.model_dump_json())["value_number"] == 1234.5
     assert Priced(label="x", value="(D)").model_dump(mode="json")["value_number"] is None
     assert priced.model_dump()["value_number"] == Decimal("1234.5")
+
+
+@pytest.mark.parametrize(
+    ("arguments", "match"),
+    [
+        ({"max_rows": 0}, "max_rows and max_bytes must be at least 1"),
+        ({"max_bytes": 0}, "max_rows and max_bytes must be at least 1"),
+        ({"note": ""}, "note must say how to see the rest"),
+        ({"note": "   "}, "note must say how to see the rest"),
+    ],
+)
+def test_result_cap_refuses_an_empty_bound_or_a_blank_note(
+    arguments: dict[str, object], match: str
+) -> None:
+    with pytest.raises(ValueError, match=match):
+        ResultCap(**arguments)  # type: ignore[arg-type]

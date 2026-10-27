@@ -1,10 +1,8 @@
 import json
 from datetime import UTC, datetime
 
-import pytest
-
-from xippios.core.mcp import ResultCap, cap_result
-from xippios.core.models import Result, ResultMeta, UpstreamModel
+from xippios.core.mcp import cap_result
+from xippios.core.models import Result, ResultCap, ResultMeta, UpstreamModel
 
 
 class Row(UpstreamModel):
@@ -76,11 +74,6 @@ def test_non_list_payload_passes_or_previews() -> None:
     assert len(payload["preview"]) == 100
 
 
-def test_cap_validation() -> None:
-    with pytest.raises(ValueError, match="max_rows"):
-        ResultCap(max_rows=0)
-
-
 def test_the_default_note_promises_no_filter() -> None:
     payload = json.loads(cap_result(envelope(500), ResultCap(max_rows=10)))
     assert payload["note"] == (
@@ -129,12 +122,6 @@ def test_a_cap_note_is_not_shown_when_nothing_is_cut() -> None:
     cap = ResultCap(note="filter by period to see the rest")
     assert "note" not in json.loads(cap_result(envelope(3), cap))
     assert json.loads(cap_result({"a": 1}, cap)) == {"a": 1}
-
-
-@pytest.mark.parametrize("note", ["", "   "])
-def test_a_blank_note_is_refused(note: str) -> None:
-    with pytest.raises(ValueError, match="note must say how to see the rest"):
-        ResultCap(note=note)
 
 
 def _utf8(text: str) -> int:

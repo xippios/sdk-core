@@ -20,16 +20,15 @@ from xippios.core.testing import (
     Scrub,
     fixture_from_response,
     load_fixture,
-    mount_fixture,
     record,
     record_sync,
     recorded_query,
-    replay,
     response_from_fixture,
     sent_query,
     sent_urls,
-    write_fixture,
 )
+from xippios.core.testing.fixtures import write_fixture
+from xippios.core.testing.replay import mount_fixture, replay
 
 BASE = "https://api.example.test"
 
