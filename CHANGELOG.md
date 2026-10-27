@@ -6,60 +6,72 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-27
+
+This patch release carries the release train, the family conformance check every source
+runs, and the shared test helpers brought forward from 0.3.0; `gates.yml` ships switched
+off. ADR-0019 to ADR-0023 and conventions 1.14 and 1.15 come as documentation; the code
+of ADR-0019 and ADR-0022 ships in 0.3.0. As a patch, it keeps 0.2.0's compatibility
+(conventions §12). A source adopts it in one adoption PR with `/adopt-release`, moving
+its bound to `xippios-core~=0.2.1` (ADR-0018, amendment (c)); "Hand-apply for sources"
+below lists what that PR changes by hand.
+
 ### Added
 
-- **The release train** (plan WP2; Johannes's decision of 2026-10-26; row 27 c):
-  `publish.yml` keeps its name and runs on every push to `main` and on dispatch. Its
-  `release-check` looks at a push that changed `pyproject.toml` or `CHANGELOG.md` (a new
-  source's first release PR changes only the CHANGELOG, since the scaffold already says
-  0.1.0) and lets it through when the version in `pyproject.toml` has no tag and
-  `CHANGELOG.md` has its `## [X.Y.Z] - ` heading; a changed `pyproject.toml` without that
-  heading leaves a notice, anything else ends quietly. Then CI, the annotated tag
-  `vX.Y.Z` on the merge commit with the CHANGELOG section as its message, the build
-  checked against that tag, and the `pypi` environment that Johannes approves. A
-  session never pushes a tag; sdk-usda-psd's v0.2.0 tag on the wrong commit, caught by
-  the old workflow, was the case. `publish.yml` has no `concurrency` group, whose one
-  pending run would lose a release run queued behind a run waiting at `pypi`. The
-  workflow's header and `docs/handover.md` give the recovery path ("Re-run failed jobs"
-  once the tag exists; a build that fails for good after the tag needs a patch release)
-  and the race of two pushes to `main` close together (the second run's tag push fails
-  red, or tags a later commit when the first run's `ci` failed; re-run the failed jobs
-  of the run whose commit is the release, and if the other run already tagged a later
-  commit, Johannes rejects its `pypi` deployment and the release is re-done as a patch;
-  a release is not merged while another release run is waiting).
-- **The family conformance check** (plan WP6; Johannes's decision D12 of 2026-10-26),
-  `xippios.core.testing.family`: what every source shares, tested once, collected with
-  one line, `from xippios.core.testing.family import *  # noqa: F403`, in a
-  template-rendered `tests/test_family.py`. Empty namespace levels, `py.typed`,
-  `__version__`; `mcp.py` and `http.py` serve exactly `tasks.__all__` minus
-  `BULK_TASKS`, the write server exactly `tasks_write.__all__`; every task synchronous
-  (no `async_fn` required, conventions §6), returning `Result[T]`, with an agent
-  docstring; the README status table, in the format of sdk-template's
-  `README.md.jinja`, lists exactly the read and the write tasks; `.copier-answers.yml`
-  names a template tag; `pyproject.toml` bounds `xippios-core` and its extras with
-  `~=X.Y.Z`. The package under test is the ini option `xippios_package`, which the
-  plugin registers, or the one `tasks.py` under `src/xippios/`. It replaces the three
-  copies the family review of 2026-10-25 counted in every source, `tests/test_layout.py`,
-  `tests/test_adapters.py` and the structural part of `tests/test_tasks.py`
-  (sdk-usda-psd, sdk-usda-nass, sdk-usda-esr, sdk-usda-gats, sdk-comtrade,
-  sdk-cashctrl). Two family checks are CI steps instead, documented for the template in
-  `docs/handover.md`: a CHANGELOG entry on every PR but a release, an adoption or
-  Dependabot's, and the 256 KiB cap on the fixture files a PR adds or changes, a moved
-  one included (ADR-0019), a warning in template v0.2.1 and an error from v0.3.0.
-- **Shared test helpers** (C12, moved from 0.3.0 to 0.2.1; ADR-0023 decision 2, each
-  carried by two sources or more):
+- **The release train** (conventions §12; ADR-0018, amendment (b); Johannes's decision
+  of 2026-10-26): `publish.yml` keeps its name and runs on every push to `main` and on
+  dispatch. Its `release-check` looks at a push that changed `pyproject.toml` or
+  `CHANGELOG.md` (a new source's first release PR changes only the CHANGELOG, since the
+  scaffold already says 0.1.0) and lets it through when the version in `pyproject.toml`
+  has no tag and `CHANGELOG.md` has its `## [X.Y.Z] - ` heading; a changed
+  `pyproject.toml` without that heading leaves a notice, anything else ends quietly.
+  Then CI, the annotated tag `vX.Y.Z` on the merge commit with the CHANGELOG section as
+  its message, the build checked against that tag, and the `pypi` environment that
+  Johannes approves. A session never pushes a tag; sdk-usda-psd's v0.2.0 tag on the
+  wrong commit, caught by the old workflow, was the case. `publish.yml` has no
+  `concurrency` group, whose one pending run would lose a release run queued behind a
+  run waiting at `pypi`. The workflow's header and `docs/handover.md` give the recovery
+  path ("Re-run failed jobs" once the tag exists; a build that fails for good after the
+  tag needs a patch release) and the race of two pushes to `main` close together (the
+  second run's tag push fails red, or tags a later commit when the first run's `ci`
+  failed; re-run the failed jobs of the run whose commit is the release, and if the
+  other run already tagged a later commit, Johannes rejects its `pypi` deployment and
+  the release is re-done as a patch; a release is not merged while another release run
+  is waiting).
+- **The family conformance check** (conventions §10; ADR-0013, amendment 2026-10-26;
+  Johannes's decision of 2026-10-26), `xippios.core.testing.family`: what every source
+  shares, tested once, collected with one line,
+  `from xippios.core.testing.family import *  # noqa: F403`, in a template-rendered
+  `tests/test_family.py`. Empty namespace levels, `py.typed`, `__version__`; `mcp.py`
+  and `http.py` serve exactly `tasks.__all__` minus `BULK_TASKS`, the write server
+  exactly `tasks_write.__all__`; every task synchronous (no `async_fn` required,
+  conventions §6), returning `Result[T]`, with an agent docstring; the README status
+  table, in the format of sdk-template's `README.md.jinja`, lists exactly the read and
+  the write tasks; `.copier-answers.yml` names a template tag; `pyproject.toml` bounds
+  `xippios-core` and its extras with `~=X.Y.Z`. The package under test is the ini option
+  `xippios_package`, which the plugin registers, or the one `tasks.py` under
+  `src/xippios/`. It replaces the three copies a review across the family counted in
+  every source on 2026-10-25, `tests/test_layout.py`, `tests/test_adapters.py` and the
+  structural part of `tests/test_tasks.py` (sdk-usda-psd, sdk-usda-nass, sdk-usda-esr,
+  sdk-usda-gats, sdk-comtrade, sdk-cashctrl). Two family checks are CI steps instead,
+  documented for the template in `docs/handover.md`: a CHANGELOG entry on every PR but a
+  release, an adoption or Dependabot's, and the 256 KiB cap on the fixture files a PR
+  adds or changes, a moved one included (ADR-0019), a warning in template v0.2.1 and an
+  error from v0.3.0.
+- **Shared test helpers** (ADR-0023 decision 2, each carried by two sources or more;
+  brought forward from 0.3.0 by Johannes's decision of 2026-10-26):
   - the plugin's `anyio_backend`, asyncio, which the conftest of all six sources and of
     the template defined;
-  - `sent_query(route)`, the scrubbed query of the last request a route received
-    (row 36 a; sdk-usda-nass's `sent_query`, sdk-comtrade's `_sent`, sdk-cashctrl
-    inline);
+  - `sent_query(route)`, the scrubbed query of the last request a route received (asked
+    for by sdk-usda-nass; sdk-usda-nass's `sent_query`, sdk-comtrade's `_sent`,
+    sdk-cashctrl inline);
   - `recorded_query(fixture)`, the scrubbed query a fixture was recorded with
     (sdk-comtrade's `recorded_params` and `_recorded`, sdk-cashctrl's `recorded_query`);
   - `response_from_fixture(fixture)`, a recorded answer as an `httpx.Response` with its
     request, for calling `classify` (`recorded()` in sdk-usda-psd, sdk-usda-esr,
     sdk-usda-gats and sdk-cashctrl);
   - `url=` on `mount_fixture`, `replay` and the plugin's `replay_fixture`, serving a
-    recorded answer at another URL (row 41 b; `_mount_recorded_404` in sdk-usda-psd and
+    recorded answer at another URL (`_mount_recorded_404` in sdk-usda-psd and
     sdk-usda-esr, found by sdk-usda-esr);
   - `CLOCK_SLACK` and `assert_time_between(value, before, after)`, bracketing a time read
     around a call with five seconds of slack for the WSL2 host's clock, which steps back
@@ -67,22 +79,22 @@ All notable changes to this project are documented here. The format follows
     sdk-usda-psd and sdk-usda-esr).
   A query parameter sent or recorded more than once fails the two query helpers rather
   than losing a value.
-- **`.github/workflows/gates.yml`** (Johannes's decision D63 of 2026-10-26, its
-  fallback): calls the `merge-class` and `family-review` workflows of `xippios/.github`
-  as jobs, each only when the repository variable `GATES_CALLER` is `1`, which Johannes
-  sets per repository if the ruleset editor offers no "Require workflows" rule. It ships
-  off.
+- **`.github/workflows/gates.yml`** (Johannes's decision of 2026-10-26, as a fallback;
+  ADR-0018, amendment (e): the merge classes its check posts): calls the `merge-class`
+  and `family-review` workflows of `xippios/.github` as jobs, each only when the
+  repository variable `GATES_CALLER` is `1`, which Johannes sets per repository if the
+  ruleset editor offers no "Require workflows" rule. It ships off.
 
 ### Changed
 
-- **`ci.yml` has no push trigger** (plan WP2): CI runs once per push to `main`, through
-  `publish.yml`, for a release; the strict up-to-date policy tests every tree before it
-  merges.
+- **`ci.yml` has no push trigger** (the release train, above): CI runs once per push to
+  `main`, through `publish.yml`, for a release; the strict up-to-date policy tests every
+  tree before it merges.
 - **Every action in the three workflows is pinned by commit SHA**, its version in a
   comment, as in the `xippios/.github` repository.
-- **The sdist's include and exclude patterns are anchored at the root** (row 29 c,
-  found in sdk-template's T1 fix round): unanchored, `README.md` and `LICENSE` match a
-  file of that name at any depth. The sdist's file list is unchanged.
+- **The sdist's include and exclude patterns are anchored at the root** (found by
+  sdk-template): unanchored, `README.md` and `LICENSE` match a file of that name at any
+  depth. The sdist's file list is unchanged.
 - **The `testing` extra declares `packaging>=22`**, which the family check reads the
   core bound with and which pytest already required; 22.0 is the first release whose
   versions and specifiers are PEP 440 only.
@@ -119,19 +131,20 @@ All notable changes to this project are documented here. The format follows
   (`bankAccounts[].iban`) is still parsing only; an adoption PR, which fetches nothing,
   leaves `FETCHED.md` to the next `/refresh-upstream` and ports only the capture
   script's changes.
-- **ADR-0018, amendment 2026-10-26**: (a) decision 3 covers sdk-template's release
-  PRs, which auto-merge after the reviewer's `ready` like core's and a source's; (b) the
+- **ADR-0018, amendment 2026-10-26**: (a) decision 3 covers sdk-template's release PRs,
+  which auto-merge after the reviewer's `ready` like core's and a source's; (b) the
   release train replaces the human tag: the release PR's merge runs `publish.yml`, which
   tags `vX.Y.Z` on the merge commit, and the approval of the `pypi` environment run is
   the human gate; sdk-template tags from its CHANGELOG's top heading with its own
   `release.yml`; until a repository's workflow tags itself, Johannes pushes its tag;
   (c) the core bound may read `~=X.Y.Z` when patch Z shipped what the source adopts,
-  still one minor; (d) an adoption PR may delete the fixtures, mounts and tests the adoption
-  itself makes dead, and nothing else rides along.
-- **`docs/roadmap.md`**: core 0.2.1 and template v0.2.1 as step 0, core 0.3.0 opening
-  with the deletions of PR 0, and the order of the next sources; faostat's API is keyed
-  by a login bearer token (probed 2026-10-26), and wasde's tables come from the
-  release's XLS or XML, decided at its first interview.
+  still one minor; (d) an adoption PR may delete the fixtures, mounts and tests the
+  adoption itself makes dead, and nothing else rides along.
+- **`docs/roadmap.md`**: core 0.2.1 and template v0.2.1 as the first step, core 0.3.0
+  opening with a PR that deletes what has no consumer, and the order of the next
+  sources; faostat's API is keyed by a login bearer token (probed 2026-10-26), and
+  wasde's tables come from the release's XLS or XML, decided with Johannes when its work
+  starts.
 - **Conventions 1.14**: the rules of ADR-0019 and ADR-0022 bind a source from its 0.3.0
   adoption, or, when it starts on a git pin of core 0.3.0, each rule from its first PR
   on a pin that carries the rule's code; `usda-wasde` among the source names (§1;
@@ -158,13 +171,12 @@ All notable changes to this project are documented here. The format follows
 - **Conventions 1.15**: §10 states the one live workflow, `.github/workflows/live.yml`,
   in the shape the template renders, which a source whose secrets differ keeps: one job,
   `contents: read`, nightly and on `workflow_dispatch`, the key reaching only its pytest
-  step, sources that share a key staggering their start (ADR-0009 amendment; row 29 d,
-  found by sdk-template's T1 review); §10 names the family conformance check,
-  `xippios.core.testing.family`, which the rendered `tests/test_family.py` collects and
-  every source's CI runs (ADR-0013 amendment; the family session, 2026-10-26, confirmed
-  at the merge); §15 and the definition of done's Adoption PR intro: the session enables
-  auto-merge on an adoption PR only when its merge class is `auto`, and a `human`
-  adoption waits for Johannes (ADR-0018, amendment (e); the merge classes of the
+  step, sources that share a key staggering their start (ADR-0009 amendment; found by
+  sdk-template); §10 names the family conformance check, `xippios.core.testing.family`,
+  which the rendered `tests/test_family.py` collects and every source's CI runs
+  (ADR-0013 amendment); §15 and the definition of done's Adoption PR intro: the session
+  enables auto-merge on an adoption PR only when its merge class is `auto`, and a
+  `human` adoption waits for Johannes (ADR-0018, amendment (e); the merge classes of the
   `.github` repository's README), and the definition of done's Process line allows the
   session's one merge action, auto-merge on an adoption or `chore/release-*` PR, only
   when its merge class is `auto` (ADR-0018, amendment (e)).
@@ -180,15 +192,16 @@ All notable changes to this project are documented here. The format follows
   2026-10-26).
 - **`docs/roadmap.md`**: a pinned new source swaps to `~=0.3.0` in its single v0.3.0
   adoption PR, since a release PR changes only the §12 subset; eurostat's design round
-  is the session's first interview; faostat's paging and limits are verified with the
-  credential at the session's step 0, once Johannes provides the FAO account at its G1;
-  the release check fires on a change of the version or of `CHANGELOG.md`, so a first
-  release tags itself; the snapshot and design-round PRs of esmis and eurostat start on
-  template v0.2.1 and core 0.2.1 without a pin, the scaffold carries `core_git_ref` only
-  when the C14+C15 SHA exists, else a re-pin PR precedes the first tasks PR, and a
-  re-pin to a SHA with ADR-0022's code precedes the reference-data PR; eurostat proves a
-  keyless render of template v0.2.1 with `new-source.sh --local-only`, and the
-  login-keyed case (faostat) is not a template variant (ADR-0023, ADR-0008).
+  is the first decision put to Johannes when its work starts; faostat's paging and
+  limits are verified with the credential first, once Johannes provides the FAO account
+  on approving its package; the release check fires on a change of the version or of
+  `CHANGELOG.md`, so a first release tags itself; the snapshot and design-round PRs of
+  esmis and eurostat start on template v0.2.1 and core 0.2.1 without a pin, the scaffold
+  carries `core_git_ref` only when core's `main` has merged the api.data.gov gateway
+  module and the bulk downloads of ADR-0019, else a re-pin PR precedes the first tasks
+  PR, and a re-pin to a SHA with ADR-0022's code precedes the reference-data PR;
+  eurostat proves a keyless render of template v0.2.1 with `new-source.sh --local-only`,
+  and the login-keyed case (faostat) is not a template variant (ADR-0023, ADR-0008).
 - **`CLAUDE.md` and `docs/handover.md`** describe the release train: a session never
   tags, the release PR's merge tags, Johannes approves `pypi`. `docs/handover.md` gains
   "Core 0.2.1", with the release's recovery path, and "Adopting core 0.2.1", per source,
@@ -202,21 +215,23 @@ and the values `copier update` takes from the answers; `docs/handover.md`, "Adop
 
 - `pyproject.toml` — `xippios-core~=0.2.1` and its extras likewise, from
   `core_version=0.2.1` — `tests/test_family.py` imports what 0.2.0 lacks (ADR-0018,
-  amendment c).
+  amendment (c)).
 - `tests/test_tasks.py` — delete `test_package_has_a_version` and
   `test_task_is_a_sync_facade_with_an_agent_docstring` — the family check makes them.
 - `tests/test_client.py` (sdk-usda-psd, sdk-usda-esr, sdk-usda-gats),
-  `tests/test_errors.py` (sdk-cashctrl) — `recorded()` → `response_from_fixture` — C12.
+  `tests/test_errors.py` (sdk-cashctrl) — `recorded()` → `response_from_fixture` — a
+  shared test helper (ADR-0023).
 - `tests/test_slices.py` (sdk-usda-psd, sdk-usda-esr) — `_mount_recorded_404` →
-  `replay_fixture(..., url=...)` — row 41 b.
+  `replay_fixture(..., url=...)` — a shared test helper, found by sdk-usda-esr.
 - `tests/test_tasks.py` (sdk-usda-nass `sent_query`, sdk-comtrade `_sent`, sdk-cashctrl
-  inline) — the query of the last request → `sent_query` — row 36 a.
+  inline) — the query of the last request → `sent_query` — a shared test helper, asked
+  for by sdk-usda-nass.
 - `tests/conftest.py` and `tests/test_tasks.py` (sdk-comtrade `recorded_params` and
   `_recorded`), `tests/test_tasks.py` (sdk-cashctrl `recorded_query`) — the recorded
-  query → `recorded_query` — C12.
-- `tests/test_lists.py` (sdk-usda-psd, sdk-usda-esr, sdk-usda-gats), `tests/test_tasks.py`
-  (sdk-usda-gats) — the `retrieved_at` bracket → `assert_time_between`, `CLOCK_SLACK`
-  from core — C12.
+  query → `recorded_query` — a shared test helper (ADR-0023).
+- `tests/test_lists.py` (sdk-usda-psd, sdk-usda-esr, sdk-usda-gats),
+  `tests/test_tasks.py` (sdk-usda-gats) — the `retrieved_at` bracket →
+  `assert_time_between`, `CLOCK_SLACK` from core — a shared test helper (ADR-0023).
 - `tests/test_adapters.py` (sdk-comtrade, sdk-cashctrl) — the tests of their own move to
   `tests/test_tasks.py` or `tests/test_tasks_write.py` before the update deletes the
   file — the family check makes the rest.

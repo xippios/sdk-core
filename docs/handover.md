@@ -1,6 +1,6 @@
 # Handover — from planning to Claude Code
 
-Date: 2026-10-20 · Author: Johannes Didaskalu (with Claude) · Refreshed 2026-10-22 with the state after sessions 1 and 2, 2026-10-25 with the state after the core 0.2.0 release PR, and 2026-10-26 with core 0.2.1, the release train and the family check (the sections from "Core 0.2.1" on).
+Date: 2026-10-20 · Author: Johannes Didaskalu (with Claude) · Refreshed 2026-10-22 with the state after sessions 1 and 2, 2026-10-25 with the state after the core 0.2.0 release PR, 2026-10-26 with core 0.2.1, the release train and the family check (the sections from "Core 0.2.1" on), and 2026-10-27 with `sdk-core`'s state line at the core 0.2.1 release PR.
 
 ## State
 
@@ -12,7 +12,9 @@ required reviewer `jdidaskalu`; PyPI account `xippios`.
 
 - **`sdk-core`**: 0.1.0 on PyPI since 2026-10-22, 0.2.0, what the first four sources
   taught core (below), since 2026-10-25, both tagged by Johannes. 0.2.1 (below) brings the
-  release train: from its release PR on, the merge of a release PR tags it.
+  release train, and its release PR, `chore/release-0.2.1`, is the first to tag itself:
+  its merge runs `publish.yml`, which tags `v0.2.1` on the merge commit and waits at
+  `pypi` for Johannes's approval. From then on, the merge of a release PR tags it.
 - **`sdk-template`**: v0.2.0 tagged 2026-10-25. Generated repositories depend on
   `xippios-core` from PyPI.
 - **Sources**: `sdk-usda-nass` (the pilot), `sdk-comtrade` and `sdk-usda-psd` are built
