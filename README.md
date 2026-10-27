@@ -480,8 +480,12 @@ def run() -> None:  # entry point: xippios-example-mcp = "xippios.example.mcp:ru
 
 Tool names are `<source>_<function>` (`example_get_series`), the docstring is the tool
 description, the signature is the input schema. Results are capped at 200 rows or
-64 KB with a note on how to narrow the query; errors come back as
-`error: <Class>: <message>`. `--http` serves streamable HTTP instead of stdio.
+64 KB with a note on how to narrow the query, and a capped list whose `meta.request`
+records an integer `start` says where to resume (`; resume with start=200`); errors come
+back as `error: <Class>: <message>`, arguments the tool's schema refuses too
+(`error: InvalidRequestError: year: Input should be a valid integer, ...`), before the
+tool runs and never with pydantic's text or the value given. `--http` serves
+streamable HTTP instead of stdio.
 A reference tool whose whole list an agent needs gets a cap of its own, keyed by the
 task function's name, with the rows and bytes the source judges it needs:
 `build_server(..., caps={"list_commodities": ResultCap(max_rows=500,
@@ -596,16 +600,20 @@ xippios_placeholder_key_envs = ["EXAMPLE_API_KEY"]
 - `@pytest.mark.live` tests are skipped unless `XIPPIOS_LIVE_TESTS=1`, and `anyio`
   tests run on asyncio (the plugin's `anyio_backend`).
 - The whole run is offline (ADR-0013). From `pytest_configure` on, during collection, in
-  fixtures and in tests, a request through httpx's default transports raises
+  fixtures and in tests, a request through httpx's default transports (the plugin
+  patches httpcore's connection pools, which they all send through) raises
   `RuntimeError` naming its method and path unless `respx` answers it, a `respx` route
   that passes through included; mark a test `network` to let it through. In every test
   not marked `live`, the rate limiter never waits (mark a test `rate_limited` to keep
-  it) and no `QuotaPolicy` pauses, refuses or stays spent from one test to the next
-  (`rate_limited` keeps the pause too), and every `EnvKeyAuth` sends `PLACEHOLDER_KEY`
-  while the variables named in `xippios_placeholder_key_envs` hold it (fixture
-  `placeholder_api_key`), whatever the shell or an earlier live test left behind. The
-  `httpx` and `httpcore` logger levels come back after every test. ADR-0013 states the
-  edges of these guarantees.
+  it), no `QuotaPolicy` pauses, refuses or stays spent from one test to the next
+  (`rate_limited` keeps the pause too), every `MemoryCache` starts and ends empty (a
+  cache backend of the source's own is the source's to clear), and every `EnvKeyAuth`
+  sends `PLACEHOLDER_KEY` while the variables named in `xippios_placeholder_key_envs`
+  hold it (fixture `placeholder_api_key`), whatever the shell or an earlier live test
+  left behind. The `httpx` and `httpcore` logger levels come back after every test.
+  After a live run the summary prints each quota policy's last reading, `quota after the
+  live run: usda-psd: 986 of 1000 requests left as of ...`. ADR-0013 states the edges of
+  these guarantees.
 - `replay_fixture("api_GET", "corn_2024")` mounts `tests/fixtures/api_GET/corn_2024.json`
   on its method, host and path; `match_params=["countOnly"]` makes the route match those
   recorded query parameters too. A parameter's absence cannot be matched: where two

@@ -115,3 +115,9 @@ Amended by ADR-0015's amendment of 2026-10-27 (core 0.3.0): the third edge no lo
 as written. `install` sets `before_request` itself as the hook, so a subclass's override
 is called through it; the testing plugin still turns off the pause step alone, not a wait
 or refusal of the override's own.
+
+Amended 2026-10-27 (core 0.3.0; queue row 21 b, found by sdk-cashctrl): decision 3's note
+of a cut list ends `; resume with start=<start + shown>` where the result's
+`meta.request` records an integer `start`, an offset-paged task's, after the default text
+or the cap's own `note`; every other note, the byte-cap note included, is unchanged.
+Conventions §8 states it from 1.20 on.

@@ -172,3 +172,23 @@ unmocked download in an offline test is refused with the same `RuntimeError`, an
 `respx` route answers a mocked one. Replay serves a fixture's body as recorded, a body
 the recorder cut (`truncated`) included. `sent_urls`, `sent_query` and `recorded_query`
 redact by the one rule of `xippios.core.redaction` (ADR-0005, amendment 2026-10-27).
+
+Amended 2026-10-27 (core 0.3.0; the family review's C11; queue rows 39 b, found by
+sdk-usda-gats, and 44 b, found by sdk-usda-esr; decided by Johannes on 2026-10-27): decision
+1 patches httpcore's two pool methods only, `httpcore.ConnectionPool.handle_request` and
+`httpcore.AsyncConnectionPool.handle_async_request`; httpx's transport methods are no
+longer patched. Every default httpx transport sends through an httpcore pool, its proxies
+included (`HTTPProxy` and `SOCKSProxy` are pools), and respx's default mocker patches the
+same two methods and hands a route that passes through to the guard, so the refusal and
+its edges are as above; a transport a test passes itself bypasses both, as before. Every
+`MemoryCache` registers itself when it is built, and an autouse fixture clears every
+registered cache before and after each test not marked `live`, beside the quota reset of
+decision 4, so an answer one test cached never answers the route the next test mounts; a
+`CacheBackend` of a source's own is not covered, and the fixture's docstring says so.
+After each `live` test that ran, the plugin keeps every quota policy's source and
+`snapshot().describe()`, the last reading kept past the resets of later offline tests,
+and `pytest_terminal_summary` prints one line per policy, `quota after the live run:
+<source>: <describe()>`: times, counts and the source, never a key, a host or a query.
+The marker `rate_limited` names the quota pause it keeps as well. The plugin's docstrings
+point to the decisions above instead of restating them; the edges stay listed here.
+Conventions §10 states the clearing and the summary from 1.20 on.
