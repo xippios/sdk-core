@@ -6,10 +6,96 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Removed
+
+- **`xippios.core.config` and the `pydantic-settings` dependency** (ADR-0002, amendment
+  2026-10-27; ADR-0023, decision 5; no consumer, counted by the family review of
+  2026-10-25): `SourceSettings` goes; `resolve_api_key`, whose one caller was
+  `EnvKeyAuth`, is folded into `xippios.core.client.auth` as a private helper with the
+  same behaviour for that caller and the same `ConfigError` message. `pydantic` stays,
+  `SecretStr` with it. Conventions 1.16 §7: the environment is read through the
+  `EnvKeyAuth` helpers.
+- **The sync `Client`** (ADR-0002 and ADR-0015, amendments 2026-10-27; no consumer):
+  every source derives its sync task functions with `xippios.core.sync`, which stays.
+  `xippios.core.client` no longer re-exports `UseClientDefault`, and core no longer
+  imports it from httpx's private `httpx._client`: `auth=` keeps its three states on
+  `AsyncClient.request`, `get` and `get_json` and on `record` and `record_sync` (the
+  client's credentials by default, `None` for none, an `httpx.Auth` to replace them),
+  its default now a sentinel of core's own.
+- **`AsyncClient.derive`, the `limiter=` argument and the `limiter` property, and
+  `retry=` and `timeouts=` on `record` and `record_sync`** (ADR-0015, amendment
+  2026-10-27; the overrides queue row 12 asked for, found by sdk-comtrade; no source
+  calls them): the rate limiter is built from `config.rate_limit` alone, and the testing
+  plugin, which patches `TokenBucket.acquire`, needs neither. A recording goes through
+  the client it is given; one that must not retry a 5xx records through a client whose
+  config says `RetryPolicy(max_attempts=1)`. `auth=` per call stays: sdk-comtrade
+  records its keyless reference files with it.
+- **`paginate_pages` and `paginate_cursor`** (no consumer): `paginate_offset` keeps its
+  signature, and its docstring shows how a page-numbered endpoint maps the offset to its
+  page, `page = first_page + offset // page_size`. sdk-cashctrl, its one consumer, is
+  unaffected.
+- **26 names leave the export lists** (ADR-0023, decision 5: an `__init__.py` exports
+  only what consumers import), each still importable from its own module, where core
+  itself imports it from: `CacheBackend`, `EnvKeyAuth`, `QuotaSnapshot` and `load_csv`
+  from `xippios.core`; those three and `WIRE_HEADERS`, `Params`, `TokenBucket`,
+  `send_with_retries` and `strip_wire_headers` from `xippios.core.client`; `LIVE_ENV`,
+  `PLACEHOLDER_KEY`, `FixtureRequest`, `live_enabled`, `mount_fixture`, `replay`,
+  `write_fixture`, `scrub_headers`, `scrub_params` and `scrub_url` from
+  `xippios.core.testing`; `is_write_server`, `quiet_request_logging` and
+  `register_tasks` from `xippios.core.mcp`; `PROBLEM_MEDIA_TYPE`, `STATUS_BY_ERROR`,
+  `install_error_handlers` and `problem_response` from `xippios.core.http`. With the
+  six deleted names above, the five lists go from 113 entries (98 names) to 81 (69
+  names). No source imports a removed name from a package.
+
 ### Changed
 
+- **`ResultCap` is defined in `xippios.core.models` and exported from `xippios.core`**
+  (queue row 30 a, found by sdk-usda-psd; the per-tool cap of ADR-0016): a source's
+  `tasks.py` declares its `MCP_CAPS` without the `mcp` extra and without the
+  `ImportError` guard around the import. `xippios.core.mcp` keeps re-exporting it, and
+  `cap_result` stays there.
+- **`.claude/settings.json`** (queue row 31 b, found by sdk-template, which copies the
+  file verbatim): `gh pr merge --auto` is allowed and `gh pr merge` is no longer denied,
+  as in the workspace root's settings. A deny shadows every allow, so the session's one
+  merge action, enabling auto-merge (ADR-0018, amendment (e)), was refused here.
 - `gates.yml` calls the gates repository under its new name `xippios/sdk-gates` (renamed
   from `.github` on 2026-10-27).
+
+### Added
+
+- **`BODY_LIMIT`, `error_from_response` and `parse_retry_after` exported from
+  `xippios.core`** (ADR-0023, decision 5: a name keeps or gains its export when a
+  consumer imports it): sdk-cashctrl imports the first two from `xippios.core.errors`,
+  and sdk-usda-psd, then sdk-usda-esr and sdk-usda-gats, the third. The module path
+  keeps working.
+
+### Documentation
+
+- **ADR-0002, amendment 2026-10-27**: `pydantic-settings` and `xippios.core.config` are
+  gone, keys are read by the `EnvKeyAuth` helpers, and the sync facade is
+  `xippios.core.sync`.
+- **ADR-0015, amended 2026-10-27**: the sync `Client`, `UseClientDefault` and `derive` leave
+  decisions 2 and 4 and the consequences; `QuotaSnapshot` is importable from
+  `xippios.core.client.quota`. **ADR-0004** and **ADR-0009** get a line each for the
+  deleted `config` module and `resolve_api_key`.
+- **Conventions 1.16**: §7 reads the environment through the `EnvKeyAuth` helpers.
+
+### Hand-apply for sources
+
+What a source's adoption of 0.3.0 changes because of the removals and moves above; no
+source imports a deleted name, so nothing else breaks.
+
+- `src/xippios/usda/nass/tasks.py`, `src/xippios/usda/psd/tasks.py`,
+  `src/xippios/usda/esr/tasks.py`, `src/xippios/usda/gats/tasks.py` — the
+  `ImportError`-guarded `from xippios.core.mcp import ResultCap` → an unguarded
+  `from xippios.core import ResultCap`, and the comment that names the `mcp` extra goes
+  — `ResultCap` lives in `xippios.core.models` (queue row 30 a).
+- `src/xippios/cashctrl/_client.py`, `src/xippios/cashctrl/api/_form.py`,
+  `tests/test_errors.py` (sdk-cashctrl: `BODY_LIMIT`, `error_from_response`);
+  `src/xippios/usda/psd/_client.py`, `src/xippios/usda/esr/_client.py`,
+  `src/xippios/usda/gats/_client.py` (`parse_retry_after`) — `from xippios.core.errors
+  import ...` may become `from xippios.core import ...` — the names are exported now; the
+  module path keeps working.
 
 ## [0.2.1] - 2026-10-27
 

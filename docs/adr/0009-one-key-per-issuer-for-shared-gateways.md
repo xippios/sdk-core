@@ -64,3 +64,7 @@ never see it. Its start time is derived from the slug and folded onto 01:00 to 0
 so the sources that read one key (`usda-psd`, `usda-esr` and `usda-gats` on
 `DATA_GOV_API_KEY`) start at different times and do not draw on the shared hourly quota
 together.
+
+Amended by ADR-0002's amendment of 2026-10-27 (core 0.3.0): `resolve_api_key` is no
+longer public; core reads whatever variable a source names through the `EnvKeyAuth`
+helpers alone.

@@ -43,3 +43,9 @@ and the standalone `fastmcp` package.
 - `py.typed` ships in the package; without it `mypy --strict` fails in every
   consumer.
 - The layout block in `CLAUDE.md` was updated; conventions.md did not change.
+
+Amended by ADR-0002's amendment of 2026-10-27 (core 0.3.0): the `config` module is
+deleted, so it leaves the modules and the middle layer named above; the sync facade is
+`xippios.core.sync` alone, the sync `Client` deleted. `ResultCap` is defined in `models`,
+at the bottom, so `xippios.core` exports it without the `mcp` extra, and
+`xippios.core.mcp` re-exports it.

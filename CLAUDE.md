@@ -36,12 +36,11 @@ src/xippios/core/
   _version.py        __version__ from distribution metadata
   _loop.py           one background event loop; sync() derives sync functions from async
   errors.py          error taxonomy, response/exception classifiers
-  models.py          UpstreamModel, ResultMeta, Result[T], parse()
-  config.py          SourceSettings base, resolve_api_key()
-  pagination.py      offset / page-number / cursor iterators, collect()
+  models.py          UpstreamModel, ResultMeta, Result[T], ResultCap, parse()
+  pagination.py      paginate_offset (page numbers map onto offsets), collect()
   reference.py       loader for packaged reference data (CSV, JSON); StrEnum/IntEnum renderers
   tenants.py         Tenants (tenants declared in the environment, one client each), list_task
-  client/            httpx client: config, retry, ratelimit, cache, quota, auth (env-key helpers), _core, Client
+  client/            httpx client: config, retry, ratelimit, cache, quota, auth (env-key helpers), _core
   mcp/               MCP server helpers: server, results (caps), errors (to text), cli   [extra: mcp]
   http/              FastAPI helpers: router (from tasks), problems (RFC 9457)          [extra: http]
   testing/           pytest plugin (live gate, offline guarantees, anyio_backend), fixtures, record, replay, scrub,
@@ -66,7 +65,7 @@ Rules of the tree (ADR-0004):
 
 - A concern is a subpackage when it has an optional dependency or more than one
   internal module; otherwise it is a single module. Do not add empty directories.
-- Imports point downward only: `errors` and `models` at the bottom; `config`, `client`,
+- Imports point downward only: `errors` and `models` at the bottom; `client`,
   `pagination`, `reference`, `tenants` above; `mcp`, `http`, `testing` on top. Nothing
   below an adapter imports an adapter.
 - The MCP adapter targets the official `mcp` SDK 2.x (`mcp.server.mcpserver.MCPServer`).
@@ -75,7 +74,10 @@ Rules of the tree (ADR-0004):
   request URL at `INFO`; URLs can carry a key or a tenant host (ADR-0005). `build_server`
   and `main` therefore call `quiet_request_logging()`. Keep both calls; the tests in
   `tests/mcp/` guard them, and the testing plugin restores the logger levels per test.
-- The public surface is `__init__.py` and nothing else. `xippios.core.mcp`,
+- The public surface is the `__all__` of the five `__init__.py` files and nothing else:
+  each exports what consumers import (ADR-0023, decision 5), and
+  `tests/test_public_surface.py` pins all five. A helper core calls itself stays
+  importable from its own module, outside the surface. `xippios.core.mcp`,
   `xippios.core.http` and `xippios.core.testing` are imported explicitly by their users.
 
 ## Commands

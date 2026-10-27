@@ -8,16 +8,15 @@ It gives a source package the things that should be identical across the family:
 
 - **HTTP client** on `httpx` with retries, a per-source rate limiter, an optional
   response cache (off by default; the in-memory one is bounded by TTL and size),
-  explicit timeouts and one `User-Agent`. Async at the core, a sync facade on top.
+  explicit timeouts and one `User-Agent`. Async at the core; `sync` derives the sync
+  task functions from the async ones.
   A 429 is retried for every method, a 5xx or a transport failure only for GET, HEAD
   and OPTIONS unless `RetryPolicy.retry_non_idempotent` is set, because upstream makes a
   repeated write safe, or because the source only reads through POST.
-  `ClientConfig.cache_filter` narrows the cache to chosen requests; clients built with
-  the same `limiter` share one pace. A body goes as JSON (`json=`) or form-encoded
-  (`data=`); `AsyncClient.derive` gives a client with another retry policy or other
-  timeouts that shares auth, pace, cache and transport, and never closes the transport.
-  Two hooks, `before_request` and `observe`, see each call and each response;
-  `QuotaPolicy` uses them to wait out or refuse a request into a spent quota.
+  `ClientConfig.cache_filter` narrows the cache to chosen requests. A body goes as JSON
+  (`json=`) or form-encoded (`data=`). Two hooks, `before_request` and `observe`, see
+  each call and each response; `QuotaPolicy` uses them to wait out or refuse a request
+  into a spent quota.
   `auth=None` sends one call without the client's key.
 - **Auth helpers** that read the key from the environment on the first request:
   query parameter, header, bearer token or basic auth. A source's documented error
@@ -242,8 +241,9 @@ on the first request, so a declared tenant without one fails then, with `ConfigE
 
 ## Reference data and generated enums
 
-A source ships its code lists under `reference/` and reads them with `load_csv`,
-`load_json` or `load_table`. Its refresh script generates `enums.py` from them with
+A source ships its code lists under `reference/` and reads them with `load_json` or
+`load_table` (`load_csv`, which `load_table` calls for a CSV file, stays in
+`xippios.core.reference`). Its refresh script generates `enums.py` from them with
 `xippios.core.reference`, and the module is committed as rendered:
 
 ```python
@@ -323,7 +323,8 @@ task function's name, with the rows and bytes the source judges it needs:
 `build_server(..., caps={"list_commodities": ResultCap(max_rows=500,
 max_bytes=100_000)})`; every other tool keeps 200 rows or 64 KB. The note says "narrow
 the query to see the rest" and promises no filter; a tool with filters names them in
-its cap, `ResultCap(note="filter by year to see the rest")`.
+its cap, `ResultCap(note="filter by year to see the rest")`. `ResultCap` comes from
+`xippios.core`, so the `MCP_CAPS` in a source's `tasks.py` need no `mcp` extra.
 A write server (`build_server(..., read_only=False)`) refuses, with `ValueError`, a task
 that does not take `confirm: bool = False`, and `--http` serves it on a loopback
 `--host` only (`127.0.0.1`, `localhost`, `::1`): it carries no authentication.
@@ -457,8 +458,9 @@ xippios_placeholder_key_envs = ["EXAMPLE_API_KEY"]
   whose clock steps back.
 - `record(client, "/v1/series", fixture_path(...), params=...)` records a live response
   with credentials scrubbed. Never hand-write a fixture. `json=` or `data=` (a form) send
-  a body, recorded with its content type; `retry=` and `timeouts=` override the
-  client's for the recording.
+  a body, recorded with its content type. The recording goes through the client as it
+  is configured; one that must not retry a 5xx goes through a client whose config says
+  `RetryPolicy(max_attempts=1)`.
 
 `mcp_call(server, "example_get_series", {...})` calls a tool through an in-process MCP
 client, so the server's middleware, a tenant lock included, runs as for a real client;
@@ -506,12 +508,11 @@ changed, breaking changes first.
 
 | Module | What | Status |
 | --- | --- | --- |
-| `xippios.core.client` | httpx client, retries, rate limit, cache, quota policy, request hooks, sync facade | alpha |
+| `xippios.core.client` | httpx client, retries, rate limit, cache, quota policy, request hooks, env-key auth | alpha |
 | `xippios.core.errors` | taxonomy and response classification | alpha |
-| `xippios.core.models` | `UpstreamModel`, `Result`, `ResultMeta`, `parse` | alpha |
-| `xippios.core.config` | `SourceSettings`, `resolve_api_key` | alpha |
+| `xippios.core.models` | `UpstreamModel`, `Result`, `ResultMeta`, `ResultCap`, `parse` | alpha |
 | `xippios.core.reference` | packaged CSV/JSON loaders, generated `StrEnum`/`IntEnum` modules | alpha |
-| `xippios.core.pagination` | offset, page and cursor iterators | alpha |
+| `xippios.core.pagination` | `paginate_offset` (a page-numbered endpoint maps the offset to its page), `collect` | alpha |
 | `xippios.core.tenants` | `Tenants`, `list_task`: tenants from the environment, one client each | alpha |
 | `xippios.core.mcp` | tool registration, result caps, error text, CLI, quiet request log | alpha |
 | `xippios.core.http` | router factory, problem details | alpha |
