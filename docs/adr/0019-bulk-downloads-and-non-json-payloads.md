@@ -119,7 +119,7 @@ recorder option and of decision 6, and, at gate 5 of the same day, the JSON-obje
   (also `apikey`, `api-key`), `token`, `secret`, `password`, `passwd`, `pwd`, `auth`,
   `authorization`, `sig`, `signature`, `credential` or `credentials`; a bare `key` is
   not. `sig` and `pwd` are on the list because catalog file links can arrive as
-  pre-signed URLs (an Azure SAS carries `sig=`; queue row 83). A
+  pre-signed URLs (an Azure SAS carries `sig=`; queue row 84). A
   `QueryKeyAuth(param, ...)` registers `param` when it is built, and the name is a
   credential from then on in the whole process, matched exactly in any letter case: USDA
   NASS's `QueryKeyAuth("key", ...)` makes `key` one, and Eurostat, keyless, keeps its
