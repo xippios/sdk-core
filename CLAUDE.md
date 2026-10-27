@@ -54,7 +54,7 @@ docs/
                      called by publish.yml; no push trigger of its own
   publish.yml        every push to main: tags vX.Y.Z from pyproject.toml when a release PR merged,
                      builds, waits in environment `pypi` for Johannes's approval (the release train)
-  gates.yml          calls the merge-class and family-review workflows of xippios/.github; runs only
+  gates.yml          calls the merge-class and family-review workflows of xippios/sdk-gates; runs only
                      when the repository variable GATES_CALLER is "1"
 ```
 

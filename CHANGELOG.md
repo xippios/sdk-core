@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- `gates.yml` calls the gates repository under its new name `xippios/sdk-gates` (renamed
+  from `.github` on 2026-10-27).
+
 ## [0.2.1] - 2026-10-27
 
 This patch release carries the release train, the family conformance check every source
