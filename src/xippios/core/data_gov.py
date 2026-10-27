@@ -155,10 +155,14 @@ class Gateway:
           answer before ``classify`` runs (ADR-0015, decision 1), so the wait counts to
           the snapshot's ``resumes_at``, from ``Retry-After`` or one ``WINDOW``. The
           message names the gateway's allowance, that every package using the key
-          shares it, the quota as the snapshot reports it and the wait. Whether the
-          client retries is the retry loop's: a wait beyond its ``backoff_max`` ends
-          the retries after one request. Called on its own, on an answer no client
-          observed, the wait is the one the policy would set from it.
+          shares it, and the quota as the snapshot reports it. Whether the client
+          retries is the retry loop's: a wait beyond its ``backoff_max`` ends the
+          retries after one request. When the shared snapshot shows no spent quota
+          still ahead, because no client observed this answer, another answer has
+          replaced the snapshot since, or the quota is back already, the wait is the
+          one the policy would set from this answer, and the message says it in
+          seconds. Called on its own while the shared quota is spent, it reads the
+          snapshot like any other call.
         - 404 with ``error.code`` ``NOT_FOUND`` is a ``NotFoundError`` naming the path.
 
         Everything else is ``None``: the source's own ``classify`` goes on with its
@@ -199,19 +203,22 @@ class Gateway:
         policy = self.policy
         snapshot = policy.snapshot()
         wait = policy._wait_left(snapshot)
-        if wait is None:  # no client observed this answer: classify called on its own
+        if wait is None:  # the snapshot shows no spent quota still ahead: read this answer
             snapshot, wait = None, policy._wait(response, policy._clock())
         allowance = (
             f"{snapshot.limit} requests per rolling hour per key"
             if snapshot is not None and snapshot.limit is not None
             else "an hourly quota per key"
         )
-        quota = f" Quota: {snapshot.describe()}." if snapshot is not None else ""
+        state = (
+            f"Quota: {snapshot.describe()}."
+            if snapshot is not None
+            else f"The quota is expected back in {wait:.0f} s."
+        )
         return RateLimitError(
             f"api.data.gov rate limit reached for the key in {API_KEY_ENV} "
             f"(HTTP 429{' ' + upstream if upstream else ''}). The gateway allows {allowance}, "
-            f"shared by every package using that key.{quota} The quota is expected back in "
-            f"{wait:.0f} s.",
+            f"shared by every package using that key. {state}",
             retry_after=wait,
             source=self.source,
         )

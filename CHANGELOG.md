@@ -77,9 +77,9 @@ All notable changes to this project are documented here. The format follows
   `resumes_at` on the policy's clock, since `observe` ran before it, instead of
   restating "`Retry-After`, else the window" as the three copies did; no
   `QuotaPolicy.wait_for` is added. Its message names the gateway's allowance, that every
-  package using the key shares it, the quota and the wait, and no longer says what was
-  retried: the retry loop's bound decides that.
-
+  package using the key shares it, and the quota as the snapshot reports it, or the wait
+  in seconds where no snapshot shows it spent, and no longer says what was retried: the
+  retry loop's bound decides that.
 - **`ResultCap` is defined in `xippios.core.models` and exported from `xippios.core`**
   (queue row 30 a, found by sdk-usda-psd; the per-tool cap of ADR-0016): a source's
   `tasks.py` declares its `MCP_CAPS` without the `mcp` extra and without the
@@ -162,7 +162,9 @@ and texts that change, listed here.
   `client = AsyncClient(config, auth=gateway.auth)`; where the package keeps the names
   `API_KEY_ENV`, `policy` and `auth`, they become `xippios.core.data_gov.API_KEY_ENV`,
   `Gateway.policy` and `gateway.auth`; the `parse_retry_after` import goes when nothing
-  else uses it — the gateway module replaces the three copies (C14, ADR-0023).
+  else uses it; the module docstring's "waiting within `RetryPolicy.backoff_max`" reads
+  "waiting within the policy's `pause_cap`" — the gateway module replaces the three
+  copies (C14, ADR-0023), and the pause has one cap (C6).
 - `tests/test_client.py` (psd, esr, gats) — the wiring test drops
   `policy.reset_header`, which is gone, and may assert
   `config.before_request == Gateway.policy.before_request` next to
@@ -172,6 +174,9 @@ and texts that change, listed here.
   with `CLOCK_SLACK`, while `classify` called on its own still gives the exact wait; the
   policy's refusal before sending carries `source == "api.data.gov"`, not the slug, and
   starts "api.data.gov quota of the key in DATA_GOV_API_KEY spent" — C6, C14.
+- `tests/test_tasks.py` (sdk-usda-gats), the 429 test of `get_census_export_series` —
+  `info.value.retry_after == 3151.0` is read through the client, so it becomes the
+  snapshot's wait, a fraction under 3151: bracket it with `CLOCK_SLACK` — C14.
 - `CLAUDE.md` (psd, esr, gats), the rate-limit row — "within `RetryPolicy.backoff_max`
   (30 s by default)" → "within the policy's `pause_cap` (30 s by default)", and the
   gateway's key, answers and quota named as `xippios.core.data_gov`'s — ADR-0010,

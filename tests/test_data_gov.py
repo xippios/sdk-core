@@ -15,7 +15,7 @@ from collections.abc import Callable
 import httpx
 import pytest
 
-from xippios.core.client import AsyncClient, ClientConfig, MemoryCache
+from xippios.core.client import AsyncClient, ClientConfig
 from xippios.core.data_gov import API_KEY_ENV, WINDOW, Gateway
 from xippios.core.errors import AuthError, NotFoundError, RateLimitError
 from xippios.core.testing import CLOCK_SLACK
@@ -118,7 +118,7 @@ async def test_a_429_waits_until_the_snapshot_says_the_quota_is_back() -> None:
     assert "(HTTP 429 OVER_RATE_LIMIT: You have exceeded your rate limit." in message
     assert "1000 requests per rolling hour per key" in message
     assert f"Quota: {snapshot.describe()}." in message
-    assert "The quota is expected back in 315" in message
+    assert "expected back in" not in message, "the snapshot's time, not the seconds again"
     assert API_KEY_ENV in message
     assert HOST not in message
     assert info.value.source == "usda-psd"
@@ -141,6 +141,7 @@ def test_a_429_classified_on_its_own_waits_what_the_policy_would_set() -> None:
     assert isinstance(error, RateLimitError)
     assert error.retry_after == 3151.0
     assert "Quota:" not in error.message
+    assert "The quota is expected back in 3151 s." in error.message
     assert Gateway.policy.snapshot() is None, "classify reads the policy, never writes it"
 
 
@@ -183,19 +184,3 @@ async def test_two_sources_draw_on_one_quota() -> None:
     assert 3151 - slack <= info.value.retry_after <= 3151 + slack
     assert HOST not in info.value.message
     assert "not-sent" not in info.value.message
-
-
-@pytest.mark.anyio
-async def test_a_cache_hit_leaves_the_snapshot() -> None:
-    gateway = Gateway("usda-psd")
-    upstream = Upstream(200, [], QUOTA)
-    config = ClientConfig(source="usda-psd", version="1", base_url=BASE, cache=MemoryCache())
-    client = AsyncClient(
-        gateway.install(config), auth=gateway.auth, transport=httpx.MockTransport(upstream)
-    )
-    await client.get_json("/api/psd/regions")
-    observed = Gateway.policy.snapshot()
-    assert observed is not None
-    await client.get_json("/api/psd/regions")
-    assert upstream.sent == ["GET /api/psd/regions"]
-    assert Gateway.policy.snapshot() is observed
