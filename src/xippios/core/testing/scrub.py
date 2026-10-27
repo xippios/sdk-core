@@ -113,6 +113,7 @@ class _Scrubber:
     def __init__(self, scrub: Scrub, url: httpx.URL) -> None:
         self._scrub = scrub
         self._host: re.Pattern[str] | None = None
+        forms: set[str] = set()
         if scrub.host is not None:
             forms = {form for form in (url.host, url.raw_host.decode("ascii")) if form}
             if scrub.host.lower() in {form.lower() for form in forms}:
@@ -129,6 +130,32 @@ class _Scrubber:
             re.compile(_plain_or_encoded(value))
             for value in sorted(scrub.secrets, key=len, reverse=True)
         ]
+        # The longest text one of the patterns can match: each character percent-encoded
+        # as up to four bytes, %XX each.
+        values = [*scrub.secrets, *(forms if self._host is not None else ())]
+        self._reach = 12 * max((len(value) for value in values), default=0)
+
+    def spared_end(self, text: str, end: int) -> int:
+        """``end`` moved back to the start of a host or secret occurrence it would split.
+
+        A cut keeping ``text[:end]`` would otherwise keep the first part of one, which
+        neither the scrub nor the verify recognises (``max_bytes=``). Occurrences are
+        those the scrub replaces: the original host, in any letter case, and each secret
+        value, plain or percent-encoded.
+        """
+        patterns = [pattern for pattern in (self._host, *self._secrets) if pattern is not None]
+        split = True
+        while split and end > 0:
+            split = False
+            window = max(0, end - self._reach), end + self._reach
+            for pattern in patterns:
+                for match in pattern.finditer(text, *window):
+                    if match.start() < end < match.end():
+                        end, split = match.start(), True
+                        break
+                if split:
+                    break
+        return end
 
     def text(self, text: str) -> str:
         """``text`` with the original host made the placeholder, then secrets redacted."""

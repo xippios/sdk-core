@@ -34,8 +34,8 @@ src/xippios/core/
   __init__.py        public surface, re-exports only; adapters are NOT re-exported
   py.typed           PEP 561 marker; without it mypy --strict fails in every source repo
   _version.py        __version__ from distribution metadata
-  _loop.py           one background event loop; sync() derives sync functions from async;
-                     as_async and is_bulk_task (BULK_TASKS) for the adapters
+  _loop.py           one background event loop; sync() derives sync functions from async
+  _tasks.py          is_bulk_task: what the adapters read from a source's tasks.py (BULK_TASKS)
   errors.py          error taxonomy (UnknownCode: a code a packaged list lacks), response/exception
                      classifiers
   redaction.py       the one credential rule (REDACTED, the names QueryKeyAuth registers),
@@ -76,9 +76,9 @@ Rules of the tree (ADR-0004):
 
 - A concern is a subpackage when it has an optional dependency or more than one
   internal module; otherwise it is a single module. Do not add empty directories.
-- Imports point downward only: `errors`, `redaction` and `models` at the bottom; `client`,
-  `pagination`, `reference`, `tenants`, `data_gov` above; `mcp`, `http`, `testing` on
-  top. Nothing below an adapter imports an adapter.
+- Imports point downward only: `errors`, `redaction`, `_tasks` and `models` at the bottom;
+  `client`, `pagination`, `reference`, `tenants`, `data_gov` above; `mcp`, `http`,
+  `testing` on top. Nothing below an adapter imports an adapter.
 - The MCP adapter targets the official `mcp` SDK 2.x (`mcp.server.mcpserver.MCPServer`).
   `FastMCP` no longer exists there; the standalone `fastmcp` package is not used.
 - Constructing an `MCPServer` configures root logging at `INFO`, and httpx logs every

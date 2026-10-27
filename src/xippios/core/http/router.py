@@ -21,7 +21,8 @@ from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel, create_model
 
-from xippios.core._loop import as_async, is_bulk_task
+from xippios.core._loop import as_async
+from xippios.core._tasks import is_bulk_task
 from xippios.core.errors import XippiosError
 from xippios.core.http.problems import problem_response
 

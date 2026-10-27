@@ -63,8 +63,8 @@ Johannes decided five points of the code on 2026-10-27, in the interview before 
    `PackagedList.load(package, name)` on `load_json`, `.meta(source, *, request, vintage,
    published_at, published_at_naive)` building rule 1's meta, `.parse(model, *,
    source)` validating the records, and `.write(path)` writing the file
-   (`{"param", "endpoint", "fetched", "records"}`, indented, non-ASCII text kept) for the
-   refresh scripts. A list of values is records of one field named by the upstream
+   (`{"param", "endpoint", "fetched", "records"}`, indented, non-ASCII text kept,
+   `fetched` to the second) for the refresh scripts. A list of values is records of one field named by the upstream
    parameter, and a table records of its columns: usda-nass's value files and
    sdk-comtrade's value files and CSV tables become such files in their adoptions,
    without network, their list tasks still returning strings. `endpoint` names the
@@ -90,10 +90,28 @@ With them, three rules of the code. Rule 2: the flag with an aware `published_at
 with none, is refused, since the flag says upstream printed a time without a zone. Rule
 3: `ResultMeta` drops a top-level `None` from `request` at construction, before the
 credential rule, so a credential left `None` is not recorded as sent; a `None` inside a
-nested mapping is kept as given. And conventions §4 gains the period series of queue row
-39 i: a task that assembles a series from one call per period states its ceiling, the
-newest period upstream has released; `vintage` is the newest release among the periods;
-a period beyond the ceiling is refused naming the ceiling; what a period inside the range
-that upstream has not released answers is stated in the task's docstring, never an empty
-page passed off as no data. Conventions 1.19 states the five points and the period
-series in §3 to §6.
+nested mapping is kept as given.
+
+In the review of that PR, on 2026-10-27, Johannes decided three more points:
+
+6. **Period series** (queue row 39 i). A task that assembles a series from one upstream
+   call per period states its ceiling, the most periods one call fetches (the MCP
+   tool's, where it is smaller), and sets `vintage` to the newest release among the
+   periods. Its docstring says what an unreleased period inside the range answers: the
+   period is skipped where upstream's empty answer can be told from data (sdk-usda-psd's
+   empty 404), and the whole range is refused, naming the latest released period, where
+   it cannot (sdk-usda-gats's `[]` for an unreleased month looks like a month without
+   trade). An empty answer that cannot be told from no data is never passed off as data.
+7. **The refusal is `NotFoundError`**, naming the latest released period, as
+   sdk-usda-gats refuses today; `InvalidRequestError` stays for a malformed request
+   (ADR-0007).
+8. **A packaged file holds the four keys and an optional `note`, nothing else.**
+   `PackagedList` refuses any other key and gains `note: str | None = None`, free-text
+   provenance that `.write` writes when it is set and core reads nothing from.
+   sdk-usda-nass writes its `derived_from` into `note`, and its two lists derived from
+   `unit_desc` keep `param: "unit_desc"` in files of their own names, which
+   `load(package, name)` takes; sdk-comtrade writes its `note` and its `exceptions` into
+   `note` as text, and its `origin` becomes `endpoint`.
+
+Conventions 1.19 states the eight points in §3 to §6, and its preamble lists them among
+the rules that bind a source from its 0.3.0 adoption.

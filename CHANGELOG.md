@@ -103,6 +103,26 @@ All notable changes to this project are documented here. The format follows
   package using the key shares it, and the quota as the snapshot reports it, or the wait
   in seconds where no snapshot shows it spent, and no longer says what was retried: the
   retry loop's bound decides that.
+- **`key` is a credential only where a `QueryKeyAuth` sends it** (the family review's
+  C10; ADR-0019, decision 6, amended 2026-10-27; found in the Eurostat design round,
+  ADR-0019's context). The one rule of `xippios.core.redaction` names credentials by
+  whole words between `_`, `-` or the ends: `api_key` (`apikey`, `api-key`), `token`,
+  `secret`, `password`, `passwd`, `pwd`, `auth`, `authorization`, `sig`, `signature`,
+  `credential`, `credentials`, and no bare `key`; `sig` and `pwd` are new, for
+  pre-signed file links (an Azure SAS carries `sig=`). `QueryKeyAuth(param, ...)`
+  registers `param` when it is built, a credential from then on in the whole process, in
+  any letter case. USDA NASS's `QueryKeyAuth("key", ...)` keeps its `key` redacted;
+  Eurostat, keyless, keeps its SDMX `key` as data; a `sort_key` is data everywhere. A
+  process that imports both redacts `key` for both.
+- **One rule for the envelope, the recorder and replay** (C10, ADR-0005, amended
+  2026-10-27): `ResultMeta.request`, the recorder's scrub, `sent_urls`, `sent_query`,
+  `recorded_query` and `mount_fixture` read `xippios.core.redaction`; `scrub_params`,
+  `scrub_url` and `scrub_headers` move there (the header list unchanged) and stay
+  importable from `xippios.core.testing.scrub`; `models.REDACTED`,
+  `testing.REDACTED` and `redaction.REDACTED` are one object. `recorded_query` reads the
+  recorded URL through `scrub_url` again, and `match_params` naming a credential is
+  refused by name ("names a credential, which a fixture holds as REDACTED") before its
+  value is looked at.
 - **`ResultCap` is defined in `xippios.core.models` and exported from `xippios.core`**
   (queue row 30 a, found by sdk-usda-psd; the per-tool cap of ADR-0016): a source's
   `tasks.py` declares its `MCP_CAPS` without the `mcp` extra and without the
@@ -114,25 +134,6 @@ All notable changes to this project are documented here. The format follows
   merge action, enabling auto-merge (ADR-0018, amendment (e)), was refused here.
 - `gates.yml` calls the gates repository under its new name `xippios/sdk-gates` (renamed
   from `.github` on 2026-10-27).
-
-- **`key` is a credential only where a `QueryKeyAuth` sends it** (the family review's
-  C10; ADR-0019, decision 6, amended 2026-10-27; found in the Eurostat design round,
-  ADR-0019's context). The one rule of `xippios.core.redaction` names credentials by
-  whole words between `_`, `-` or the ends: `api_key` (`apikey`, `api-key`), `token`,
-  `secret`, `password`, `passwd`, `auth`, `authorization`, `signature`, `credential`,
-  `credentials`, and no bare `key`; `QueryKeyAuth(param, ...)` registers `param` when it
-  is built, a credential from then on in the whole process, in any letter case. USDA
-  NASS's `QueryKeyAuth("key", ...)` keeps its `key` redacted; Eurostat, keyless, keeps
-  its SDMX `key` as data; a `sort_key` is data everywhere. A process that imports both
-  redacts `key` for both.
-- **One rule for the envelope, the recorder and replay** (C10, ADR-0005, amended
-  2026-10-27): `ResultMeta.request`, the recorder's scrub, `sent_urls`, `sent_query`,
-  `recorded_query` and `mount_fixture` read `xippios.core.redaction`; `scrub_params`,
-  `scrub_url` and `scrub_headers` move there (the header list unchanged) and stay
-  importable from `xippios.core.testing.scrub`; `models.REDACTED`,
-  `testing.REDACTED` and `redaction.REDACTED` are one object. `recorded_query` reads the
-  recorded URL through `scrub_url` again, and `match_params` naming a credential is
-  refused by name ("names a credential") before its value is looked at.
 
 - **`ResultMeta` refuses a field it does not define** (queue row 21 a, found by
   sdk-cashctrl; ADR-0012, amendment 2026-10-27): `extra="forbid"`, so a misspelt
@@ -199,20 +200,23 @@ All notable changes to this project are documented here. The format follows
   C15; ADR-0019, decision 1; queue row 46, found by sdk-usda-nass): a GET through the
   client's pool, streamed to a temporary file beside `dest` and renamed when complete,
   removed on any failure, never cached and never held in memory. `before_request`, the
-  limiter, `observe`, `classify` (a success's status and headers; its body goes to the
-  file unread) and the retry rule of ADR-0011 apply as for `get()`, a retry restarting
-  the file; an error answer is read up to `BODY_LIMIT` bytes and raised through the
-  taxonomy; a 1xx or 3xx raises `UpstreamError`, since redirects are not followed.
+  limiter, `observe` and `classify` (both see a success's status and headers only; its
+  body goes to the file unread) and the retry rule of ADR-0011 apply as for `get()`, a
+  retry restarting the file; an error answer is read up to `BODY_LIMIT` bytes and raised
+  through the taxonomy; a 1xx or 3xx raises `UpstreamError`, since redirects are not
+  followed; a `dest` that is a directory, or whose directory does not exist, is refused
+  with `ValueError` before anything is sent.
   `Downloaded` carries `path`, `bytes`, `content_type`, `filename` (from
   `Content-Disposition`), `etag`, `last_modified` (the header's text) and `retrieved_at`;
   exported from `xippios.core` and `xippios.core.client`. Consumers, named by ADR-0019:
   sdk-usda-esmis, sdk-usda-wasde, sdk-usda-nass's bulk datasets, sdk-eurostat and
   sdk-faostat.
-- **`decode_text` and `decode_csv`** (C15; ADR-0019, decision 2; row 46), exported from
-  `xippios.core.client` beside `decode_json`: the text in the `Content-Type` charset,
-  UTF-8 by default, a byte order mark stripped; and `csv.DictReader` rows from a
-  downloaded file or a response, headers as upstream prints them, a generator that reads
-  a file row by row and closes it when it ends.
+- **`decode_text` and `decode_csv`** (C15; ADR-0019, decision 2, amended 2026-10-27;
+  row 46), exported from `xippios.core.client` beside `decode_json`: the text in the
+  `Content-Type` charset, UTF-8 by default, a byte order mark stripped; and
+  `decode_csv(data, *, delimiter=",", source=None)`, `csv.DictReader` rows from a
+  downloaded file (a `Path` or `str`) or a response, headers as upstream prints them, a
+  generator that reads a file row by row and closes it when it ends.
 - **`ClientConfig.cache_max_bytes`** (C15; ADR-0019, decision 3; row 46): 8 MiB by
   default; a larger body is returned and not stored; a value below 1 is refused.
 - **`BULK_TASKS`** (C15; ADR-0019, decision 4): `register_tasks` and `router_from_tasks`
@@ -222,13 +226,18 @@ All notable changes to this project are documented here. The format follows
   task, and the refusal now says that a task in `BULK_TASKS` is no tool.
 - **The recorder's `max_bytes=`** on `record`, `record_sync` and `fixture_from_response`
   (C15; ADR-0019, decision 5, amended 2026-10-27; queue row 43, found by sdk-usda-gats,
-  and row 48, the family's): a JSON array keeps its first whole elements whose compact
-  JSON text fits, a text is cut at a UTF-8 character boundary; a JSON object, XML, ZIP,
-  XLSX, gzip, XLS and a body that is not UTF-8 text are refused with the reason. A cut
-  response is marked `truncated` with `original_bytes`, `sha256` (of the whole body,
-  before the scrub) and, for an array, `original_count`, new optional fields of
-  `FixtureResponse`; a fixture without a cut is written without them, so every existing
-  fixture loads and re-records unchanged. Replay serves the body as recorded.
+  and the family's finding that a cut-off JSON object, a JSON-stat cube, does not decode
+  on replay): a JSON array is cut at an element boundary of its original text, its
+  numbers and spacing as upstream wrote them; a text is cut at a UTF-8 character
+  boundary, never inside a secret value or the request host; a JSON object, a body
+  declared JSON that does not parse, an array whose first element alone does not fit, a
+  cut that keeps nothing, XML, ZIP, XLSX, gzip, XLS and a body that is not UTF-8 text
+  are refused with the reason. `max_bytes` bounds the body, not the fixture file, which
+  escapes the body as a JSON string. A cut response is marked `truncated` with
+  `original_bytes`, `sha256` (of the whole body, before the scrub) and, for an array,
+  `original_count`, new optional fields of `FixtureResponse`; a fixture without a cut is
+  written without them, so every existing fixture loads and re-records unchanged. Replay
+  serves the body as recorded.
 - **`xippios.core.redaction`** (C10; ADR-0019, decision 6; ADR-0023, decision 3 (b),
   credential redaction): the one `REDACTED`, `is_credential_name`,
   `register_credential_name`, `redact_credentials` and the three `scrub_*` functions, at
@@ -244,17 +253,18 @@ All notable changes to this project are documented here. The format follows
   2026-10-27; queue rows 28 a and d and 34 a, found by sdk-usda-psd, 38 b, the template's
   scaffold, found by sdk-usda-esr, and 39 g, found by sdk-usda-gats), in
   `xippios.core.reference` and exported from `xippios.core`: one frozen model,
-  `PackagedList(param, endpoint, fetched, records)`, for a list fetched from one
-  upstream operation, upstream's records under upstream's field names, a list of values
-  being records of one field named by the upstream parameter. `PackagedList.load(package,
+  `PackagedList(param, endpoint, fetched, records)` with an optional free-text `note`,
+  for a list fetched from one upstream operation, upstream's records under upstream's
+  field names, a list of values being records of one field named by the upstream
+  parameter; any other key of a file is refused. `PackagedList.load(package,
   name)` reads `reference/<name>.json` through `load_json` (`name` with or without
   `.json`); `.meta(source, *, request, vintage, published_at, published_at_naive)` builds
   rule 1's `ResultMeta` (`endpoint` the list's operation, `retrieved_at` its `fetched`,
   `vintage` only what the caller passes, `total` `None`); `.parse(model, *, source)`
   validates the records through `parse`; `.write(path)` writes the file
-  (`{"param", "endpoint", "fetched", "records"}`, indented, non-ASCII text kept,
-  `fetched` as `...Z`) for the refresh scripts. Keys of a file beyond the four are
-  ignored. Consumers: sdk-usda-psd, sdk-usda-esr and sdk-usda-gats, which carry copies,
+  (`{"param", "endpoint", "fetched", "records"}` and `note` when it is set, indented,
+  non-ASCII text kept, `fetched` to the second as `...Z`) for the refresh scripts.
+  Consumers: sdk-usda-psd, sdk-usda-esr and sdk-usda-gats, which carry copies,
   sdk-usda-nass and sdk-comtrade, whose value files and tables it reads after their
   adoption, and the template's refresh script.
 - **`matches` and `closest`** (C13; rows 28 d, 39 g and 39 j), in
@@ -263,8 +273,9 @@ All notable changes to this project are documented here. The format follows
   case-folded substring test of each field that is not `None`, as text, never joined),
   and `closest(value, codes, *, n=3)`, sdk-usda-psd's two `difflib` passes, by code and
   then by name, at most `n` `(code, name)` pairs. Consumers: sdk-usda-psd,
-  sdk-usda-gats and sdk-comtrade (`matches`); sdk-usda-psd, sdk-usda-gats and
-  sdk-usda-esr (`closest`, gats and esr behind strategies of their own).
+  sdk-usda-esr, sdk-usda-gats and sdk-comtrade (`matches`); sdk-usda-psd and
+  sdk-usda-gats, the latter behind its three-letter pass (`closest`; sdk-usda-esr's is
+  integer-nearest and stays its own).
 - **`UnknownCode`** (row 39 j, found by sdk-usda-gats; ADR-0022, amendment 2026-10-27),
   an `InvalidRequestError` in `xippios.core.errors`, exported from `xippios.core`:
   `UnknownCode(param, value, *, list_name, fetched, closest=(), hint=None, reason=None,
@@ -346,25 +357,37 @@ All notable changes to this project are documented here. The format follows
   sources behind api.data.gov.
 
 - **ADR-0019, amendment 2026-10-27**: decision 1's `auth=` default is the client's own
-  credentials; decision 5's one `max_bytes=` for texts and arrays, the JSON-object
-  refusal and the XML reason ("a cut-off XML document is not well-formed"); decision 6's
-  mechanism. **ADR-0005** (the list without a bare `key`, no second pattern for
-  fixtures), **ADR-0013** (the guard covers `download`; replay of a cut body) and
-  **ADR-0004** (`redaction` at the bottom, `client/download.py`) get a dated line each.
-- **Conventions 1.18**: §4 states the one rule and when `key` is a credential; §10 the
-  scrub's rule, the JSON-object refusal, the XML reason and `original_count`.
+  credentials, and what differs from `get()` (the hooks see a success's headers only, a
+  1xx or 3xx raises, `dest` refused before sending); decision 2's `decode_csv(data, ...)`;
+  decision 5's one `max_bytes=` for texts and arrays, the cut at element boundaries, the
+  JSON-object refusal and the XML reason ("a cut-off XML document is not well-formed");
+  decision 6's mechanism and the words `sig` and `pwd`. **ADR-0005** (the list without a
+  bare `key`, no second pattern for fixtures), **ADR-0013** (the guard covers
+  `download`; replay of a cut body) and **ADR-0004** (`redaction` and `_tasks` at the
+  bottom, `client/download.py`) get a dated line each.
+- **Conventions 1.18**: §4 states the one rule, every word of it, and when `key` is a
+  credential; §6 that a download's hooks see a success's headers only, that a 1xx or
+  3xx raises, and `decode_csv`'s signature; §10 the scrub's rule, the JSON-object
+  refusal, the XML reason, the cut at element boundaries, `original_count`, and that
+  `max_bytes` bounds the body, not the file.
 
 - **ADR-0022, amendment 2026-10-27**: the five decisions on the code (the `fetched`
   time and its bare-date reading; one `PackagedList` with value lists as one-field
   records and a URL path as `endpoint`; the helpers; `get_answer`; frozen series), the
-  flag's refusals, the order of the `None` rule and the credential rule, and the period
-  series of queue row 39 i. **ADR-0015** (decision 5's `get_answer`), **ADR-0012**
+  flag's refusals, the order of the `None` rule and the credential rule, and three more
+  from the review of the code: the period series of queue row 39 i (the ceiling is the
+  most periods one call fetches; an unreleased period is skipped where upstream's empty
+  answer can be told from data, else the range is refused), its refusal as
+  `NotFoundError` naming the latest released period, and the packaged file's optional
+  `note` with every other key refused. **ADR-0015** (decision 5's `get_answer`), **ADR-0012**
   (`ResultMeta` refuses unknown fields) and **ADR-0004** (`reference` above `models`)
   get a dated line each.
-- **Conventions 1.19**: §3 the packaged-list file; §4 the refusal of unknown fields,
-  `get_answer` for a hit's `retrieved_at`, the flag's refusals, `PackagedList`'s methods
-  and the bare-date reading, `matches`, the frozen series (row 39 h) and the period
-  series (row 39 i); §5 `UnknownCode`; §6 `get_answer`.
+- **Conventions 1.19**: §3 the packaged-list file, `reference/<name>.json` with its
+  optional `note`; §4 the refusal of unknown fields, `get_answer` for a hit's
+  `retrieved_at`, the flag's refusals, `PackagedList`'s methods and the bare-date
+  reading, `matches`, the frozen series (row 39 h) and the period series (row 39 i);
+  §5 `UnknownCode`, in the taxonomy tree under `InvalidRequestError`; §6 `get_answer`.
+  The preamble lists these among the rules that bind a source from its 0.3.0 adoption.
 
 - **ADR-0008, amended 2026-10-27**: `render_enums` replaces the two renderers, the plain
   output and the refresh script's ruff step replace the amendment of 2026-10-24's
@@ -444,7 +467,11 @@ listed here.
   the substring rule keeps `REDACTED` for such a name, so a `sent_query(route) ==
   recorded_query(fixture)` comparison differs on it until the fixture is re-recorded; a
   test that matched the text "was recorded as REDACTED" for a credential named in
-  `match_params` → "names a credential" — C10.
+  `match_params` → "names a credential"; a parameter whose name has the whole word `sig`
+  or `pwd` now reads `REDACTED` — C10.
+- Every source that calls `decode_csv` by keyword (none yet) — `source=` is now the slug
+  for its errors; the file or response is the positional `data` — ADR-0019, decision 2,
+  amended 2026-10-27.
 - `src/xippios/<pkg>/tasks.py` of a source with a bulk task — `BULK_TASKS =
   frozenset({...})` beside `MCP_CAPS`; `mcp.py` and `http.py` may pass `tasks.__all__`
   whole. Template v0.3.0 renders the `BULK_TASKS = frozenset()` scaffold — C15.
@@ -467,8 +494,9 @@ listed here.
   (packaged, fetched ...)" or "If PSD added the code since" matches the new text; gats
   passes its example codes as `hint=` only when `closest` is empty, since a `hint` wins
   over `closest` — row 39 j.
-- `src/xippios/usda/psd/tasks.py`, `src/xippios/usda/gats/tasks.py`,
-  `src/xippios/comtrade/tasks.py` — `_packaged`, `_packaged_meta` and `_matches` →
+- `src/xippios/usda/psd/tasks.py`, `src/xippios/usda/esr/tasks.py`,
+  `src/xippios/usda/gats/tasks.py`, `src/xippios/comtrade/tasks.py` — `_packaged`,
+  `_packaged_meta` and `_matches` (comtrade: `_packaged_meta` and `_matches`) →
   `packaged.parse(Model, source=SOURCE)`, `packaged.meta(SOURCE, request=...)` and
   `matches`; `meta.vintage` becomes `None` and `meta.retrieved_at` the list's `fetched`,
   so the list tasks' docstrings that say "``meta.vintage`` is the day the package
@@ -477,11 +505,16 @@ listed here.
 - `src/xippios/usda/nass/tasks.py`, `src/xippios/comtrade/tasks.py`, their
   `reference/*.json` value files and comtrade's CSV tables with `reference/tables.json`
   — converted, without network, to packaged-list files (`{"param", "endpoint",
-  "fetched", "records"}`, a value list as records of one field named by the parameter,
-  `fetched` kept as the date it is), `endpoint` the upstream operation (nass's
-  `get_param_values`, comtrade's `files/v1/app/reference/<file>.json`) where nass wrote
-  "reference" and comtrade a file path; the list tasks read them with
-  `PackagedList.load` and still return strings — ADR-0022, rule 1 and amendment (2).
+  "fetched", "records"}` and an optional `note`, a value list as records of one field
+  named by the parameter, `fetched` kept as the date it is), `endpoint` the upstream
+  operation (nass's `get_param_values`, comtrade's `files/v1/app/reference/<file>.json`)
+  where nass wrote "reference" and comtrade a file path; any other key is refused, so
+  nass writes its `derived_from` into `note` as text, and its two lists derived from
+  `unit_desc` keep `param: "unit_desc"` in files of their own names, which
+  `PackagedList.load(package, name)` takes; comtrade writes its `note` and its
+  `exceptions` into `note` as text, and its `origin` becomes `endpoint`. The list tasks
+  read the files with `PackagedList.load` and still return strings — ADR-0022, rule 1
+  and amendment (2) and (8).
 - `src/xippios/usda/gats/api/` — the five wrappers that return `(records, stored_at)` →
   `client.get_answer(path)`, its `retrieved_at` the task's `meta.retrieved_at` on a hit
   and a miss alike; `_client.stored_at` goes — row 39 a.
@@ -489,8 +522,16 @@ listed here.
   `client.get_answer(...)` for `retrieved_at` instead of `get()` and `decode_json()` —
   row 39 a.
 - `src/xippios/usda/esr/tasks.py`, `src/xippios/usda/gats/tasks.py` — `published_at`
-  from their naive release times with `published_at_naive=True`; `vintage` keeps the
-  release text as upstream prints it — ADR-0022, rule 2.
+  from their naive release times with `published_at_naive=published_at is not None`,
+  since the flag without a time is refused; `vintage` keeps the release text as
+  upstream prints it — ADR-0022, rule 2.
+- `src/xippios/usda/psd/tasks.py`, `get_time_series` — its docstring states its ceiling
+  and that a market year answering PSD's empty 404 is skipped — ADR-0022, amendment (6),
+  conventions §4.
+- `src/xippios/usda/gats/tasks.py`, `get_census_export_series`,
+  `get_census_import_series` and `get_census_reexport_series` — nothing: they already
+  refuse a range with an unreleased month with `NotFoundError` naming the released
+  months, and their docstrings say so — ADR-0022, amendment (6) and (7).
 - `src/xippios/usda/psd/tasks.py` — nothing for its `None` filters: `meta.request` leaves
   them out by itself; a test that asserted `{"search": None}` sees `{}` — rule 3.
 - `scripts/refresh_reference.py` (psd, esr, gats, comtrade; the template renders it in

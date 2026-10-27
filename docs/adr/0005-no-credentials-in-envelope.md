@@ -56,8 +56,9 @@ Core 0.3.0 makes the rule one module, `xippios.core.redaction`, read by `ResultM
 fixture recorder and the replay helpers alike (ADR-0019, amendment 2026-10-27, decision
 6). Two sentences above no longer hold. The list of words loses a bare `key`, which is a
 credential only where a `QueryKeyAuth` sends the key under that name (USDA NASS), and
-gains `passwd`, `authorization` and `credentials`, which the code already matched; so a
-`sort_key` is data, not redacted. And the recorder keeps no more generous pattern of its
+gains `passwd`, `authorization` and `credentials`, which the code already matched, and
+`pwd` and `sig`, for pre-signed URLs (ADR-0019, amendment 2026-10-27); so a `sort_key`
+is data, not redacted. And the recorder keeps no more generous pattern of its
 own: its substring match (`keyword`, `author` and `passport` redacted) is gone, and the
 whole-word rule applies to fixtures as to the envelope. The backstops for fixtures stay
 the named values of `Scrub(secrets=...)`, the verify step and the definition of done's

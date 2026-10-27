@@ -161,9 +161,29 @@ def test_a_one_field_value_list_round_trips_through_write_and_load(
     assert [record["state_alpha"] for record in loaded.records] == ["AK", "C\u00f4te"]
 
 
-def test_a_packaged_list_refuses_a_time_without_a_zone_and_records_that_do_not_parse() -> None:
+def test_a_note_is_written_when_set_and_fetched_to_the_second(package: str, tmp_path: Path) -> None:
+    # sdk-usda-nass: two lists derived from one parameter, each in a file of its own name.
+    derived = PackagedList(
+        param="unit_desc",
+        endpoint="get_param_values",
+        fetched=datetime(2026, 10, 27, 9, 15, 30, 654321, tzinfo=UTC),
+        note="derived from unit_desc: the units of yield statistics",
+        records=[{"unit_desc": "BU / ACRE"}],
+    )
+    derived.write(tmp_path / PKG / "reference" / "unit_desc_yield.json")
+    loaded = PackagedList.load(package, "unit_desc_yield")
+    assert loaded == derived.model_copy(
+        update={"fetched": datetime(2026, 10, 27, 9, 15, 30, tzinfo=UTC)}
+    )
+    text = (tmp_path / PKG / "reference" / "unit_desc_yield.json").read_text(encoding="utf-8")
+    assert '"fetched": "2026-10-27T09:15:30Z",\n  "note": "derived from unit_desc' in text
+
+
+def test_a_packaged_list_refuses_a_naive_time_an_unknown_key_and_unparsable_records() -> None:
     with pytest.raises(ValueError, match="fetched must carry a zone"):
         PackagedList.model_validate({**COMMODITIES, "fetched": "2026-10-23T09:15:00"})
+    with pytest.raises(ValueError, match=r"origin\n  Extra inputs are not permitted"):
+        PackagedList.model_validate({**COMMODITIES, "origin": "https://example.test/c.json"})
     broken = PackagedList.model_validate({**COMMODITIES, "records": [{"commodityCode": "1"}]})
     with pytest.raises(ValidationError, match=r"^usda-psd PSDData_GetCommodities: 1 validation"):
         broken.parse(Commodity, source="usda-psd")

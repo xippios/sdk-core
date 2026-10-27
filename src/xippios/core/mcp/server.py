@@ -32,7 +32,8 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.utilities.func_metadata import FuncMetadata, func_metadata
 from mcp.types import CallToolResult, TextContent, ToolAnnotations
 
-from xippios.core._loop import as_async, is_bulk_task
+from xippios.core._loop import as_async
+from xippios.core._tasks import is_bulk_task
 from xippios.core.errors import InvalidRequestError, XippiosError
 from xippios.core.mcp.errors import _refused_arguments, error_to_text
 from xippios.core.mcp.results import cap_result

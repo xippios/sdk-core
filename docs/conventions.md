@@ -5,10 +5,11 @@ Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 The rules of ADR-0019 and ADR-0022, all of them (the download and decode calls, the
 cache bound, `BULK_TASKS`, the fixture cap and the `truncated` marker, the file-fixture
 rules, the spared `key`, the packaged-answer rule and the packaged-list file,
-`published_at_naive`, the `None`-filter rule, `get_answer`), and ADR-0008's renderer
-rule of 1.20 (`render_enums`, the module committed as formatted), bind a source from its
-0.3.0 adoption (§15), since the code that serves them ships in core 0.3.0; until then a
-source records what its upstream answers and names a fixture over the cap in the PR
+`published_at_naive`, the `None`-filter rule, `get_answer`, `matches` (§4), `UnknownCode`
+(§5), the frozen series and the period series (§4)), and ADR-0008's renderer rule of 1.20
+(`render_enums`, the module committed as formatted), bind a source from its 0.3.0
+adoption (§15), since the code that serves them ships in core 0.3.0; until then a source
+records what its upstream answers and names a fixture over the cap in the PR
 description; a source that starts on a git pin of core 0.3.0 (the roadmap's pin rule) is
 bound by each rule from its first PR on a pin that carries the rule's code.
 
@@ -124,17 +125,21 @@ skip it (§8, §9; ADR-0019).
 - Reference data (commodity codes, country codes, report calendars) ships inside the
   package under `reference/` as CSV or JSON, loaded via `xippios.core.reference`, and is
   versioned with the package. A list fetched from one upstream operation is a packaged
-  list, `reference/<param>.json` with `{"param", "endpoint", "fetched", "records"}`:
-  upstream's records under upstream's field names (`UpstreamModel.dump_upstream`), a
-  list of values as records of one field named by the upstream parameter, a table as
-  records of its columns. The refresh script writes it with `PackagedList.write`,
-  `fetched` the UTC time of the fetch to the second; the package reads it with
-  `PackagedList.load` (ADR-0022, amendment 2026-10-27). Enums are generated from it with
-  one `xippios.core.reference.render_enums` call: one module, a `StrEnum` per value list
-  and an `IntEnum` per list of `(id, name)` pairs, each class docstring naming its list
-  and fetch date. The whole generated module, docstrings included, is ASCII-only and
-  passes `ruff check` and `ruff format --check` as committed, after the refresh script's
-  `ruff format && ruff check --fix` (ADR-0008, amendment 2026-10-27).
+  list, `reference/<name>.json` with `{"param", "endpoint", "fetched", "records"}` and an
+  optional `"note"`, free-text provenance (what a derived list is derived from, how a
+  list was reconciled with upstream's documentation), and no other key: upstream's
+  records under upstream's field names (`UpstreamModel.dump_upstream`), a list of values
+  as records of one field named by the upstream parameter, a table as records of its
+  columns. `<name>` is the parameter, or a name of the list's own where two lists derive
+  from one parameter. The refresh script writes it with `PackagedList.write`, `fetched`
+  the UTC time of the fetch to the second; the package reads it with
+  `PackagedList.load(package, name)` (ADR-0022, amendment 2026-10-27). Enums are
+  generated from it with one `xippios.core.reference.render_enums` call: one module, a
+  `StrEnum` per value list and an `IntEnum` per list of `(id, name)` pairs, each class
+  docstring naming its list and fetch date. The whole generated module, docstrings
+  included, is ASCII-only and passes `ruff check` and `ruff format --check` as committed,
+  after the refresh script's `ruff format && ruff check --fix` (ADR-0008, amendment
+  2026-10-27).
 
 ## 4. Result envelope and metadata
 
@@ -195,13 +200,16 @@ release 2024-09`), the task's docstring says so, and `vintage` holds that releas
 identifier. `ResultMeta` has no field for it (ADR-0022, amendment 2026-10-27).
 
 A task that assembles a period series from one upstream call per period (a month, a
-marketing year) states its ceiling, the newest period upstream has released, in its
-docstring with where it reads it from (a release calendar, a release-dates operation);
-`vintage` is the newest release among the periods returned. A period beyond the ceiling
-is refused with `InvalidRequestError` naming the ceiling. What a period inside the range
-that upstream has not released answers, a refusal or the period skipped, is stated in
-the task's docstring; an empty page is never passed off as no data (ADR-0022, amendment
-2026-10-27).
+marketing year) states its ceiling, the most periods one call fetches (the MCP tool's,
+where it is smaller: sdk-usda-gats fetches at most 60 months, 24 on the MCP server), and
+sets `vintage` to the newest release among the periods returned. Its docstring says what
+a period inside the range that upstream has not released answers: the period is skipped
+where upstream's empty answer can be told from data (sdk-usda-psd's empty 404), and the
+whole range is refused, naming the latest released period, where it cannot (an
+unreleased month answers sdk-usda-gats with `[]`, as a month without trade does). The
+refusal is `NotFoundError` naming the latest released period; `InvalidRequestError`
+stays for a malformed request (ADR-0007). An empty answer that cannot be told from no
+data is never passed off as data (ADR-0022, amendment 2026-10-27).
 
 A task that reads a file (§2) sets `endpoint` to the file kind as upstream names it
 (`wasde.xls`, `qs.crops`), `vintage` to the release identifier (an ESMIS release id, a
@@ -213,15 +221,15 @@ the file's URL or release id plus the filters applied in Python (ADR-0020).
 passes its parameters as they are; a `None` inside a nested mapping is kept as given. It
 never carries credentials (ADR-0005). `ResultMeta` redacts the value of any key that
 names one, at any depth, to `"REDACTED"` at construction, by the one rule of
-`xippios.core.redaction` (a whole word `api_key`, `token`, `secret`, `password`,
-`auth`, `authorization`, `signature` or `credential`, between `_`, `-` or the ends of
-the name), so an envelope is safe to hand to an agent, return over HTTP, or write to a
-store; personal identifiers in upstream data stay out of it by §3's rule for
-projections (ADR-0017). A bare `key` is not on the list: it is a credential in a process
-where a `QueryKeyAuth` sends the key under that name (USDA NASS), which registers it
-when built, and data elsewhere, as Eurostat's SDMX series `key` is (ADR-0019, amendment
-2026-10-27). A task that wants the credential's provenance records the variable name,
-never the value.
+`xippios.core.redaction` (a whole word `api_key`, `apikey`, `api-key`, `token`,
+`secret`, `password`, `passwd`, `pwd`, `auth`, `authorization`, `sig`, `signature`,
+`credential` or `credentials`, between `_`, `-` or the ends of the name), so an envelope
+is safe to hand to an agent, return over HTTP, or write to a store; personal identifiers
+in upstream data stay out of it by §3's rule for projections (ADR-0017). A bare `key` is
+not on the list: it is a credential in a process where a `QueryKeyAuth` sends the key
+under that name (USDA NASS), which registers it when built, and data elsewhere, as
+Eurostat's SDMX series `key` is (ADR-0019, amendment 2026-10-27). A task that wants the
+credential's provenance records the variable name, never the value.
 
 `tenant` is the name of the tenant a multi-tenant source served the data for (§7),
 never a credential, a host or another of the tenant's values; `None` for a
@@ -251,8 +259,10 @@ XippiosError
 ├── UpstreamError        other 4xx/5xx (carries status, body)
 ├── TransportError       network, timeout
 └── InvalidRequestError  the request as given cannot be served: a bad argument or a
-                         documented refusal, detected before the call or by upstream's
-                         own refusal of the query (ADR-0007)
+    │                    documented refusal, detected before the call or by upstream's
+    │                    own refusal of the query (ADR-0007)
+    └── UnknownCode      a code the packaged list lacks, refused before the call
+                         (ADR-0022)
 ```
 
 Source packages subclass only when upstream has a distinct, documented failure mode;
@@ -316,12 +326,15 @@ the query can carry a key (ADR-0005).
   auth=...) -> Downloaded` streams the body to `dest` under a temporary name, renames it
   when complete and removes it on failure, and never touches the response cache. The
   limiter, the hooks (`before_request`, `observe`), `classify` and the retry rule apply
-  as they do to `get()`, and `auth` works as it does there; a retry restarts the file.
-  `Downloaded` carries `path`, `bytes`, `content_type`, the file name from
+  as they do to `get()`, and `auth` works as it does there; a retry restarts the file;
+  except that `observe` and `classify` see a success's status and headers only, its
+  body going to the file unread, and a 1xx or 3xx raises `UpstreamError`, since
+  redirects are not followed (ADR-0019, amendment 2026-10-27). `Downloaded` carries `path`, `bytes`, `content_type`, the file name from
   `Content-Disposition` when sent, `etag`, `last_modified` and `retrieved_at`.
 - `decode_text(response)` (charset from `Content-Type`, UTF-8 by default, a BOM
-  stripped) and `decode_csv(source, *, delimiter=",")` (the stdlib's `csv.DictReader`,
-  headers as upstream prints them) sit beside `decode_json`. The source opens gzip and
+  stripped) and `decode_csv(data, *, delimiter=",", source=None)` (a path or a response;
+  the stdlib's `csv.DictReader`, headers as upstream prints them) sit beside
+  `decode_json`. The source opens gzip and
   zip with the stdlib; core ships no XML, spreadsheet or PDF parser (ADR-0019,
   ADR-0020).
 - Credentials come from the client's `auth`. A call to a keyless endpoint on the same
@@ -441,9 +454,11 @@ route: `router_from_tasks` skips it, and no route returns a file path (ADR-0019)
   compressed file cannot be parsed and a cut-off XML document is not well-formed; byte
   truncation (`max_bytes=`) applies to text bodies, and the recorder refuses it for those
   formats and for a body that is not UTF-8 text; a JSON array is truncated by elements:
-  the recorder keeps the first N whose compact JSON text fits, marks `truncated: true`
-  and records the full count (`original_count`) and the sha256; a JSON object is
-  refused, and the source records a small real answer (ADR-0019, amendment 2026-10-27).
+  the recorder cuts its original text after the first N elements that fit, never
+  re-serialising them, marks `truncated: true` and records the full count
+  (`original_count`) and the sha256; a JSON object is refused, and the source records a
+  small real answer (ADR-0019, amendment 2026-10-27). `max_bytes` bounds the body, not
+  the fixture file, which escapes the body as a JSON string.
   A test on a sample or a truncated fixture asserts the parser's shape, never a size.
 - A file-distributed source keeps a sample of each file kind under
   `tests/fixtures/files/<file_kind>/<case>.*` with a provenance line: the release id, the
