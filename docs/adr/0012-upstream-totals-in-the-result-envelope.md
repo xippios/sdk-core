@@ -55,3 +55,8 @@ Two alternatives were rejected:
   upstream reports a count.
 - The field is optional with a default, so this is not a breaking change: sources on
   core 0.1.0 are unaffected and adopt the field with the next core release.
+
+Amended by ADR-0023, decision 5 (2026-10-27, core 0.3.0): of core's paginators only
+`paginate_offset` remains, `paginate_pages` and `paginate_cursor` deleted for want of a
+consumer; a page-numbered source maps the offset to its page in its `fetch`, and a
+cursor-paginated source drives its own loop, both setting `total` as above.

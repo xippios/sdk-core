@@ -703,4 +703,6 @@ async def test_auth_none_and_the_default_share_the_cache(respx_mock: respx.MockR
     await client.get("/v1/reference", auth=None)
     hit = await client.get("/v1/reference")
     assert hit.extensions["xippios_cache"] == "hit"
+    spelled = await client.get("/v1/reference", auth=httpx.USE_CLIENT_DEFAULT)  # type: ignore[arg-type]
+    assert spelled.extensions["xippios_cache"] == "hit"  # httpx's default is the client's
     assert sent_urls(route) == [f"{BASE}/v1/reference"]
