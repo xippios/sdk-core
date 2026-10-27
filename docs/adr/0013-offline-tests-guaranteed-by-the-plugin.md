@@ -195,3 +195,11 @@ Consumers: sdk-usda-gats and sdk-comtrade clear their caches in fixtures of thei
 and the plugin, which the template's `tests/conftest.py` enables in every source, is a
 family invariant (ADR-0023, decisions 1 and 3 (a)). Conventions §10 states the clearing
 and the summary from 1.20 on.
+
+Amended 2026-10-27 (ADR-0024; core 0.3.0; the family review's C9; decided by Johannes on
+2026-10-25 and 2026-10-27): the recorder's placeholder host and the verify's JSON-decoded,
+percent-encoded and host forms leave core for sdk-cashctrl's recorder. The scrub replaces
+each named value as given, and the verify searches the URL, the header values and the text
+bodies for each as given, refusing the exchange with the location named; the "one JSON-aware
+pass" and the placeholder host of the decision above no longer describe core. Conventions
+§10 states it from 1.21 on.
