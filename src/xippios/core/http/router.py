@@ -4,7 +4,8 @@ A task whose parameters are all scalars becomes ``GET /<source>/<function>`` wit
 parameters. A task with any non-scalar parameter (a mapping, a list, a model) becomes
 ``POST /<source>/<function>`` whose JSON body is an object keyed by parameter name
 (ADR-0007). Either way the return annotation is the response model and the docstring the
-description, and errors come back as problem details, never as tracebacks.
+description, and errors come back as problem details, never as tracebacks. A task its
+``tasks.py`` names in ``BULK_TASKS`` gets no route (ADR-0019).
 """
 
 import functools
@@ -20,7 +21,7 @@ from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel, create_model
 
-from xippios.core._loop import as_async
+from xippios.core._loop import as_async, is_bulk_task
 from xippios.core.errors import XippiosError
 from xippios.core.http.problems import problem_response
 
@@ -116,11 +117,16 @@ def router_from_tasks(
     """One route per task function under ``/<source>``, tagged with the source.
 
     Scalar-only signatures become ``GET`` with query parameters; any non-scalar
-    parameter makes the route a ``POST`` with a JSON body keyed by parameter name.
+    parameter makes the route a ``POST`` with a JSON body keyed by parameter name. A
+    task the module that defines it names in ``BULK_TASKS`` gets no route: a bulk task
+    returns a file, or a list read from one, and is Python-only; no route returns a file
+    path (conventions §9, ADR-0019). So an adapter may pass every name of
+    ``tasks.__all__``.
 
     Args:
         source: Source slug, e.g. ``"usda-nass"``; becomes the path prefix and the tag.
-        tasks: Task functions.
+        tasks: Task functions, e.g. ``[getattr(tasks, n) for n in tasks.__all__]``; one
+            in its module's ``BULK_TASKS`` is skipped.
         prefix: Path prefix; defaults to ``/<source>``.
         tags: OpenAPI tags; default to ``[source]``.
     """
@@ -129,6 +135,8 @@ def router_from_tasks(
         tags=list(tags) if tags else [source],
     )
     for fn in tasks:
+        if is_bulk_task(fn):
+            continue
         doc = inspect.getdoc(fn) or ""
         _, parameters, returns = _resolved(fn)
         scalar_only = all(is_scalar(p.annotation) for p in parameters)

@@ -3,7 +3,9 @@
 One daemon thread owns one event loop for the whole process. Sync facades submit
 coroutines to it and block until they finish, which works from plain scripts, from
 Jupyter, and from inside another running loop. Nothing here is public API except
-through ``xippios.core.sync``.
+through ``xippios.core.sync``. The adapters take two more things about a task function
+from here: ``as_async``, its awaitable form, and ``is_bulk_task``, whether it stays off
+the adapters (ADR-0019).
 
 Not fork-safe: a process forked after the loop thread started (``multiprocessing`` with
 the ``fork`` start method) inherits a loop whose thread does not exist. Use the
@@ -13,11 +15,12 @@ the ``fork`` start method) inherits a loop whose thread does not exist. Use the
 import asyncio
 import functools
 import inspect
+import sys
 import threading
 from collections.abc import Awaitable, Callable, Coroutine
 from typing import Any, Protocol, cast
 
-__all__ = ["SyncFunction", "as_async", "run", "sync"]
+__all__ = ["SyncFunction", "as_async", "is_bulk_task", "run", "sync"]
 
 _LOOP_THREAD_NAME = "xippios-core-loop"
 
@@ -111,3 +114,16 @@ def as_async(fn: Callable[..., Any]) -> Callable[..., Awaitable[Any]]:
         return await asyncio.to_thread(fn, *args, **kwargs)
 
     return wrapper
+
+
+def is_bulk_task(fn: Callable[..., Any]) -> bool:
+    """True when the module that defines ``fn`` names it in its ``BULK_TASKS``.
+
+    A bulk task returns a file or a list read from one and is Python-only:
+    ``register_tasks`` and ``router_from_tasks`` skip it (ADR-0019, decision 4). The
+    module is ``sys.modules[fn.__module__]``, the source's ``tasks.py``; a sync facade
+    made by ``sync`` keeps its async twin's module and its name minus ``_async``, the
+    name ``tasks.__all__`` and ``BULK_TASKS`` use.
+    """
+    module = sys.modules.get(getattr(fn, "__module__", None) or "")
+    return getattr(fn, "__name__", None) in getattr(module, "BULK_TASKS", ())

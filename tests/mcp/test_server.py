@@ -1,4 +1,6 @@
 import logging
+import sys
+import types
 from collections.abc import Callable
 from typing import Annotated, Any
 
@@ -147,7 +149,8 @@ async def test_a_cap_for_a_name_that_is_no_task_is_refused() -> None:
     caps = {"example_list_areas": ResultCap(max_rows=400), "list_nothing": ResultCap()}
     rule = (
         "^caps names no task among the tasks: example_list_areas, list_nothing; a key is the "
-        "task function's __name__, not the tool name with the source prefix$"
+        "task function's __name__, not the tool name with the source prefix, and a task in "
+        "BULK_TASKS is no tool$"
     )
     with pytest.raises(ValueError, match=rule):
         build_server("example", [get_series, list_areas], caps=caps)
@@ -184,6 +187,35 @@ async def test_a_cap_of_its_own_falls_back_to_the_family_default_not_to_the_serv
     assert series["note"].endswith(
         "rows (cap: 200 rows or 1000 bytes); narrow the query to see the rest"
     )
+
+
+async def download_series_async(series_id: str) -> Result[list[Series]]:
+    """Download every year of one series.
+
+    Args:
+        series_id: Upstream identifier, e.g. ``"CORN_YIELD"``.
+    """
+    raise NotImplementedError
+
+
+download_series_async.__module__ = "example_bulk_tasks"
+download_series = sync(download_series_async)  # keeps the module, as in a tasks.py
+
+
+@pytest.mark.anyio
+async def test_a_task_in_bulk_tasks_is_no_tool(monkeypatch: pytest.MonkeyPatch) -> None:
+    # ADR-0019, decision 4: the rendered mcp.py passes every name of tasks.__all__.
+    tasks = types.ModuleType("example_bulk_tasks")
+    tasks.BULK_TASKS = frozenset({"download_series"})  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, tasks.__name__, tasks)
+    server = build_server("example", [get_series, download_series])
+    assert [tool.name for tool in await server.list_tools()] == ["example_get_series"]
+    with pytest.raises(ValueError, match=r"download_series; .* a task in BULK_TASKS is no tool$"):
+        build_server(
+            "example", [get_series, download_series], caps={"download_series": ResultCap()}
+        )
+    monkeypatch.delitem(sys.modules, tasks.__name__)  # no module, no BULK_TASKS: a tool
+    assert len(await build_server("example", [download_series]).list_tools()) == 1
 
 
 @pytest.mark.anyio
