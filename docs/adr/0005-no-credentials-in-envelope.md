@@ -63,3 +63,8 @@ own: its substring match (`keyword`, `author` and `passport` redacted) is gone, 
 whole-word rule applies to fixtures as to the envelope. The backstops for fixtures stay
 the named values of `Scrub(secrets=...)`, the verify step and the definition of done's
 grep of every fixture for key patterns.
+
+Amended 2026-10-27 (ADR-0024): the verify step named above searches each value of
+`Scrub(secrets=...)` as given, a plain substring, in the URL, the header values and the
+text bodies of a recording; the JSON-decoded and percent-encoded forms it searched before
+are the source's recorder's to look for.

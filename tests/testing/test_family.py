@@ -123,7 +123,7 @@ SOURCE: dict[str, str] = {
     "tests/test_family.py": "from xippios.core.testing.family import *  # noqa: F403\n",
 }
 
-FAMILY_TESTS = 11
+FAMILY_TESTS = 10
 
 
 def run_family(
@@ -146,8 +146,7 @@ def run_family(
 
 def test_a_conforming_source_passes_every_family_check(pytester: pytest.Pytester) -> None:
     result = run_family(pytester)
-    result.assert_outcomes(passed=FAMILY_TESTS - 1, skipped=1)
-    result.stdout.fnmatch_lines(["*xippios.example has no tasks_write module: no write server*"])
+    result.assert_outcomes(passed=FAMILY_TESTS)
 
 
 def test_the_package_is_named_by_the_ini_option_when_src_holds_two(
@@ -161,7 +160,7 @@ def test_the_package_is_named_by_the_ini_option_when_src_holds_two(
     )
     named = PYPROJECT + 'xippios_package = "xippios.example"\n'
     result = run_family(pytester, {**second, "pyproject.toml": named})
-    result.assert_outcomes(passed=FAMILY_TESTS - 1, skipped=1)
+    result.assert_outcomes(passed=FAMILY_TESTS)
 
 
 def test_an_adapter_that_drops_a_task_fails_naming_it(pytester: pytest.Pytester) -> None:
@@ -174,7 +173,7 @@ def test_an_adapter_that_drops_a_task_fails_naming_it(pytester: pytest.Pytester)
     result = run_family(
         pytester, {"src/xippios/example/mcp.py": dropped, "src/xippios/example/http.py": extra}
     )
-    result.assert_outcomes(passed=FAMILY_TESTS - 3, failed=2, skipped=1)
+    result.assert_outcomes(passed=FAMILY_TESTS - 2, failed=2)
     result.stdout.fnmatch_lines(
         [
             "*mcp.py must register exactly tasks.__all__ minus BULK_TASKS:*",
@@ -192,7 +191,7 @@ def test_an_adapter_that_drops_a_task_fails_naming_it(pytester: pytest.Pytester)
 def test_a_stale_status_table_fails_naming_both_sides(pytester: pytest.Pytester) -> None:
     stale = README.replace("`list_regions()`", "`list_old_regions()`")
     result = run_family(pytester, {"README.md": stale})
-    result.assert_outcomes(passed=FAMILY_TESTS - 2, failed=1, skipped=1)
+    result.assert_outcomes(passed=FAMILY_TESTS - 1, failed=1)
     result.stdout.fnmatch_lines(
         [
             "*README.md's status table ('Task function' column) lists exactly the tasks:*",
@@ -221,7 +220,7 @@ def test_bulk_tasks_stay_off_the_adapters_and_in_the_table(pytester: pytest.Pyte
     )
     changes: dict[str, str | None] = {"src/xippios/example/tasks.py": bulk, "README.md": table}
     result = run_family(pytester, changes)
-    result.assert_outcomes(passed=FAMILY_TESTS - 1, skipped=1)
+    result.assert_outcomes(passed=FAMILY_TESTS)
     # register_tasks and router_from_tasks skip it themselves (ADR-0019, decision 4).
     every = "[getattr(tasks, n) for n in tasks.__all__]"
     adapters = {
@@ -229,7 +228,7 @@ def test_bulk_tasks_stay_off_the_adapters_and_in_the_table(pytester: pytest.Pyte
         for path in ("src/xippios/example/mcp.py", "src/xippios/example/http.py")
     }
     result = run_family(pytester, {**changes, **adapters})
-    result.assert_outcomes(passed=FAMILY_TESTS - 1, skipped=1)
+    result.assert_outcomes(passed=FAMILY_TESTS)
 
 
 def test_a_task_without_the_envelope_or_the_docstring_fails(pytester: pytest.Pytester) -> None:
@@ -268,7 +267,7 @@ def test_the_answers_tag_and_the_core_bound(pytester: pytest.Pytester) -> None:
         "xippios-core[http]~=0.2.1", "xippios-core[http]~=0.2.0"
     )
     result = run_family(pytester, {".copier-answers.yml": answers, "pyproject.toml": loose})
-    result.assert_outcomes(passed=FAMILY_TESTS - 3, failed=2, skipped=1)
+    result.assert_outcomes(passed=FAMILY_TESTS - 2, failed=2)
     result.stdout.fnmatch_lines(
         [
             "*_commit is 'v0.2.1-3-g1a2b3c4', not a template tag vX.Y.Z*",
@@ -330,26 +329,20 @@ __all__ = ["create_series"]
 '''
 
 
-def test_a_write_server_serves_exactly_the_write_tasks(pytester: pytest.Pytester) -> None:
-    write_server = (
-        "from xippios.core.mcp import build_server\n"
-        "from xippios.example import tasks_write\n"
-        "from xippios.example._client import SOURCE\n\n"
-        "server = build_server(SOURCE, [tasks_write.create_series], read_only=False)\n"
-    )
+def test_write_tasks_are_checked_and_listed_and_the_write_server_is_not(
+    pytester: pytest.Pytester,
+) -> None:
+    # The write server is its source's to test (ADR-0024); none is written here.
+    write: dict[str, str | None] = {"src/xippios/example/tasks_write.py": WRITE_TASKS}
     table = README.replace(
         "| `regions` |",
         "| `create` | `create_series(name, confirm)` | write server | alpha |\n| `regions` |",
     )
-    result = run_family(
-        pytester,
-        {
-            "src/xippios/example/tasks_write.py": WRITE_TASKS,
-            "src/xippios/example/mcp_write.py": write_server,
-            "README.md": table,
-        },
-    )
+    result = run_family(pytester, {**write, "README.md": table})
     result.assert_outcomes(passed=FAMILY_TESTS)
+    result = run_family(pytester, write)
+    result.assert_outcomes(passed=FAMILY_TESTS - 1, failed=1)
+    result.stdout.fnmatch_lines(["*- create_series is not in the table*"])
 
 
 @pytest.mark.parametrize(

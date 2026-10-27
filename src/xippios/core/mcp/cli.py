@@ -3,7 +3,7 @@
 A source adds its own options through two hooks instead of parsing the command line a
 second time: ``add_options`` puts them on core's parser, so ``--help`` lists every
 option and a typo fails as usual, and ``apply_options`` turns the parsed options into
-the server to run, a server locked to one tenant for instance (ADR-0014).
+the server to run (ADR-0014, decision 8).
 """
 
 import argparse
@@ -61,12 +61,12 @@ def main(
     """Parse ``argv`` once and run the server on stdio or streamable HTTP.
 
     ``apply_options(namespace, server)`` returns the server to run; a ``XippiosError``
-    it raises (an undeclared tenant is an ``InvalidRequestError``, a missing variable a
-    ``ConfigError``) stops the process like an argparse error: the message on stderr,
-    exit status 2, no traceback. A write server (``is_write_server``) is served over
-    ``--http`` on a loopback ``--host`` only (``127.0.0.1``, ``localhost``, ``::1``),
-    unless ``--allow-remote`` is passed: it carries no authentication. On a read-only
-    server ``--allow-remote`` changes nothing.
+    it raises (an option value the source refuses is an ``InvalidRequestError``, a
+    missing variable a ``ConfigError``) stops the process like an argparse error: the
+    message on stderr, exit status 2, no traceback. A write server (``is_write_server``)
+    is served over ``--http`` on a loopback ``--host`` only (``127.0.0.1``,
+    ``localhost``, ``::1``), unless ``--allow-remote`` is passed: it carries no
+    authentication. On a read-only server ``--allow-remote`` changes nothing.
 
     The httpx and httpcore loggers are quieted again right before the server runs
     (``quiet_request_logging``), in case the server was built another way or a level was
@@ -76,9 +76,9 @@ def main(
         server: A server from ``build_server``.
         argv: Arguments without the program name; defaults to ``sys.argv[1:]``.
         add_options: Adds the source's arguments to core's parser (see ``build_parser``).
-        apply_options: Builds the server to run from the parsed options, e.g. one with
-            ``tenant_lock=TenantLock("org", namespace.org)`` when ``--org`` was given;
-            returns ``server`` itself when there is nothing to change.
+        apply_options: Builds the server to run from the parsed options, e.g. one built
+            anew for an option of the source's; returns ``server`` itself when there is
+            nothing to change.
     """
     parser = build_parser(server.name, add_options=add_options)
     args = parser.parse_args(argv)

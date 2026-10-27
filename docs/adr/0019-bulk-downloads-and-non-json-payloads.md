@@ -131,3 +131,8 @@ rule on gate 5 of the same day (queue row 48).
   `recorded_query` and `mount_fixture` read the one rule; the recorder's broader
   substring pattern is gone (ADR-0005, amendment 2026-10-27), so `sort_key` and
   `keyword` are data everywhere.
+
+Amended 2026-10-27 (ADR-0024; the family review's C9): the text cut of decision 5 goes back
+to the start of a secret value the cut would split, never of the request host: the
+recorder's placeholder host left core, and a source that replaces a host spares it in its
+own recorder step.

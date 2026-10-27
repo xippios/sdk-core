@@ -19,8 +19,8 @@ EXPORTS = {
         "BODY_LIMIT", "error_from_response", "parse_retry_after",
         # models and helpers
         "Result", "ResultCap", "ResultMeta", "UpstreamModel", "parse", "parse_decimal",
-        "Tenants", "collect", "paginate_offset", "load_json", "load_table",
-        "PackagedList", "matches", "closest", "sync", "__version__",
+        "collect", "paginate_offset", "load_json", "load_table", "PackagedList", "matches",
+        "closest", "sync", "__version__",
     },
     "xippios.core.client": {
         "AsyncClient", "BasicKeyAuth", "BearerAuth", "CachedResponse", "ClientConfig",
@@ -30,14 +30,13 @@ EXPORTS = {
     },
     "xippios.core.testing": {
         "CLOCK_SLACK", "REDACTED", "Fixture", "FixtureResponse", "ReplayFixture", "Scrub",
-        "assert_projection", "assert_time_between", "assert_write_tools",
-        "fixture_from_response", "fixture_path", "load_fixture", "mcp_call", "mcp_call_text",
-        "record", "record_sync", "recorded_query", "response_from_fixture", "sent_query",
-        "sent_urls",
+        "assert_projection", "assert_time_between", "fixture_from_response", "fixture_path",
+        "load_fixture", "mcp_call", "mcp_call_text", "record", "record_sync", "recorded_query",
+        "response_from_fixture", "sent_query", "sent_urls",
     },
     "xippios.core.mcp": {
-        "ResultCap", "TenantLock", "build_parser", "build_server", "cap_result",
-        "error_to_text", "main", "tool_name",
+        "ResultCap", "build_parser", "build_server", "cap_result", "error_to_text", "main",
+        "tool_name",
     },
     "xippios.core.http": {"is_scalar", "router_from_tasks", "status_for"},
 }  # fmt: skip

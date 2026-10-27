@@ -40,3 +40,9 @@ record's columns under their upstream names. Johannes decided the rule on 2026-1
   leave out `ssn` and `iban`.
 - sdk-template's model scaffold gets a comment pointing to this rule.
 - Conventions 1.13: §3 states the rule, and §4 points to it from the envelope.
+
+Amended 2026-10-27 (ADR-0024; decided by Johannes on 2026-10-27): `Scrub(rewrite=...)`
+left core. A recording names the values in `Scrub(secrets=...)`; a source that rewrites
+them by key does so in its own recorder step, on the `Fixture` that `fixture_from_response`
+returns, before it writes the file, as sdk-cashctrl's recorder does. Conventions §3 says so
+from 1.21 on.
