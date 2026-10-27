@@ -173,7 +173,10 @@ def test_decode_text_reads_the_charset_and_strips_a_bom() -> None:
     assert decode_text(httpx.Response(200, content="\ufeffCôte".encode())) == "Côte"
     request = httpx.Request("GET", f"{BASE}/v1/file.txt")
     broken = httpx.Response(200, content=b"\xff\xfe", request=request)
-    with pytest.raises(ValidationError, match=r"^example: response from /v1/file.txt is not utf-8"):
+    message = (
+        r"^example: response from /v1/file.txt is not utf-8 text: invalid start byte at byte 0$"
+    )
+    with pytest.raises(ValidationError, match=message):
         decode_text(broken, source="example")
 
 
@@ -187,5 +190,7 @@ def test_decode_csv_reads_a_file_row_by_row(tmp_path: Path) -> None:
     response = httpx.Response(200, text=CSV, headers={"Content-Type": "text/csv"})
     assert list(decode_csv(response)) == [{"commodity": "CORN", "Value (1000 MT)": "15,341"}]
     (tmp_path / "latin.csv").write_bytes("a\nC\xf4te\n".encode("latin-1"))
-    with pytest.raises(ValidationError, match=r"^latin.csv is not UTF-8 text"):
+    with pytest.raises(
+        ValidationError, match=r"^latin.csv is not UTF-8 text: invalid continuation"
+    ):
         list(decode_csv(tmp_path / "latin.csv"))

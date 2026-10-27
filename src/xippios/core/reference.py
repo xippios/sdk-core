@@ -30,9 +30,11 @@ from importlib import resources
 from pathlib import Path
 from typing import Any, Self, cast
 
+import pydantic
 from pydantic import BaseModel, ConfigDict, TypeAdapter, field_validator
 
-from xippios.core.models import ResultMeta, parse
+from xippios.core.errors import ValidationError
+from xippios.core.models import ResultMeta, _validation_text, parse
 
 __all__ = [
     "PackagedList",
@@ -89,9 +91,18 @@ def load_table[T](package: str, name: str, model: type[T]) -> list[T]:
         package: Import path of the source package.
         name: File name under ``reference/``.
         model: The row model, e.g. a ``UpstreamModel`` subclass.
+
+    Raises:
+        ValidationError: A row does not fit ``model``; raised ``from None``, its text
+            naming the package, the file and the first failure's location, type and
+            message as ``parse``'s does, the rows on ``raw``.
     """
     raw = load_csv(package, name) if name.endswith(".csv") else load_json(package, name)
-    return TypeAdapter(list[model]).validate_python(raw)  # type: ignore[valid-type]
+    try:
+        return TypeAdapter(list[model]).validate_python(raw)  # type: ignore[valid-type]
+    except pydantic.ValidationError as exc:
+        message = f"{package} reference/{name}: {_validation_text(exc)}"
+        raise ValidationError(message, raw=raw) from None
 
 
 class PackagedList(BaseModel):

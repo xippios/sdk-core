@@ -4,6 +4,7 @@ import asyncio
 import csv
 import inspect
 import io
+import json
 import os
 import tempfile
 import threading
@@ -483,16 +484,28 @@ def decode_json(
             (conventions §5).
 
     Raises:
-        ValidationError: The body is not JSON; ``raw`` holds its text, truncated.
+        ValidationError: The body is not JSON; raised ``from None``, the text naming the
+            decoder's message and position (``... is not JSON: Expecting value at line 1
+            column 1 (char 0)``), ``raw`` the body's text, truncated (queue row 42).
     """
     try:
         return response.json()
     except ValueError as exc:
         raise ValidationError(
-            f"{source + ': ' if source else ''}{_where(response, path)} is not JSON",
+            f"{source + ': ' if source else ''}{_where(response, path)} is not JSON: "
+            f"{_reason(exc)}",
             raw=response.text[:BODY_LIMIT],
             source=source,
-        ) from exc
+        ) from None
+
+
+def _reason(exc: ValueError) -> str:
+    """What a decoder said and where, never the text it read (queue row 42)."""
+    if isinstance(exc, json.JSONDecodeError):
+        return f"{exc.msg} at line {exc.lineno} column {exc.colno} (char {exc.pos})"
+    if isinstance(exc, UnicodeDecodeError):
+        return f"{exc.reason} at byte {exc.start}"
+    return type(exc).__name__
 
 
 def _where(response: httpx.Response, path: str | None) -> str:
@@ -522,17 +535,20 @@ def decode_text(
 
     Raises:
         ValidationError: The body is not text in that charset, or the charset is
-            unknown; ``raw`` holds the first ``BODY_LIMIT`` bytes.
+            unknown; raised ``from None``, the text naming the decoder's reason and the
+            byte, ``raw`` the first ``BODY_LIMIT`` bytes (queue row 42).
     """
     charset = response.charset_encoding or "utf-8"
     try:
         text = response.content.decode(charset)
     except (LookupError, UnicodeDecodeError) as exc:
+        reason = _reason(exc) if isinstance(exc, UnicodeDecodeError) else "an unknown charset"
         raise ValidationError(
-            f"{source + ': ' if source else ''}{_where(response, path)} is not {charset} text",
+            f"{source + ': ' if source else ''}{_where(response, path)} is not {charset} "
+            f"text: {reason}",
             raw=response.content[:BODY_LIMIT],
             source=source,
-        ) from exc
+        ) from None
     return text.removeprefix("\ufeff")
 
 
@@ -555,7 +571,8 @@ def decode_csv(source: Path | httpx.Response, *, delimiter: str = ",") -> Iterat
     Raises:
         ValidationError: The text is not UTF-8 (or not in the response's charset), or
             not CSV the stdlib can read, e.g. a field over its size limit; raised while
-            iterating, at the row where it is found.
+            iterating, at the row where it is found, ``from None``, naming the decoder's
+            or the csv module's message, never the text.
     """
     if isinstance(source, httpx.Response):
         yield from _rows(io.StringIO(decode_text(source), newline=""), delimiter, "response")
@@ -568,9 +585,11 @@ def _rows(handle: IO[str], delimiter: str, name: str) -> Iterator[dict[str, str]
     try:
         yield from csv.DictReader(handle, delimiter=delimiter)
     except UnicodeDecodeError as exc:
-        raise ValidationError(f"{name} is not UTF-8 text", raw=exc.object[:BODY_LIMIT]) from exc
+        raise ValidationError(
+            f"{name} is not UTF-8 text: {exc.reason}", raw=exc.object[:BODY_LIMIT]
+        ) from None
     except csv.Error as exc:
-        raise ValidationError(f"{name} is not CSV the csv module reads: {exc}", raw="") from exc
+        raise ValidationError(f"{name} is not CSV the csv module reads: {exc}", raw="") from None
 
 
 class _ClassifyOnce:

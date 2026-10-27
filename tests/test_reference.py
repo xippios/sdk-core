@@ -75,6 +75,18 @@ def test_load_table_json(package: str) -> None:
     assert load_table(package, "codes.json", Code)[0].rank == 1
 
 
+def test_a_row_that_does_not_fit_is_refused_from_none(package: str, tmp_path: Path) -> None:
+    (tmp_path / PKG / "reference" / "bad.csv").write_text("code,name,rank\nUS,MARKER,first\n")
+    with pytest.raises(ValidationError) as info:
+        load_table(package, "bad.csv", Code)
+    assert str(info.value) == (
+        f"{PKG} reference/bad.csv: 1 validation error(s); first at 0.rank (int_parsing): Input "
+        "should be a valid integer, unable to parse string as an integer"
+    )
+    assert info.value.raw == [{"code": "US", "name": "MARKER", "rank": "first"}]
+    assert info.value.__cause__ is None  # row 42: no chained pydantic text quoting the row
+
+
 def test_callers_get_fresh_objects(package: str) -> None:
     first = load_csv(package, "codes.csv")
     first[0]["code"] = "mutated"

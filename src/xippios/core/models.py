@@ -110,6 +110,9 @@ class UpstreamModel(BaseModel):
 
         Raises:
             TypeError: When a field of this model is neither on ``source`` nor overridden.
+            ValidationError: When a copied or overridden value does not fit this model;
+                raised ``from None``, its text naming the location, type and message as
+                ``parse``'s does, the values on ``raw``.
         """
         missing = [
             name for name in cls.model_fields if name not in overrides and not hasattr(source, name)
@@ -119,8 +122,13 @@ class UpstreamModel(BaseModel):
                 f"{cls.__name__}.project: {type(source).__name__} has no field "
                 + ", ".join(missing)
             )
-        copied = {name: getattr(source, name) for name in cls.model_fields if name not in overrides}
-        return cls(**copied, **overrides)
+        values = {name: getattr(source, name) for name in cls.model_fields if name not in overrides}
+        values |= overrides
+        try:
+            return cls(**values)
+        except pydantic.ValidationError as exc:
+            message = f"{cls.__name__}.project: {_validation_text(exc)}"
+            raise ValidationError(message, raw=values) from None
 
     def dump_upstream(self) -> dict[str, Any]:
         """This record as JSON values under upstream's field names, in field order.
@@ -284,8 +292,28 @@ class ResultCap:
             raise ValueError("note must say how to see the rest; None keeps the default")
 
 
+def _validation_text(exc: pydantic.ValidationError) -> str:
+    """``<n> validation error(s); first at <loc> (<type>): <msg>``, never an input value.
+
+    pydantic's own text quotes each failing value, and the containing object around a
+    missing field; this folds in the location, the error type and the message only, so a
+    ``ValidationError`` raised ``from None`` carries no upstream data in its text (queue
+    row 42).
+    """
+    first = exc.errors(include_url=False, include_context=False, include_input=False)[0]
+    location = ".".join(str(part) for part in first["loc"]) or "<root>"
+    return (
+        f"{exc.error_count()} validation error(s); first at {location} ({first['type']}): "
+        f"{first['msg']}"
+    )
+
+
 def parse[T](type_: type[T], raw: object, *, source: str, endpoint: str) -> T:
     """Validate an upstream payload, wrapping failures as ``ValidationError``.
+
+    The error is raised ``from None``: its text names the first failure's location, type
+    and message and never a value, and the payload stays on ``raw`` for a debugger, out
+    of ``str()`` and out of a printed traceback (queue row 42).
 
     Args:
         type_: The target type: a model class or a generic such as ``list[Series]``.
@@ -297,15 +325,12 @@ def parse[T](type_: type[T], raw: object, *, source: str, endpoint: str) -> T:
         The validated value.
 
     Raises:
-        ValidationError: With the raw payload attached, when validation fails.
+        ValidationError: With the raw payload attached, when validation fails, e.g.
+            ``example get_thing: 1 validation error(s); first at value (float_parsing):
+            Input should be a valid number, unable to parse string as a number``.
     """
     try:
         return TypeAdapter(type_).validate_python(raw)
     except pydantic.ValidationError as exc:
-        first = exc.errors()[0]
-        location = ".".join(str(part) for part in first["loc"]) or "<root>"
-        message = (
-            f"{source} {endpoint}: {exc.error_count()} validation error(s); "
-            f"first at {location}: {first['msg']}"
-        )
-        raise ValidationError(message, raw=raw, source=source) from exc
+        message = f"{source} {endpoint}: {_validation_text(exc)}"
+        raise ValidationError(message, raw=raw, source=source) from None

@@ -1,4 +1,5 @@
 import json
+import traceback
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
@@ -123,13 +124,36 @@ def test_parse_model_and_generic() -> None:
     assert many[0].value == 1.0
 
 
-def test_parse_wraps_validation_error_with_raw() -> None:
-    raw = {"seriesId": "a", "value": "not a number"}
+MARKER = "API:abcd-a-payload-value"
+"""What a failing payload carries: it reaches ``raw``, never a printed traceback (row 42)."""
+
+
+def test_parse_raises_from_none_and_keeps_the_payload_out_of_the_traceback() -> None:
+    raw = [{"seriesId": MARKER, "value": 1}, {"seriesId": MARKER, "value": MARKER}]
     with pytest.raises(ValidationError) as info:
-        parse(Series, raw, source="example", endpoint="get_thing")
-    assert info.value.raw is raw
-    assert info.value.source == "example"
-    assert str(info.value).startswith("example get_thing: 1 validation error(s); first at value:")
+        parse(list[Series], raw, source="example", endpoint="get_thing")
+    assert str(info.value) == (
+        "example get_thing: 1 validation error(s); first at 1.value (float_parsing): Input "
+        "should be a valid number, unable to parse string as a number"
+    )
+    assert (info.value.raw, info.value.source) == (raw, "example")
+    assert info.value.__cause__ is None
+    assert info.value.__suppress_context__
+    printed = "".join(traceback.format_exception(info.value))
+    assert "first at 1.value (float_parsing)" in printed
+    assert MARKER not in printed
+
+
+def test_a_projection_that_does_not_fit_raises_from_none() -> None:
+    wide = Wide(label=MARKER, amount=None, extra=1)
+    with pytest.raises(ValidationError) as info:
+        Row.project(wide, amounts=[MARKER])
+    assert str(info.value) == (
+        "Row.project: 1 validation error(s); first at amounts.0 (decimal_parsing): Input "
+        "should be a valid decimal"
+    )
+    assert info.value.raw == {"label": MARKER, "amount": None, "amounts": [MARKER]}
+    assert MARKER not in "".join(traceback.format_exception(info.value))
 
 
 class Row(UpstreamModel):

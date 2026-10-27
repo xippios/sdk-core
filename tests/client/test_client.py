@@ -439,14 +439,16 @@ def test_decode_json_refuses_a_body_that_is_not_json() -> None:
     response = httpx.Response(200, text="<html>oops</html>", request=request)
     with pytest.raises(ValidationError) as info:
         decode_json(response, source="example")
-    assert info.value.message == "example: response from /v1/x is not JSON"
+    assert info.value.message == (
+        "example: response from /v1/x is not JSON: Expecting value at line 1 column 1 (char 0)"
+    )
     assert info.value.raw == "<html>oops</html>"
     assert info.value.source == "example"
-    assert isinstance(info.value.__cause__, ValueError)
-    with pytest.raises(ValidationError, match=r"^response from /v1/data is not JSON$"):
+    assert (info.value.__cause__, info.value.__suppress_context__) == (None, True)  # row 42
+    with pytest.raises(ValidationError, match=r"^response from /v1/data is not JSON: "):
         decode_json(response, path="/v1/data")
-    with pytest.raises(ValidationError, match=r"^response is not JSON$"):
-        decode_json(httpx.Response(200, text="oops"))
+    with pytest.raises(ValidationError, match=r"^response is not JSON: Extra data at line 1 "):
+        decode_json(httpx.Response(200, text='{"a": 1} oops'))
 
 
 def test_one_pool_per_event_loop(respx_mock: respx.MockRouter, config: ClientConfig) -> None:
