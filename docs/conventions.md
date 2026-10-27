@@ -1,6 +1,6 @@
 # xippios SDK family — conventions
 
-Version 1.14 · 2026-10-26 · applies to every `sdk-*` repository under github.com/xippios.
+Version 1.15 · 2026-10-26 · applies to every `sdk-*` repository under github.com/xippios.
 Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 The rules of ADR-0019 and ADR-0022, all of them (the download and decode calls, the
 cache bound, `BULK_TASKS`, the fixture cap and the `truncated` marker, the file-fixture
@@ -409,7 +409,13 @@ route: `router_from_tasks` skips it, and no route returns a file path (ADR-0019)
   The scrub spares a parameter named `key` when the client's auth is not a query key
   (`api_key_location != query`), as `ResultMeta` does (§4, ADR-0019).
 - Live tests are marked `@pytest.mark.live`, skipped unless `XIPPIOS_LIVE_TESTS=1`,
-  and run in CI only on a nightly schedule with org secrets.
+  and run in CI only in the one live workflow, `.github/workflows/live.yml`, in the shape
+  the template renders (a source whose secrets differ keeps that shape): one job,
+  `contents: read`, on a nightly schedule and on `workflow_dispatch`, never on a pull
+  request. The key reaches only that job's `uv run pytest -m live` step, from the org
+  secret; checkout, setup-uv and `uv sync` never see it. Sources that share a key stagger
+  their nightly start, so that they do not draw on the shared quota together; the
+  template derives the time from the slug (ADR-0009, amendment 2026-10-26).
 - The pytest plugin (`pytest_plugins = ["xippios.core.testing.plugin"]`) keeps the
   default run offline and free of real keys (ADR-0013):
   - No network, from `pytest_configure` on: while test modules are collected, in a
@@ -442,6 +448,17 @@ route: `router_from_tasks` skips it, and no route returns a file path (ADR-0019)
   - Logger levels: the `httpx` and `httpcore` logger levels are restored after every
     test, live ones included. They are saved per test, after fixtures of wider scope
     are set up, so one of those that changes a level leaves it behind.
+- The family conformance check, `xippios.core.testing.family`, tests once, in core, what
+  every source shares: the empty namespace levels, `py.typed` and `__version__`; the
+  tasks `mcp.py` and `http.py` serve (`tasks.__all__` minus `BULK_TASKS`) and those the
+  write server serves (`tasks_write.__all__`); every task synchronous, returning
+  `Result[T]`, with an agent docstring; the README status table listing exactly the
+  tasks; the template tag in `.copier-answers.yml`; the core bound of §12. The template
+  renders `tests/test_family.py`, which collects it with one line
+  (`from xippios.core.testing.family import *  # noqa: F403`), so it runs in every
+  source's CI, and a source keeps no copy of its checks. The plugin's ini option
+  `xippios_package` names the package under test where `src/xippios/` holds more than
+  one `tasks.py` (ADR-0013, amendment 2026-10-26).
 - Every task function has at least one fixture-backed test and one live smoke test.
 - Coverage is reported, not gated; mypy strict and ruff are gated.
 
@@ -511,9 +528,12 @@ adoption PR before its next release (§12, ADR-0018). The PR description is this
 checklist, ticked; an unticked item needs a one-line reason, an item the release does
 not touch included. A template-only update, with no new core minor, is judged against
 the items it touches. sdk-template's `/adopt-release` command walks the list step by
-step. An adoption PR is a `chore/template-update*` PR: after the reviewer's `ready` the
-session enables auto-merge, and GitHub merges it once `ci` is green and review threads
-are resolved.
+step. An adoption PR is a `chore/template-update*` PR: when its merge class is `auto` the
+session enables auto-merge after the reviewer's `ready`, and GitHub merges it once `ci` is
+green and review threads are resolved; a `human` adoption (a source-owned workflow, a
+changed template answer, a protected path, a build or install route) waits for Johannes
+(ADR-0018, amendment (e); the merge classes are in the README of the organisation's
+`.github` repository).
 
 1. The core floor is raised: `xippios-core` and each of its extras name the new minor
    with the bound of §12 (`xippios-core~=0.2.0`), and, where the source depends on

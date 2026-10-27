@@ -11,7 +11,7 @@ unless it is marked ``rate_limited``, quota snapshots reset before and after it,
 every ``EnvKeyAuth`` sending ``PLACEHOLDER_KEY`` (``placeholder_api_key``). A ``live``
 test is skipped unless ``XIPPIOS_LIVE_TESTS=1``.
 Every test, ``live`` or not, gets the ``httpx`` and ``httpcore`` logger levels back
-when it ends.
+when it ends, and ``anyio`` tests run on asyncio (``anyio_backend``).
 """
 
 import asyncio
@@ -37,6 +37,8 @@ LIVE_ENV = "XIPPIOS_LIVE_TESTS"
 PLACEHOLDER_KEY = "placeholder-for-fixture-replay"
 """The key every ``EnvKeyAuth`` sends in a test not marked ``live``."""
 _KEY_ENVS = "xippios_placeholder_key_envs"
+PACKAGE_INI = "xippios_package"
+"""The ini option naming the package the family check tests (``xippios.core.testing.family``)."""
 _REQUEST_LOGGERS = ("httpx", "httpcore")
 _MARKERS = (
     "live: hits the real upstream; skipped unless XIPPIOS_LIVE_TESTS=1",
@@ -194,13 +196,21 @@ def _transport_guard_async(
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
-    """Register the ini option ``xippios_placeholder_key_envs``."""
+    """Register the ini options ``xippios_placeholder_key_envs`` and ``xippios_package``."""
     parser.addini(
         _KEY_ENVS,
         "environment variables set to the placeholder key in every test not marked live, "
         "e.g. COMTRADE_API_KEY",
         type="args",
         default=[],
+    )
+    parser.addini(
+        PACKAGE_INI,
+        "import path of the source package the family check tests, e.g. xippios.usda.psd; "
+        "unset, the one package with a tasks.py under src/xippios/ "
+        "(xippios.core.testing.family)",
+        type="string",
+        default="",
     )
 
 
@@ -394,6 +404,22 @@ def _restore_request_logger_levels() -> Iterator[None]:
         logging.getLogger(name).setLevel(level)
 
 
+@pytest.fixture(scope="module")
+def anyio_backend() -> str:
+    """Run every ``anyio`` test on asyncio, the backend the family's client runs on.
+
+    anyio's own fixture runs each test once per installed backend, trio included where
+    it is installed; every source's ``conftest.py`` pinned asyncio with a fixture of its
+    own. Module-scoped, as anyio's is, so a module-scoped async fixture can use it. A
+    ``conftest.py`` or a test module that defines ``anyio_backend`` overrides this one.
+
+    It wins over anyio's when the plugin is enabled as every source enables it, through
+    ``pytest_plugins`` in ``tests/conftest.py``, which registers it after anyio's. Loaded
+    earlier, with ``-p xippios.core.testing.plugin``, anyio's comes last and decides.
+    """
+    return "asyncio"
+
+
 @pytest.fixture
 def fixtures_dir(request: pytest.FixtureRequest) -> Path:
     """``tests/fixtures`` under the repository root."""
@@ -404,17 +430,26 @@ def fixtures_dir(request: pytest.FixtureRequest) -> Path:
 def replay_fixture(respx_mock: respx.MockRouter, fixtures_dir: Path) -> ReplayFixture:
     """Mount ``tests/fixtures/<endpoint>/<case>.json`` and return the route.
 
-    Called as ``replay_fixture(endpoint, case, match_params=None)``, ``match_params`` by
-    keyword; it names recorded query parameters a request must carry too, e.g.
-    ``["countOnly"]`` (see ``xippios.core.testing.mount_fixture``). A test annotates the
-    fixture as ``xippios.core.testing.ReplayFixture``.
+    Called as ``replay_fixture(endpoint, case, match_params=None, url=None)``, the last
+    two by keyword: ``match_params`` names recorded query parameters a request must carry
+    too, e.g. ``["countOnly"]``, and ``url`` serves the recorded answer at another URL,
+    e.g. a recorded empty 404 at the path of another year (see
+    ``xippios.core.testing.mount_fixture``). A test annotates the fixture as
+    ``xippios.core.testing.ReplayFixture``.
     """
 
     def _replay(
-        endpoint: str, case: str, *, match_params: Iterable[str] | None = None
+        endpoint: str,
+        case: str,
+        *,
+        match_params: Iterable[str] | None = None,
+        url: str | None = None,
     ) -> respx.Route:
         return replay(
-            respx_mock, fixture_path(fixtures_dir, endpoint, case), match_params=match_params
+            respx_mock,
+            fixture_path(fixtures_dir, endpoint, case),
+            match_params=match_params,
+            url=url,
         )
 
     return _replay

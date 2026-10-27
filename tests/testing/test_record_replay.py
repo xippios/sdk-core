@@ -14,7 +14,7 @@ from xippios.core.client import (
     RetryPolicy,
     Timeouts,
 )
-from xippios.core.errors import NotFoundError
+from xippios.core.errors import NotFoundError, error_from_response
 from xippios.core.testing import (
     REDACTED,
     Fixture,
@@ -25,7 +25,10 @@ from xippios.core.testing import (
     mount_fixture,
     record,
     record_sync,
+    recorded_query,
     replay,
+    response_from_fixture,
+    sent_query,
     sent_urls,
     write_fixture,
 )
@@ -428,3 +431,81 @@ def test_the_more_specific_fixture_is_mounted_first(
     replay(respx_mock, tmp_path / "d.json")
     assert httpx.get(f"{BASE}/v1/get?countOnly=true&r=1").json() == {"count": 3}
     assert httpx.get(f"{BASE}/v1/get?r=1").json() == {"rows": []}
+
+
+def test_sent_query_is_the_last_query_scrubbed(
+    respx_mock: respx.MockRouter, config: ClientConfig
+) -> None:
+    # sdk-usda-nass (sent_query) and sdk-comtrade (_sent) each carried it; cashctrl reads
+    # route.calls.last inline (row 36 a).
+    route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
+    with pytest.raises(AssertionError, match="received no request"):
+        sent_query(route)
+    with Client(config) as client:
+        client.get("/v1/x", params={"key": "SECRET", "year": 2024})
+        client.get("/v1/x", params={"year": 2025, "state": ""})
+    assert sent_query(route) == {"year": "2025", "state": ""}
+    assert [httpx.URL(url).params.get("key") for url in sent_urls(route)] == [REDACTED, None]
+
+
+def test_sent_query_refuses_a_repeated_parameter(respx_mock: respx.MockRouter) -> None:
+    route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
+    httpx.get(f"{BASE}/v1/x?period=2022&period=2023&flow=M")
+    with pytest.raises(AssertionError, match=r"sent more than once: \['period'\]"):
+        sent_query(route)
+
+
+def test_recorded_query_is_the_scrubbed_recorded_query(tmp_path: Path) -> None:
+    # sdk-comtrade (recorded_params, _recorded) and sdk-cashctrl (recorded_query).
+    request = httpx.Request("GET", f"{BASE}/v1/x?key=SECRET&year=2024&q=")
+    path = tmp_path / "x.json"
+    write_fixture(httpx.Response(200, json={}, request=request), path)
+    assert recorded_query(load_fixture(path)) == {"key": REDACTED, "year": "2024", "q": ""}
+
+
+def test_a_recorded_answer_is_served_at_another_url(
+    respx_mock: respx.MockRouter, tmp_path: Path
+) -> None:
+    # sdk-usda-psd and sdk-usda-esr each carried _mount_recorded_404 (row 41 b): the empty
+    # 404 recorded for 1900 stands in for a year without data inside a range.
+    request = httpx.Request("GET", f"{BASE}/v1/year/1900")
+    path = tmp_path / "data" / "unknown_year.json"
+    write_fixture(httpx.Response(404, content=b"", request=request), path)
+    route = replay(respx_mock, path, url=f"{BASE}/v1/year/2022")
+    assert httpx.get(f"{BASE}/v1/year/2022").status_code == 404
+    with pytest.raises(AllMockedAssertionError):
+        httpx.get(f"{BASE}/v1/year/1900")
+    assert sent_urls(route) == [f"{BASE}/v1/year/2022"]
+    flows = replay(respx_mock, path, url=f"{BASE}/v1/year/2023?flow=M", match_params=["flow"])
+    assert httpx.get(f"{BASE}/v1/year/2023?flow=M").status_code == 404
+    with pytest.raises(AllMockedAssertionError):
+        httpx.get(f"{BASE}/v1/year/2023?flow=X")
+    assert flows.call_count == 1
+    with pytest.raises(ValueError, match=r"'year' is not a query parameter of the URL given"):
+        replay(respx_mock, path, url=f"{BASE}/v1/year/2024", match_params=["year"])
+
+
+def test_the_plugin_serves_a_recorded_answer_at_another_url(
+    replay_fixture: ReplayFixture,
+) -> None:
+    route = replay_fixture("x", "y", url=f"{BASE}/v2/x")
+    with Client(ClientConfig(source="example", version="1", base_url=BASE)) as client:
+        assert client.get_json("/v2/x") == {"n": 1}
+    assert sent_urls(route) == [f"{BASE}/v2/x"]
+
+
+def test_response_from_fixture_carries_the_recorded_request(tmp_path: Path) -> None:
+    # sdk-usda-psd, sdk-usda-esr, sdk-usda-gats (test_client.py) and sdk-cashctrl
+    # (test_errors.py) each carried recorded(): a recorded answer for classify.
+    request = httpx.Request("GET", f"{BASE}/v1/x?key=SECRET")
+    path = tmp_path / "x.json"
+    write_fixture(httpx.Response(404, json={"error": "none"}, request=request), path)
+    response = response_from_fixture(load_fixture(path))
+    assert (response.status_code, response.json()) == (404, {"error": "none"})
+    assert (response.request.method, str(response.request.url)) == (
+        "GET",
+        f"{BASE}/v1/x?key={REDACTED}",
+    )
+    error = error_from_response(response, source="example")
+    assert isinstance(error, NotFoundError)
+    assert str(error).startswith("404 from GET /v1/x")

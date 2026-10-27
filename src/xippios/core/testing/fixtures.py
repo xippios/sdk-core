@@ -24,6 +24,8 @@ __all__ = [
     "fixture_from_response",
     "fixture_path",
     "load_fixture",
+    "recorded_query",
+    "response_from_fixture",
     "write_fixture",
 ]
 
@@ -172,3 +174,51 @@ def write_fixture(response: httpx.Response, path: Path, *, scrub: Scrub | None =
 def load_fixture(path: Path) -> Fixture:
     """Read a fixture written by ``write_fixture``."""
     return Fixture.model_validate_json(path.read_text(encoding="utf-8"))
+
+
+def response_from_fixture(fixture: Fixture) -> httpx.Response:
+    """The recorded response as an ``httpx.Response``, without a request sent.
+
+    Its request is the recorded method and URL, scrubbed, so a test can hand it to a
+    source's ``classify`` or to ``error_from_response``, which read both, e.g.
+    ``classify(response_from_fixture(load_fixture(path)))``. The recorded request body
+    is not attached.
+
+    Args:
+        fixture: The recorded exchange, e.g. from ``load_fixture``.
+    """
+    return httpx.Response(
+        fixture.response.status,
+        headers=fixture.response.headers,
+        content=fixture.response.content,
+        request=httpx.Request(fixture.request.method, fixture.request.url),
+    )
+
+
+def recorded_query(fixture: Fixture) -> dict[str, str]:
+    """The query parameters the fixture was recorded with, as the recorder scrubbed them.
+
+    A credential reads ``REDACTED``. The companion of ``sent_query``: a test compares
+    what a task sent with what was recorded, ``sent_query(route) ==
+    recorded_query(fixture)``.
+
+    Args:
+        fixture: The recorded exchange, e.g. from ``load_fixture``.
+
+    Raises:
+        AssertionError: A parameter was recorded more than once; read its values with
+            ``httpx.URL(fixture.request.url).params.get_list(name)``.
+    """
+    return _query_of(fixture.request.url)
+
+
+def _query_of(url: str) -> dict[str, str]:
+    """``url``'s query as a mapping, blank values kept; a repeated name fails the test."""
+    params = httpx.URL(url).params
+    repeated = sorted({name for name in params if len(params.get_list(name)) > 1})
+    if repeated:
+        raise AssertionError(
+            f"query parameters sent more than once: {repeated}; read them with "
+            "httpx.URL(url).params.get_list(name)"
+        )
+    return dict(params)

@@ -148,3 +148,20 @@ Amended by ADR-0015 (2026-10-24): decision 4, no quota pause and no quota left s
 
 Amended by ADR-0016 (2026-10-24): two edges of decision 4, the snapshots consecutive
 live tests share and when a quota spent by a fixture of wider scope is forgotten.
+
+## Amendment 2026-10-26
+
+The plugin's guarantees extend to the family invariants that the template-rendered
+`tests/test_family.py` collects. Core's `testing` extra ships the family conformance
+check, `xippios.core.testing.family`, and the rendered file collects it with one line,
+`from xippios.core.testing.family import *  # noqa: F403`, so every source's default run,
+in its CI, tests what every source shares: the empty namespace levels, `py.typed` and
+`__version__`, the tasks the adapters and the write server serve, `Result[T]` and the
+agent docstrings, the README status table, the template tag and the core bound. Each
+source carried these checks as its own `tests/test_layout.py` and
+`tests/test_adapters.py`; a check added in a later core release now reaches every source
+with the core update, as the guarantees above do. The plugin registers the ini option
+`xippios_package`, which names the package under test where `src/xippios/` holds more
+than one `tasks.py`. Johannes decided on 2026-10-26 that a family conformance check ships
+in core's `testing` extra and runs in every source's CI; conventions §10 names it from
+1.15 on.

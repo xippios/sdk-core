@@ -26,7 +26,7 @@ dependencies = [
 [project.optional-dependencies]
 mcp = ["mcp>=2.0"]
 http = ["fastapi>=0.115"]
-testing = ["pytest>=8", "respx>=0.22", "anyio>=4", "httpcore>=1.0"]
+testing = ["pytest>=8", "respx>=0.22", "anyio>=4", "httpcore>=1.0", "packaging>=22"]
 
 [project.urls]
 Homepage = "https://github.com/xippios/sdk-core"
@@ -52,8 +52,9 @@ build-backend = "hatchling.build"
 packages = ["src/xippios"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src", "tests", "docs", "README.md", "CHANGELOG.md", "LICENSE"]
-exclude = ["docs/handover.md"]
+# Anchored at the root: an unanchored "README.md" or "LICENSE" matches one at any depth.
+include = ["/src", "/tests", "/docs", "/README.md", "/CHANGELOG.md", "/LICENSE"]
+exclude = ["/docs/handover.md"]
 
 [tool.ruff]
 line-length = 100
