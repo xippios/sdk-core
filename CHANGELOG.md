@@ -46,8 +46,39 @@ All notable changes to this project are documented here. The format follows
   `install_error_handlers` and `problem_response` from `xippios.core.http`. With the
   six deleted names above, the five lists go from 113 entries (98 names) to 81 (69
   names). No source imports a removed name from a package.
+- **`QuotaPolicy`'s `reset_header`, with the reset header's three formats** (the family
+  review's C6; ADR-0015, amendment 2026-10-27; no source sets it, and api.data.gov sends
+  no reset header): delay-seconds, epoch seconds and an HTTP-date are no longer read. A
+  spent quota is back after a 429's `Retry-After`, the seconds `spent` names, or
+  `window`, each cut to `window`.
+- **`QuotaPolicy.mark_spent`** (C6; no caller): `spent=` stays, for an upstream that
+  answers a spent limit with something other than a 429.
+- **The per-config cap and the hook check of `QuotaPolicy.install`** (C6): `install` no
+  longer binds the pause to each config's `retry.backoff_max` through a hook of its own,
+  nor refuses with `ValueError` a config that has a `before_request` or `observe` hook of
+  its own; `pause_cap=None` and the 30 s of a `before_request` called directly go with
+  them (Changed, below).
 
 ### Changed
+
+- **`pause_cap` is the one bound of a quota pause** (C6; ADR-0010, decision 4, and
+  ADR-0015, amended 2026-10-27): 30.0 by default, the default `backoff_max`, whether
+  `before_request` runs as the hook or is called directly; a config's
+  `retry.backoff_max` bounds the retries alone.
+- **`QuotaPolicy.install(config)` sets the policy's own hooks** (C6):
+  `dataclasses.replace(config, before_request=policy.before_request,
+  observe=policy.observe)`, reading nothing else from the config. Hooks the config had
+  are replaced; a source that needs hooks of its own as well composes them itself.
+  Installing again changes nothing. Since the hook is `before_request` itself, a
+  subclass's override is called through it; the testing plugin still turns off the
+  pause step alone.
+- **The api.data.gov 429's wait comes from the quota snapshot** (queue row 30 c, found
+  by sdk-usda-psd): the gateway's `classify` counts to `Gateway.policy.snapshot()`'s
+  `resumes_at` on the policy's clock, since `observe` ran before it, instead of
+  restating "`Retry-After`, else the window" as the three copies did; no
+  `QuotaPolicy.wait_for` is added. Its message names the gateway's allowance, that every
+  package using the key shares it, the quota and the wait, and no longer says what was
+  retried: the retry loop's bound decides that.
 
 - **`ResultCap` is defined in `xippios.core.models` and exported from `xippios.core`**
   (queue row 30 a, found by sdk-usda-psd; the per-tool cap of ADR-0016): a source's
@@ -68,6 +99,21 @@ All notable changes to this project are documented here. The format follows
   consumer imports it): sdk-cashctrl imports the first two from `xippios.core.errors`,
   and sdk-usda-psd, then sdk-usda-esr and sdk-usda-gats, the third. The module path
   keeps working.
+- **`xippios.core.data_gov`, the api.data.gov gateway module** (the family review's C14;
+  ADR-0009, amendment 2026-10-27; ADR-0023; queue row 30 d, found by sdk-usda-psd, and
+  row 39 e, by sdk-usda-gats). `Gateway(source)` gives `auth`, a `HeaderKeyAuth` on
+  `X-Api-Key` from `DATA_GOV_API_KEY` with the source's slug for its `ConfigError`;
+  `classify(response)`, the gateway's `API_KEY_*` answer to a 401 or 403 as `AuthError`,
+  its 429 as `RateLimitError` and its `NOT_FOUND` 404 as `NotFoundError`, in the source's
+  name with the gateway's URL written `<host>`, and `None` for every other answer; and
+  `install(config)`, the hooks of `Gateway.policy`, one `QuotaPolicy` per process on
+  `x-ratelimit-limit` and `x-ratelimit-remaining` with a one-hour window, which every
+  source in the process shares. The policy's refusal before sending speaks for
+  `api.data.gov` and names the variable. `API_KEY_ENV`, `KEY_HEADER`, `WINDOW`,
+  `LIMIT_HEADER` and `REMAINING_HEADER` come with it. Consumers: sdk-usda-psd,
+  sdk-usda-esr and sdk-usda-gats, which carry the same code as copies today, and the
+  template's api.data.gov gateway answer of v0.3.0. Imported from its module;
+  `xippios.core` does not re-export it.
 
 ### Documentation
 
@@ -79,11 +125,18 @@ All notable changes to this project are documented here. The format follows
   `xippios.core.client.quota`. **ADR-0004** and **ADR-0009** get a line each for the
   deleted `config` module and `resolve_api_key`.
 - **Conventions 1.16**: §7 reads the environment through the `EnvKeyAuth` helpers.
+- **ADR-0009, ADR-0010 and ADR-0015, amended 2026-10-27**: the gateway module as the
+  code side of one key per issuer; the quota pause bounded by `pause_cap`; C6's
+  removals, `install`'s contract and the 429's wait read from the snapshot.
+- **Conventions 1.17**: §6 bounds the quota pause by the policy's `pause_cap` and says
+  that `install` replaces the config's hooks; §7 names `xippios.core.data_gov` for the
+  sources behind api.data.gov.
 
 ### Hand-apply for sources
 
-What a source's adoption of 0.3.0 changes because of the removals and moves above; no
-source imports a deleted name, so nothing else breaks.
+What a source's adoption of 0.3.0 changes because of the changes above. No source
+imports a deleted name; the tests of the api.data.gov sources read a deleted attribute
+and texts that change, listed here.
 
 - `src/xippios/usda/nass/tasks.py`, `src/xippios/usda/psd/tasks.py`,
   `src/xippios/usda/esr/tasks.py`, `src/xippios/usda/gats/tasks.py` — the
@@ -96,6 +149,33 @@ source imports a deleted name, so nothing else breaks.
   `src/xippios/usda/gats/_client.py` (`parse_retry_after`) — `from xippios.core.errors
   import ...` may become `from xippios.core import ...` — the names are exported now; the
   module path keeps working.
+- `src/xippios/usda/psd/_client.py`, `src/xippios/usda/esr/_client.py`,
+  `src/xippios/usda/gats/_client.py` — the gateway block (`API_KEY_ENV`,
+  `policy = QuotaPolicy(...)`, `_URL`, `_gateway_error`, `_over_rate_limit`, the
+  `API_KEY_*`, 429 and `NOT_FOUND` branches of `classify`, `auth = HeaderKeyAuth(...)`) →
+  `gateway = Gateway(SOURCE)` from `xippios.core.data_gov`: `classify` returns
+  `gateway.classify(response)` when that is not `None` and keeps its own branches after
+  it (psd's empty 404, esr's 400), `config = gateway.install(ClientConfig(...))`,
+  `client = AsyncClient(config, auth=gateway.auth)`; where the package keeps the names
+  `API_KEY_ENV`, `policy` and `auth`, they become `xippios.core.data_gov.API_KEY_ENV`,
+  `Gateway.policy` and `gateway.auth`; the `parse_retry_after` import goes when nothing
+  else uses it — the gateway module replaces the three copies (C14, ADR-0023).
+- `tests/test_client.py` (psd, esr, gats) — the wiring test drops
+  `policy.reset_header`, which is gone, and may assert
+  `config.before_request == Gateway.policy.before_request` next to
+  `config.observe == Gateway.policy.observe`; the assertion on "Nothing was retried"
+  goes, since the message no longer speaks of retries; a `retry_after` read through the
+  client is the snapshot's wait from now, so `== 3151.0` or `== 3600` becomes a bracket
+  with `CLOCK_SLACK`, while `classify` called on its own still gives the exact wait; the
+  policy's refusal before sending carries `source == "api.data.gov"`, not the slug, and
+  starts "api.data.gov quota of the key in DATA_GOV_API_KEY spent" — C6, C14.
+- `CLAUDE.md` (psd, esr, gats), the rate-limit row — "within `RetryPolicy.backoff_max`
+  (30 s by default)" → "within the policy's `pause_cap` (30 s by default)", and the
+  gateway's key, answers and quota named as `xippios.core.data_gov`'s — ADR-0010,
+  decision 4, amended 2026-10-27.
+
+sdk-comtrade's planned `QuotaPolicy(limit_header=None, remaining_header=None,
+window=86400, spent=...)` is unaffected: `spent=` stays.
 
 ## [0.2.1] - 2026-10-27
 

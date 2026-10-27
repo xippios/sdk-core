@@ -21,6 +21,9 @@ It gives a source package the things that should be identical across the family:
 - **Auth helpers** that read the key from the environment on the first request:
   query parameter, header, bearer token or basic auth. A source's documented error
   shapes go into `ClientConfig.classify`, consulted on every response.
+- **The api.data.gov gateway** (`xippios.core.data_gov`) for every source behind it:
+  the key from `DATA_GOV_API_KEY`, the gateway's error answers, and one quota policy per
+  process for that key.
 - **Error taxonomy**: `ConfigError`, `AuthError`, `RateLimitError`, `NotFoundError`,
   `ValidationError`, `UpstreamError`, `TransportError` and `InvalidRequestError` (the
   request as given cannot be served: a bad argument, or a refusal the source documents,
@@ -164,13 +167,51 @@ async def list_countries_async() -> object:
 The policy reads the quota headers of every response from the wire through
 `ClientConfig.observe`. Once a 429, or a response that leaves nothing, shows the quota
 spent, `ClientConfig.before_request` makes the next request wait until it is back if
-that is within `RetryPolicy.backoff_max` (30 s by default), with one warning in the log,
+that is within the policy's `pause_cap` (30 s by default), with one warning in the log,
 and otherwise raises `RateLimitError` with `retry_after`, saying that nothing was sent.
-An upstream that answers a spent limit with something other than a 429 gets
-`QuotaPolicy(spent=...)`, a function that returns the seconds to wait for such an
-answer, or `None`. A wait from upstream is never longer than `window`, and the reset
-header may hold delay-seconds, epoch seconds or an HTTP-date. `install` refuses a config
-that has hooks of its own, rather than replacing them.
+A spent quota is back after a 429's `Retry-After`, else after `window`. An upstream that
+answers a spent limit with something other than a 429 gets `QuotaPolicy(spent=...)`, a
+function that returns the seconds to wait for such an answer, or `None`. A wait from
+upstream is never longer than `window`. `install` sets the policy's two hooks on a copy
+of the config and reads nothing else from it; a source that needs hooks of its own as
+well composes them itself.
+
+A source behind api.data.gov takes all of this from `xippios.core.data_gov`, together
+with its key and the gateway's documented answers. Every `Gateway` in a process shares
+one `QuotaPolicy`, `Gateway.policy`, since one key is one quota across every package that
+uses it:
+
+```python
+import httpx
+
+from xippios.core import AsyncClient, ClientConfig, NotFoundError, XippiosError
+from xippios.core.data_gov import Gateway
+
+gateway = Gateway("usda-psd")
+
+
+def classify(response: httpx.Response) -> XippiosError | None:
+    error = gateway.classify(response)  # API_KEY_*, the 429, NOT_FOUND; else None
+    if error is None and response.status_code == 404 and not response.content:
+        # the source's own documented answers follow the gateway's
+        error = NotFoundError(f"no data for {response.request.url.path}", source="usda-psd")
+    return error
+
+
+config = gateway.install(
+    ClientConfig(
+        source="usda-psd",
+        version="0.3.0",
+        base_url="https://api.fas.usda.gov",
+        classify=classify,
+    )
+)
+client = AsyncClient(config, auth=gateway.auth)  # X-Api-Key from DATA_GOV_API_KEY
+```
+
+The gateway's 429 is a `RateLimitError` in the source's name whose `retry_after` is the
+wait the shared policy keeps the quota spent for; once it is spent, the policy refuses the
+next request of any source in the process before sending, as `api.data.gov`.
 
 A request the cache answers never waits: `before_request` runs after the cache lookup,
 and a cache hit carries the time its entry was stored in
@@ -510,6 +551,7 @@ changed, breaking changes first.
 | --- | --- | --- |
 | `xippios.core.client` | httpx client, retries, rate limit, cache, quota policy, request hooks, env-key auth | alpha |
 | `xippios.core.errors` | taxonomy and response classification | alpha |
+| `xippios.core.data_gov` | `Gateway`: the api.data.gov key, the gateway's `classify`, one quota policy per process | alpha |
 | `xippios.core.models` | `UpstreamModel`, `Result`, `ResultMeta`, `ResultCap`, `parse` | alpha |
 | `xippios.core.reference` | packaged CSV/JSON loaders, generated `StrEnum`/`IntEnum` modules | alpha |
 | `xippios.core.pagination` | `paginate_offset` (a page-numbered endpoint maps the offset to its page), `collect` | alpha |
