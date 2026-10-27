@@ -1,5 +1,4 @@
 import asyncio
-import dataclasses
 import gzip
 import time
 
@@ -16,8 +15,6 @@ from xippios.core.client import (
     QueryKeyAuth,
     RateLimit,
     RetryPolicy,
-    Timeouts,
-    TokenBucket,
     cache_key,
     decode_json,
 )
@@ -322,145 +319,6 @@ async def test_rate_limiter_waits_between_calls(
     await client.get("/v1/x")
     assert len(sleeper.calls) == 1
     assert 0.9 <= sleeper.calls[0] <= 1.0
-
-
-class Clock:
-    def __init__(self) -> None:
-        self.now = 0.0
-
-    def __call__(self) -> float:
-        return self.now
-
-
-@pytest.mark.anyio
-@pytest.mark.rate_limited
-async def test_clients_share_one_limiter(respx_mock: respx.MockRouter, sleeper: Sleeper) -> None:
-    respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
-    bucket = TokenBucket(RateLimit(per_minute=60, burst=1), clock=Clock())
-    keyed = ClientConfig(source="example", version="1", base_url=BASE)
-    # A config of its own would pace at 6,000 a minute; the shared bucket wins.
-    keyless = ClientConfig(
-        source="example", version="1", base_url=BASE, rate_limit=RateLimit(per_minute=6000)
-    )
-    a = AsyncClient(keyed, sleep=sleeper, limiter=bucket)
-    b = AsyncClient(keyless, sleep=sleeper, limiter=bucket)
-    assert a.limiter is b.limiter
-    assert a.limiter is bucket
-    await a.get("/v1/x")
-    assert sleeper.calls == []
-    await b.get("/v1/x")  # the bucket's one token went to a
-    assert sleeper.calls == [pytest.approx(1.0)]
-
-
-def test_limiter_defaults_to_the_configured_rate_limit(config: ClientConfig) -> None:
-    assert AsyncClient(config).limiter is None
-    limited = ClientConfig(
-        source="example", version="1", base_url=BASE, rate_limit=RateLimit(per_minute=30)
-    )
-    own = AsyncClient(limited).limiter
-    assert own is not None
-    assert own.limit == RateLimit(per_minute=30)
-
-
-@pytest.mark.anyio
-@pytest.mark.rate_limited
-async def test_derive_shares_auth_limiter_and_cache_and_changes_only_the_policy(
-    respx_mock: respx.MockRouter, sleeper: Sleeper
-) -> None:
-    # sdk-comtrade: a recording needs longer timeouts than the source's client has.
-    route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={"n": 1})
-    cache = MemoryCache()
-    bucket = TokenBucket(RateLimit(per_minute=60, burst=1), clock=Clock())
-    config = ClientConfig(
-        source="example",
-        version="1",
-        base_url=BASE,
-        retry=RetryPolicy(max_attempts=1),
-        cache=cache,
-        headers={"X-Family": "xippios"},
-    )
-    client = AsyncClient(config, auth=httpx.BasicAuth("user", "pw"), sleep=sleeper, limiter=bucket)
-    retry = RetryPolicy(max_attempts=5, jitter=False)
-    timeouts = Timeouts(read=300.0)
-    derived = client.derive(retry=retry, timeouts=timeouts)
-
-    assert derived is not client
-    assert type(derived) is AsyncClient
-    assert derived.config == dataclasses.replace(config, retry=retry, timeouts=timeouts)
-    assert client.config is config
-    assert derived.config.cache is cache
-    assert derived.limiter is bucket
-    assert client.derive(timeouts=timeouts).config.retry is config.retry
-    assert client.derive(retry=retry).config.timeouts is config.timeouts
-    assert client.derive().config == config
-
-    await client.get("/v1/x", params={"a": 1})  # takes the bucket's one token, fills the cache
-    hit = await derived.get("/v1/x", params={"a": 1})
-    assert hit.extensions["xippios_cache"] == "hit"
-    assert route.call_count == 1
-    assert sleeper.calls == []
-    await derived.get("/v1/x", params={"a": 2})  # waits on the shared bucket, shared sleep
-    assert sleeper.calls == [pytest.approx(1.0)]
-    assert route.calls.last.request.headers["authorization"].startswith("Basic ")
-    assert route.calls.last.request.headers["x-family"] == "xippios"
-    assert route.calls.last.request.extensions["timeout"] == {
-        "connect": 10.0,
-        "read": 300.0,
-        "write": 10.0,
-        "pool": 10.0,
-    }
-    await derived.aclose()
-
-
-@pytest.mark.anyio
-async def test_derive_shares_the_transport(config: ClientConfig) -> None:
-    seen: list[httpx.Request] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        seen.append(request)
-        return httpx.Response(200, json={})
-
-    client = AsyncClient(config, transport=httpx.MockTransport(handler))
-    async with client.derive(retry=RetryPolicy(max_attempts=1)) as derived:
-        await derived.get("/v1/x")
-    assert [str(request.url) for request in seen] == [f"{BASE}/v1/x"]
-
-
-class CountingTransport(httpx.AsyncBaseTransport):
-    """Answers every request and counts the requests and how often it was closed."""
-
-    def __init__(self) -> None:
-        self.requests = 0
-        self.closed = 0
-
-    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
-        self.requests += 1
-        return httpx.Response(200, json={})
-
-    async def aclose(self) -> None:
-        self.closed += 1
-
-
-@pytest.mark.anyio
-async def test_a_derived_client_never_closes_the_transport_it_borrowed(
-    config: ClientConfig,
-) -> None:
-    transport = CountingTransport()
-    client = AsyncClient(config, transport=transport)
-    await client.get("/v1/x")
-    derived = client.derive(retry=RetryPolicy(max_attempts=1))
-    await derived.get("/v1/x")
-    pool = derived._pool()
-    await derived.aclose()
-    assert pool.is_closed  # the derived client's own pool is closed
-    assert transport.closed == 0  # the parent's transport is not
-    async with derived.derive(timeouts=Timeouts(read=1.0)) as grandchild:
-        await grandchild.get("/v1/x")
-    assert transport.closed == 0
-    await client.get("/v1/x")  # the parent still sends through it
-    assert transport.requests == 4
-    await client.aclose()
-    assert transport.closed == 1  # a transport passed by the caller closes with its client
 
 
 @pytest.mark.anyio

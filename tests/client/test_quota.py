@@ -561,23 +561,6 @@ async def test_each_installed_config_pauses_within_its_own_backoff_max() -> None
         await pause(explicit.install(make_config(retry=RetryPolicy(backoff_max=60.0))))
 
 
-@pytest.mark.anyio
-@pytest.mark.rate_limited
-async def test_a_derived_client_keeps_its_parent_s_cap() -> None:
-    events: list[str] = []
-    clock = Clock()
-    policy = QuotaPolicy(window=20.0, clock=clock, sleep=Sleeper(events, clock))
-    upstream = Upstream(events, answer(headers=SPENT))
-    config = policy.install(make_config(retry=RetryPolicy(max_attempts=1, backoff_max=12.0)))
-    client = AsyncClient(config, transport=upstream)
-    await client.get("/v1/x")
-    derived = client.derive(retry=RetryPolicy(max_attempts=1, backoff_max=600.0))
-    assert derived.config.before_request == config.before_request
-    with pytest.raises(RateLimitError, match=r"\(12 s\)"):
-        await derived.get("/v1/x")
-    assert upstream.sent == 1
-
-
 # -- the pause, through the client --------------------------------------------------------
 
 

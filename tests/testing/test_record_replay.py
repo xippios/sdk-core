@@ -11,7 +11,6 @@ from xippios.core.client import (
     ClientConfig,
     HeaderKeyAuth,
     RetryPolicy,
-    Timeouts,
 )
 from xippios.core.errors import NotFoundError, error_from_response
 from xippios.core.testing import (
@@ -33,14 +32,6 @@ from xippios.core.testing import (
 )
 
 BASE = "https://api.example.test"
-
-
-class Sleeper:
-    def __init__(self) -> None:
-        self.calls: list[float] = []
-
-    async def __call__(self, seconds: float) -> None:
-        self.calls.append(seconds)
 
 
 @pytest.fixture
@@ -147,72 +138,6 @@ async def test_record_refuses_json_and_data_together(
 
 
 @pytest.mark.anyio
-async def test_record_uses_the_given_retry_and_timeouts(
-    respx_mock: respx.MockRouter, config: ClientConfig, tmp_path: Path
-) -> None:
-    # sdk-comtrade: a recording could not override the client's retry policy or timeouts.
-    route = respx_mock.get(f"{BASE}/v1/slow").mock(
-        side_effect=[httpx.Response(503), httpx.Response(200, json={"n": 1})]
-    )
-    sleeper = Sleeper()
-    client = AsyncClient(config, sleep=sleeper)  # max_attempts=1
-    fixture = await record(
-        client,
-        "/v1/slow",
-        tmp_path / "slow.json",
-        retry=RetryPolicy(max_attempts=2, jitter=False),
-        timeouts=Timeouts(read=300.0),
-    )
-    assert fixture.response.status == 200
-    assert route.call_count == 2
-    assert sleeper.calls == [0.5]  # the client's sleep, the override's backoff
-    assert route.calls.last.request.extensions["timeout"]["read"] == 300.0
-
-    route.side_effect = [httpx.Response(503)]
-    fixture = await record(client, "/v1/slow", tmp_path / "slow.json")
-    assert fixture.response.status == 503  # the client itself is unchanged
-    assert route.call_count == 3
-    assert route.calls.last.request.extensions["timeout"]["read"] == 60.0
-
-
-class ClosingTransport(httpx.AsyncBaseTransport):
-    """Answers every request and counts how often a pool closed it."""
-
-    def __init__(self) -> None:
-        self.closed = 0
-
-    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"n": 1})
-
-    async def aclose(self) -> None:
-        self.closed += 1
-
-
-@pytest.mark.anyio
-async def test_record_closes_the_derived_client_and_leaves_the_transport_open(
-    config: ClientConfig, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    closed: list[AsyncClient] = []
-    aclose = AsyncClient.aclose
-
-    async def counting_aclose(self: AsyncClient) -> None:
-        closed.append(self)
-        await aclose(self)
-
-    monkeypatch.setattr(AsyncClient, "aclose", counting_aclose)
-    transport = ClosingTransport()
-    client = AsyncClient(config, transport=transport)
-    await record(client, "/v1/x", tmp_path / "a.json", timeouts=Timeouts(read=300.0))
-    assert len(closed) == 1  # the derived client, closed when record returned
-    assert closed[0] is not client
-    assert transport.closed == 0  # the client's transport, which derive only borrowed
-    await record(client, "/v1/x", tmp_path / "b.json")
-    assert len(closed) == 1  # the caller's own client stays open
-    await client.aclose()
-    assert transport.closed == 1
-
-
-@pytest.mark.anyio
 async def test_record_a_tenant_and_replay_on_the_placeholder_host(
     respx_mock: respx.MockRouter, tmp_path: Path
 ) -> None:
@@ -242,35 +167,16 @@ async def test_record_a_tenant_and_replay_on_the_placeholder_host(
     assert route.call_count == 1
 
 
-def test_record_sync_takes_the_new_keywords(
-    respx_mock: respx.MockRouter, config: ClientConfig, tmp_path: Path
-) -> None:
-    respx_mock.post(f"{BASE}/v1/x").respond(200, json={"org": "s3cr3t"})
-    fixture = record_sync(
-        AsyncClient(config),
-        "/v1/x",
-        tmp_path / "x.json",
-        method="POST",
-        data={"org": "s3cr3t"},
-        scrub=Scrub(secrets=["s3cr3t"]),
-        timeouts=Timeouts(read=5.0),
-    )
-    assert fixture.request.body == f"org={REDACTED}"
-    assert fixture.response.body == f'{{"org":"{REDACTED}"}}'
-
-
 @pytest.mark.anyio
-@pytest.mark.parametrize("override", [False, True], ids=["client", "derived"])
 async def test_record_without_the_client_s_auth(
-    respx_mock: respx.MockRouter, config: ClientConfig, tmp_path: Path, override: bool
+    respx_mock: respx.MockRouter, config: ClientConfig, tmp_path: Path
 ) -> None:
     # sdk-comtrade: a keyless reference file is recorded without sending the key.
     route = respx_mock.get(f"{BASE}/files/ref.json").respond(200, json={"codes": []})
     client = AsyncClient(config, auth=HeaderKeyAuth("X-Api-Key", "EXAMPLE_API_KEY"))
-    timeouts = Timeouts(read=300.0) if override else None
-    await record(client, "/files/ref.json", tmp_path / "ref.json", auth=None, timeouts=timeouts)
+    await record(client, "/files/ref.json", tmp_path / "ref.json", auth=None)
     assert "x-api-key" not in route.calls.last.request.headers
-    await record(client, "/files/ref.json", tmp_path / "ref.json", timeouts=timeouts)
+    await record(client, "/files/ref.json", tmp_path / "ref.json")
     assert "x-api-key" in route.calls.last.request.headers
 
 

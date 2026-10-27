@@ -310,11 +310,12 @@ class QuotaPolicy:
         ``config`` itself is unchanged. The ``before_request`` hook is bound to this
         config's cap: ``pause_cap`` when the policy was given one, else
         ``config.retry.backoff_max``, so one policy installed on two configs pauses each
-        within its own bound, and a client from ``AsyncClient.derive`` keeps its
-        parent's hooks and cap. Installing the policy again on a config it is installed
-        on is allowed. The hook calls the pause step directly, never ``before_request``,
-        so a subclass's override of ``before_request`` is not called through it, and the
-        testing plugin, which turns off the pause step, does not turn off the override.
+        within its own bound, and a config copied with ``dataclasses.replace`` keeps
+        the hooks and the cap of the one it came from. Installing the policy again on a
+        config it is installed on is allowed. The hook calls the pause step directly,
+        never ``before_request``, so a subclass's override of ``before_request`` is not
+        called through it, and the testing plugin, which turns off the pause step, does
+        not turn off the override.
 
         Args:
             config: The source's client configuration.
@@ -410,8 +411,8 @@ def _reset_wait(value: str | None, now: datetime) -> float | None:
 class _InstalledPause:
     """The ``before_request`` hook ``QuotaPolicy.install`` sets: the pause at one config's cap.
 
-    A value, so a config installed twice compares equal, and a ``derive``d config, which
-    copies its hooks, keeps the cap of the config it came from.
+    A value, so a config installed twice compares equal, and a config copied with
+    ``dataclasses.replace``, which copies its hooks, keeps the cap of the one it came from.
     """
 
     policy: QuotaPolicy
