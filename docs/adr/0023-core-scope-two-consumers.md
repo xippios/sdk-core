@@ -74,4 +74,5 @@ with no rule for when core should take it, the only way out of a copy was into c
 
 Amended 2026-10-27 (ADR-0024): of "the write checks" C8 names, `assert_write_tools` left
 core in 0.3.0 with tenants and the tenant lock; the `confirm` check of a write server and
-`main`'s loopback rule stay, as invariants of every write server (decision 3 (a)).
+`main`'s loopback rule stay, since conventions §8 requires them of every write server and the
+family review's C8 keeps them.

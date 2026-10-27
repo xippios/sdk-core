@@ -175,9 +175,12 @@ decision 3 (a)), for every source's schema-typed arguments. Conventions §8 stat
 
 Superseded in part by ADR-0024 (2026-10-27; core 0.3.0; the family review's C8; decided by
 Johannes on 2026-10-25 and 2026-10-27): decisions 1 to 4 (`Tenants`), 6 (`list_task`), 7
-(`TenantLock`) and 11, and the consequence that has a source call `assert_write_tools`, no
-longer hold in core; the code moves to sdk-cashctrl, its one consumer, which is bound by
-none of them. Decisions 5 (`ResultMeta.tenant`), 8 (`main`'s option hooks), 9 (the
-`confirm` check and the loopback rule) and 10 (`mcp_call` and `mcp_call_text` through the
-middleware) stand; decision 8's locked server and the amendment's sentence on a lock's
-middleware are examples of what a source may build, no longer core's.
+(`TenantLock`) and 11, and two consequences, the template's `multi_tenant` question (not
+built, the family review's T1) and the in-process client tests of `tests/mcp/test_lock.py`
+as the guard of the provisional middleware API (the file is deleted; the argument check's
+tests through `mcp_call_text` guard it now), no longer hold in core; the code moves to
+sdk-cashctrl, its one consumer, which is bound by none of them. Decisions 5
+(`ResultMeta.tenant`), 8 (`main`'s option hooks), 9 (the `confirm` check and the loopback
+rule) and 10 (`mcp_call` and `mcp_call_text` through the middleware) stand; decision 8's
+locked server and the amendment's sentence on a lock's middleware are examples of what a
+source may build, no longer core's.

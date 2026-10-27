@@ -363,7 +363,8 @@ the one `QuotaPolicy` per process for that key on its config (ADR-0009, amendmen
 
 A multi-tenant source, whose upstream serves each tenant from a host or under a key of
 its own (CashCtrl's organisations), carries its tenant registry itself and names the
-tenant of every result in `ResultMeta.tenant` (§4; ADR-0024).
+tenant of every result in `ResultMeta.tenant` (§4; ADR-0024); its messages and results name
+tenants and variables, never a value (ADR-0005).
 
 ## 8. MCP conventions
 
@@ -524,8 +525,9 @@ route: `router_from_tasks` skips it, and no route returns a file path (ADR-0019)
   every source shares: the empty namespace levels, `py.typed` and `__version__`; the
   tasks `mcp.py` and `http.py` serve (`tasks.__all__` minus `BULK_TASKS`); every task,
   `tasks_write.__all__` included, synchronous, returning `Result[T]`, with an agent
-  docstring; the README status table listing exactly the tasks; the template tag in `.copier-answers.yml`; the core bound of §12. The template
-  renders `tests/test_family.py`, which collects it with one line
+  docstring; the README status table listing exactly the tasks; the template tag in
+  `.copier-answers.yml`; the core bound of §12. The template renders
+  `tests/test_family.py`, which collects it with one line
   (`from xippios.core.testing.family import *  # noqa: F403`), so it runs in every
   source's CI, and a source keeps no copy of its checks. The plugin's ini option
   `xippios_package` names the package under test where `src/xippios/` holds more than

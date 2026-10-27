@@ -202,5 +202,8 @@ Amended 2026-10-27 (ADR-0024; core 0.3.0; the family review's C9; decided by Joh
 percent-encoded and host forms leave core for sdk-cashctrl's recorder. The scrub replaces
 each named value as given, and the verify searches the URL, the header values and the text
 bodies for each as given, refusing the exchange with the location named; the "one JSON-aware
-pass" and the placeholder host of the decision above no longer describe core. Conventions
-§10 states it from 1.21 on.
+pass" and the placeholder host of the decision above no longer describe core. And the family
+check of the amendment of 2026-10-26 no longer tests the tasks the write server serves
+(Johannes's decision of 2026-10-27): a source's write server is its own to test, and the
+write tasks stay in the task checks and the status table. Conventions §10 states both from
+1.21 on.

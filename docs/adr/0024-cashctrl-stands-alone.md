@@ -35,15 +35,17 @@ verify.
    placeholder, the percent-encoded matching of secrets, the JSON-decoded verify, the
    host check of the verify, and `Scrub(rewrite=...)`; the family check's
    `test_family_write_server_serves_the_write_tasks`. Of ADR-0014 this supersedes
-   decisions 1 to 4, 6, 7 and 11 and the consequence that has a source call
-   `assert_write_tools`.
+   decisions 1 to 4, 6, 7 and 11 and two consequences: the template's `multi_tenant`
+   question, and the in-process client tests of `tests/mcp/test_lock.py` as the guard of
+   the `mcp` SDK's provisional middleware API, which the argument check's tests through
+   `mcp_call_text` are now.
 2. **What core keeps, and why.** `ResultMeta.tenant` (ADR-0014, decision 5) is a field
    of the envelope every source returns, `None` for a single-tenant source: a family
    invariant (ADR-0023, decision 3 (a)). The `confirm: bool = False` check of
    `register_tasks(read_only=False)`, `is_write_server` and `main`'s loopback rule with
-   `--allow-remote` (decision 9) are what conventions §8 requires of any write server,
-   so they are invariants of the family's write servers (3 (a)); the template's
-   cleanup drops its write scaffold, not the rule. `main`'s option hooks (decision 8)
+   `--allow-remote` (decision 9) stay because conventions §8 requires them of every
+   write server and the family review's C8 keeps them in core; the template's cleanup
+   drops its write scaffold (T2), not the rule. `main`'s option hooks (decision 8)
    and `mcp_call` and `mcp_call_text` through the in-process client (decision 10) are
    every source's entry point and test path (3 (a) and (c)). `Scrub(secrets=...)`,
    `allow_binary` and the verify are secret scrubbing in recorded fixtures (3 (b)).
@@ -69,25 +71,22 @@ verify.
 
 ## Consequences
 
-- sdk-cashctrl's adoption of 0.3.0 copies the code from `git show 7814062:<path>`:
-  `src/xippios/core/tenants.py` as a module of its own;
+- sdk-cashctrl's adoption of 0.3.0 copies the code from the commit on `main` that merges
+  the PR before this move, named in `docs/handover.md`'s Adopting core 0.3.0 section
+  (`git show <that sha>:<path>`): `src/xippios/core/tenants.py` as a module of its own;
   `src/xippios/core/mcp/server.py` for the lock (`TenantLock` and the functions that
-  served it), as a wrapper that binds `org` or as a middleware of its own, its choice,
-  since decision 7 of ADR-0014 binds it no longer. The `mcp` SDK runs middleware
-  outermost first, and `register_tasks` appends core's argument check, so a lock
-  middleware appended after `build_server` would run inside it and a call without `org`
-  would get "org: Field required"; inserted ahead of the check
-  (`server.middleware.insert(0, ...)`), where core placed its lock, it keeps ADR-0014's
-  texts as they were. `src/xippios/core/testing/adapters.py` for `assert_write_tools`,
-  which it extends with a check that `confirm` is the last parameter (queue row 26 f);
+  served it), which becomes a wrapper that binds `org` on its tools, no middleware, as
+  the family review's C8 has it, so its tests follow the wrapper and no middleware order
+  is involved; decision 7 of ADR-0014 binds it no longer.
+  `src/xippios/core/testing/adapters.py` for `assert_write_tools`, which it extends with
+  a check that `confirm` is the last parameter (queue row 26 f);
   `src/xippios/core/testing/scrub.py` for the host placeholder, the percent-encoded
   matching, the JSON-decoded verify and `rewrite`, into `scripts/record_fixture.py`. The
   tests come from `tests/test_tenants.py`, `tests/mcp/test_lock.py`,
   `tests/testing/test_adapters.py`, `tests/testing/test_scrub.py`,
   `tests/testing/test_fixtures.py` and `tests/testing/test_record_replay.py` at the same
-  commit.
-  `Tenants.client_for`, which drops a replaced client without closing it (queue row
-  24 b), goes with the code. `CHANGELOG.md` lists the files to change under
+  commit. `Tenants.client_for`, which drops a replaced client without closing it (queue
+  row 24 b), goes with the code. `CHANGELOG.md` lists the files to change under
   "Hand-apply for sources".
 - The family check has ten tests. It still reads `tasks_write` for the two task checks
   and the README status table; a source's write server is its own to test.
@@ -99,6 +98,8 @@ verify.
   `build_server`, `register_tasks` and `Scrub` refuse the removed arguments, and a
   recording whose secret appears only percent-encoded or behind a JSON escape is no
   longer refused by core.
+- ADR-0019's text cut spares a secret value, no longer the request host (a dated line
+  there); ADR-0005, ADR-0013, ADR-0014, ADR-0017 and ADR-0023 get one each as well.
 - Conventions 1.21: §1 names the per-tenant variables as sdk-cashctrl's scheme; §3 makes
   the rewrite by key the source's own recorder step; §7 has a multi-tenant source carry
   its tenant registry itself; §8 loses the tenant list and the lock and keeps the write
