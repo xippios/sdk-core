@@ -124,8 +124,8 @@ skip it (§8, §9; ADR-0019).
 - Reference data (commodity codes, country codes, report calendars) ships inside the
   package under `reference/` as CSV or JSON, loaded via `xippios.core.reference`, and is
   versioned with the package. A list fetched from one upstream operation is a packaged
-  list, `reference/<name>.json` with `{"param", "endpoint", "fetched", "records"}` and an
-  optional `"note"`, free-text provenance (what a derived list is derived from, how a
+  list, `reference/<name>.json` with `{"param", "endpoint", "fetched", "records"}` and
+  an optional `"note"`, free-text provenance (what a derived list is derived from, how a
   list was reconciled with upstream's documentation), and no other key: upstream's
   records under upstream's field names (`UpstreamModel.dump_upstream`), a list of values
   as records of one field named by the upstream parameter, a table as records of its
@@ -133,10 +133,9 @@ skip it (§8, §9; ADR-0019).
   from one parameter. The refresh script writes it with `PackagedList.write`, `fetched`
   the UTC time of the fetch to the second; the package reads it with
   `PackagedList.load(package, name)` (ADR-0022, amendment 2026-10-27). Enums are
-  generated from it with
-  `xippios.core.reference` (`render_str_enums`, `render_int_enums`), and the whole
-  generated module, docstrings included, is ASCII-only and passes `ruff check` and
-  `ruff format --check` as rendered (ADR-0008).
+  generated from it with `xippios.core.reference` (`render_str_enums`,
+  `render_int_enums`), and the whole generated module, docstrings included, is
+  ASCII-only and passes `ruff check` and `ruff format --check` as rendered (ADR-0008).
 
 ## 4. Result envelope and metadata
 
