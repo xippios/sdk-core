@@ -16,6 +16,7 @@ import httpx
 from pydantic import SecretStr
 
 from xippios.core.errors import ConfigError
+from xippios.core.redaction import register_credential_name
 
 __all__ = ["BasicKeyAuth", "BearerAuth", "EnvKeyAuth", "HeaderKeyAuth", "QueryKeyAuth"]
 
@@ -82,8 +83,13 @@ class EnvKeyAuth(httpx.Auth):
 class QueryKeyAuth(EnvKeyAuth):
     """Send the key as a query parameter, e.g. ``?key=...`` for USDA NASS.
 
+    Building one registers ``param`` as a credential name for the whole process
+    (``xippios.core.redaction``): its value is ``REDACTED`` in every ``ResultMeta.request``,
+    every recorded fixture and every URL ``sent_urls`` gives, also where the name is no
+    credential by itself, as ``key`` is not (ADR-0019, decision 6).
+
     Args:
-        param: Query parameter name.
+        param: Query parameter name, e.g. ``"key"``.
         env_var: Variable that holds the key.
         key: Explicit key; wins over the environment.
         source: Source slug for error messages.
@@ -99,6 +105,7 @@ class QueryKeyAuth(EnvKeyAuth):
     ) -> None:
         super().__init__(env_var, key=key, source=source)
         self.param = param
+        register_credential_name(param)
 
     def apply(self, request: httpx.Request) -> None:
         """Merge the key into the query string."""

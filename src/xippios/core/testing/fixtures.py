@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict
 
 from xippios.core.client.cache import strip_wire_headers
 from xippios.core.models import utcnow
+from xippios.core.redaction import scrub_url
 from xippios.core.testing.scrub import Scrub, _Scrubber
 
 __all__ = [
@@ -196,9 +197,11 @@ def response_from_fixture(fixture: Fixture) -> httpx.Response:
 
 
 def recorded_query(fixture: Fixture) -> dict[str, str]:
-    """The query parameters the fixture was recorded with, as the recorder scrubbed them.
+    """The query parameters the fixture was recorded with, credentials redacted.
 
-    A credential reads ``REDACTED``. The companion of ``sent_query``: a test compares
+    A credential reads ``REDACTED``: the recorder scrubbed it, and the URL is read
+    through ``scrub_url`` again, the rule ``sent_query`` applies, so a name the rule
+    makes a credential reads ``REDACTED`` in both. The companion of ``sent_query``: a test compares
     what a task sent with what was recorded, ``sent_query(route) ==
     recorded_query(fixture)``.
 
@@ -209,7 +212,7 @@ def recorded_query(fixture: Fixture) -> dict[str, str]:
         AssertionError: A parameter was recorded more than once; read its values with
             ``httpx.URL(fixture.request.url).params.get_list(name)``.
     """
-    return _query_of(fixture.request.url)
+    return _query_of(scrub_url(fixture.request.url))
 
 
 def _query_of(url: str) -> dict[str, str]:

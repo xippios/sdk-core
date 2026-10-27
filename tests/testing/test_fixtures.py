@@ -20,7 +20,7 @@ def _response(
 ) -> httpx.Response:
     request = httpx.Request(
         "GET",
-        "https://api.example.test/v1/x?key=SECRET&year=2024",
+        "https://api.example.test/v1/x?api_key=SECRET&year=2024",
         headers={"Authorization": "Bearer SECRET"},
     )
     return httpx.Response(
@@ -44,7 +44,7 @@ def test_write_scrubs_and_round_trips(tmp_path: Path) -> None:
     raw = json.loads(text)
     assert raw["request"] == {
         "method": "GET",
-        "url": f"https://api.example.test/v1/x?key={REDACTED}&year=2024",
+        "url": f"https://api.example.test/v1/x?api_key={REDACTED}&year=2024",
         "body": None,
         "body_base64": False,
         "content_type": None,

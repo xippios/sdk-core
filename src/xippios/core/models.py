@@ -1,7 +1,5 @@
 """Result envelope, release metadata and the base for upstream payload models (conventions §4)."""
 
-import re
-from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
@@ -19,6 +17,7 @@ from pydantic import (
 )
 
 from xippios.core.errors import ValidationError
+from xippios.core.redaction import REDACTED, redact_credentials
 
 __all__ = [
     "REDACTED",
@@ -26,46 +25,10 @@ __all__ = [
     "ResultCap",
     "ResultMeta",
     "UpstreamModel",
-    "is_credential_key",
     "parse",
     "parse_decimal",
-    "redact_credentials",
     "utcnow",
 ]
-
-REDACTED = "REDACTED"
-"""What a credential-like value in ``ResultMeta.request`` is replaced with."""
-
-_CREDENTIAL_KEY = re.compile(
-    r"(?i)(?:^|[_-])"
-    r"(?:api_?key|key|token|secret|password|passwd|auth|authorization|signature|credentials?)"
-    r"(?:[_-]|$)"
-)
-
-
-def is_credential_key(name: str) -> bool:
-    """True when a parameter name looks like it carries a credential (ADR-0005).
-
-    Matches whole words separated by ``_`` or ``-``: ``key``, ``api_key``, ``x-api-key``,
-    ``access_token``, ``client_secret``, ``sort_key`` all match; ``keyword`` does not.
-    """
-    return _CREDENTIAL_KEY.search(name) is not None
-
-
-def _redact_value(value: Any) -> Any:
-    if isinstance(value, Mapping):
-        return redact_credentials(value)
-    if isinstance(value, list):
-        return [_redact_value(item) for item in value]
-    return value
-
-
-def redact_credentials(mapping: Mapping[str, Any]) -> dict[str, Any]:
-    """A copy of ``mapping`` with credential-like keys set to ``REDACTED`` at any depth."""
-    return {
-        key: REDACTED if is_credential_key(key) else _redact_value(value)
-        for key, value in mapping.items()
-    }
 
 
 def parse_decimal(text: str) -> Decimal | None:
@@ -151,8 +114,11 @@ class ResultMeta(BaseModel):
         retrieved_at: When we fetched the data; timezone-aware UTC, defaults to now.
         published_at: Upstream publication or release time when known.
         vintage: Upstream release identifier when the source has one.
-        request: The parameters used, for reproducibility. Credential-like keys are
-            redacted at construction (ADR-0005); record the variable name, never the value.
+        request: The parameters used, for reproducibility. The value of every key that
+            names a credential, at any depth, is ``REDACTED`` at construction by the one
+            rule of ``xippios.core.redaction`` (ADR-0005; ``key`` only where a
+            ``QueryKeyAuth`` sends it, ADR-0019); record the variable name, never the
+            value.
         total: Upstream's count of the records matching the request, when the source
             reports one; ``None`` when it does not or the count is unknown. Set only from
             what upstream reports, never computed from ``len(data)`` (ADR-0012).
