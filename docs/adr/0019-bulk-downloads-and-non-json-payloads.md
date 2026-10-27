@@ -76,9 +76,10 @@ three sources wrote the api.data.gov gateway client (ADR-0015, review C14).
 
 ## Amendment 2026-10-27
 
-Core 0.3.0 implements this ADR; Johannes decided on 2026-10-27 the shape of decision 5's
-recorder option and of decision 6, and, at gate 5 of the same day, the JSON-object rule
-(queue row 48).
+Core 0.3.0 implements this ADR. Decision 5's recorder option rests on Johannes's
+decisions of 2026-10-27, its shape first and then the cut of a JSON array as upstream's
+original text; decision 6's mechanism on his decision of the same day; the JSON-object
+rule on gate 5 of the same day (queue row 48).
 
 - **Decision 1**: the default of `auth=` is the client's own credentials, core's own
   sentinel as on `request`, `get` and `get_json`, not httpx's `USE_CLIENT_DEFAULT`, which
@@ -100,7 +101,9 @@ recorder option and of decision 6, and, at gate 5 of the same day, the JSON-obje
   of `application/json` or `...+json`, or a body that parses as JSON, a byte order mark
   allowed) is cut at an element boundary in its original text, never re-serialised: the
   first whole elements that fit in `max_bytes` bytes with a closing `]`, numbers and
-  spacing as upstream wrote them, and `original_count` records its length. Another text
+  spacing as upstream wrote them, the boundaries found with `json.JSONDecoder.raw_decode`
+  (Johannes's decision of 2026-10-27, which replaced the re-serialised cut decided
+  earlier that day), and `original_count` records its length. Another text
   is cut at `max_bytes` bytes, back to a whole UTF-8 character and back to the start of
   a secret value or of the request host the cut would split, so no part of one is kept.
   A cut is marked `truncated` with `original_bytes` and `sha256`, both of the whole body

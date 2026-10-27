@@ -179,13 +179,13 @@ the file's URL or release id plus the filters applied in Python (ADR-0020).
 any key that names one, at any depth, to `"REDACTED"` at construction, by the one rule
 of `xippios.core.redaction` (a whole word `api_key`, `apikey`, `api-key`, `token`,
 `secret`, `password`, `passwd`, `pwd`, `auth`, `authorization`, `sig`, `signature`,
-`credential` or `credentials`, between `_`, `-` or the ends of the name), so an envelope is safe to hand to an agent, return over HTTP, or write to a
-store; personal identifiers in upstream data stay out of it by §3's rule for
-projections (ADR-0017). A bare `key` is not on the list: it is a credential in a process
-where a `QueryKeyAuth` sends the key under that name (USDA NASS), which registers it
-when built, and data elsewhere, as Eurostat's SDMX series `key` is (ADR-0019, amendment
-2026-10-27). A task that wants the credential's provenance records the variable name,
-never the value.
+`credential` or `credentials`, between `_`, `-` or the ends of the name), so an
+envelope is safe to hand to an agent, return over HTTP, or write to a store; personal
+identifiers in upstream data stay out of it by §3's rule for projections (ADR-0017). A
+bare `key` is not on the list: it is a credential in a process where a `QueryKeyAuth`
+sends the key under that name (USDA NASS), which registers it when built, and data
+elsewhere, as Eurostat's SDMX series `key` is (ADR-0019, amendment 2026-10-27). A task
+that wants the credential's provenance records the variable name, never the value.
 
 `tenant` is the name of the tenant a multi-tenant source served the data for (§7),
 never a credential, a host or another of the tenant's values; `None` for a
@@ -277,14 +277,14 @@ the query can carry a key (ADR-0005).
   as they do to `get()`, and `auth` works as it does there; a retry restarts the file;
   except that `observe` and `classify` see a success's status and headers only, its
   body going to the file unread, and a 1xx or 3xx raises `UpstreamError`, since
-  redirects are not followed (ADR-0019, amendment 2026-10-27). `Downloaded` carries `path`, `bytes`, `content_type`, the file name from
-  `Content-Disposition` when sent, `etag`, `last_modified` and `retrieved_at`.
+  redirects are not followed (ADR-0019, amendment 2026-10-27). `Downloaded` carries
+  `path`, `bytes`, `content_type`, the file name from `Content-Disposition` when sent,
+  `etag`, `last_modified` and `retrieved_at`.
 - `decode_text(response)` (charset from `Content-Type`, UTF-8 by default, a BOM
-  stripped) and `decode_csv(data, *, delimiter=",", source=None)` (a path or a response;
-  the stdlib's `csv.DictReader`, headers as upstream prints them) sit beside
-  `decode_json`. The source opens gzip and
-  zip with the stdlib; core ships no XML, spreadsheet or PDF parser (ADR-0019,
-  ADR-0020).
+  stripped) and `decode_csv(data, *, delimiter=",", source=None)` (a path or a
+  response; the stdlib's `csv.DictReader`, headers as upstream prints them) sit beside
+  `decode_json`. The source opens gzip and zip with the stdlib; core ships no XML,
+  spreadsheet or PDF parser (ADR-0019, ADR-0020).
 - Credentials come from the client's `auth`. A call to a keyless endpoint on the same
   host passes `auth=None` and is sent without them; another `httpx.Auth` replaces them
   for one call; no second client is needed to leave the key off (ADR-0015). `auth=None`

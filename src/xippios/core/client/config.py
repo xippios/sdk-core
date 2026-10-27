@@ -156,7 +156,10 @@ class ClientConfig:
             retry decision, also when the caller asked for the raw response
             (``raise_on_error=False``). For reading, e.g. quota headers; it returns
             nothing, and an exception it raises propagates as the programming error it
-            is. ``QuotaPolicy.install`` sets it (ADR-0015).
+            is, except on a ``download``'s success, whose body goes to the file unread:
+            a hook that reads it there is suppressed and counts as nothing observed
+            (``httpx.ResponseNotRead``, ADR-0019). ``QuotaPolicy.install`` sets it
+            (ADR-0015).
     """
 
     source: str
