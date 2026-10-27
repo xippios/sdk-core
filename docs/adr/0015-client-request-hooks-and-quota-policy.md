@@ -217,10 +217,10 @@ config, binds nothing per config and no longer refuses a config with hooks of it
 which a source composes itself; installing again changes nothing. So the per-config cap,
 "one policy on two configs pauses each within its own bound", the `ValueError` for another
 hook and the 30 s of a direct call no longer hold, and since the hook `install` sets is
-`before_request` itself, a subclass's override is called through it, the edge ADR-0016
-recorded; the testing plugin still turns off the pause step alone. A `classify` reads the
-wait for a 429 from `snapshot()`'s `resumes_at`, since `observe` ran before it (decision
-1), so no `wait_for` is added (queue row 30 c). The consequence that packages sharing a key
-in one process keep a snapshot each no longer holds for api.data.gov:
+`before_request` itself, a subclass's override is called through it, reversing the edge
+ADR-0016 recorded; the testing plugin still turns off the pause step alone. A `classify`
+reads the wait for a 429 from `snapshot()`'s `resumes_at`, since `observe` ran before it
+(decision 1), so no `wait_for` is added (queue row 30 c). The consequence that packages
+sharing a key in one process keep a snapshot each no longer holds for api.data.gov:
 `xippios.core.data_gov` shares one policy per process (queue row 30 d). Conventions 1.17
 states the cap and `install`'s contract in §6.

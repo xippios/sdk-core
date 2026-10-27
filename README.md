@@ -210,8 +210,9 @@ client = AsyncClient(config, auth=gateway.auth)  # X-Api-Key from DATA_GOV_API_K
 ```
 
 The gateway's 429 is a `RateLimitError` in the source's name whose `retry_after` is the
-wait the shared policy keeps the quota spent for; once it is spent, the policy refuses the
-next request of any source in the process before sending, as `api.data.gov`.
+wait the shared policy keeps the quota spent for; once it is spent, the next request of
+any source in the process waits within the policy's cap or is refused before sending, as
+`api.data.gov`.
 
 A request the cache answers never waits: `before_request` runs after the cache lookup,
 and a cache hit carries the time its entry was stored in
