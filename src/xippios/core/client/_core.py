@@ -122,7 +122,8 @@ class AsyncClient:
         """Send one request and return the response.
 
         Retries, rate limiting and caching (GET only, narrowed by
-        ``ClientConfig.cache_filter``) apply as configured. A cache hit returns at once;
+        ``ClientConfig.cache_filter``, a body over ``ClientConfig.cache_max_bytes`` not
+        stored) apply as configured. A cache hit returns at once;
         otherwise ``ClientConfig.before_request`` runs once, before the rate limiter, and
         ``ClientConfig.observe`` sees every response from the wire, retried attempts
         included. The source's ``classify`` hook, if any, is asked before a 429 or 5xx
@@ -206,7 +207,12 @@ class AsyncClient:
                 if classified is not None:
                     raise classified
             raise_for_status(response, source=self.source)
-        if key is not None and self.config.cache is not None and response.status_code == 200:
+        if (
+            key is not None
+            and self.config.cache is not None
+            and response.status_code == 200
+            and len(response.content) <= self.config.cache_max_bytes
+        ):
             # The content is already decoded: keeping content-encoding would make the
             # replay decode it a second time (httpx.DecodingError on a gzip answer).
             self.config.cache.set(

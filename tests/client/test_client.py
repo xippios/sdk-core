@@ -379,6 +379,25 @@ async def test_cache_filter_limits_caching_to_chosen_requests(
 
 
 @pytest.mark.anyio
+async def test_a_body_over_cache_max_bytes_passes_through_unstored(
+    respx_mock: respx.MockRouter,
+) -> None:
+    # ADR-0019, decision 3: a tens-of-MB dataset is not kept in memory by the cache.
+    big = respx_mock.get(f"{BASE}/v1/big").respond(200, content=b"x" * 11)
+    small = respx_mock.get(f"{BASE}/v1/small").respond(200, content=b"x" * 10)
+    cache = MemoryCache()
+    config = ClientConfig(
+        source="example", version="1", base_url=BASE, cache=cache, cache_max_bytes=10
+    )
+    client = AsyncClient(config)
+    for _ in range(2):
+        assert (await client.get("/v1/big")).content == b"x" * 11
+        await client.get("/v1/small")
+    assert (big.call_count, small.call_count) == (2, 1)
+    assert len(cache) == 1
+
+
+@pytest.mark.anyio
 async def test_non_200_and_non_get_are_not_cached(respx_mock: respx.MockRouter) -> None:
     get = respx_mock.get(f"{BASE}/v1/x").respond(404)
     post = respx_mock.post(f"{BASE}/v1/x").respond(200, json={})
