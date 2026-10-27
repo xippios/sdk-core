@@ -77,14 +77,15 @@ verify.
   outermost first, and `register_tasks` appends core's argument check, so a lock
   middleware appended after `build_server` would run inside it and a call without `org`
   would get "org: Field required"; inserted ahead of the check
-  (`server.middleware.insert(0, ...)`), as core inserted it, it keeps ADR-0014's texts
-  as they were. `src/xippios/core/testing/adapters.py`
-  for `assert_write_tools`, which it extends with a check that `confirm` is the last
-  parameter (queue row 26 f); `src/xippios/core/testing/scrub.py` for the host
-  placeholder, the percent-encoded matching, the JSON-decoded verify and `rewrite`, into
-  `scripts/record_fixture.py`. The tests come from `tests/test_tenants.py`,
-  `tests/mcp/test_lock.py`, `tests/testing/test_adapters.py`,
-  `tests/testing/test_scrub.py` and `tests/testing/test_fixtures.py` at the same commit.
+  (`server.middleware.insert(0, ...)`), where core placed its lock, it keeps ADR-0014's
+  texts as they were. `src/xippios/core/testing/adapters.py` for `assert_write_tools`,
+  which it extends with a check that `confirm` is the last parameter (queue row 26 f);
+  `src/xippios/core/testing/scrub.py` for the host placeholder, the percent-encoded
+  matching, the JSON-decoded verify and `rewrite`, into `scripts/record_fixture.py`. The
+  tests come from `tests/test_tenants.py`, `tests/mcp/test_lock.py`,
+  `tests/testing/test_adapters.py`, `tests/testing/test_scrub.py`,
+  `tests/testing/test_fixtures.py` and `tests/testing/test_record_replay.py` at the same
+  commit.
   `Tenants.client_for`, which drops a replaced client without closing it (queue row
   24 b), goes with the code. `CHANGELOG.md` lists the files to change under
   "Hand-apply for sources".
