@@ -107,6 +107,8 @@ jobs:
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
     steps:
+      # The one checkout that keeps its credentials: this job pushes the tag with the token
+      # (conventions §13).
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Tag the merge commit with its CHANGELOG section
         id: tag
