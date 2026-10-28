@@ -52,19 +52,29 @@ Every source package has three layers, top to bottom, and nothing skips a layer.
 1. **Endpoint wrappers** — `xippios/<pkg>/api/*.py`. One function per upstream endpoint,
    parameters as upstream names them (snake_cased), returning typed models that mirror
    the upstream payload. The module and the function carry the upstream operation name
-   in snake case (ADR-0003, amendment 2026-10-28), from the `operationId` where the
-   snapshot has one, else from the path, minus a controller prefix that every operation
-   of the API shares (the Swagger controllers of the FAS APIs, `ESRData_`, `PSDData_`,
-   `GATSData_`): `PSDData_GetCommodityDataByYear` is `get_commodity_data_by_year` in
-   `api/get_commodity_data_by_year.py`. Upstream's spelling survives the transform, so a
-   singular stays singular (`GATSData_GetCensusImport` is `get_census_import`). The
-   verbatim id stays in the first line of the wrapper's docstring and in the `endpoint=`
-   the wrapper passes, so `meta.endpoint` keeps upstream's exact name (§4). Where
-   operation ids repeat across services, one module per service, named after the
-   service, holds that service's wrappers (sdk-eurostat's `api/statistics.py`). An
-   existing source applies the rule to its wrappers and fixture directories in one PR of
-   its own, right after its core 0.3.0 adoption and never inside the adoption PR, and an
-   adoption PR is judged against the rest of 1.22 until that PR merges.
+   in snake case (ADR-0003, amendment 2026-10-28): from the operation's id in the
+   snapshot (an OpenAPI `operationId`, a WADL method id), else from the path, minus a
+   controller prefix that every operation of the API shares (the Swagger controllers of
+   the FAS APIs, `ESRData_`, `PSDData_`, `GATSData_`), so
+   `PSDData_GetCommodityDataByYear` is `get_commodity_data_by_year` in
+   `api/get_commodity_data_by_year.py`. A name from the path drops the prefix every
+   operation shares, turns `/` into `_` and drops a file suffix such as `.json`:
+   sdk-cashctrl's `/api/v1/account/category/list.json` is `account_category_list`,
+   sdk-usda-nass's `/api/api_GET/` is `api_get`. A run of capitals is one word:
+   `GATSData_GetHS6Commodities` is `get_hs6_commodities`, `GATSData_GetUNTradeExports`
+   is `get_un_trade_exports`. Upstream's spelling survives the transform, so a singular
+   stays singular (`GATSData_GetCensusImport` is `get_census_import`). The verbatim id
+   stays in the first line of the wrapper's docstring and in the `endpoint=` the wrapper
+   passes, so `meta.endpoint` keeps upstream's exact name (§4); the task layer and the
+   MCP tool names are unchanged by the rule. Where an API's operation ids repeat, across
+   its services or across the resources of one service, the wrappers of such a service
+   share one module named after the service (sdk-eurostat's `api/statistics.py` and
+   `api/sdmx.py`); another service of the same API keeps one module per operation
+   (sdk-eurostat's `api/catalogue.py` holds `getTocXml` alone and stays). An existing
+   source applies the rule to its wrappers and fixture directories in one PR of its own,
+   right after its core 0.3.0 adoption and never inside the adoption PR, or, when it is
+   past that adoption as 1.22 lands, in the first PR of its next version; an adoption PR
+   is judged against the rest of 1.22 until the rename PR merges.
 2. **Task-shaped functions** — `xippios/<pkg>/tasks.py`. The functions a person
    or an agent actually wants: `get_balance_sheet(commodity, marketing_year)`. They
    compose endpoint wrappers, handle pagination and reference lookups, and return
@@ -442,9 +452,10 @@ route: `router_from_tasks` skips it, and no route returns a file path (ADR-0019)
 
 - Unit tests run offline against recorded fixtures (`respx`); fixtures live in
   `tests/fixtures/<wrapper>/<case>.json`, the directory named after the wrapper function
-  (§2), and are recorded by the `record-fixture` command, never hand-written. `<case>` is
-  lowercase snake case for the words the source chooses; an upstream code inside it is
-  written as upstream writes it (`CH_2026_8.json`).
+  (§2; ADR-0003, amendment 2026-10-28), and are recorded by the `record-fixture`
+  command, never hand-written. `<case>` is lowercase snake case for the words the source
+  chooses; an upstream code inside it is written as upstream writes it
+  (`CH_2026_8.json`).
 - A fixture file a PR adds or changes stays under 256 KiB (ADR-0019); a fixture over the
   cap recorded before the rule bound stays until a PR re-records it. A download fixture
   holds a small real answer (a short date range, one commodity) or the first N rows or
@@ -660,8 +671,8 @@ changed template answer, a protected path, a build or install route) waits for J
    template's refresh script, and committed as formatted, after the script's
    `ruff format && ruff check --fix` (ADR-0008, amendment 2026-10-27).
 7. `mypy --strict` covers `scripts/` too (`files = ["src", "tests", "scripts"]`).
-8. The current conventions version is applied: every rule changed since the version the
-   source last applied holds in the source.
+8. The current conventions version is applied (1.22's name rule excepted, §2): every rule
+   changed since the version the source last applied holds in the source.
 9. `CHANGELOG.md` has a line under Unreleased naming the core, template and conventions
    versions adopted.
 

@@ -111,8 +111,8 @@ line (and the Process line's copy in the PR template) state it from 1.15 on, cit
 Note 2026-10-28 (queue row 55): the gates repository (e) names has been
 `xippios/sdk-gates` since 2026-10-27, when `xippios/.github` was renamed; its README
 defines the merge classes and its `merge-class` check computes them. (e) stands as
-written on its date; conventions §15 and the definition of done name `xippios/sdk-gates`
-from 1.22 on.
+written on its date; conventions §15, the definition of done's Adoption PR intro and its
+copy in the PR template name `xippios/sdk-gates` from 1.22 on.
 
 ## Amendment 2026-10-27
 

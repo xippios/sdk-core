@@ -8,27 +8,35 @@ All notable changes to this project are documented here. The format follows
 
 ### Documentation
 
-- **Conventions 1.22** (ADR-0003, amendment 2026-10-28: fidelity in names is owed to
-  what a consumer sees, `meta.endpoint`, the wrapper's docstring, the snapshot and the
-  packaged parameter names): §2 names a wrapper module and its function after the
-  upstream operation in snake case, from the `operationId` where the snapshot has one or
-  else from the path, without a controller prefix every operation of the API shares (the
-  FAS APIs' `ESRData_`, `PSDData_`, `GATSData_`), upstream's spelling kept; the verbatim
-  id stays in the wrapper's docstring and in its `endpoint=`, so `meta.endpoint` does
-  not change, and where operation ids repeat across services one module per service
-  holds them. An existing source renames in one PR of its own right after its core 0.3.0
-  adoption, never inside the adoption PR. §10 keeps a wrapper's fixtures under
-  `tests/fixtures/<wrapper>/<case>.json`, the case name in lowercase snake case with an
-  upstream code written as upstream writes it. §15 item 3 makes code core removed for
-  its one consumer part of that consumer's adoption, copied from the commit core's
-  handover names and listed file by file in the PR description with the ADR that moved
-  it; the definition of done's adoption block, and its copy in
-  `.github/PULL_REQUEST_TEMPLATE.md`, gains the line. §15, the definition of done and
-  its copy name `xippios/sdk-gates`, the gates repository since its rename on
-  2026-10-27, as the home of the merge classes, and ADR-0018 gets a dated note under
-  amendment (e) saying so. The review checklist gains item 16: a new wrapper's module,
-  function and fixture directory follow the name rule, and the verbatim id stays in its
-  docstring and `endpoint=`.
+- **ADR-0003, amendment 2026-10-28**: fidelity in names is owed to what a consumer sees,
+  `meta.endpoint`, the first line of a wrapper's docstring, the snapshot and the
+  packaged parameter names; a layer-1 wrapper's module and function carry the upstream
+  operation name in snake case, and its fixtures live in a directory named after it; the
+  task layer and the MCP tool names are unchanged. **ADR-0018** gets a dated note under
+  amendment (e): the gates repository has been `xippios/sdk-gates` since its rename on
+  2026-10-27.
+- **Conventions 1.22**: §2 names a wrapper module and its function after the upstream
+  operation in snake case, from the operation's id in the snapshot (an OpenAPI
+  `operationId`, a WADL method id) or else from the path, without a controller prefix
+  every operation of the API shares (the FAS APIs' `ESRData_`, `PSDData_`, `GATSData_`),
+  a run of capitals one word and upstream's spelling kept; the verbatim id stays in the
+  wrapper's docstring and in its `endpoint=`, so `meta.endpoint` does not change; where
+  operation ids repeat, one module per service holds them; an existing source renames in
+  one PR of its own right after its core 0.3.0 adoption, never inside it, or, already
+  past that adoption, in the first PR of its next version. §10 keeps a wrapper's
+  fixtures under `tests/fixtures/<wrapper>/<case>.json`, the case name in lowercase
+  snake case with an upstream code written as upstream writes it. §15 item 3 makes code
+  core removed for its one consumer part of that consumer's adoption, copied from the
+  commit core's handover names and listed file by file in the PR description with the
+  ADR that moved it; item 8 excepts 1.22's name rule; §15 names `xippios/sdk-gates` as
+  the home of the merge classes.
+- The definition of done's Adoption PR block and its copy in
+  `.github/PULL_REQUEST_TEMPLATE.md`: a line for code copied in from core, the current
+  conventions version applied with 1.22's name rule excepted, and `xippios/sdk-gates` as
+  the home of the merge classes.
+- The review checklist's item 16: a new wrapper's module, function and fixture directory
+  follow the name rule, and the verbatim id stays in the first line of its docstring and
+  in `endpoint=`.
 
 ## [0.3.0] - 2026-10-27
 
