@@ -49,19 +49,22 @@ itself (`src/xippios/usda/nass/`) has one.
 Every source package has three layers, top to bottom, and nothing skips a layer.
 `<pkg>` below is the import path under `xippios` as a directory: `comtrade`, `usda/nass`.
 
-1. **Endpoint wrappers** — `xippios/<pkg>/api/*.py`. One function per upstream
-   endpoint, parameters as upstream names them (snake_cased), returning typed models
-   that mirror the upstream payload. The module and the function carry the upstream
-   operation name in snake case, from the `operationId` where the snapshot has one,
-   else from the path, minus a controller prefix that every operation of the API shares
-   (the Swagger controllers of the FAS APIs, `ESRData_`, `PSDData_`, `GATSData_`):
-   `PSDData_GetCommodityDataByYear` is `get_commodity_data_by_year` in
+1. **Endpoint wrappers** — `xippios/<pkg>/api/*.py`. One function per upstream endpoint,
+   parameters as upstream names them (snake_cased), returning typed models that mirror
+   the upstream payload. The module and the function carry the upstream operation name
+   in snake case (ADR-0003, amendment 2026-10-28), from the `operationId` where the
+   snapshot has one, else from the path, minus a controller prefix that every operation
+   of the API shares (the Swagger controllers of the FAS APIs, `ESRData_`, `PSDData_`,
+   `GATSData_`): `PSDData_GetCommodityDataByYear` is `get_commodity_data_by_year` in
    `api/get_commodity_data_by_year.py`. Upstream's spelling survives the transform, so a
    singular stays singular (`GATSData_GetCensusImport` is `get_census_import`). The
    verbatim id stays in the first line of the wrapper's docstring and in the `endpoint=`
    the wrapper passes, so `meta.endpoint` keeps upstream's exact name (§4). Where
    operation ids repeat across services, one module per service, named after the
-   service, holds that service's wrappers (sdk-eurostat's `api/statistics.py`).
+   service, holds that service's wrappers (sdk-eurostat's `api/statistics.py`). An
+   existing source applies the rule to its wrappers and fixture directories in one PR of
+   its own, right after its core 0.3.0 adoption and never inside the adoption PR, and an
+   adoption PR is judged against the rest of 1.22 until that PR merges.
 2. **Task-shaped functions** — `xippios/<pkg>/tasks.py`. The functions a person
    or an agent actually wants: `get_balance_sheet(commodity, marketing_year)`. They
    compose endpoint wrappers, handle pagination and reference lookups, and return

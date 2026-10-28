@@ -74,3 +74,22 @@ UTC time, amendment 2026-10-24) reaches it with the next run that fetches (queue
 37 b).
 
 Conventions §3 states the first two rules from 1.14 on, §15 the third.
+
+## Amendment 2026-10-28
+
+Fidelity in names is owed to what a consumer sees: `meta.endpoint`, which keeps the
+upstream operation name verbatim; the first line of a wrapper's docstring, which names
+it; the snapshot under `docs/upstream/`; and the packaged parameter names, a packaged
+list's file and its `param` named by the upstream parameter (ADR-0022). The Python
+identifiers of a layer-1 wrapper, its module and its function, carry the upstream
+operation name in snake case, from the `operationId` where the snapshot has one, else
+from the path, minus a controller prefix the whole API shares (`ESRData_`, `PSDData_`,
+`GATSData_`); upstream's spelling survives the transform. A wrapper's fixtures live in a
+directory named after it, `tests/fixtures/<wrapper>/`. The task layer and the MCP tool
+names are unchanged by it. Raised by the family session's harmonization of the sources'
+names: sdk-usda-esr, sdk-usda-psd and sdk-usda-gats named their wrappers with the
+verbatim `operationId`, sdk-usda-esmis, sdk-comtrade and sdk-cashctrl in snake case, and
+sdk-usda-nass's `api_GET` and sdk-eurostat's `getData` kept upstream's case; Johannes
+decided it on 2026-10-28.
+
+Conventions §2 and §10 state it from 1.22 on.
