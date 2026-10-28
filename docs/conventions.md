@@ -1,6 +1,6 @@
 # xippios SDK family — conventions
 
-Version 1.21 · 2026-10-27 · applies to every `sdk-*` repository under github.com/xippios.
+Version 1.22 · 2026-10-28 · applies to every `sdk-*` repository under github.com/xippios.
 Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 The rules of ADR-0019 and ADR-0022, all of them (the download and decode calls, the
 cache bound, `BULK_TASKS`, the fixture cap and the `truncated` marker, the file-fixture
@@ -49,9 +49,46 @@ itself (`src/xippios/usda/nass/`) has one.
 Every source package has three layers, top to bottom, and nothing skips a layer.
 `<pkg>` below is the import path under `xippios` as a directory: `comtrade`, `usda/nass`.
 
-1. **Endpoint wrappers** — `xippios/<pkg>/api/*.py`. One function per upstream
-   endpoint, named after the upstream operation, parameters as upstream names them
-   (snake_cased), returning typed models that mirror the upstream payload.
+1. **Endpoint wrappers** — `xippios/<pkg>/api/*.py`. One function per upstream endpoint,
+   parameters as upstream names them (snake_cased), returning typed models that mirror
+   the upstream payload. The module and the function carry the upstream operation name
+   in snake case (ADR-0003, amendment 2026-10-28): from the operation's id in the
+   snapshot (an OpenAPI `operationId`, a WADL method id), else from the path, minus a
+   controller prefix that every operation of the API shares (the Swagger controllers of
+   the FAS APIs, `ESRData_`, `PSDData_`, `GATSData_`), so
+   `PSDData_GetCommodityDataByYear` is `get_commodity_data_by_year` in
+   `api/get_commodity_data_by_year.py`. An `operationId` that restates the path, with or
+   without the HTTP method (a generator's slug: sdk-comtrade's `get-getda`,
+   `getmetadata`), or an opaque id (sdk-comtrade's hex ids), is not a name and counts as
+   absent, so the path rule applies. A name from the path drops the server's base path,
+   or the prefix every operation of the service shares, and a parameter segment such as
+   `{typeCode}`, turns `/` into `_` and drops a file suffix such as `.json`:
+   sdk-cashctrl's `/api/v1/account/category/list.json` is `account_category_list`,
+   sdk-comtrade's `/data/v1/getDa` is `get_da`, sdk-usda-nass's `/api/api_GET/` is
+   `api_get`. A file suffix that tells operations on one path apart stays as the last
+   word, the default `.json` dropped: sdk-cashctrl's `order/document/read.json` is
+   `order_document_read`, `read.pdf` is `order_document_read_pdf`; `journal/list.json`
+   is `journal_list`, `list.xlsx` is `journal_list_xlsx`. A run of capitals is one word:
+   `GATSData_GetHS6Commodities` is `get_hs6_commodities`, `GATSData_GetUNTradeExports`
+   is `get_un_trade_exports`. Upstream's spelling survives the transform, so a singular
+   stays singular (`GATSData_GetCensusImport` is `get_census_import`). The verbatim id
+   stays in the first line of the wrapper's docstring and in the `endpoint=` the wrapper
+   passes, so `meta.endpoint` keeps upstream's exact name (§4); the task layer and the
+   MCP tool names are unchanged by the rule. Where an API's operation ids repeat, across
+   its services or across the resources of one service, the wrappers of such a service
+   share one module named after the service (sdk-eurostat's `api/statistics.py` and
+   `api/sdmx.py`); ids counted as absent do not trigger it (sdk-comtrade's data wrappers
+   stay one module per operation); another service of the same API may keep its service
+   module (sdk-eurostat's `api/catalogue.py` holds `getTocXml` alone and stays). A
+   module may hold, beside its wrapper, a second function on the same endpoint, named
+   after the wrapper with a suffix that says what differs (sdk-comtrade's `api/get.py`
+   holds `get` and `get_count_only`, its `api/reference.py` `reference` and
+   `reference_rows`); a helper that calls no endpoint is not a wrapper and keeps a plain
+   name (sdk-eurostat's `codelist_path` and `data_path` in `api/sdmx.py`). An existing
+   source applies the rule to its wrappers and fixture directories in one PR of its own,
+   right after its core 0.3.0 adoption and never inside the adoption PR, or, when it is
+   past that adoption as 1.22 lands, in the first PR of its next version; an adoption PR
+   is judged against the rest of 1.22 until the rename PR merges.
 2. **Task-shaped functions** — `xippios/<pkg>/tasks.py`. The functions a person
    or an agent actually wants: `get_balance_sheet(commodity, marketing_year)`. They
    compose endpoint wrappers, handle pagination and reference lookups, and return
@@ -428,8 +465,13 @@ route: `router_from_tasks` skips it, and no route returns a file path (ADR-0019)
 ## 10. Testing
 
 - Unit tests run offline against recorded fixtures (`respx`); fixtures live in
-  `tests/fixtures/<endpoint>/<case>.json` and are recorded by the `record-fixture`
-  command, never hand-written.
+  `tests/fixtures/<wrapper>/<case>.json`, the directory named after the wrapper function
+  (§2; ADR-0003, amendment 2026-10-28), and are recorded by the `record-fixture`
+  command, never hand-written. `<case>` is lowercase snake case for the words the source
+  chooses; an upstream code inside it is written as upstream writes it
+  (`CH_2026_8.json`). A fixture recorded through a task rather than a wrapper, such as a
+  download's metadata or a helper's answer, lives under the task's name; file samples
+  keep `tests/fixtures/files/<file_kind>/` as before (ADR-0020).
 - A fixture file a PR adds or changes stays under 256 KiB (ADR-0019); a fixture over the
   cap recorded before the rule bound stays until a PR re-records it. A download fixture
   holds a small real answer (a short date range, one commodity) or the first N rows or
@@ -615,8 +657,8 @@ step. An adoption PR is a `chore/template-update*` PR: when its merge class is `
 session enables auto-merge after the reviewer's `ready`, and GitHub merges it once `ci` is
 green and review threads are resolved; a `human` adoption (a source-owned workflow, a
 changed template answer, a protected path, a build or install route) waits for Johannes
-(ADR-0018, amendment (e); the merge classes are in the README of the organisation's
-`.github` repository).
+(ADR-0018, amendment (e); the merge classes are in the README of the gates repository,
+`xippios/sdk-gates`).
 
 1. The core floor is raised: `xippios-core` and each of its extras name the new minor
    with the bound of §12 (`xippios-core~=0.2.0`), and, where the source depends on
@@ -626,7 +668,12 @@ changed template answer, a protected path, a build or install route) waits for J
    resolved.
 3. Every local workaround that a core change replaced is deleted, its tests with it, and
    the PR description names the core change for each (`QuotaAwareClient` → `QuotaPolicy`,
-   ADR-0015); the release's ADRs and CHANGELOG list them per source.
+   ADR-0015); the release's ADRs and CHANGELOG list them per source. In the other
+   direction, code that core removed for its one consumer (ADR-0023, decision 5) is
+   copied into that consumer as part of its adoption, from the commit core's handover
+   names (`git show <sha>:<path>`); the PR description lists every copied file under the
+   Adoption PR block with the ADR that moved it (ADR-0024 for sdk-cashctrl at 0.3.0), and
+   the reviewer judges the copy against that list.
 4. Logic duplicated across sources is moved into core or dropped: what core now provides
    is dropped here; what it does not provide yet is carried by the source, named in the
    PR description and in a queue row; a second source may carry the same helper when
@@ -640,8 +687,8 @@ changed template answer, a protected path, a build or install route) waits for J
    template's refresh script, and committed as formatted, after the script's
    `ruff format && ruff check --fix` (ADR-0008, amendment 2026-10-27).
 7. `mypy --strict` covers `scripts/` too (`files = ["src", "tests", "scripts"]`).
-8. The current conventions version is applied: every rule changed since the version the
-   source last applied holds in the source.
+8. The current conventions version is applied (1.22's name rule excepted, §2): every rule
+   changed since the version the source last applied holds in the source.
 9. `CHANGELOG.md` has a line under Unreleased naming the core, template and conventions
    versions adopted.
 

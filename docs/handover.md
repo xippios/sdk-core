@@ -567,12 +567,14 @@ v0.2.0.
   "Values of ``<key>`` (fetched <date>).", which a tool's input schema shows the agent
   (conventions §8).
 - Item 7, unchanged: `files = ["src", "tests", "scripts"]` under `[tool.mypy]`.
-- Item 8, conventions 1.21. The existing sources apply 1.13 on 2026-10-27 (comtrade,
-  until its 0.2.0 adoption, an earlier version): one that adopts 0.2.1 first goes from
-  1.15; one that carries "Adopting core 0.2.1" into this PR goes from 1.13 and takes the
-  rules changed in 1.14 and 1.15 as well (the CHANGELOG's `[0.2.1]` section; "Adopting
-  core 0.2.1", item 8). Binding from this adoption: the fixture files a PR adds or
-  changes under 256 KiB, a cut one marked `truncated` (§10; template v0.3.0's
+- Item 8, conventions 1.22 (an existing source applies §2's name rule to its wrappers
+  and fixture directories in one PR of its own, right after its core 0.3.0 adoption and
+  never inside the adoption PR). The existing sources apply 1.13 on 2026-10-27
+  (comtrade, until its 0.2.0 adoption, an earlier version): one that adopts 0.2.1 first
+  goes from 1.15; one that carries "Adopting core 0.2.1" into this PR goes from 1.13 and
+  takes the rules changed in 1.14 and 1.15 as well (the CHANGELOG's `[0.2.1]` section;
+  "Adopting core 0.2.1", item 8). Binding from this adoption: the fixture files a PR
+  adds or changes under 256 KiB, a cut one marked `truncated` (§10; template v0.3.0's
   fixture-cap step fails), `BULK_TASKS` (§8), the packaged-list file
   `reference/<name>.json` (§3), `published_at_naive`, the `None` rule, `get_answer` for
   a cache hit's `retrieved_at`, `matches`, the frozen and the period series (§4),
@@ -586,7 +588,9 @@ v0.2.0.
   multi-tenant source carrying its tenant registry and its recorder's rewrite (§1, §3,
   §7, §8, §10).
 - Item 9: `CHANGELOG.md` has a line under Unreleased naming core 0.3.0, template v0.3.0
-  and conventions 1.21.
+  and conventions 1.22 (an existing source applies §2's name rule to its wrappers and
+  fixture directories in one PR of its own, right after its core 0.3.0 adoption and
+  never inside the adoption PR).
 - Every source's tests meet the texts and refusals the CHANGELOG's Hand-apply list names
   under "Every source": the credential rule, unknown `ResultMeta` fields, refused tool
   arguments, parse failures.

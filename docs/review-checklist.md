@@ -65,6 +65,10 @@ repository it reviews.
     rule the PR replaced).
 15. **Conventions** (`sdk-core`): a change to `docs/conventions.md` carries an ADR or an
     ADR amendment, and the conventions version bumps once per PR.
+16. **Wrapper and fixture names** (conventions §2, §10): a new endpoint wrapper's module
+    and function carry the upstream operation name by §2's rule, and its fixtures live
+    under `tests/fixtures/<wrapper>/`; the verbatim operation id is in the first line of
+    the wrapper's docstring and in the `endpoint=` it passes.
 
 ## Report
 

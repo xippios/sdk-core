@@ -74,3 +74,28 @@ UTC time, amendment 2026-10-24) reaches it with the next run that fetches (queue
 37 b).
 
 Conventions §3 states the first two rules from 1.14 on, §15 the third.
+
+## Amendment 2026-10-28
+
+Fidelity in names is owed to what a consumer sees: `meta.endpoint`, which keeps the
+upstream operation name verbatim; the first line of a wrapper's docstring, which names
+it; the snapshot under `docs/upstream/`; and the packaged parameter names, a packaged
+list's file and its `param` named by the upstream parameter (ADR-0022). The Python
+identifiers of a layer-1 wrapper, its module and its function, carry the upstream
+operation name in snake case, from the operation's id in the snapshot (an OpenAPI
+`operationId`, a WADL method id), else from the path, minus a controller prefix the
+whole API shares (`ESRData_`, `PSDData_`, `GATSData_`); a file suffix that tells
+operations on one path apart stays as the last word, the default `.json` dropped
+(sdk-cashctrl's `order/document/read.pdf` is `order_document_read_pdf`); upstream's
+spelling survives the transform. A wrapper's fixtures live in a directory named after
+it, `tests/fixtures/<wrapper>/`. The task layer and the MCP tool names are unchanged by
+it. Raised by the family session's harmonization of the sources' names: sdk-usda-esr,
+sdk-usda-psd and sdk-usda-gats named their wrappers with the verbatim `operationId`;
+sdk-usda-esmis and sdk-cashctrl in snake case; sdk-comtrade's ids restate the path, with
+or without the HTTP method (a generator's slug: `get-getda`, `getmetadata`), or are
+opaque hex ids, so they are not names and count as absent, and its wrappers are named
+from the path; sdk-usda-nass's `api_GET` kept upstream's case, and so did sdk-eurostat's
+four wrappers named by WADL method ids, `getData`, `getTocXml`, `codeListQuery` and
+`dataQuery`. Johannes decided it on 2026-10-28.
+
+Conventions §2 and §10 state it from 1.22 on.
