@@ -84,10 +84,12 @@ list's file and its `param` named by the upstream parameter (ADR-0022). The Pyth
 identifiers of a layer-1 wrapper, its module and its function, carry the upstream
 operation name in snake case, from the operation's id in the snapshot (an OpenAPI
 `operationId`, a WADL method id), else from the path, minus a controller prefix the
-whole API shares (`ESRData_`, `PSDData_`, `GATSData_`); upstream's spelling survives the
-transform. A wrapper's fixtures live in a directory named after it,
-`tests/fixtures/<wrapper>/`. The task layer and the MCP tool names are unchanged by it.
-Raised by the family session's harmonization of the sources' names: sdk-usda-esr,
+whole API shares (`ESRData_`, `PSDData_`, `GATSData_`); a file suffix that tells
+operations on one path apart stays as the last word, the default `.json` dropped
+(sdk-cashctrl's `order/document/read.pdf` is `order_document_read_pdf`); upstream's
+spelling survives the transform. A wrapper's fixtures live in a directory named after
+it, `tests/fixtures/<wrapper>/`. The task layer and the MCP tool names are unchanged by
+it. Raised by the family session's harmonization of the sources' names: sdk-usda-esr,
 sdk-usda-psd and sdk-usda-gats named their wrappers with the verbatim `operationId`;
 sdk-usda-esmis and sdk-cashctrl in snake case; sdk-comtrade's ids restate the path, with
 or without the HTTP method (a generator's slug: `get-getda`, `getmetadata`), or are

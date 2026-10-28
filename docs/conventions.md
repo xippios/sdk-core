@@ -65,15 +65,18 @@ Every source package has three layers, top to bottom, and nothing skips a layer.
    `{typeCode}`, turns `/` into `_` and drops a file suffix such as `.json`:
    sdk-cashctrl's `/api/v1/account/category/list.json` is `account_category_list`,
    sdk-comtrade's `/data/v1/getDa` is `get_da`, sdk-usda-nass's `/api/api_GET/` is
-   `api_get`. A run of capitals is one word: `GATSData_GetHS6Commodities` is
-   `get_hs6_commodities`, `GATSData_GetUNTradeExports` is `get_un_trade_exports`.
-   Upstream's spelling survives the transform, so a singular stays singular
-   (`GATSData_GetCensusImport` is `get_census_import`). The verbatim id stays in the
-   first line of the wrapper's docstring and in the `endpoint=` the wrapper passes, so
-   `meta.endpoint` keeps upstream's exact name (§4); the task layer and the MCP tool
-   names are unchanged by the rule. Where an API's operation ids repeat, across its
-   services or across the resources of one service, the wrappers of such a service share
-   one module named after the service (sdk-eurostat's `api/statistics.py` and
+   `api_get`. A file suffix that tells operations on one path apart stays as the last
+   word, the default `.json` dropped: sdk-cashctrl's `order/document/read.json` is
+   `order_document_read`, `read.pdf` is `order_document_read_pdf`; `journal/list.json`
+   is `journal_list`, `list.xlsx` is `journal_list_xlsx`. A run of capitals is one word:
+   `GATSData_GetHS6Commodities` is `get_hs6_commodities`, `GATSData_GetUNTradeExports`
+   is `get_un_trade_exports`. Upstream's spelling survives the transform, so a singular
+   stays singular (`GATSData_GetCensusImport` is `get_census_import`). The verbatim id
+   stays in the first line of the wrapper's docstring and in the `endpoint=` the wrapper
+   passes, so `meta.endpoint` keeps upstream's exact name (§4); the task layer and the
+   MCP tool names are unchanged by the rule. Where an API's operation ids repeat, across
+   its services or across the resources of one service, the wrappers of such a service
+   share one module named after the service (sdk-eurostat's `api/statistics.py` and
    `api/sdmx.py`); ids counted as absent do not trigger it (sdk-comtrade's data wrappers
    stay one module per operation); another service of the same API may keep its service
    module (sdk-eurostat's `api/catalogue.py` holds `getTocXml` alone and stays). An
