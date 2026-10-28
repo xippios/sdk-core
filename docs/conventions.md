@@ -469,7 +469,9 @@ route: `router_from_tasks` skips it, and no route returns a file path (ADR-0019)
   (§2; ADR-0003, amendment 2026-10-28), and are recorded by the `record-fixture`
   command, never hand-written. `<case>` is lowercase snake case for the words the source
   chooses; an upstream code inside it is written as upstream writes it
-  (`CH_2026_8.json`).
+  (`CH_2026_8.json`). A fixture recorded through a task rather than a wrapper, such as a
+  download's metadata or a helper's answer, lives under the task's name; file samples
+  keep `tests/fixtures/files/<file_kind>/` as before (ADR-0020).
 - A fixture file a PR adds or changes stays under 256 KiB (ADR-0019); a fixture over the
   cap recorded before the rule bound stays until a PR re-records it. A download fixture
   holds a small real answer (a short date range, one commodity) or the first N rows or
