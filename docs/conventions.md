@@ -57,10 +57,14 @@ Every source package has three layers, top to bottom, and nothing skips a layer.
    controller prefix that every operation of the API shares (the Swagger controllers of
    the FAS APIs, `ESRData_`, `PSDData_`, `GATSData_`), so
    `PSDData_GetCommodityDataByYear` is `get_commodity_data_by_year` in
-   `api/get_commodity_data_by_year.py`. A name from the path drops the prefix every
-   operation shares, turns `/` into `_` and drops a file suffix such as `.json`:
-   sdk-cashctrl's `/api/v1/account/category/list.json` is `account_category_list`,
-   sdk-usda-nass's `/api/api_GET/` is `api_get`. A run of capitals is one word:
+   `api/get_commodity_data_by_year.py`. An `operationId` that merely restates the HTTP
+   method and the path (a generator's slug, sdk-comtrade's `get-getda`) or an opaque id
+   (sdk-comtrade's hex ids) is not a name and counts as absent, so the path rule
+   applies. A name from the path drops the prefix every operation shares and a parameter
+   segment such as `{typeCode}`, turns `/` into `_` and drops a file suffix such as
+   `.json`: sdk-cashctrl's `/api/v1/account/category/list.json` is
+   `account_category_list`, sdk-comtrade's `/data/v1/getDa` is `get_da`, sdk-usda-nass's
+   `/api/api_GET/` is `api_get`. A run of capitals is one word:
    `GATSData_GetHS6Commodities` is `get_hs6_commodities`, `GATSData_GetUNTradeExports`
    is `get_un_trade_exports`. Upstream's spelling survives the transform, so a singular
    stays singular (`GATSData_GetCensusImport` is `get_census_import`). The verbatim id

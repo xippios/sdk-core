@@ -17,7 +17,8 @@ All notable changes to this project are documented here. The format follows
   2026-10-27.
 - **Conventions 1.22**: §2 names a wrapper module and its function after the upstream
   operation in snake case, from the operation's id in the snapshot (an OpenAPI
-  `operationId`, a WADL method id) or else from the path, without a controller prefix
+  `operationId`, a WADL method id) or else from the path (an `operationId` that is a
+  generator's slug or an opaque id counting as absent), without a controller prefix
   every operation of the API shares (the FAS APIs' `ESRData_`, `PSDData_`, `GATSData_`),
   a run of capitals one word and upstream's spelling kept; the verbatim id stays in the
   wrapper's docstring and in its `endpoint=`, so `meta.endpoint` does not change; where
