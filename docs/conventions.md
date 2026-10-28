@@ -79,11 +79,16 @@ Every source package has three layers, top to bottom, and nothing skips a layer.
    share one module named after the service (sdk-eurostat's `api/statistics.py` and
    `api/sdmx.py`); ids counted as absent do not trigger it (sdk-comtrade's data wrappers
    stay one module per operation); another service of the same API may keep its service
-   module (sdk-eurostat's `api/catalogue.py` holds `getTocXml` alone and stays). An
-   existing source applies the rule to its wrappers and fixture directories in one PR of
-   its own, right after its core 0.3.0 adoption and never inside the adoption PR, or,
-   when it is past that adoption as 1.22 lands, in the first PR of its next version; an
-   adoption PR is judged against the rest of 1.22 until the rename PR merges.
+   module (sdk-eurostat's `api/catalogue.py` holds `getTocXml` alone and stays). A
+   module may hold, beside its wrapper, a second function on the same endpoint, named
+   after the wrapper with a suffix that says what differs (sdk-comtrade's `api/get.py`
+   holds `get` and `get_count_only`, its `api/reference.py` `reference` and
+   `reference_rows`); a helper that calls no endpoint is not a wrapper and keeps a plain
+   name (sdk-eurostat's `codelist_path` and `data_path` in `api/sdmx.py`). An existing
+   source applies the rule to its wrappers and fixture directories in one PR of its own,
+   right after its core 0.3.0 adoption and never inside the adoption PR, or, when it is
+   past that adoption as 1.22 lands, in the first PR of its next version; an adoption PR
+   is judged against the rest of 1.22 until the rename PR merges.
 2. **Task-shaped functions** — `xippios/<pkg>/tasks.py`. The functions a person
    or an agent actually wants: `get_balance_sheet(commodity, marketing_year)`. They
    compose endpoint wrappers, handle pagination and reference lookups, and return
