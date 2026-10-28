@@ -108,6 +108,12 @@ merges automatically after CI, the merge-class check and the review, unless its 
 line (and the Process line's copy in the PR template) state it from 1.15 on, citing
 "ADR-0018, amendment (e)".
 
+Note 2026-10-28 (queue row 55): the gates repository (e) names has been
+`xippios/sdk-gates` since 2026-10-27, when `xippios/.github` was renamed; its README
+defines the merge classes and its `merge-class` check computes them. (e) stands as
+written on its date; conventions §15 and the definition of done name `xippios/sdk-gates`
+from 1.22 on.
+
 ## Amendment 2026-10-27
 
 (f) The release train's workflows, and every workflow of the family, follow the hardening

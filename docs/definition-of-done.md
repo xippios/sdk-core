@@ -41,11 +41,12 @@ adoption itself makes dead (ADR-0018, amendment 2026-10-26). An adoption PR is a
 auto-merge after the reviewer's `ready`, and GitHub merges it once `ci` is green and
 review threads are resolved; a `human` adoption (a source-owned workflow, a changed
 template answer, a protected path, a build or install route) waits for Johannes
-(ADR-0018, amendment (e); the merge classes are in the README of the organisation's
-`.github` repository).
+(ADR-0018, amendment (e); the merge classes are in the README of the gates repository,
+`xippios/sdk-gates`).
 - [ ] core floor raised: `xippios-core~=X.Y.0`, or `~=X.Y.Z` when patch Z shipped what the source adopts (§12), and its extras likewise; a source package the source depends on bound to its own minor the same way (ADR-0021); from PyPI, no git pin, `uv.lock` updated
 - [ ] `copier update` to the template release, conflicts resolved
 - [ ] every local workaround a core change replaced is deleted, its tests with it, the core change named for each in the PR description
+- [ ] code core removed for this source alone is copied in from the commit core's handover names, every copied file listed under this block with the ADR that moved it (conventions §15 item 3; ADR-0023, decision 5; ADR-0024)
 - [ ] logic duplicated across sources moved into core or dropped; what core lacks is carried by the source and named in a queue row, a second copy only when the row names both sources, never a third (ADR-0023)
 - [ ] every test that asserted a limiter wait or a quota pause is marked `rate_limited`, and one that asserted key resolution has a module-level `placeholder_api_key` override that pins nothing (ADR-0013, ADR-0015)
 - [ ] generated enum files re-rendered once through the template's refresh script and committed as formatted, after its `ruff format && ruff check --fix`
