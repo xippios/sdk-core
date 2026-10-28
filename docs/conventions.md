@@ -76,12 +76,11 @@ Every source package has three layers, top to bottom, and nothing skips a layer.
    one module named after the service (sdk-eurostat's `api/statistics.py` and
    `api/sdmx.py`); ids counted as absent do not trigger it (sdk-comtrade's data wrappers
    stay one module per operation); another service of the same API may keep its service
-   module (sdk-eurostat's `api/catalogue.py` holds `getTocXml` alone and stays; row 135
-   leaves the modules unchanged). An existing source applies the rule to its wrappers
-   and fixture directories in one PR of its own, right after its core 0.3.0 adoption and
-   never inside the adoption PR, or, when it is past that adoption as 1.22 lands, in the
-   first PR of its next version; an adoption PR is judged against the rest of 1.22 until
-   the rename PR merges.
+   module (sdk-eurostat's `api/catalogue.py` holds `getTocXml` alone and stays). An
+   existing source applies the rule to its wrappers and fixture directories in one PR of
+   its own, right after its core 0.3.0 adoption and never inside the adoption PR, or,
+   when it is past that adoption as 1.22 lands, in the first PR of its next version; an
+   adoption PR is judged against the rest of 1.22 until the rename PR merges.
 2. **Task-shaped functions** — `xippios/<pkg>/tasks.py`. The functions a person
    or an agent actually wants: `get_balance_sheet(commodity, marketing_year)`. They
    compose endpoint wrappers, handle pagination and reference lookups, and return
