@@ -23,15 +23,18 @@ All notable changes to this project are documented here. The format follows
   of capitals one word, a file suffix that tells operations on one path apart kept as
   the last word (the default `.json` dropped) and upstream's spelling kept; the verbatim
   id stays in the wrapper's docstring and in its `endpoint=`, so `meta.endpoint` does
-  not change; where operation ids repeat, one module per service holds them; an existing
-  source renames in one PR of its own right after its core 0.3.0 adoption, never inside
-  it, or, already past that adoption, in the first PR of its next version. §10 keeps a
-  wrapper's fixtures under `tests/fixtures/<wrapper>/<case>.json`, the case name in
-  lowercase snake case with an upstream code written as upstream writes it. §15 item 3
-  makes code core removed for its one consumer part of that consumer's adoption, copied
-  from the commit core's handover names and listed file by file in the PR description
-  with the ADR that moved it; item 8 excepts 1.22's name rule; §15 names
-  `xippios/sdk-gates` as the home of the merge classes.
+  not change; where operation ids repeat, one module per service holds them; a second
+  function on the same endpoint is named after the wrapper with a suffix that says what
+  differs, and a helper that calls no endpoint keeps a plain name; an existing source
+  renames in one PR of its own right after its core 0.3.0 adoption, never inside it, or,
+  already past that adoption, in the first PR of its next version. §10 keeps a wrapper's
+  fixtures under `tests/fixtures/<wrapper>/<case>.json`, the case name in lowercase
+  snake case with an upstream code written as upstream writes it, and a fixture recorded
+  through a task rather than a wrapper lives under the task's name. §15 item 3 makes
+  code core removed for its one consumer part of that consumer's adoption, copied from
+  the commit core's handover names and listed file by file in the PR description with
+  the ADR that moved it; item 8 excepts 1.22's name rule; §15 names `xippios/sdk-gates`
+  as the home of the merge classes.
 - The definition of done's Adoption PR block and its copy in
   `.github/PULL_REQUEST_TEMPLATE.md`: a line for code copied in from core, the current
   conventions version applied with 1.22's name rule excepted, and `xippios/sdk-gates` as
