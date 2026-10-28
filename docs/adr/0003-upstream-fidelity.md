@@ -89,9 +89,11 @@ transform. A wrapper's fixtures live in a directory named after it,
 `tests/fixtures/<wrapper>/`. The task layer and the MCP tool names are unchanged by it.
 Raised by the family session's harmonization of the sources' names: sdk-usda-esr,
 sdk-usda-psd and sdk-usda-gats named their wrappers with the verbatim `operationId`;
-sdk-usda-esmis and sdk-cashctrl in snake case; sdk-comtrade's ids are generated slugs,
-its wrappers are named from the path; sdk-usda-nass's `api_GET` kept upstream's case,
-and so did sdk-eurostat's four wrappers named by WADL method ids, `getData`,
-`getTocXml`, `codeListQuery` and `dataQuery`. Johannes decided it on 2026-10-28.
+sdk-usda-esmis and sdk-cashctrl in snake case; sdk-comtrade's ids restate the path, with
+or without the HTTP method (a generator's slug: `get-getda`, `getmetadata`), or are
+opaque hex ids, so they are not names and count as absent, and its wrappers are named
+from the path; sdk-usda-nass's `api_GET` kept upstream's case, and so did sdk-eurostat's
+four wrappers named by WADL method ids, `getData`, `getTocXml`, `codeListQuery` and
+`dataQuery`. Johannes decided it on 2026-10-28.
 
 Conventions §2 and §10 state it from 1.22 on.

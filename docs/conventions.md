@@ -57,28 +57,31 @@ Every source package has three layers, top to bottom, and nothing skips a layer.
    controller prefix that every operation of the API shares (the Swagger controllers of
    the FAS APIs, `ESRData_`, `PSDData_`, `GATSData_`), so
    `PSDData_GetCommodityDataByYear` is `get_commodity_data_by_year` in
-   `api/get_commodity_data_by_year.py`. An `operationId` that merely restates the HTTP
-   method and the path (a generator's slug, sdk-comtrade's `get-getda`) or an opaque id
-   (sdk-comtrade's hex ids) is not a name and counts as absent, so the path rule
-   applies. A name from the path drops the prefix every operation shares and a parameter
-   segment such as `{typeCode}`, turns `/` into `_` and drops a file suffix such as
-   `.json`: sdk-cashctrl's `/api/v1/account/category/list.json` is
-   `account_category_list`, sdk-comtrade's `/data/v1/getDa` is `get_da`, sdk-usda-nass's
-   `/api/api_GET/` is `api_get`. A run of capitals is one word:
-   `GATSData_GetHS6Commodities` is `get_hs6_commodities`, `GATSData_GetUNTradeExports`
-   is `get_un_trade_exports`. Upstream's spelling survives the transform, so a singular
-   stays singular (`GATSData_GetCensusImport` is `get_census_import`). The verbatim id
-   stays in the first line of the wrapper's docstring and in the `endpoint=` the wrapper
-   passes, so `meta.endpoint` keeps upstream's exact name (§4); the task layer and the
-   MCP tool names are unchanged by the rule. Where an API's operation ids repeat, across
-   its services or across the resources of one service, the wrappers of such a service
-   share one module named after the service (sdk-eurostat's `api/statistics.py` and
-   `api/sdmx.py`); another service of the same API keeps one module per operation
-   (sdk-eurostat's `api/catalogue.py` holds `getTocXml` alone and stays). An existing
-   source applies the rule to its wrappers and fixture directories in one PR of its own,
-   right after its core 0.3.0 adoption and never inside the adoption PR, or, when it is
-   past that adoption as 1.22 lands, in the first PR of its next version; an adoption PR
-   is judged against the rest of 1.22 until the rename PR merges.
+   `api/get_commodity_data_by_year.py`. An `operationId` that restates the path, with or
+   without the HTTP method (a generator's slug: sdk-comtrade's `get-getda`,
+   `getmetadata`), or an opaque id (sdk-comtrade's hex ids), is not a name and counts as
+   absent, so the path rule applies. A name from the path drops the server's base path,
+   or the prefix every operation of the service shares, and a parameter segment such as
+   `{typeCode}`, turns `/` into `_` and drops a file suffix such as `.json`:
+   sdk-cashctrl's `/api/v1/account/category/list.json` is `account_category_list`,
+   sdk-comtrade's `/data/v1/getDa` is `get_da`, sdk-usda-nass's `/api/api_GET/` is
+   `api_get`. A run of capitals is one word: `GATSData_GetHS6Commodities` is
+   `get_hs6_commodities`, `GATSData_GetUNTradeExports` is `get_un_trade_exports`.
+   Upstream's spelling survives the transform, so a singular stays singular
+   (`GATSData_GetCensusImport` is `get_census_import`). The verbatim id stays in the
+   first line of the wrapper's docstring and in the `endpoint=` the wrapper passes, so
+   `meta.endpoint` keeps upstream's exact name (§4); the task layer and the MCP tool
+   names are unchanged by the rule. Where an API's operation ids repeat, across its
+   services or across the resources of one service, the wrappers of such a service share
+   one module named after the service (sdk-eurostat's `api/statistics.py` and
+   `api/sdmx.py`); ids counted as absent do not trigger it (sdk-comtrade's data wrappers
+   stay one module per operation); another service of the same API may keep its service
+   module (sdk-eurostat's `api/catalogue.py` holds `getTocXml` alone and stays; row 135
+   leaves the modules unchanged). An existing source applies the rule to its wrappers
+   and fixture directories in one PR of its own, right after its core 0.3.0 adoption and
+   never inside the adoption PR, or, when it is past that adoption as 1.22 lands, in the
+   first PR of its next version; an adoption PR is judged against the rest of 1.22 until
+   the rename PR merges.
 2. **Task-shaped functions** — `xippios/<pkg>/tasks.py`. The functions a person
    or an agent actually wants: `get_balance_sheet(commodity, marketing_year)`. They
    compose endpoint wrappers, handle pagination and reference lookups, and return
