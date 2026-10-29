@@ -2,7 +2,8 @@
 
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
-[Semantic Versioning](https://semver.org/) (pre-1.0: breaking changes bump the minor).
+[Semantic Versioning](https://semver.org/) (pre-1.0: only a breaking change bumps the
+minor, conventions §12).
 
 ## [Unreleased]
 
