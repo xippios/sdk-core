@@ -1,6 +1,7 @@
 # xippios SDK family — conventions
 
-Version 1.22 · 2026-10-28 · applies to every `sdk-*` repository under github.com/xippios.
+Version 1.23 · 2026-10-29 · applies to every `sdk-*` repository under
+github.com/xippios, and to the host `xippios-mcp` where ADR-0026 binds it.
 Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 The rules of ADR-0019 and ADR-0022, all of them (the download and decode calls, the
 cache bound, `BULK_TASKS`, the fixture cap and the `truncated` marker, the file-fixture
@@ -21,20 +22,25 @@ bound by each rule from its first PR on a pin that carries the rule's code.
 | GitHub repo | `sdk-<source>` | `sdk-usda-nass` |
 | PyPI distribution | `xippios-<source>` | `xippios-usda-nass` |
 | Import path | `xippios.<source>`; a provider with several APIs nests: `xippios.<provider>.<api>` | `xippios.comtrade`, `xippios.usda.nass` |
-| MCP entry point | `xippios-<source>-mcp` | `xippios-usda-nass-mcp` |
+| MCP entry point | `xippios-<source>-mcp`; a source with a write server: `xippios-<source>-mcp-read` and `xippios-<source>-mcp-write` (§8, ADR-0026) | `xippios-usda-nass-mcp`, `xippios-google-mail-mcp-read` |
 | MCP tool | `<source>_<verb>_<noun>` | `usda_nass_get_series` |
-| Env var for a key | `<SOURCE>_API_KEY`, or the issuer's variable when one key serves several sources (ADR-0009); per tenant of a multi-tenant source in the source's own scheme, sdk-cashctrl's `CASHCTRL_<NAME>_API_KEY` (§7, ADR-0024) | `COMTRADE_API_KEY`, `DATA_GOV_API_KEY`, `CASHCTRL_ACME_API_KEY` |
+| Env var for a key | `<SOURCE>_API_KEY`, or the issuer's variable when one key serves several sources (ADR-0009); per tenant of a multi-tenant source in the source's own scheme, sdk-cashctrl's `CASHCTRL_<NAME>_API_KEY` (§7, ADR-0024) and sdk-google-mail's `GOOGLE_<NAME>_REFRESH_TOKEN`, under the `GOOGLE_` prefix every Google source shares (ADR-0025) | `COMTRADE_API_KEY`, `DATA_GOV_API_KEY`, `CASHCTRL_ACME_API_KEY`, `GOOGLE_WORK_REFRESH_TOKEN` |
 
 `<source>` names the data provider and, where one provider has several APIs, the API:
 `usda-nass`, `usda-psd`, `usda-esr`, `usda-gats`, `usda-esmis`, `usda-wasde` (a parser
 package that depends on `usda-esmis`; ADR-0020, ADR-0021), `comtrade`, `eurostat`,
-`faostat`, `cashctrl`.
+`faostat`, `cashctrl`, `google-mail` (one repository per Google API under the shared
+namespace `google`, as the USDA sources share `usda`; Google Drive later as
+`google-drive`; ADR-0025). The names are upstream's, with one departure dated
+2026-10-29: in `google-mail`, `mail` is Johannes's name for the product upstream calls
+Gmail (ADR-0025).
 No domain prefixes (`ag`, `agri`): sources are domain-neutral; grouping happens via
 GitHub topics (`xippios-sdk`) and the org README.
 
 The import path nests only where one provider has several APIs (ADR-0006): `usda-nass`
-imports as `xippios.usda.nass`, `comtrade` as `xippios.comtrade`. Repository and
-distribution names stay flat and hyphenated. Each generated repository records its
+imports as `xippios.usda.nass`, `google-mail` as `xippios.google.mail`, `comtrade` as
+`xippios.comtrade`. Repository and distribution names stay flat and hyphenated
+(`sdk-google-mail`, `xippios-google-mail`). Each generated repository records its
 import path explicitly (`import_path` in `.copier-answers.yml`); the default turns every
 hyphen into a dot, and a single-API provider whose name carries a hyphen overrides it
 (`world-bank` → `xippios.world_bank`). MCP tool names keep the flat prefix
@@ -139,9 +145,13 @@ skip it (§8, §9; ADR-0019).
   so a member compares equal to the id in upstream's data (ADR-0008). Field names are
   upstream names in snake_case. A `Decimal` field of an `UpstreamModel` serialises as a
   JSON number in every adapter (ADR-0008); Python keeps the `Decimal`.
-- Task-shaped functions may return a *projection* of an upstream record: a subset of
-  its columns under their upstream names, typed, built with `UpstreamModel.project`.
-  Nothing is renamed or computed; parsing a value is the only permitted override.
+- Task-shaped functions may return a *projection* of an upstream record: a subset of its
+  columns under their upstream names, typed, built with `UpstreamModel.project`. Nothing
+  is renamed or computed; parsing a value is the only permitted override. A MIME
+  message's decoded view is a projection by role: decoding the MIME tree is parsing a
+  value, the view picks the tree's parts by their MIME role, under the role's name
+  (sdk-google-mail's `text`, the first `text/plain` part), and the faithful tree stays
+  on the wrapper (ADR-0025).
 - Fidelity, the hygiene above included, applies to files (ADR-0020): a model mirrors the
   file, its field names the column headers snake_cased, sheet and table names kept on the
   record as upstream prints them, units and footnote markers kept as text; nothing is
@@ -214,7 +224,10 @@ with an aware value or with none. The flag says the time is upstream's text, not
 comparable across sources; a consumer that knows the publisher's zone assigns it outside
 the family (ADR-0003, ADR-0022). `vintage` keeps the release identifier as upstream
 names it; where that identifier is the timestamp text, `vintage` holds the text and
-`published_at` its parsed value with the flag.
+`published_at` its parsed value with the flag. A load time is never a vintage: a source
+without a release calendar leaves `vintage` and `published_at` empty, and a newest load
+time computed across datasets is no release time either (sdk-usda-nass's `load_time`;
+ADR-0022, reading of 2026-10-29).
 
 A task that answers from packaged reference data (§3) fills `meta` by ADR-0022:
 `retrieved_at` is the time the packaged list was fetched from upstream (the file's
@@ -421,6 +434,14 @@ tenants and variables, never a value (ADR-0005).
   it on a loopback host only (`127.0.0.1`, `localhost`, `::1`) unless `--allow-remote`
   is passed, with a gateway in front. A write server exposes write tools only;
   reference tools stay on the read server.
+- Server names (ADR-0026): a source with a write server names its servers
+  `xippios-<source>-mcp-read` and `xippios-<source>-mcp-write`, with no alias for the
+  old name; a read-only source keeps `xippios-<source>-mcp`. `server.name` stays the
+  slug the server is built with (`build_server`'s `xippios-<source>` unless the source
+  names it), whatever its entry point is called. A group of the host xippios-mcp follows
+  the rule (`accounting-read`, `accounting-write`) and never mixes read and write tools;
+  the host refuses one that does at startup. The rule binds sdk-cashctrl at its own
+  0.4.0, a breaking change of an entry point (§12), and sdk-google-mail from its 0.1.0.
 - Result cap: default 200 rows or 64 KB, whichever first, bytes counted in the UTF-8
   encoding of the compact JSON text. Over the cap, return the first page plus a note on
   how to narrow the query. Never truncate silently. A reference tool whose whole list an
@@ -447,8 +468,12 @@ tenants and variables, never a value (ADR-0005).
   before the tool runs, by a middleware `register_tasks` installs once per server:
   `error: InvalidRequestError: <argument>: <message>`, the first error with the count
   when there are several, never pydantic's rendered error (its URL, input type or input
-  value) (ADR-0014, amendment 2026-10-27).
-- Entry point `xippios-<source>-mcp` runs stdio by default; `--http` for streamable HTTP.
+  value) (ADR-0014, amendment 2026-10-27). An error answer also sets `isError` on its
+  tool result, binding from a source's core 0.4.0 adoption, which carries the code
+  (ADR-0026, decision 6); until then a client tells an error answer by the text.
+- An entry point, `xippios-<source>-mcp` or, for a source with a write server,
+  `xippios-<source>-mcp-read` and `xippios-<source>-mcp-write`, runs stdio by default;
+  `--http` for streamable HTTP.
   A source's own options reach core's `main` through `add_options` and `apply_options`,
   parsed once with core's; an error applying them stops the process with exit status 2.
 
@@ -588,7 +613,9 @@ which §12 bounds to one minor.
 
 ## 12. Versioning and releases
 
-- SemVer. Pre-1.0: breaking changes bump minor. Post-1.0: breaking changes bump major.
+- SemVer. Pre-1.0: only a breaking change bumps the minor, as `/release-prep` step 4
+  reads; added tasks or parameters make a patch, which reaches every dependent inside
+  its `~=X.Y.0` bound (ADR-0018, amendment (g)). Post-1.0: breaking changes bump major.
 - An upstream API change that changes our public surface is a breaking change.
 - A source depends on one core minor with an upper bound, `xippios-core~=0.2.0`, and its
   extras likewise (`xippios-core[mcp]~=0.2.0`); the template renders it as `~=X.Y.0`,
@@ -600,8 +627,11 @@ which §12 bounds to one minor.
   open bound stays as published and gets the bound with its next release.
 - `CHANGELOG.md` in Keep a Changelog format; every PR adds an entry under Unreleased.
 - The release train (ADR-0018, amendment 2026-10-26): the reference-data refresh, where
-  a source has one, is its own PR before the release PR, and a release PR changes only
-  `pyproject.toml`, `uv.lock`, `CHANGELOG.md`, `README.md`, `CLAUDE.md` and
+  a source has one, runs before the release. It is a PR of its own, merged before the
+  release PR, only when a record changed or `fetched` goes from a bare date to the full
+  time (§4); otherwise the run is a coordination log line the release PR cites,
+  "unchanged" meaning the records, not the files (ADR-0018, amendment (h)). A release PR
+  changes only `pyproject.toml`, `uv.lock`, `CHANGELOG.md`, `README.md`, `CLAUDE.md` and
   `docs/handover.md` (and `scripts/check-siblings.sh` until the siblings check is
   template-owned). Release = the release PR merges on `main` → `publish.yml` tags
   `vX.Y.Z` from `pyproject.toml` on the merge commit → environment `pypi` → a human
@@ -617,7 +647,12 @@ which §12 bounds to one minor.
   the dependent adopts a core minor only after the dependency has released on it, and a
   new minor of the dependency reaches it through an adoption PR (§15). The dependency
   tags first; the dependent's release PR pins the published version. The dependent's
-  servers register its own tasks only; no cycles, one level only.
+  adoption release follows the dependency's new minor right after, so the latest of both
+  install together; a dependent that bundles the adoption with feature work says so in
+  its briefing and accepts the window. A patch reaches the dependent inside its bound,
+  so the adoption release follows a breaking minor only (ADR-0021, amendment
+  2026-10-29). The dependent's servers register its own tasks only; no cycles, one level
+  only.
 
 ## 13. Repository hygiene
 
@@ -630,7 +665,7 @@ which §12 bounds to one minor.
   30-second example · MCP client config snippet · status table of covered endpoints ·
   upstream terms and attribution · licence.
 - Topics on GitHub: `xippios-sdk`, `python`, `mcp`, plus the domain (`agriculture`,
-  `trade-data`, `accounting`) as appropriate.
+  `trade-data`, `accounting`, `email`) as appropriate.
 - Workflows are hardened (ADR-0018, amendment 2026-10-27). Every action is pinned to a
   commit SHA with its version in a comment, and bumped deliberately. Every checkout sets
   `persist-credentials: false`, except in a job that pushes with the token (the release
@@ -665,7 +700,7 @@ changed template answer, a protected path, a build or install route) waits for J
    another source package, that package's minor likewise (ADR-0021); resolved from PyPI
    with no git pin left in `[tool.uv.sources]`, and `uv.lock` is updated.
 2. `copier update` brings the repository to the template release, its conflicts
-   resolved.
+   resolved (not on routes (1) and (3) below).
 3. Every local workaround that a core change replaced is deleted, its tests with it, and
    the PR description names the core change for each (`QuotaAwareClient` → `QuotaPolicy`,
    ADR-0015); the release's ADRs and CHANGELOG list them per source. In the other
@@ -691,6 +726,24 @@ changed template answer, a protected path, a build or install route) waits for J
    changed since the version the source last applied holds in the source.
 9. `CHANGELOG.md` has a line under Unreleased naming the core, template and conventions
    versions adopted.
+
+Three routes depart from the list (ADR-0018, amendment (i)):
+
+- (1) **A core release without a template tag** (queue row 232): the bound is raised
+  with `copier update --vcs-ref=:current: -d core_version=X.Y.Z`, so
+  `.copier-answers.yml` does not drift, on a branch `chore/template-update-core-X.Y.Z`,
+  and item 2 is not applicable. A core minor without its template release is no adoption
+  until the template follows. The `/adopt-release` mode for this route is the
+  template's.
+- (2) **A dependency's minor whose new surface the dependent uses** (queue row 273): the
+  adoption PR stays pure, and the use is the next PR, as the sdk-usda-wasde 0.2.0
+  briefing splits its PR 1 and PR 2 (ADR-0021, amendment 2026-10-29).
+- (3) **A source frozen on a template tag** (queue row 118; sdk-cashctrl on template
+  v0.2.2): no `copier update`, so item 2 is not applicable, and the core floor of item 1
+  is raised by hand. The template-rendered files are the source's own and listed in its
+  `CLAUDE.md`; the template changes the new conventions version needs are hand-applied
+  and listed file by file in the PR description, as
+  https://github.com/xippios/sdk-cashctrl/pull/18 did.
 
 An adoption PR changes nothing else: no new endpoints, tasks or fixtures ride along. It
 may delete the fixtures, mounts and tests that the adoption itself makes dead, and
