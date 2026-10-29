@@ -111,16 +111,17 @@ carries a comment naming the row.
 
 ### D-c. A grant's scopes are upstream's to enforce
 
-The consent tool grants a scope set per account: `read` is `gmail.readonly`, and `write`
-is `gmail.modify`, which serves every read method too (F3; the investigation's §2.3;
-queue row 280). Neither server checks a grant before a call. Upstream refuses a call the
-grant does not cover, and `classify` turns that answer into the re-consent `AuthError`,
-naming the granted set and the set to re-run with ("account <name> was granted <scopes>;
-this tool needs gmail.modify; re-run xippios-google-mail-auth --account <name> --scopes
-write"), the granted set read from the refresh answer's `scope`, which the auth keeps
-(§2.6 (c)). Gmail's page folds the refusal into 401 `authError` (F8); the demo account
-is consented with `read` first and with `write` later, so the source's probe records the
-real shape before `classify` is written against it (D108).
+The consent tool asks for one scope set per account: `read` is `gmail.readonly`, and
+`write` is `gmail.modify`, which serves every read method too (F3; the investigation's
+§2.3; queue row 280). Neither server checks a grant before a call. Upstream refuses a
+call the grant does not cover, and `classify` turns that answer into the re-consent
+`AuthError`, naming the granted set and the set to re-run with ("account <name> was
+granted <scopes>; this tool needs gmail.modify; re-run xippios-google-mail-auth
+--account <name> --scopes write"), the granted set read from the refresh answer's
+`scope`, which the auth keeps (§2.6 (c)). Gmail's page folds the refusal into 401
+`authError` (F8); the demo account is consented with `read` first and with `write`
+later, so the source's probe records the real shape before `classify` is written against
+it (D108).
 
 Rejected (§4, D-c): per-task pre-checks, a second code path beside upstream's own; and
 one consent for both servers, since `gmail.modify` for a read-only deployment widens
