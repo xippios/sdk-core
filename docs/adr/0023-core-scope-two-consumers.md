@@ -76,3 +76,11 @@ Amended 2026-10-27 (ADR-0024): of "the write checks" C8 names, `assert_write_too
 core in 0.3.0 with tenants and the tenant lock; the `confirm` check of a write server and
 `main`'s loopback rule stay, since conventions §8 requires them of every write server and the
 family review's C8 keeps them.
+
+Amended 2026-10-29 (ADR-0025; decided by Johannes on 2026-10-29, D108 and D109 (5)): the
+multi-tenant kit sdk-cashctrl carries under ADR-0024, which the consequences above count
+as one consumer, standalone, has two consumers once sdk-google-mail copies it under
+decision 4 (queue row 281), so it returns to core in 0.4.0 under decision 2, reversing
+ADR-0024's decision 6 for it. Queue row 252's renewing-bearer base has two consumers
+likewise, sdk-faostat's login and sdk-google-mail's refresh, decision 2 counting the
+same shape.

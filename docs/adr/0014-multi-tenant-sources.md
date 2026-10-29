@@ -184,3 +184,17 @@ sdk-cashctrl, its one consumer, which is bound by none of them. Decisions 5
 rule) and 10 (`mcp_call` and `mcp_call_text` through the middleware) stand; decision 8's
 locked server and the amendment's sentence on a lock's middleware are examples of what a
 source may build, no longer core's.
+
+Amended 2026-10-29 (ADR-0025, D-d; decided by Johannes on 2026-10-29, D108 and D109
+(5)): what ADR-0024 moved to sdk-cashctrl returns to core in 0.4.0, since
+sdk-google-mail copies it and each piece has two consumers (ADR-0023, decision 2; queue
+row 281): decisions 1 to 4 (`Tenants`) and 6 (`list_task`), and decision 7's lock as the
+binding wrapper sdk-cashctrl built in place of the middleware (ADR-0024's consequences),
+with `assert_write_tools`, the demo-only conftest strip and the `_cli.py` serve command.
+Until then they stay the two sources' copies, each naming the row.
+
+Amended 2026-10-29 (ADR-0026; decided by Johannes on 2026-10-29, D109 and D110 (4)): for
+the packages the host xippios-mcp serves, decision 9's "a gateway in front" is the host,
+with its per-endpoint bearer, the default, and, for claude.ai, the OAuth authorization
+server in front of it: the deployment that protects a write server beyond loopback. Core
+still adds no authentication to MCP servers.
