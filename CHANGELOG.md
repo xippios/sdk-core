@@ -44,24 +44,26 @@ minor, conventions §12).
   follow the name rule, and the verbatim id stays in the first line of its docstring and
   in `endpoint=`.
 - **ADR-0025**: Google Mail, sdk-google-mail's decisions. Its read server is held to
-  loopback unless `--allow-remote`, checked in its own `apply_options` until a second
-  consumer brings core a `loopback_only` option; `RefreshTokenAuth`, an `EnvKeyAuth`
-  whose key is the refresh token and whose `auth_flow` renews the access token in
-  memory, is the second consumer of a renewing-bearer base for core 0.4.0; a grant's
-  scopes are upstream's to enforce, and `classify` maps the refusal to a re-consent
-  `AuthError`; the multi-tenant kit (`Tenants`, `list_task`, the binding lock wrapper,
-  `assert_write_tools`, the demo-only conftest strip, the serve command) is copied from
-  sdk-cashctrl and returns to core in 0.4.0; `get_message` returns a decoded view, a
-  projection by MIME role, the faithful tree on the wrapper.
+  loopback unless `--allow-remote`, checked in its own `apply_options` until core 0.4.0
+  carries the `loopback_only` option (row 282, the host its second consumer);
+  `RefreshTokenAuth`, an `EnvKeyAuth` whose key is the refresh token and whose
+  `auth_flow` renews the access token in memory, is the second consumer of a
+  renewing-bearer base for core 0.4.0; a grant's scopes are upstream's to enforce, and
+  `classify` maps the refusal to a re-consent `AuthError`; the multi-tenant kit
+  (`Tenants`, `list_task`, the binding lock wrapper, `assert_write_tools`, the demo-only
+  conftest strip, the serve command) is copied from sdk-cashctrl and returns to core in
+  0.4.0; `get_message` returns a decoded view, a projection by MIME role, the faithful
+  tree on the wrapper.
 - **ADR-0026**: the host xippios-mcp, a public package that is no source. 0.1.0 runs on
   today's packages, each package's server mounted by path; a group never mixes read and
   write tools, and the tool lists are checked at startup; per-endpoint auth is none or a
   bearer, the bearer the default, with allowed hosts and `transport_security` for a
-  reverse proxy; `isError` is read once core sets it; the `-read` and `-write` names;
-  the template's package contract is its 0.2.0 interface; the sources are extras with
-  `>=` bounds, an exception to ADR-0021 for the host alone; claude.ai needs an OAuth
-  authorization server in front, Pomerium Core the runbook's choice. `CLAUDE.md` lists
-  both ADRs.
+  reverse proxy; the host applies the loopback rules itself to an endpoint with `auth:
+  none` (row 296), and is `loopback_only`'s second consumer (row 282); `isError` is read
+  once core sets it; the `-read` and `-write` names; the template's package contract is
+  its 0.2.0 interface; the sources are extras with `>=` bounds, an exception to ADR-0021
+  for the host alone; claude.ai needs an OAuth authorization server in front, Pomerium
+  Core the runbook's choice. `CLAUDE.md` lists both ADRs.
 - **ADR-0014, ADR-0018, ADR-0021, ADR-0022, ADR-0023 and ADR-0024, amended 2026-10-29**:
   ADR-0024's decision 6 is reversed for the kit that returns to core, as its status line
   now says, with a dated line each under ADR-0014 and ADR-0023; ADR-0014's second line

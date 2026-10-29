@@ -72,8 +72,9 @@ carries no authentication; serve it on a loopback --host or pass --allow-remote 
 gateway", and the process ends with exit status 2. The loopback names are a private copy
 of core's `_LOOPBACK_HOSTS`, with a comment naming queue row 282 (ADR-0023, decision 4).
 The core option, `build_server(..., loopback_only=True)` recorded beside the write
-servers and read by `main`'s remote check, waits for a second consumer (queue row 282;
-ADR-0023, decision 2).
+servers and read by `main`'s remote check, now has its second consumer, the host
+xippios-mcp (ADR-0026, decision 5; queue row 296), so it enters core 0.4.0 with the kit
+and the renewing-bearer base (queue row 282; ADR-0023, decision 2).
 
 Rejected (the investigation's §4, D-a): loopback by default for every read server, which
 would change every data source's deployment; and a rule keyed on tenancy, since the
@@ -167,9 +168,10 @@ cap a long `text` or `html` comes back as a preview plus the note (ADR-0016).
   `email`.
 - Dated lines under ADR-0014 (the kit's return), ADR-0023 (the kit's and the renewing
   bearer's two consumers) and ADR-0024 (decision 6 reversed for the kit).
-- Core 0.4.0's code: the kit (queue row 281) and the renewing-bearer base (row 252), two
-  consumers each; the `loopback_only` option (row 282) enters core with its second
-  consumer. Nothing in `xippios.core` changes with this ADR.
+- Core 0.4.0's code: the kit (queue row 281), the renewing-bearer base (row 252) and the
+  `loopback_only` option (row 282), two consumers each, the option's second the host
+  xippios-mcp (ADR-0026, decision 5; row 296). Nothing in `xippios.core` changes with
+  this ADR.
 - sdk-google-mail 0.1.0 (queue row 280): its PR 3, the accounts and the auth, follows
   this ADR on sdk-core `main`.
 - No gateway runbook in sdk-google-mail: its servers serve Streamable HTTP on loopback,

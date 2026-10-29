@@ -1,7 +1,8 @@
 # ADR-0026: The host xippios-mcp
 
 Status: Accepted · Date: 2026-10-29 · Decided by Johannes on 2026-10-29 (D109, D110 (4);
-panel B's decisions 2 to 4 as amended; drafted by the family)
+panel B's decisions 2 to 4 as amended; drafted by the family; decision 5's loopback rule
+the session's recommendation, queue row 296)
 
 ## Context
 
@@ -87,7 +88,20 @@ on `_LOOPBACK_HOSTS` in core's `mcp/cli.py`).
    (panel B's decision 2; D109).
 5. **Per-endpoint auth.** Each endpoint's auth is none or a bearer token from 0.1.0, the
    bearer the default (D109 (2)). The allowed hosts and `transport_security` are stated
-   in the config, so the host works behind a reverse proxy.
+   in the config, so the host works behind a reverse proxy. The loopback rules of
+   ADR-0014, decision 9, and ADR-0025, D-a, run in core's `main` and in a source's
+   `apply_options`, which the host does not use (the mount proof serves each server's
+   `streamable_http_app` under uvicorn), so the host applies them itself: an endpoint
+   with `auth: none` that serves a write server (core's `is_write_server`, importable
+   from `xippios.core.mcp.server`) binds a loopback host only, and startup refuses it on
+   another host unless the endpoint sets `allow_remote: true`. A read server a source
+   holds to loopback is covered the same way once core carries the `loopback_only`
+   option (queue row 282), of which the host is the second consumer (ADR-0023, decision
+   2), so the option enters core 0.4.0 and the host reads it from its 0.2.0 interface
+   (decision 8, queue row 284); until then an endpoint with `auth: none` that mounts
+   sdk-google-mail's read server is the operator's to keep on loopback, which the host's
+   README says. This is the session's recommendation of 2026-10-29, queue row 296;
+   Johannes can overturn it at G3 of the conventions 1.23 PR.
 6. **Error answers are flagged.** Once core sets `isError` on an error answer (queue row
    283; ADR-0023, decision 3 (c): one signature for every adapter), the host reads the
    flag; until then it reads the text `error: <ErrorClass>: <message>` of conventions
@@ -128,9 +142,11 @@ on `_LOOPBACK_HOSTS` in core's `mcp/cli.py`).
 - Dated lines under ADR-0014 (the host, with its per-endpoint bearer and the
   authorization server in front, is the deployment that protects a write server beyond
   loopback) and ADR-0021 (the `>=` exception, in its amendment of 2026-10-29).
-- Queue rows: 283 (`isError`, core 0.4.0), 284 (the package contract and the host
-  flavour of the scaffold, template v0.4.0), 286 (sdk-cashctrl's `-read` at its 0.4.0),
-  287 (the root's naming exception and the guard), 289 (the host's 0.1.0). The host's
-  briefing is written once this ADR is on sdk-core `main`.
+- Queue rows: 282 (`loopback_only`, the host its second consumer, core 0.4.0), 283
+  (`isError`, core 0.4.0), 284 (the package contract and the host flavour of the
+  scaffold, template v0.4.0), 286 (sdk-cashctrl's `-read` at its 0.4.0), 287 (the root's
+  naming exception and the guard), 289 (the host's 0.1.0), 296 (the host applies the
+  loopback rules itself). The host's briefing is written once this ADR is on sdk-core
+  `main`.
 - Core still adds no authentication to MCP servers (ADR-0014): the bearer and the
   authorization server are the host's and its deployment's.
