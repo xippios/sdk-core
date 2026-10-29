@@ -44,7 +44,7 @@ template answer, a protected path, a build or install route) waits for Johannes
 (ADR-0018, amendment (e); the merge classes are in the README of the gates repository,
 `xippios/sdk-gates`).
 - [ ] core floor raised: `xippios-core~=X.Y.0`, or `~=X.Y.Z` when patch Z shipped what the source adopts (§12), and its extras likewise; a source package the source depends on bound to its own minor the same way (ADR-0021); from PyPI, no git pin, `uv.lock` updated
-- [ ] `copier update` to the template release, conflicts resolved
+- [ ] `copier update` to the template release, conflicts resolved; not applicable on §15's routes (1), a core release without a template tag, and (3), a source frozen on a template tag, whose hand-applied template changes are listed file by file in the PR description
 - [ ] every local workaround a core change replaced is deleted, its tests with it, the core change named for each in the PR description
 - [ ] code core removed for this source alone is copied in from the commit core's handover names, every copied file listed under this block with the ADR that moved it (conventions §15 item 3; ADR-0023, decision 5; ADR-0024)
 - [ ] logic duplicated across sources moved into core or dropped; what core lacks is carried by the source and named in a queue row, a second copy only when the row names both sources, never a third (ADR-0023)
@@ -60,4 +60,4 @@ template answer, a protected path, a build or install route) waits for Johannes
 - [ ] assumptions and open questions listed in the PR description
 - [ ] live calls spent by this PR are counted in the description (keyed calls by number; `none` is a count)
 - [ ] the description carries, after this checklist, a `## Decisions taken` block: one line per decision the session made, each backed by a convention, an ADR, a coordination rule, a decision of Johannes's with its date, or `gap, row N`; a line backed by none of these is a blocking finding
-- [ ] a release PR changes only the subset of conventions §12; the reference refresh is its own PR
+- [ ] a release PR changes only the subset of conventions §12; the reference refresh ran before it, in a PR of its own only when a record changed or `fetched` went from a bare date to the full time, otherwise as a coordination log line the release PR cites
