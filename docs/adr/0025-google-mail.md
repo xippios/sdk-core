@@ -1,7 +1,9 @@
 # ADR-0025: Google Mail — loopback, the renewing bearer, scopes, the kit's return and the decoded view
 
 Status: Accepted · Date: 2026-10-29 · Decided by Johannes on 2026-10-29 (D108, D109 (5),
-D110 (4) where cited, D111; drafted by the family from the investigation of 2026-10-29)
+D110 (4) for the claude.ai edge, D111; drafted by the family from the investigation of
+2026-10-29; the host as the loopback option's second consumer the session's
+recommendation, queue row 296)
 
 ## Context
 
@@ -72,9 +74,11 @@ carries no authentication; serve it on a loopback --host or pass --allow-remote 
 gateway", and the process ends with exit status 2. The loopback names are a private copy
 of core's `_LOOPBACK_HOSTS`, with a comment naming queue row 282 (ADR-0023, decision 4).
 The core option, `build_server(..., loopback_only=True)` recorded beside the write
-servers and read by `main`'s remote check, now has its second consumer, the host
-xippios-mcp (ADR-0026, decision 5; queue row 296), so it enters core 0.4.0 with the kit
-and the renewing-bearer base (queue row 282; ADR-0023, decision 2).
+servers and read by `main`'s remote check, has its second consumer in the host
+xippios-mcp, so it enters core 0.4.0 with the kit and the renewing-bearer base (queue
+row 282; ADR-0023, decision 2); the host as that consumer is the session's
+recommendation of 2026-10-29 (queue row 296; ADR-0026, decision 5), which Johannes can
+overturn at G3 of the conventions 1.23 PR.
 
 Rejected (the investigation's §4, D-a): loopback by default for every read server, which
 would change every data source's deployment; and a rule keyed on tenancy, since the
@@ -112,21 +116,21 @@ carries a comment naming the row.
 
 ### D-c. A grant's scopes are upstream's to enforce
 
-The consent tool asks for one scope set per account: `read` is `gmail.readonly`, and
-`write` is `gmail.modify`, which serves every read method too (F3; the investigation's
-§2.3; queue row 280). Neither server checks a grant before a call. Upstream refuses a
-call the grant does not cover, and `classify` turns that answer into the re-consent
-`AuthError`, naming the granted set and the set to re-run with ("account <name> was
-granted <scopes>; this tool needs gmail.modify; re-run xippios-google-mail-auth
---account <name> --scopes write"), the granted set read from the refresh answer's
-`scope`, which the auth keeps (§2.6 (c)). Gmail's page folds the refusal into 401
-`authError` (F8); the demo account is consented with `read` first and with `write`
-later, so the source's probe records the real shape before `classify` is written against
-it (D108).
+Each account is consented once, for the scope set its deployment needs: `read`, which is
+`gmail.readonly`, or `write`, which is `gmail.modify` and serves every read method too
+(F3; the investigation's §2.3; queue row 280). Neither server checks a grant before a
+call. Upstream refuses a call the grant does not cover, and `classify` turns that answer
+into the re-consent `AuthError`, naming the granted set and the set to re-run with
+("account <name> was granted <scopes>; this tool needs gmail.modify; re-run
+xippios-google-mail-auth --account <name> --scopes write"), the granted set read from
+the refresh answer's `scope`, which the auth keeps (§2.6 (c)). Gmail's page folds the
+refusal into 401 `authError` (F8); the demo account is consented with `read` first and
+with `write` later, so the source's probe records the real shape before `classify` is
+written against it (D108).
 
 Rejected (§4, D-c): per-task pre-checks, a second code path beside upstream's own; and
-one consent for both servers, since `gmail.modify` for a read-only deployment widens
-what it can do.
+one consent for both servers, a `write` grant for a deployment that only reads, since
+`gmail.modify` widens what it can do.
 
 ### D-d. The kit returns to core
 
@@ -170,8 +174,9 @@ cap a long `text` or `html` comes back as a preview plus the note (ADR-0016).
   bearer's two consumers) and ADR-0024 (decision 6 reversed for the kit).
 - Core 0.4.0's code: the kit (queue row 281), the renewing-bearer base (row 252) and the
   `loopback_only` option (row 282), two consumers each, the option's second the host
-  xippios-mcp (ADR-0026, decision 5; row 296). Nothing in `xippios.core` changes with
-  this ADR.
+  xippios-mcp, the session's recommendation of 2026-10-29, which Johannes can overturn
+  at G3 (row 296; ADR-0026, decision 5). Nothing in `xippios.core` changes with this
+  ADR.
 - sdk-google-mail 0.1.0 (queue row 280): its PR 3, the accounts and the auth, follows
   this ADR on sdk-core `main`.
 - No gateway runbook in sdk-google-mail: its servers serve Streamable HTTP on loopback,

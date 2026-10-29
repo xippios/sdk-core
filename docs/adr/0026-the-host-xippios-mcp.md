@@ -69,10 +69,11 @@ on `_LOOPBACK_HOSTS` in core's `mcp/cli.py`).
    hand from the template's shared files (`ci.yml` with the gates caller, `publish.yml`,
    pre-commit, ruff, `pyproject.toml`, the PR template) and records the deviation in its
    `CLAUDE.md`; a host flavour of the scaffold is the template's part of queue row 284
-   (row 289). Of the conventions, decisions 4, 7 and 9 below bind it, and the shared
-   files it is scaffolded from carry §11's tooling, §12's release train and §13's
-   hygiene to it; the rules written for a source's layers, envelope, fixtures and
-   adoption have nothing to bind in it.
+   (row 289). Of the conventions, decisions 2 (§7), 4, 5, 6 (§8's error text) and 7
+   below bind it, and decision 9 exempts it from §12's one-minor bound; the shared files
+   it is scaffolded from carry §11's tooling, §12's release train and §13's hygiene to
+   it; the rules written for a source's layers, envelope, fixtures and adoption have
+   nothing to bind in it.
 2. **0.1.0 runs on today's packages**: stdio locally, streamable HTTP on a server, a
    Docker image (D109 (2)) and the Forge recipe (queue row 289). A config file names the
    endpoints and the groups (`mcp.xippios.com/<group>/mcp`); the secrets stay in the
@@ -93,15 +94,16 @@ on `_LOOPBACK_HOSTS` in core's `mcp/cli.py`).
    `apply_options`, which the host does not use (the mount proof serves each server's
    `streamable_http_app` under uvicorn), so the host applies them itself: an endpoint
    with `auth: none` that serves a write server (core's `is_write_server`, importable
-   from `xippios.core.mcp.server`) binds a loopback host only, and startup refuses it on
-   another host unless the endpoint sets `allow_remote: true`. A read server a source
-   holds to loopback is covered the same way once core carries the `loopback_only`
-   option (queue row 282), of which the host is the second consumer (ADR-0023, decision
-   2), so the option enters core 0.4.0 and the host reads it from its 0.2.0 interface
-   (decision 8, queue row 284); until then an endpoint with `auth: none` that mounts
-   sdk-google-mail's read server is the operator's to keep on loopback, which the host's
-   README says. This is the session's recommendation of 2026-10-29, queue row 296;
-   Johannes can overturn it at G3 of the conventions 1.23 PR.
+   from `xippios.core.mcp.server`, outside core's public surface; whether core 0.4.0
+   exports it, with `register_tasks`, is queue row 297) binds a loopback host only, and
+   startup refuses it on another host unless the endpoint sets `allow_remote: true`. A
+   read server a source holds to loopback is covered the same way once core carries the
+   `loopback_only` option (queue row 282), of which the host is the second consumer
+   (ADR-0023, decision 2), so the option enters core 0.4.0 and the host reads it from
+   its 0.2.0 interface (decision 8, queue row 284); until then an endpoint with `auth:
+   none` that mounts sdk-google-mail's read server is the operator's to keep on
+   loopback, which the host's README says. This is the session's recommendation of
+   2026-10-29, queue row 296; Johannes can overturn it at G3 of the conventions 1.23 PR.
 6. **Error answers are flagged.** Once core sets `isError` on an error answer (queue row
    283; ADR-0023, decision 3 (c): one signature for every adapter), the host reads the
    flag; until then it reads the text `error: <ErrorClass>: <message>` of conventions
@@ -122,9 +124,8 @@ on `_LOOPBACK_HOSTS` in core's `mcp/cli.py`).
 9. **The sources are extras with `>=` bounds.** The host declares each source package as
    an extra with a `>=` lower bound: an exception to ADR-0021's decision 1, and to the
    one-minor `~=` bound of conventions §12, for the host alone, since it serves every
-   package at its latest and its own release follows theirs (D109 (2)). Its first joint
-   resolve follows queue row 260, sdk-usda-wasde's adoption of xippios-usda-esmis 0.2.0
-   (D106; queue row 269).
+   package at its latest (D109 (2)). Its first joint resolve follows queue row 260,
+   sdk-usda-wasde's adoption of xippios-usda-esmis 0.2.0 (D106; queue row 269).
 10. **The claude.ai edge** (D110 (4)). claude.ai needs an OAuth authorization server in
     front of the host: it starts sign-in on a 401 with `WWW-Authenticate: Bearer
     resource_metadata="..."` and needs PKCE S256, RFC 8707's `resource` and DCR or CIMD
@@ -137,8 +138,8 @@ on `_LOOPBACK_HOSTS` in core's `mcp/cli.py`).
 
 - Conventions 1.23: its version line applies the conventions to the host where this ADR
   binds it (decision 1); §1's entry-point row and §8 name the servers by decision 7; §8
-  carries the group rule and `isError`, which binds a source from its core 0.4.0
-  adoption.
+  carries the group rule and `isError`, which binds a source from its adoption of the
+  core release that carries the code (core 0.4.0 as planned, queue row 283).
 - Dated lines under ADR-0014 (the host, with its per-endpoint bearer and the
   authorization server in front, is the deployment that protects a write server beyond
   loopback) and ADR-0021 (the `>=` exception, in its amendment of 2026-10-29).

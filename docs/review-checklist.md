@@ -13,8 +13,9 @@ repository it reviews.
   a PR that changes one of them is judged against its branch's own version of it. Read
   the repository's `CLAUDE.md`, and its `docs/upstream/` for every claim about the
   upstream API.
-- Never read or print `.envrc`, `.env` or a variable ending in `_API_KEY`; a leak check
-  greps the files for key patterns, it never compares against a key.
+- Never read or print `.envrc`, `.env` or a variable ending in `_API_KEY`,
+  `_REFRESH_TOKEN` or `_SECRET`; a leak check greps the files for key patterns, it never
+  compares against a key.
 
 ## Check, in this order
 
@@ -56,7 +57,7 @@ repository it reviews.
     CI and Process blocks; it deletes only what the adoption itself makes dead
     (ADR-0018, amendment 2026-10-26). On §15's routes (1) and (3), a core release
     without a template tag (queue row 232) and a source frozen on a template tag (queue
-    row 118), item 2 does not apply: the first raises the bound with
+    row 118), §15's item 2 does not apply: the first raises the bound with
     `copier update --vcs-ref=:current:`, the second runs no `copier update` and lists
     the template changes it hand-applies file by file (ADR-0018, amendment (i)).
 13. **Release PR** (`chore/release-*`; the version in `pyproject.toml` changed, or for

@@ -1,6 +1,7 @@
 # ADR-0014: Multi-tenant sources
 
-Status: Accepted; superseded in part by ADR-0024 (2026-10-27) · Date: 2026-10-23
+Status: Accepted; superseded in part by ADR-0024 (2026-10-27), decisions 1 to 4, 6 and 7
+returning to core in 0.4.0 under ADR-0025 (2026-10-29) · Date: 2026-10-23
 
 ## Context
 

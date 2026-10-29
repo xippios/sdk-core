@@ -225,9 +225,9 @@ comparable across sources; a consumer that knows the publisher's zone assigns it
 the family (ADR-0003, ADR-0022). `vintage` keeps the release identifier as upstream
 names it; where that identifier is the timestamp text, `vintage` holds the text and
 `published_at` its parsed value with the flag. A load time is never a vintage: a source
-without a release calendar leaves `vintage` and `published_at` empty, and a newest load
-time computed across datasets is no release time either (sdk-usda-nass's `load_time`;
-ADR-0022, reading of 2026-10-29).
+whose only time is the time upstream loaded the data (sdk-usda-nass's `load_time`)
+leaves `vintage` and `published_at` empty, and a newest load time computed across
+datasets is no release time either (ADR-0022, reading of 2026-10-29).
 
 A task that answers from packaged reference data (§3) fills `meta` by ADR-0022:
 `retrieved_at` is the time the packaged list was fetched from upstream (the file's
@@ -469,8 +469,9 @@ tenants and variables, never a value (ADR-0005).
   `error: InvalidRequestError: <argument>: <message>`, the first error with the count
   when there are several, never pydantic's rendered error (its URL, input type or input
   value) (ADR-0014, amendment 2026-10-27). An error answer also sets `isError` on its
-  tool result, binding from a source's core 0.4.0 adoption, which carries the code
-  (ADR-0026, decision 6); until then a client tells an error answer by the text.
+  tool result, binding from a source's adoption of the core release that carries the
+  code (core 0.4.0 as planned, queue row 283; ADR-0026, decision 6); until then a client
+  tells an error answer by the text.
 - An entry point, `xippios-<source>-mcp` or, for a source with a write server,
   `xippios-<source>-mcp-read` and `xippios-<source>-mcp-write`, runs stdio by default;
   `--http` for streamable HTTP.
@@ -665,7 +666,7 @@ which §12 bounds to one minor.
   30-second example · MCP client config snippet · status table of covered endpoints ·
   upstream terms and attribution · licence.
 - Topics on GitHub: `xippios-sdk`, `python`, `mcp`, plus the domain (`agriculture`,
-  `trade-data`, `accounting`, `email`) as appropriate.
+  `trade-data`, `accounting`, `email` (ADR-0025)) as appropriate.
 - Workflows are hardened (ADR-0018, amendment 2026-10-27). Every action is pinned to a
   commit SHA with its version in a comment, and bumped deliberately. Every checkout sets
   `persist-credentials: false`, except in a job that pushes with the token (the release

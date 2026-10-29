@@ -117,7 +117,8 @@ uv run pre-commit run --all-files
   run in the environment `pypi`. A session's one merge action is enabling GitHub
   auto-merge, after the reviewer's `ready`, on an adoption (`chore/template-update*`) or
   `chore/release-*` PR whose merge class is `auto` (ADR-0018, amendment (e)).
-- Never read or print `.envrc`, `.env`, or any variable ending in `_API_KEY`.
+- Never read or print `.envrc`, `.env`, or any variable ending in `_API_KEY`,
+  `_REFRESH_TOKEN` or `_SECRET`.
 - `ruff` is configured to leave `docs/` alone; never reformat code blocks in the
   governing documents.
 - If a convention seems wrong, say so in the PR description and follow it anyway; changing
