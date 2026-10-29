@@ -13,8 +13,9 @@ repository it reviews.
   a PR that changes one of them is judged against its branch's own version of it. Read
   the repository's `CLAUDE.md`, and its `docs/upstream/` for every claim about the
   upstream API.
-- Never read or print `.envrc`, `.env` or a variable ending in `_API_KEY`; a leak check
-  greps the files for key patterns, it never compares against a key.
+- Never read or print `.envrc`, `.env` or a variable ending in `_API_KEY`,
+  `_REFRESH_TOKEN` or `_SECRET`; a leak check greps the files for key patterns, it never
+  compares against a key.
 
 ## Check, in this order
 
@@ -54,12 +55,19 @@ repository it reviews.
 12. **Adoption PR** (`chore/template-update*`): judged against conventions §15 and
     nothing else, that is the definition of done's Adoption PR block with its Enforced by
     CI and Process blocks; it deletes only what the adoption itself makes dead
-    (ADR-0018, amendment 2026-10-26).
+    (ADR-0018, amendment 2026-10-26). On §15's routes (1) and (3), a core release
+    without a template tag (queue row 232) and a source frozen on a template tag (queue
+    row 118), §15's item 2 does not apply: the first raises the bound with
+    `copier update --vcs-ref=:current:`, the second runs no `copier update` and lists
+    the template changes it hand-applies file by file (ADR-0018, amendment (i)).
 13. **Release PR** (`chore/release-*`; the version in `pyproject.toml` changed, or for
     sdk-template the top heading of `CHANGELOG.md`): it changes only the subset of
     conventions §12 (`pyproject.toml`, `uv.lock`, `CHANGELOG.md`, `README.md`,
     `CLAUDE.md`, `docs/handover.md`, and `scripts/check-siblings.sh` until the siblings
-    check is template-owned); the reference-data refresh was its own PR.
+    check is template-owned); the reference-data refresh ran before it, in a PR of its
+    own only when a record changed or `fetched` went from a bare date to the full time,
+    otherwise as a coordination log line the release PR cites (conventions §12;
+    ADR-0018, amendment (h)).
 14. **Stale sentences**: no sentence in a changed `README.md`, `CLAUDE.md`, docstring or
     document contradicts the state after the change (a version, a count, a file name, a
     rule the PR replaced).

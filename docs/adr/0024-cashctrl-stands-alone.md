@@ -1,8 +1,9 @@
 # ADR-0024: cashctrl stands alone — tenants, the tenant lock and the recorder extras leave core
 
-Status: Accepted · Date: 2026-10-27 · Decided by Johannes on 2026-10-25 (sdk-cashctrl
-stands alone on one core minor) and on 2026-10-27 (the family check's write-server test,
-the recorder's `rewrite` and verify)
+Status: Accepted; decision 6 reversed in part by ADR-0025 (2026-10-29) · Date:
+2026-10-27 · Decided by Johannes on 2026-10-25 (sdk-cashctrl stands alone on one core
+minor) and on 2026-10-27 (the family check's write-server test, the recorder's `rewrite`
+and verify)
 
 ## Context
 
@@ -106,3 +107,12 @@ verify.
   server's rules; §10 loses the placeholder host and the JSON-aware verify, keeps the
   plain verify and `allow_binary`, and the family check no longer names the write
   server.
+
+Amended 2026-10-29 (ADR-0025, D-d; decided by Johannes on 2026-10-29, D108 and D109
+(5)): decision 6, "nothing replaces what leaves", is reversed for the pieces queue row
+281 names, (a) `Tenants`, (b) `list_task`, (c) the binding lock wrapper sdk-cashctrl
+built in place of the middleware, (d) `assert_write_tools` and (e) the demo-only
+conftest strip, with (f) the `_cli.py` serve command. sdk-google-mail copies them from
+sdk-cashctrl under ADR-0023, decision 4, so each has two consumers (ADR-0023, decision
+2), and they return to core in 0.4.0. The rest of this ADR stands, the recorder's extras
+(decisions 3 and 4) among it.

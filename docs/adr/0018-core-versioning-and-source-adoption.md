@@ -128,3 +128,47 @@ a secret passed by name to the one job that uses it. The family's reusable workf
 repository that is not pinned. Core's
 `ci.yml`, `publish.yml` and `gates.yml` met it except for the `tag` job's comment, which
 the change that brought this amendment added.
+
+## Amendment 2026-10-29
+
+Two rules the source briefings kept asking, decided by Johannes on 2026-10-29 in the
+interview for conventions 1.23 (D110 (1) and (2)), and the adoption routes the queue
+found, with Johannes's D35 and D85 for the frozen source.
+
+(g) **The version rule** (D110 (1); queue row 233). Conventions §12's "Pre-1.0: breaking
+changes bump minor", on which decision 1 builds, reads: pre-1.0 only a breaking change
+bumps the minor, as `/release-prep` step 4 reads ("pre-1.0, a breaking change bumps the
+minor"). Added tasks or parameters make a patch, which reaches every dependent inside
+its `~=X.Y.0` bound, so the adoption release of ADR-0021's amendment of 2026-10-29
+follows a breaking minor only. The sdk-usda-gats 0.3.0 briefing had read added surface
+as a minor; the sdk-usda-esmis 0.3.0 and sdk-usda-psd 0.4.0 briefings recommended the
+patch.
+
+(h) **The refresh rule** (D110 (2); queue rows 109 and 110). The reference-data refresh
+of the release train (amendment (b), conventions §12) runs before the release and gets a
+PR of its own only when a record changed or `fetched` goes from a bare date to the full
+time (ADR-0022, amendment 2026-10-27, point 1); otherwise the run is a coordination log
+line the release PR cites. "Unchanged" means the records, not the files: a run whose
+records are unchanged still moves every `fetched` to the run's time, which changes the
+files and `meta.retrieved_at`, and gets no PR for it. It is Johannes's ruling for
+sdk-usda-esmis 0.1.0 of 2026-10-27, with sdk-usda-psd's exception of 2026-10-28, the
+bare date that becomes the full time. The coordination rules' rule 9 is reworded in
+rules v5, and the template's `/release-prep` follows (queue row 110).
+
+(i) **Conventions §15's three routes** (queue rows 232, 273 and 118), beside the
+adoption its list describes, a core minor with its template release through `copier
+update`. (1) A core release without a template tag (row 232): the bound is raised with
+`copier update --vcs-ref=:current: -d core_version=X.Y.Z` on
+`chore/template-update-core-X.Y.Z`, §15 item 2 does not apply, and a core minor without
+its template release is no adoption until the template follows; the `/adopt-release`
+mode for it is the template's. (2) A dependency's minor whose new surface the dependent
+uses (row 273): the adoption PR stays pure and the use is the next PR (ADR-0021,
+amendment 2026-10-29, point 3). (3) A source frozen on a template tag (row 118;
+sdk-cashctrl, on template v0.2.2 since its core 0.3.0 adoption, D35 and D85): no `copier
+update`; the template-rendered files are the source's own and listed in its `CLAUDE.md`;
+the template changes the new conventions version needs are hand-applied and listed file
+by file in the PR description, as https://github.com/xippios/sdk-cashctrl/pull/18 did.
+
+Conventions §12 states (g) and (h) from 1.23 on, §15 (i); the review checklist's items
+12 and 13, the definition of done's `copier update` line and its last Process line, and
+their copies in the PR template, state (h) and (i).

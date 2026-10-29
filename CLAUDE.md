@@ -23,7 +23,9 @@ particular upstream API.
    0021 dependencies between source packages,
    0022 packaged answers and release times,
    0023 core scope: code enters core with two consumers,
-   0024 cashctrl stands alone: tenants, the lock and the recorder extras leave core)
+   0024 cashctrl stands alone: tenants, the lock and the recorder extras leave core,
+   0025 Google Mail: loopback, the renewing bearer, scopes, the kit's return, the decoded view,
+   0026 the host xippios-mcp)
 3. `docs/definition-of-done.md` — what a PR must satisfy before it is opened
 
 The family file `../CLAUDE.md` applies as well.
@@ -115,7 +117,8 @@ uv run pre-commit run --all-files
   run in the environment `pypi`. A session's one merge action is enabling GitHub
   auto-merge, after the reviewer's `ready`, on an adoption (`chore/template-update*`) or
   `chore/release-*` PR whose merge class is `auto` (ADR-0018, amendment (e)).
-- Never read or print `.envrc`, `.env`, or any variable ending in `_API_KEY`.
+- Never read or print `.envrc`, `.env`, or any variable ending in `_API_KEY`,
+  `_REFRESH_TOKEN` or `_SECRET`.
 - `ruff` is configured to leave `docs/` alone; never reformat code blocks in the
   governing documents.
 - If a convention seems wrong, say so in the PR description and follow it anyway; changing

@@ -115,3 +115,17 @@ In the review of that PR, on 2026-10-27, Johannes decided three more points:
 
 Conventions 1.19 states the eight points in §3 to §6, and its preamble lists them among
 the rules that bind a source from its 0.3.0 adoption.
+
+## Reading 2026-10-29
+
+A load time is never a vintage. Rule 1 says that a fetch date is not a vintage, and the
+consequences have sdk-usda-nass leave `published_at` empty because its `load_time` is a
+load time, not a release time. The sdk-usda-nass 0.3.0 debrief of 2026-10-29 proposed
+`meta.vintage` from the newest `load_time` once core said how conventions §4 and this
+ADR read for a source without a release calendar (queue row 264). They read: a source
+whose only time is the time upstream loaded the data, as sdk-usda-nass's `load_time` is,
+leaves `vintage` and `published_at` empty, since a load time is neither a release
+identifier nor a release time, and a newest `load_time` computed across datasets is a
+maximum the package computes, which queue row 199 (2) calls a guess. Johannes decided it
+on 2026-10-29 (D110 (3)); sdk-usda-nass 0.3.0's PR 4, which waited on the question, is
+dropped. Conventions §4 states it from 1.23 on.

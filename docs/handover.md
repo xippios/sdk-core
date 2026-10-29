@@ -675,7 +675,9 @@ sdk-core#31 on `main`, the last tree that holds it (sdk-core#32 removed it):
 - `git show cb8ecdf379c04522e5f1dcd91ea5e8bdfa1fb3ff:src/xippios/core/tenants.py` —
   `Tenants` and `list_task`, as a module of its own; `client_for` keeps its shape, and
   the replaced client it drops without closing stays so until cashctrl decides
-  otherwise.
+  otherwise. (2026-10-29: cashctrl decided it in its adoption,
+  https://github.com/xippios/sdk-cashctrl/pull/13: its copy closes the replaced client
+  through `aclose()`, queue rows 24 (b) and 118.)
 - `git show cb8ecdf379c04522e5f1dcd91ea5e8bdfa1fb3ff:src/xippios/core/mcp/server.py` —
   the lock pieces, `TenantLock`'s validation of the parameter and the tenant,
   `_only_the_locked_tenant` and `_lock_sentence`, for a lock that is a wrapper binding
@@ -710,6 +712,12 @@ Then, by the CHANGELOG's Hand-apply list:
   so the update to v0.3.0 deletes `tests/test_adapters.py`;
   `test_the_write_server_serves_write_tasks_only` moves to a test file of cashctrl's
   own, such as `tests/test_tasks_write.py`, and calls the copied `assert_write_tools`.
+  (2026-10-29: cashctrl stays on template v0.2.2, its last tag before v0.3.0, and runs
+  no `copier update` after it, conventions §15's route for a source frozen on a template
+  tag (queue row 118): its adoption, https://github.com/xippios/sdk-cashctrl/pull/13,
+  updated it to v0.2.2, which deleted `tests/test_adapters.py`, and
+  https://github.com/xippios/sdk-cashctrl/pull/18 hand-applied template v0.3.0's
+  changes.)
 - Unchanged: every task's `ResultMeta(tenant=org)` (`ResultMeta.tenant` stays, ADR-0024,
   decision 2), its `REDACTED` imports, the `confirm` check and the loopback rule.
   `BODY_LIMIT` and `error_from_response` may come from `xippios.core`; `_cli.py`'s

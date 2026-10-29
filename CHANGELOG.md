@@ -2,7 +2,8 @@
 
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
-[Semantic Versioning](https://semver.org/) (pre-1.0: breaking changes bump the minor).
+[Semantic Versioning](https://semver.org/) (pre-1.0: only a breaking change bumps the
+minor, conventions §12).
 
 ## [Unreleased]
 
@@ -42,6 +43,65 @@ All notable changes to this project are documented here. The format follows
 - The review checklist's item 16: a new wrapper's module, function and fixture directory
   follow the name rule, and the verbatim id stays in the first line of its docstring and
   in `endpoint=`.
+- **ADR-0025**: Google Mail, sdk-google-mail's decisions. Its read server is held to
+  loopback unless `--allow-remote`, checked in its own `apply_options` until core 0.4.0
+  carries the `loopback_only` option (row 282, the host its second consumer by the
+  session's recommendation, row 296); `RefreshTokenAuth`, an `EnvKeyAuth` whose key is
+  the refresh token and whose `auth_flow` renews the access token in memory, is the
+  second consumer of a renewing-bearer base for core 0.4.0; a grant's scopes are
+  upstream's to enforce, and `classify` maps the refusal to a re-consent `AuthError`;
+  the multi-tenant kit (`Tenants`, `list_task`, the binding lock wrapper,
+  `assert_write_tools`, the demo-only conftest strip, the serve command) is copied from
+  sdk-cashctrl and returns to core in 0.4.0; `get_message` returns a decoded view, a
+  projection by MIME role, the faithful tree on the wrapper.
+- **ADR-0026**: the host xippios-mcp, a public package that is no source. 0.1.0 runs on
+  today's packages, each package's server mounted by path; a group never mixes read and
+  write tools, and the tool lists are checked at startup; per-endpoint auth is none or a
+  bearer, the bearer the default, with allowed hosts and `transport_security` for a
+  reverse proxy; the host applies the loopback rules itself to an endpoint with `auth:
+  none` and is `loopback_only`'s second consumer (row 282), the session's recommendation
+  (row 296); `isError` is read once core sets it; the `-read` and `-write` names; the
+  template's package contract is its 0.2.0 interface; the sources are extras with `>=`
+  bounds, an exception to ADR-0021 for the host alone; claude.ai needs an OAuth
+  authorization server in front, Pomerium Core the runbook's choice. `CLAUDE.md` lists
+  both ADRs.
+- **ADR-0014, ADR-0018, ADR-0021, ADR-0022, ADR-0023 and ADR-0024, amended 2026-10-29**:
+  ADR-0024's decision 6 is reversed for the kit that returns to core, as its status line
+  now says, with a dated line each under ADR-0014 and ADR-0023; ADR-0014's second line
+  makes the host the deployment that protects a write server beyond loopback. ADR-0021
+  gains the dependency order (a dependent's adoption release follows a dependency's new
+  minor right after, a breaking minor only, since a patch reaches the dependent inside
+  its bound), the route for a dependency's new surface and a pointer to the host's
+  exception; ADR-0022 a reading of 2026-10-29, a load time is never a vintage for a
+  source whose only time is a load time; ADR-0018 (g) the version rule, (h) the refresh
+  rule and (i) §15's three routes.
+- **Conventions 1.23**: the version line applies the conventions to the host
+  `xippios-mcp` where ADR-0026 binds it. §1 names `xippios-<source>-mcp-read` and
+  `-write` for a source with a write server, lists `google-mail` (the shared namespace
+  `google`, Drive later as `google-drive`) with the dated sentence that `mail` is
+  Johannes's name for the product upstream calls Gmail, and names
+  `GOOGLE_<NAME>_REFRESH_TOKEN`; §3 makes a MIME message's decoded view a projection by
+  role; §4 says a load time is never a vintage, for a source whose only time is the time
+  upstream loaded the data; §8 names the servers `-read` and `-write` where a write
+  server exists, keeps `server.name` the slug, has a host group never mix read and write
+  tools, and has an error answer set `isError` from a source's adoption of the core
+  release that carries the code (core 0.4.0 as planned, row 283); §12 states the version
+  rule (pre-1.0 only a breaking change bumps the minor), the refresh rule (a PR only
+  when a record changed or `fetched` goes from a bare date to the full time, otherwise a
+  coordination log line the release PR cites) and the dependency order; §13 gains the
+  topic `email`; §15 gains three routes, a core release without a template tag, a
+  dependency's minor whose new surface the dependent uses and a source frozen on a
+  template tag, item 2 not applicable on the first and the third.
+- The definition of done's `copier update` line and its last Process line, and their
+  copies in `.github/PULL_REQUEST_TEMPLATE.md`: `copier update` not applicable on §15's
+  routes (1) and (3); the reference refresh a PR of its own only when a record changed
+  or `fetched` went from a bare date to the full time.
+- The review checklist's items 12 (§15's item 2 does not apply on §15's routes (1) and
+  (3)) and 13 (the refresh rule), and its leak rule, which names `_REFRESH_TOKEN` and
+  `_SECRET` beside `_API_KEY`, as `CLAUDE.md`'s now does.
+- `docs/handover.md`, "Adopting core 0.3.0", sdk-cashctrl: two dated brackets, its
+  template frozen on v0.2.2 (§15's route (3)) and its copy of `client_for`, which closes
+  the replaced client.
 
 ## [0.3.0] - 2026-10-27
 
