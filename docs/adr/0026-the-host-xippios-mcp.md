@@ -147,7 +147,7 @@ on `_LOOPBACK_HOSTS` in core's `mcp/cli.py`).
   (`isError`, core 0.4.0), 284 (the package contract and the host flavour of the
   scaffold, template v0.4.0), 286 (sdk-cashctrl's `-read` at its 0.4.0), 287 (the root's
   naming exception and the guard), 289 (the host's 0.1.0), 296 (the host applies the
-  loopback rules itself). The host's briefing is written once this ADR is on sdk-core
-  `main`.
+  loopback rules itself), 297 (the export of `register_tasks` and `is_write_server`,
+  core 0.4.0). The host's briefing is written once this ADR is on sdk-core `main`.
 - Core still adds no authentication to MCP servers (ADR-0014): the bearer and the
   authorization server are the host's and its deployment's.
