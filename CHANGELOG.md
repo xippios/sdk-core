@@ -128,6 +128,20 @@ minor, conventions §12).
   per-endpoint windows shorter than an hour to `classify`, with no `QuotaPolicy` until
   row 318 (ADR-0010, amendment 2026-10-30); §13 gains the topic `social-media`
   (ADR-0027).
+- **ADR-0016, amended 2026-10-30**: decision 4's byte bound above the default gains a
+  second case beside a reference list an agent needs whole, a tool whose result is one
+  upstream page that must return whole, to which the row bound never applies, which a cut at the default
+  would turn into a preview: a cursor-paged page losing the `next_token` the caller
+  needs for the next page, or a bounded lookup (sdk-x's post tools at 128,000 bytes and
+  `lookup_users` at 160,000, row 338 item 3); the row bound is unchanged, and where the
+  upstream bills per result the tool's docstring states the price. **ADR-0027** names
+  that amendment beside ADR-0016's decision 4 in its decision 4 and §8's clause in its
+  Consequences, and its Rejected bullet cites ADR-0012's collect-every-page decision by
+  its content. The README's cap paragraph names the whole-page case beside the
+  reference tool.
+- **Conventions 1.25**: §8 gives a tool whose result is one upstream page that must
+  return whole a byte bound of its own, beside the reference tool's (ADR-0016,
+  amendment 2026-10-30).
 
 ## [0.3.0] - 2026-10-27
 

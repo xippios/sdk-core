@@ -1,6 +1,6 @@
 # xippios SDK family — conventions
 
-Version 1.24 · 2026-10-30 · applies to every `sdk-*` repository under
+Version 1.25 · 2026-10-30 · applies to every `sdk-*` repository under
 github.com/xippios, and to the host `xippios-mcp` where ADR-0026 binds it.
 Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 The rules of ADR-0019 and ADR-0022, all of them (the download and decode calls, the
@@ -449,8 +449,13 @@ tenants and variables, never a value (ADR-0005).
   how to narrow the query. Never truncate silently. A reference tool whose whole list an
   agent needs gets a cap of its own, keyed by the task function's name, with the rows
   and bytes the source judges it needs (`register_tasks(..., caps={"list_partners":
-  ResultCap(max_rows=400, max_bytes=100_000)})`); a byte bound above the default is a
-  deliberate choice for that tool, and every other tool keeps the default (ADR-0016).
+  ResultCap(max_rows=400, max_bytes=100_000)})`). So does a tool whose result is one
+  upstream page that must return whole, a cursor-paged page with the `next_token` the
+  caller needs for the next page or a bounded lookup, which a cut at the default would
+  turn into a preview: a byte bound of its own, the row bound unchanged (sdk-x's post
+  tools and `lookup_users`; ADR-0016, amendment 2026-10-30). A byte bound above the
+  default is a deliberate choice for that tool, and every other tool keeps the default
+  (ADR-0016).
   The note never promises a filter the tool lacks: the default says "narrow the query to
   see the rest", and a tool with filters names them in its cap's `note`. A cut list whose
   `meta.request` records an integer `start`, an offset-paged task's, ends its note with
