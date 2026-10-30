@@ -92,7 +92,7 @@ The coordination log of sdk-x and sdk-x's `CLAUDE.md` record each answer.
    List members and conversation fixtures keep other accounts' members and posts with
    every free text rewritten and their ids, times and public metrics as sent (Johannes,
    2026-10-29); the List posts fixture does the same, the session's (row 330, item 10),
-   which Johannes can overturn at G3 of the conventions 1.24 PR. The snapshot of X's
+   which Johannes can overturn at G3 of the conventions 1.25 PR. The snapshot of X's
    documentation stays under ADR-0003's amendment of 2026-10-24: reproduced for
    reference with its attribution, the Developer Agreement's I.4, I.10, I.12 and III.A
    (d) cited in sdk-x's `CLAUDE.md`, and X's objection honoured by a summary that keeps
@@ -106,7 +106,7 @@ The coordination log of sdk-x and sdk-x's `CLAUDE.md` record each answer.
    the counts task reads one page of up to 31 days for 0.010 USD. `lookup_users`'
    optional `most_recent_post`, off by default, adds up to 0.50 USD, 1.50 USD for 100
    users, above gate P's bound for users: the session's decision (queue row 338, item
-   6), which Johannes can overturn at G3 of the conventions 1.24 PR. Ranking,
+   6), which Johannes can overturn at G3 of the conventions 1.25 PR. Ranking,
    summarising or storing posts is the consumer's. The docstrings name the price per
    result. The per-tool byte caps stand: 128,000 bytes for the four post tools, so that
    a whole page of 100 posts returns with its `next_token` (for Latin-script text), and

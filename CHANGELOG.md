@@ -130,7 +130,7 @@ minor, conventions §12).
   (ADR-0027).
 - **ADR-0016, amended 2026-10-30**: decision 4's byte bound above the default gains a
   second case beside a reference list an agent needs whole, a tool whose result is one
-  upstream page that must return whole, one row to the cap, which a cut at the default
+  upstream page that must return whole, to which the row bound never applies, which a cut at the default
   would turn into a preview: a cursor-paged page losing the `next_token` the caller
   needs for the next page, or a bounded lookup (sdk-x's post tools at 128,000 bytes and
   `lookup_users` at 160,000, row 338 item 3); the row bound is unchanged, and where the

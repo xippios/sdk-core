@@ -450,21 +450,20 @@ A reference tool whose whole list an agent needs gets a cap of its own, keyed by
 task function's name, with the rows and bytes the source judges it needs:
 `build_server(..., caps={"list_commodities": ResultCap(max_rows=500,
 max_bytes=100_000)})`. So does a tool whose result is one upstream page that must return
-whole, a cursor-paged page with its `next_token`, with a byte bound of its own and the
-row bound unchanged (ADR-0016, amendment 2026-10-30); every other tool keeps 200 rows or
-64 KB. The note says "narrow the query to see the rest" and promises no filter; a tool
-with filters names them in its cap, `ResultCap(note="filter by year to see the rest")`.
-`ResultCap` comes from `xippios.core`, so the `MCP_CAPS` in a source's `tasks.py` need
-no `mcp` extra.
-A write server (`build_server(..., read_only=False)`) refuses, with `ValueError`, a task
-that does not take `confirm: bool = False`, and `--http` serves it on a loopback
-`--host` only (`127.0.0.1`, `localhost`, `::1`): it carries no authentication.
-`--allow-remote` serves it beyond loopback, behind a gateway that adds it.
-A task named in its `tasks.py`'s `BULK_TASKS` is skipped, so `mcp.py` may pass every name
-of `tasks.__all__`; a cap named for it is refused.
-Request URLs are not logged: `build_server` and `main` set the `httpx` and `httpcore`
-loggers to `WARNING` (`quiet_request_logging`), because a URL can carry an API key or a
-tenant host.
+whole, a cursor-paged page with its `next_token` or a bounded lookup, with a byte bound
+of its own and the row bound unchanged (ADR-0016, amendment 2026-10-30); every other
+tool keeps 200 rows or 64 KB. The note says "narrow the query to see the rest" and
+promises no filter; a tool with filters names them in its cap, `ResultCap(note="filter
+by year to see the rest")`. `ResultCap` comes from `xippios.core`, so the `MCP_CAPS` in
+a source's `tasks.py` need no `mcp` extra. A write server (`build_server(...,
+read_only=False)`) refuses, with `ValueError`, a task that does not take `confirm: bool
+= False`, and `--http` serves it on a loopback `--host` only (`127.0.0.1`, `localhost`,
+`::1`): it carries no authentication. `--allow-remote` serves it beyond loopback, behind
+a gateway that adds it. A task named in its `tasks.py`'s `BULK_TASKS` is skipped, so
+`mcp.py` may pass every name of `tasks.__all__`; a cap named for it is refused. Request
+URLs are not logged: `build_server` and `main` set the `httpx` and `httpcore` loggers to
+`WARNING` (`quiet_request_logging`), because a URL can carry an API key or a tenant
+host.
 
 A source's own options go through `main`'s hooks, so the command line is parsed once:
 `add_options` puts them on core's parser, so `--help` lists them; `apply_options(namespace,
