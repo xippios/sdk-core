@@ -176,10 +176,11 @@ CI build only.
 briefing's recommendation after conventions §1's `xippios-<source>-mcp`, approved by
 Johannes at its G1 on 2026-10-29.
 
-(d) **Endpoint names are the operator's** (decision 7). The host does not check an
-endpoint's name against the `-read` and `-write` rule, an endpoint name being any path
-segment; the rule is the operator's to follow, and the host's sample config follows it.
-Decision 4's refusal of a group that mixes read and write tools is unchanged.
+(d) **Endpoint names are the operator's** (decision 7; the host session's, row 306 (d)).
+The host does not check an endpoint's name against the `-read` and `-write` rule, an
+endpoint name being any path segment; the rule is the operator's to follow, and the
+host's sample config follows it. Decision 4's refusal of a group that mixes read and
+write tools is unchanged.
 
 (e) **The host's minors** (decision 9; D114, Johannes 2026-10-29). The host has no
 dependents, so its minors cost nobody an adoption: an added surface bumps its minor as

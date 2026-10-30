@@ -137,13 +137,13 @@ sdk-google-mail recorded under the `gmail.readonly` grant
 (`tests/fixtures/messages_modify/insufficient_permissions.json`) show the scope refusal
 as HTTP 403, reason `insufficientPermissions`, status `PERMISSION_DENIED`, with
 `WWW-Authenticate: Bearer error="insufficient_scope"` listing the accepted scopes and an
-`ErrorInfo` in `details`, not the 401 `authError` fold F8 feared; 401 `authError` stays
-the answer to a garbage or expired bearer. `classify` follows the recording. Nor do the
-two scope sets cover every method: `messages.delete`, `threads.delete` and
-`messages.batchDelete` accept the full-access scope `https://mail.google.com/` alone,
-and the 26 `settings.*` writes need `gmail.settings.basic` or `gmail.settings.sharing`
-(the discovery document), so either is a third scope set, with its own dated line here
-when a package takes it.
+`ErrorInfo` in `details`, not the 401 `authError` fold Gmail's error page states (F8);
+401 `authError` stays the answer to a garbage or expired bearer. `classify` follows the
+recording. Nor do the two scope sets cover every method: `messages.delete`,
+`threads.delete` and `messages.batchDelete` accept the full-access scope
+`https://mail.google.com/` alone, and the 26 `settings.*` writes need
+`gmail.settings.basic` or `gmail.settings.sharing` (the discovery document), so each
+would be a third scope set, with its own dated line here when a package takes it.
 
 ### D-d. The kit returns to core
 
