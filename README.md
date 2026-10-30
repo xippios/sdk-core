@@ -452,10 +452,10 @@ task function's name, with the rows and bytes the source judges it needs:
 max_bytes=100_000)})`. So does a tool whose result is one upstream page that must return
 whole, a cursor-paged page with its `next_token`, with a byte bound of its own and the
 row bound unchanged (ADR-0016, amendment 2026-10-30); every other tool keeps 200 rows or
-64 KB. The note says "narrow
-the query to see the rest" and promises no filter; a tool with filters names them in
-its cap, `ResultCap(note="filter by year to see the rest")`. `ResultCap` comes from
-`xippios.core`, so the `MCP_CAPS` in a source's `tasks.py` need no `mcp` extra.
+64 KB. The note says "narrow the query to see the rest" and promises no filter; a tool
+with filters names them in its cap, `ResultCap(note="filter by year to see the rest")`.
+`ResultCap` comes from `xippios.core`, so the `MCP_CAPS` in a source's `tasks.py` need
+no `mcp` extra.
 A write server (`build_server(..., read_only=False)`) refuses, with `ValueError`, a task
 that does not take `confirm: bool = False`, and `--http` serves it on a loopback
 `--host` only (`127.0.0.1`, `localhost`, `::1`): it carries no authentication.
