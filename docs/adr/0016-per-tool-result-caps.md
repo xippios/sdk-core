@@ -123,3 +123,16 @@ or the cap's own `note`; every other note, the byte-cap note included, is unchan
 Its consumer is sdk-cashctrl's offset-paged tasks; it adds no name to core and extends the
 note decision 3 gives every cut, which says how to see the rest, to say where to resume.
 Conventions §8 states it from 1.20 on.
+
+Amended 2026-10-30 (queue row 338, item 3, found by sdk-x; decided by Johannes on
+2026-10-30; ADR-0027, decision 4): decision 4's byte bound above the default 64 KB has
+a second case beside a reference list an agent needs whole, a tool whose result is one
+upstream page that must return whole. Such a result is a model, not a list, so it is
+one row to the cap and the byte bound cuts it whole into a note and a preview: a
+cursor-paged page then loses the `next_token` the caller needs for the next page, and a
+bounded lookup every record past the preview. sdk-x's four post tools take 128,000 bytes,
+so that a page of 100 posts returns with its `next_token`, and its `lookup_users`
+160,000, for a lookup of 100 users. The row bound is unchanged, the family's 200, and
+the cut still carries the note. Where the upstream bills per result, the tool's
+docstring states the price per result (ADR-0027, decision 4), so a larger page is a
+known cost. Conventions §8 states it from 1.24 on.
