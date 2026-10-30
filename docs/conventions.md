@@ -31,9 +31,9 @@ bound by each rule from its first PR on a pin that carries the rule's code.
 package that depends on `usda-esmis`; ADR-0020, ADR-0021), `comtrade`, `eurostat`,
 `faostat`, `cashctrl`, `google-mail` (one repository per Google API under the shared
 namespace `google`, as the USDA sources share `usda`; Google Drive later as
-`google-drive`; ADR-0025). The names are upstream's, with one departure dated
-2026-10-29: in `google-mail`, `mail` is Johannes's name for the product upstream calls
-Gmail (ADR-0025).
+`google-drive`; ADR-0025), `x` (ADR-0027). The names are upstream's, with one departure
+dated 2026-10-29: in `google-mail`, `mail` is Johannes's name for the product upstream
+calls Gmail (ADR-0025).
 No domain prefixes (`ag`, `agri`): sources are domain-neutral; grouping happens via
 GitHub topics (`xippios-sdk`) and the org README.
 
@@ -349,15 +349,17 @@ the query can carry a key (ADR-0005).
 - A per-source rate limiter sets a fast pace within the source's documented per-second
   or per-minute limit or, where none is documented, a self-imposed pace that the
   package's CLAUDE.md names as such; longer-window quotas (hourly, daily) may be
-  exhausted, not rationed (ADR-0010). `classify` interprets the upstream's 429, or its
-  documented answer to a spent limit, as `RateLimitError` with `retry_after` (from
-  `Retry-After`, the quota headers or a documented fallback), the client keeps a
-  quota snapshot from the quota headers (`QuotaPolicy`, ADR-0015), and retries honour
-  `retry_after` up to `backoff_max`. A request into a quota the snapshot shows spent
-  waits it out inside the call, logged, when the wait is within the policy's
-  `pause_cap` (30 s by default), and otherwise raises `RateLimitError` with
-  `retry_after` without sending; a pause handed back to the caller is stated in the
-  error text.
+  exhausted, not rationed (ADR-0010), and per-endpoint windows shorter than an hour
+  (X's 15-minute windows) are left to `classify`, with no `QuotaPolicy` until a policy
+  keyed per endpoint exists (queue row 318; ADR-0010, amendment 2026-10-30). `classify`
+  interprets the upstream's 429, or its documented answer to a spent limit, as
+  `RateLimitError` with `retry_after` (from `Retry-After`, the quota headers or a
+  documented fallback), the client keeps a quota snapshot from the quota headers
+  (`QuotaPolicy`, ADR-0015), and retries honour `retry_after` up to `backoff_max`. A
+  request into a quota the snapshot shows spent waits it out inside the call, logged,
+  when the wait is within the policy's `pause_cap` (30 s by default), and otherwise
+  raises `RateLimitError` with `retry_after` without sending; a pause handed back to the
+  caller is stated in the error text.
 - Two hooks on `ClientConfig` see what passes through the client (ADR-0015):
   `before_request`, called once per call after the cache lookup and before the rate
   limiter, may wait or raise a taxonomy error, and then nothing is sent; `observe` sees
