@@ -112,11 +112,11 @@ The coordination log of sdk-x and sdk-x's `CLAUDE.md` record each answer.
    a whole page of 100 posts returns with its `next_token` (for Latin-script text), and
    160,000 for `lookup_users`, whose `GET /2/users/by` has no `next_token` and whose 100
    users fit, about 70 with `most_recent_post`; the counts task and `get_usage` stay at
-   the family default (ADR-0016, decision 4; Johannes 2026-10-30, superseding gate P's
-   "MCP_CAPS keep the family default"; row 338, item 3). The nouns are the snapshot's,
-   posts, users and Lists, never tweets or accounts (ADR-0003). Queue row 339 asks
-   conventions §4 for the one-page-per-call reading of a metered source, beside row
-   315's for a list unbounded by nature.
+   the family default (ADR-0016, decision 4 and its amendment of 2026-10-30; Johannes
+   2026-10-30, superseding gate P's "MCP_CAPS keep the family default"; row 338, item
+   3). The nouns are the snapshot's, posts, users and Lists, never tweets or accounts
+   (ADR-0003). Queue row 339 asks conventions §4 for the one-page-per-call reading of a
+   metered source, beside row 315's for a list unbounded by nature.
 5. **Curated account lists are product data**, never packaged (sdk-x D4): the list the
    probe reads through `--accounts` lives in sdk-x's `.local/`, gitignored, and so do
    the probe's cache and its report.
@@ -129,8 +129,10 @@ Rejected:
   which X does not bill;
 - a pace rationed within the tightest window (decision 2), the sdk-x briefing's first
   draft, against ADR-0010 decision 2 (row 304);
-- collecting every page when the token is omitted (decision 4; conventions §4, ADR-0012
-  decision 2), whose spend no call bounds (row 339);
+- collecting every page when the token is omitted (decision 4; conventions §4, and
+  ADR-0012's decision that a paginated task called without its page parameter collects
+  every page, which its amendment by ADR-0023 extends to a cursor-paginated source's own
+  loop), whose spend no call bounds (row 339);
 - `MCP_CAPS` at the family default (decision 4), under which a page of more than about
   50 posts is cut to a preview that loses its `next_token` (Johannes, 2026-10-30).
 
@@ -141,8 +143,10 @@ Rejected:
   for a header prefix in `EnvKeyAuth`; sdk-x D2's evidence made it unnecessary.
 - Conventions 1.24: §1 lists `x` among the sources; §6 leaves per-endpoint windows
   shorter than an hour to `classify`, with no `QuotaPolicy` until row 318, as the dated
-  line under ADR-0010 states decision 2's reading for them (queue row 304); §13 gains
-  the topic `social-media` (sdk-x D8), as ADR-0025 brought `email`.
+  line under ADR-0010 states decision 2's reading for them (queue row 304); §8 gives a
+  tool whose result is one upstream page that must return whole a byte bound of its
+  own, as the dated line under ADR-0016 adds that case to its decision 4 (row 338, item
+  3); §13 gains the topic `social-media` (sdk-x D8), as ADR-0025 brought `email`.
 - Open questions, each a queue row: 318 (a `QuotaPolicy` keyed per endpoint group, with
   a reset header read as a Unix timestamp, waiting for a second consumer, ADR-0023), 320
   (ADR-0003 and conventions §3 for an accepted agreement that classes documentation as
