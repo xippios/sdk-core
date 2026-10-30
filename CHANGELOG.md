@@ -111,8 +111,9 @@ minor, conventions §12).
   only from @XDevelopers, @USDA and @FAO, the recorder rewriting X Content by key before
   the write and admitting the `most_recent_post_id` expansion only; tasks return one
   upstream page per call with explicit token paging, at most 0.50 USD for posts or 1.00
-  USD for users, under per-tool byte caps that hold a whole page; curated account lists
-  are never packaged. Nothing in `xippios.core` changes. `CLAUDE.md` lists it.
+  USD for users (1.50 USD with `lookup_users`' optional `most_recent_post`), under
+  per-tool byte caps that hold a whole page; curated account lists are never packaged.
+  Nothing in `xippios.core` changes. `CLAUDE.md` lists it.
 - **ADR-0010, ADR-0025 and ADR-0026, amended 2026-10-30**: ADR-0010 leaves per-endpoint
   windows shorter than an hour to `classify` under a fast self-imposed pace, never
   rationed ahead and with no `QuotaPolicy` (row 304); ADR-0025's D-c records the scope
@@ -123,7 +124,10 @@ minor, conventions §12).
   `xippios-mcp`, the `-read` and `-write` rule as the operator's, and D114's free host
   minors with the package contract at its first minor after core 0.4.0 and template
   v0.4.0 (row 306).
-- **Conventions 1.24**: §13 gains the topic `social-media` (ADR-0027).
+- **Conventions 1.24**: §1 lists `x` among the sources (ADR-0027); §6 leaves
+  per-endpoint windows shorter than an hour to `classify`, with no `QuotaPolicy` until
+  row 318 (ADR-0010, amendment 2026-10-30); §13 gains the topic `social-media`
+  (ADR-0027).
 
 ## [0.3.0] - 2026-10-27
 
