@@ -151,3 +151,41 @@ on `_LOOPBACK_HOSTS` in core's `mcp/cli.py`).
   core 0.4.0). The host's briefing is written once this ADR is on sdk-core `main`.
 - Core still adds no authentication to MCP servers (ADR-0014): the bearer and the
   authorization server are the host's and its deployment's.
+
+## Amendment 2026-10-30
+
+Five dated lines from the host's 0.1.0 package and D114, all of queue row 306.
+
+(a) **Host-built servers** (decisions 3 and 8; Johannes 2026-10-29, the host's G5
+question 2). A single package without a tool list mounts its own server as built. A
+group, or an endpoint with an include or exclude list, is one `MCPServer` the host builds
+with `register_tasks` over the kept names of `tasks.__all__` (of `tasks_write.__all__`
+with `read_only=False`), `MCP_CAPS` cut to the kept tasks first, its slug the config's
+package key, never `server.name`. So decision 3's "a package's server is built by the
+package" holds for the first case only, and decision 8's list of what 0.1.0 reads gains
+`tasks.__all__`, `tasks_write.__all__` and `MCP_CAPS`. A host-built server lacks the
+package's instructions, version, hooks and locks until the package contract of decision
+8 carries them, at the minor (e) names.
+
+(b) **No Forge recipe in the public repository** (decision 2; Johannes 2026-10-29, the
+host's G5 question 4). Decision 2's Forge recipe (queue row 289) stays out of the public
+repository and out of row 289's scope; the host's PR 4 of 0.1.0 is the Dockerfile and its
+CI build only.
+
+(c) **The entry point** (decision 1). The host's entry point is `xippios-mcp`, the host's
+briefing's recommendation after conventions §1's `xippios-<source>-mcp`, approved by
+Johannes at its G1 on 2026-10-29.
+
+(d) **Endpoint names are the operator's** (decision 7). The host does not check an
+endpoint's name against the `-read` and `-write` rule, an endpoint name being any path
+segment; the rule is the operator's to follow, and the host's sample config follows it.
+Decision 4's refusal of a group that mixes read and write tools is unchanged.
+
+(e) **The host's minors** (decision 9; D114, Johannes 2026-10-29). The host has no
+dependents, so its minors cost nobody an adoption: an added surface bumps its minor as
+SemVer reads it, and its next release is 0.2.0 (the wasde and google-mail extras, a
+Dependabot config, a config check). The package contract of decision 8 and D109 (2)
+lands at the host's first minor after core 0.4.0 and template v0.4.0, not at 0.2.0, and
+decision 8's "the host's 0.2.0 interface", with decision 5's reading of `loopback_only`
+from it, means that minor. The sources keep D110 (1) and conventions §12's patch slot
+for the `~=` bound of their dependents.
