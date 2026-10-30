@@ -41,7 +41,7 @@ Core's limiter and `QuotaPolicy` (ADR-0010, ADR-0015) bound calls, not spend, an
 policy keeps one snapshot per client, so it cannot track windows per endpoint (queue row
 318). The family's fixtures live in public repositories. Posting has cost and
 reputational effects a read source does not have: the account it posts as and the
-automation label X asks of an automated account (the plan, §2).
+automation label an automated account carries (the plan, §2).
 
 Johannes answered the sdk-x briefing's interview items, cited here as sdk-x D1 to D8,
 with the 429 handling and the recording accounts, at its G1 and G5 of 2026-10-29.
@@ -111,15 +111,18 @@ The coordination log of sdk-x and sdk-x's `CLAUDE.md` record each answer.
    probe reads through `--accounts` lives in sdk-x's `.local/`, gitignored, and so do
    the probe's cache and its report.
 
-Rejected: a `QuotaPolicy` on X's windows (decision 2), since its one snapshot would let
-a spent `GET /2/users/by` window refuse `GET /2/tweets`, whose window is not spent, and
-it reads no Unix reset timestamp (row 318), at the price of one unbilled 429 per spent
-window; a pace rationed within the tightest window, the sdk-x briefing's first draft,
-which ADR-0010 decision 2 forbids (row 304); collecting every page when the token is
-omitted (decision 4; conventions §4, ADR-0012 decision 2), whose spend no call bounds
-(row 339); and `MCP_CAPS` at the family default (decision 4), under which a page of more
-than about 50 posts is cut to a preview that loses its `next_token` (Johannes,
-2026-10-30).
+Rejected:
+
+- a `QuotaPolicy` on X's windows (decision 2): its one snapshot would let a spent
+  `GET /2/users/by` window refuse `GET /2/tweets`, whose window is not spent, and it
+  reads no Unix reset timestamp (row 318); without it a spent window costs one 429,
+  which X does not bill;
+- a pace rationed within the tightest window (decision 2), the sdk-x briefing's first
+  draft, against ADR-0010 decision 2 (row 304);
+- collecting every page when the token is omitted (decision 4; conventions §4, ADR-0012
+  decision 2), whose spend no call bounds (row 339);
+- `MCP_CAPS` at the family default (decision 4), under which a page of more than about
+  50 posts is cut to a preview that loses its `next_token` (Johannes, 2026-10-30).
 
 ## Consequences
 
