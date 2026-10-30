@@ -1,6 +1,6 @@
 # xippios SDK family — conventions
 
-Version 1.24 · 2026-10-30 · applies to every `sdk-*` repository under
+Version 1.25 · 2026-10-30 · applies to every `sdk-*` repository under
 github.com/xippios, and to the host `xippios-mcp` where ADR-0026 binds it.
 Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 The rules of ADR-0019 and ADR-0022, all of them (the download and decode calls, the
