@@ -132,6 +132,19 @@ Rejected (§4, D-c): per-task pre-checks, a second code path beside upstream's o
 one consent for both servers, a `write` grant for a deployment that only reads, since
 `gmail.modify` widens what it can do.
 
+Amended 2026-10-30 (queue row 333): the probe of 2026-10-29 (F19) and the fixture
+sdk-google-mail recorded under the `gmail.readonly` grant
+(`tests/fixtures/messages_modify/insufficient_permissions.json`) show the scope refusal
+as HTTP 403, reason `insufficientPermissions`, status `PERMISSION_DENIED`, with
+`WWW-Authenticate: Bearer error="insufficient_scope"` listing the accepted scopes and an
+`ErrorInfo` in `details`, not the 401 `authError` fold Gmail's error page states (F8);
+401 `authError` stays the answer to a garbage or expired bearer. `classify` follows the
+recording. Nor do the two scope sets cover every method: `messages.delete`,
+`threads.delete` and `messages.batchDelete` accept the full-access scope
+`https://mail.google.com/` alone, and the 26 `settings.*` writes need
+`gmail.settings.basic` or `gmail.settings.sharing` (the discovery document), so each
+would be a third scope set, with its own dated line here when a package takes it.
+
 ### D-d. The kit returns to core
 
 sdk-google-mail copies from sdk-cashctrl what sdk-cashctrl carries under ADR-0024,

@@ -102,6 +102,32 @@ minor, conventions §12).
 - `docs/handover.md`, "Adopting core 0.3.0", sdk-cashctrl: two dated brackets, its
   template frozen on v0.2.2 (§15's route (3)) and its copy of `client_for`, which closes
   the replaced client.
+- **ADR-0027**: X as a metered, content-bearing source, sdk-x's decisions. The first
+  release reads with the app's Bearer Token in `X_API_KEY` through `BearerAuth`, and
+  posting, user-context auth and owned reads wait for their own ADR; spend is bounded
+  outside the code, by the console's spending limit, a dollar budget line in every
+  briefing that spends X credit and one billable live call a night, and the 15-minute
+  per-endpoint windows are `classify`'s, with no `QuotaPolicy`; fixtures are recorded
+  only from @XDevelopers, @USDA and @FAO, the recorder rewriting X Content by key before
+  the write and admitting the `most_recent_post_id` expansion only; tasks return one
+  upstream page per call with explicit token paging, at most 0.50 USD for posts or 1.00
+  USD for users (1.50 USD with `lookup_users`' optional `most_recent_post`), under
+  per-tool byte caps that hold a whole page; curated account lists are never packaged.
+  Nothing in `xippios.core` changes. `CLAUDE.md` lists it.
+- **ADR-0010, ADR-0025 and ADR-0026, amended 2026-10-30**: ADR-0010 leaves per-endpoint
+  windows shorter than an hour to `classify` under a fast self-imposed pace, never
+  rationed ahead and with no `QuotaPolicy` (row 304); ADR-0025's D-c records the scope
+  refusal Gmail sends, HTTP 403 `insufficientPermissions` with an `insufficient_scope`
+  challenge, not the 401 `authError` fold, and that permanent deletion and the settings
+  writes would each be a third scope set (row 333); ADR-0026 gains host-built servers for
+  groups and tool lists, the Forge recipe out of the public repository, the entry point
+  `xippios-mcp`, the `-read` and `-write` rule as the operator's, and D114's free host
+  minors with the package contract at its first minor after core 0.4.0 and template
+  v0.4.0 (row 306).
+- **Conventions 1.24**: §1 lists `x` among the sources (ADR-0027); §6 leaves
+  per-endpoint windows shorter than an hour to `classify`, with no `QuotaPolicy` until
+  row 318 (ADR-0010, amendment 2026-10-30); §13 gains the topic `social-media`
+  (ADR-0027).
 
 ## [0.3.0] - 2026-10-27
 
