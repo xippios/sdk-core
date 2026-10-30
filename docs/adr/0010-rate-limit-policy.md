@@ -99,3 +99,13 @@ Amended 2026-10-27 (core 0.3.0; ADR-0015's amendment of that date): decision 4's
 `retry_after` up to `backoff_max` (decision 3). The open question of the consequences is
 settled for api.data.gov: its snapshot is kept per key, one per process, by
 `xippios.core.data_gov` (ADR-0009, amendment 2026-10-27).
+
+Amended 2026-10-30 (decision 2; decided by Johannes on 2026-10-29 at sdk-x's G5, queue
+row 304; ADR-0027, decision 2): a source whose upstream states per-endpoint windows
+shorter than an hour, as X states a 15-minute window for each endpoint, sets a fast
+self-imposed pace under decision 1, since such a window is no per-second or per-minute
+limit, and never rations the windows ahead; a spent window is `classify`'s, a 429 whose
+reset header gives `retry_after`, the window its fallback. `QuotaPolicy` tracks one
+window per client (ADR-0015) and is not used for per-endpoint windows, so decision 4's
+refusal before a spent window waits for a policy keyed per endpoint (queue row 318);
+until then a spent window costs one 429, which X does not bill.
