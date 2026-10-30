@@ -25,7 +25,8 @@ particular upstream API.
    0023 core scope: code enters core with two consumers,
    0024 cashctrl stands alone: tenants, the lock and the recorder extras leave core,
    0025 Google Mail: loopback, the renewing bearer, scopes, the kit's return, the decoded view,
-   0026 the host xippios-mcp)
+   0026 the host xippios-mcp,
+   0027 X as a metered, content-bearing source)
 3. `docs/definition-of-done.md` — what a PR must satisfy before it is opened
 
 The family file `../CLAUDE.md` applies as well.
