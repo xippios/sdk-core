@@ -1,6 +1,6 @@
 # xippios SDK family — conventions
 
-Version 1.23 · 2026-10-29 · applies to every `sdk-*` repository under
+Version 1.24 · 2026-10-30 · applies to every `sdk-*` repository under
 github.com/xippios, and to the host `xippios-mcp` where ADR-0026 binds it.
 Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 The rules of ADR-0019 and ADR-0022, all of them (the download and decode calls, the
@@ -666,7 +666,8 @@ which §12 bounds to one minor.
   30-second example · MCP client config snippet · status table of covered endpoints ·
   upstream terms and attribution · licence.
 - Topics on GitHub: `xippios-sdk`, `python`, `mcp`, plus the domain (`agriculture`,
-  `trade-data`, `accounting`, `email` (ADR-0025)) as appropriate.
+  `trade-data`, `accounting`, `email` (ADR-0025), `social-media` (ADR-0027)) as
+  appropriate.
 - Workflows are hardened (ADR-0018, amendment 2026-10-27). Every action is pinned to a
   commit SHA with its version in a comment, and bumped deliberately. Every checkout sets
   `persist-credentials: false`, except in a job that pushes with the token (the release
