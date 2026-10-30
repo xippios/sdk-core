@@ -143,10 +143,11 @@ Rejected:
   for a header prefix in `EnvKeyAuth`; sdk-x D2's evidence made it unnecessary.
 - Conventions 1.24: §1 lists `x` among the sources; §6 leaves per-endpoint windows
   shorter than an hour to `classify`, with no `QuotaPolicy` until row 318, as the dated
-  line under ADR-0010 states decision 2's reading for them (queue row 304); §8 gives a
-  tool whose result is one upstream page that must return whole a byte bound of its
-  own, as the dated line under ADR-0016 adds that case to its decision 4 (row 338, item
-  3); §13 gains the topic `social-media` (sdk-x D8), as ADR-0025 brought `email`.
+  line under ADR-0010 states decision 2's reading for them (queue row 304); §13 gains
+  the topic `social-media` (sdk-x D8), as ADR-0025 brought `email`. Conventions 1.25:
+  §8 gives a tool whose result is one upstream page that must return whole a byte bound
+  of its own, as the dated line under ADR-0016 adds that case to its decision 4 (row
+  338, item 3).
 - Open questions, each a queue row: 318 (a `QuotaPolicy` keyed per endpoint group, with
   a reset header read as a Unix timestamp, waiting for a second consumer, ADR-0023), 320
   (ADR-0003 and conventions §3 for an accepted agreement that classes documentation as

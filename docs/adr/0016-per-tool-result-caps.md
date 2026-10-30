@@ -135,4 +135,4 @@ so that a page of 100 posts returns with its `next_token`, and its `lookup_users
 160,000, for a lookup of 100 users. The row bound is unchanged, the family's 200, and
 the cut still carries the note. Where the upstream bills per result, the tool's
 docstring states the price per result (ADR-0027, decision 4), so a larger page is a
-known cost. Conventions §8 states it from 1.24 on.
+known cost. Conventions §8 states it from 1.25 on.
