@@ -1,0 +1,16 @@
+# Written by `coordinate sync` from this core's human paths (C50, C70): `[paths] human` of the root's
+# workspace.toml and the core's defaults. A change to these paths needs the human's review. Edit
+# workspace.toml, not this file; the next PR of the session carries it (coordinate-core#76).
+/.github/** @jdidaskalu
+/CLAUDE.md @jdidaskalu
+/rules/** @jdidaskalu
+/workspace.toml @jdidaskalu
+/composer.json @jdidaskalu
+/pyproject.toml @jdidaskalu
+/.claude/** @jdidaskalu
+/.copier-answers.yml @jdidaskalu
+/package.json @jdidaskalu
+/src/**/guard.py @jdidaskalu
+/src/**/shell.py @jdidaskalu
+/src/**/identities.py @jdidaskalu
+/src/**/apps.py @jdidaskalu
