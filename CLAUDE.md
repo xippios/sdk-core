@@ -115,9 +115,7 @@ uv run pre-commit run --all-files
 - A session never tags, merges, releases, force-pushes, or touches `gh secret`. Releases
   run on the release train (conventions §12): the release PR's merge runs `publish.yml`,
   which tags `vX.Y.Z` from `pyproject.toml` on the merge commit, and Johannes approves the
-  run in the environment `pypi`. A session's one merge action is enabling GitHub
-  auto-merge, after the reviewer's `ready`, on an adoption (`chore/template-update*`) or
-  `chore/release-*` PR whose merge class is `auto` (ADR-0018, amendment (e)).
+  run in the environment `pypi`.
 - Never read or print `.envrc`, `.env`, or any variable ending in `_API_KEY`,
   `_REFRESH_TOKEN` or `_SECRET`.
 - `ruff` is configured to leave `docs/` alone; never reformat code blocks in the
