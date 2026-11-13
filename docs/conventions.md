@@ -661,7 +661,7 @@ which §12 bounds to one minor.
   tags first; the dependent's release PR pins the published version. The dependent's
   adoption release follows the dependency's new minor right after, so the latest of both
   install together; a dependent that bundles the adoption with feature work says so in
-  its briefing and accepts the window. A patch reaches the dependent inside its bound,
+  its release's section of `CHANGELOG.md` and accepts the window. A patch reaches the dependent inside its bound,
   so the adoption release follows a breaking minor only (ADR-0021, amendment
   2026-10-29). The dependent's servers register its own tasks only; no cycles, one level
   only.
@@ -685,8 +685,8 @@ which §12 bounds to one minor.
   train's `tag` job), which says so in a comment. Every workflow declares
   `permissions: contents: read` at the top, and a job adds only what it needs. No
   `secrets: inherit`: a secret is passed by name to the one job that uses it. The
-  family's own reusable workflows in `xippios/sdk-gates` are called at `@main` by
-  design, since the gates read their own `main`: the one reference to another
+  reusable workflows of the organization's repository `xippios/.github` are called at
+  `@main` by design, since they read their own `main`: the one reference to another
   repository that is not pinned.
 
 ## 14. What this family is not
