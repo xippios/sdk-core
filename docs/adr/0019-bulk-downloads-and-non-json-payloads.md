@@ -136,3 +136,15 @@ Amended 2026-10-27 (ADR-0024; the family review's C9): the text cut of decision 
 to the start of a secret value the cut would split, never of the request host: the
 recorder's placeholder host left core, and a source that replaces a host spares it in its
 own recorder step.
+
+## Amendment 2026-11-13
+
+Decision 5's cap reads by what a pull request does to a fixture file. A file the PR only
+moves, its content unchanged, is neither added nor changed, so a fixture over the cap that
+was recorded before the rule bound moves with its directory (conventions §2) and stays until
+a PR re-records it; a file moved and changed is judged by its size under its new path.
+sdk-template 0.3.2 put this reading into its fixture-cap step, which diffs with
+`--find-renames=100%`, so a pure move is a rename the step leaves out
+(https://github.com/xippios/sdk-template/pull/110); core's documents follow it
+(https://github.com/xippios/sdk-core/issues/192). Conventions 1.26 states it in §10, and the
+definition of done's fixture-cap line and the review checklist's item 4 follow.
