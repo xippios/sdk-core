@@ -1,41 +1,37 @@
-# The two merge gates in caller mode: `merge-class` (is this pull request `auto` or
-# `human`?) and `family-review` (the review against sdk-core's docs/review-checklist.md),
-# both reusable workflows of xippios/sdk-gates, called here as jobs. It exists because the
-# ruleset rule "Require workflows to pass before merging", which would run them from the
-# sdk-gates repository without any file here, may not be offered on the organisation's
-# plan; then the required check contexts become `merge-class / merge-class` and
-# `family-review / family-review` from this file (the sdk-gates repository's README,
-# "Wiring and check contexts").
+# The organization's checks of a pull request, reusable workflows of xippios/.github called
+# at @main (conventions §13), their contract in that repository's README.
 #
-# It ships switched off: both jobs run only once the repository variable GATES_CALLER is
-# "1", which Johannes sets, per repository, if the ruleset editor does not offer the
-# required-workflow rule. Until then nothing here runs. The review receives exactly one
-# secret, never `secrets: inherit`. Caller mode is not a boundary: a pull request that
-# edits this file can replace the calls, which only the required-workflow wiring prevents.
+# `conventions` reviews the pull request against the documents README.md lists under
+# `## Documents`, read from main, by the mode the variable CONVENTIONS_REVIEW sets: the
+# default, `release`, reviews a release pull request, and the callee's own condition passes
+# any other as skipped. It gets ANTHROPIC_API_KEY by name, never `secrets: inherit`, and the
+# permissions the callee asks for: `pull-requests: write` for its one comment and
+# `checks: read` for the head's checks. `adr-index` runs scripts/adr_index.py --check on the
+# checkout and takes no input and no secret.
+#
+# `edited` because the review reads the title and the description, `labeled` because the
+# label `release` set after the opening starts the review. A label starts the workflow
+# whatever its name, so on `labeled` both jobs run for `release` alone.
 name: gates
 
 on:
   pull_request:
-    # `edited` too: the review judges the description, and a base-branch change arrives
-    # as `edited`; without `types` a caller runs on the first three only.
-    types: [opened, synchronize, reopened, edited]
+    types: [opened, synchronize, reopened, edited, labeled]
 
 permissions:
   contents: read
 
 jobs:
-  merge-class:
-    if: vars.GATES_CALLER == '1'
-    uses: xippios/sdk-gates/.github/workflows/merge-class.yml@main
-    permissions:
-      contents: read
-
-  family-review:
-    if: vars.GATES_CALLER == '1'
-    uses: xippios/sdk-gates/.github/workflows/family-review.yml@main
-    secrets:
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  conventions:
+    if: github.event.action != 'labeled' || github.event.label.name == 'release'
+    uses: xippios/.github/.github/workflows/conventions.yml@main
     permissions:
       contents: read
       pull-requests: write
       checks: read
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+  adr-index:
+    if: github.event.action != 'labeled' || github.event.label.name == 'release'
+    uses: xippios/.github/.github/workflows/adr-index.yml@main
