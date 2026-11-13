@@ -1,9 +1,8 @@
 # ADR-0024: cashctrl stands alone — tenants, the tenant lock and the recorder extras leave core
 
-Status: Accepted; decision 6 reversed in part by ADR-0025 (2026-10-29) · Date:
-2026-10-27 · Decided by Johannes on 2026-10-25 (sdk-cashctrl stands alone on one core
-minor) and on 2026-10-27 (the family check's write-server test, the recorder's `rewrite`
-and verify)
+Status: Accepted · Date: 2026-10-27 · Decided by Johannes on 2026-10-25 (sdk-cashctrl
+stands alone on one core minor) and on 2026-10-27 (the family check's write-server test,
+the recorder's `rewrite` and verify) · Decision 6 reversed in part by ADR-0025 (2026-10-29)
 
 ## Context
 
