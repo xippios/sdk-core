@@ -52,7 +52,7 @@ docs/
                      called by publish.yml; no push trigger of its own
   publish.yml        every push to main: tags vX.Y.Z from pyproject.toml when a release PR merged,
                      builds, waits in environment `pypi` for a maintainer's approval
-  gates.yml          the organization's checks of a pull request from xippios/.github: the
+  organization.yml   the organization's checks of a pull request from xippios/.github: the
                      conventions review and the ADR index
 ```
 
