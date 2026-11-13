@@ -218,9 +218,9 @@ comes from the release train alone.
 (o) **The organization's workflows and the release's own section.** §13 names
 `xippios/.github`, the organization's repository, as the one whose reusable workflows a
 repository calls at `@main`, where it named the retired gates' repository. A dependent that
-bundles its adoption with feature work (ADR-0021) says so in its release's section of
-`CHANGELOG.md`, a document of the repository that a reader of the release sees, where §12
-named a briefing, which no repository holds.
+bundles its adoption with feature work says so in its release's section of `CHANGELOG.md`,
+a document of the repository that a reader of the release sees, where §12 and ADR-0021,
+decision 1, named a briefing, which no repository holds.
 
-Conventions 1.26 states (j) to (o) in §12, §13 and §15; the definition of done and the
-review checklist follow.
+Conventions 1.26 states (j) to (n) in §12, §13 and §15, and 1.27 states (o) in §12 and §13;
+the definition of done and the review checklist follow.
