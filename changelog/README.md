@@ -57,8 +57,7 @@ it took. The section holds:
 - in each group the fragments newest first, by the commit that added each, then the entries
   that `## [Unreleased]` held under that heading;
 - after them, any other group that `## [Unreleased]` held, as it stood, such as the
-  `### Documentation` entries and the `### Hand-apply for sources` list written before this
-  folder;
+  `### Documentation` entries written before this folder;
 - each Hand-apply note under its bullet.
 
 The section may gain a lead paragraph above its groups, which says what the release brings a
