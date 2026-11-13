@@ -7,15 +7,18 @@ minor, conventions §12).
 
 ## [0.3.1] - 2026-11-13
 
-Documents only: the code is that of 0.3.0. The documents now say what a change must satisfy
-wherever a repository is worked and leave out how a change lands, the 27 decision records
-have an index, a change's entry is a fragment under `changelog/`, and the repository's own
-files name no process of the work. The release also carries the documentation that waited
-since 0.3.0: conventions 1.22 to 1.27 and the records of Google Mail, the host and X
+Documents only: the code is that of 0.3.0. With conventions 1.26 and 1.27 the documents say
+what a change must satisfy wherever a repository is worked and leave out how a change lands,
+the 27 decision records have an index, a change's entry is a fragment under `changelog/`,
+and `README.md` lists the documents. The release also carries the documentation that waited
+since 0.3.0: conventions 1.22 to 1.25 and the records of Google Mail, the host and X
 (ADR-0025 to ADR-0027).
 
 ### Added
 
+- `.github/CODEOWNERS` names the paths whose change needs the maintainer's review: of the
+  repository's own files, `.github/`, `.claude/`, `CLAUDE.md` and `pyproject.toml`.
+  (https://github.com/xippios/sdk-core/pull/190, https://github.com/xippios/sdk-core/pull/198)
 - The 27 decision records have an index, `docs/adr.md` for people and `docs/adr.json` for
   machines, which `scripts/adr_index.py` writes from the records' headers. With `--check` it
   writes nothing and exits 1 when either file is stale, a record's first line does not read
@@ -31,6 +34,13 @@ since 0.3.0: conventions 1.22 to 1.27 and the records of Google Mail, the host a
 
 ### Changed
 
+- The records carry what conventions 1.26 changed. ADR-0018's amendment of 2026-11-13 names
+  each rule it changes and gains (p): the clause that bound a source starting on a git pin of
+  core 0.3.0 left the header, since every such source bounds `xippios-core~=0.3.0` from PyPI.
+  ADR-0019 gains an amendment for §10's reading that a fixture a pull request only moves is
+  neither added nor changed, and ADR-0027 gives its probe's count of requests and no longer
+  what they cost. (ADR-0018, ADR-0019, ADR-0027, §10,
+  https://github.com/xippios/sdk-core/issues/221)
 - Conventions 1.27: §13 names `xippios/.github` as the organization's repository whose
   reusable workflows are called at `@main`, where it named the retired gates' repository.
   §12 has a dependent that bundles its adoption with feature work say so in its release's
