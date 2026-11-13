@@ -4,10 +4,12 @@
 
 ## Definition of done
 
-Tick honestly. An unticked item needs a one-line reason. CI enforces the first block;
-the rest is checked in review against sdk-core's `docs/review-checklist.md`. Every PR
-deletes the Adoption PR block, except an adoption PR (conventions §15), which keeps it
-with the Enforced by CI and Process blocks and deletes Code, Tests and Docs.
+The list below copies sdk-core's `docs/definition-of-done.md`, what the change
+satisfies, as a reminder: the description need not tick it (ADR-0018, amendment
+2026-11-13). CI enforces the first block, and the review checks the rest against
+sdk-core's `docs/review-checklist.md`, reading the description for the assumptions, the
+open questions, the live calls and `## Decisions taken`. An adoption PR (conventions §15)
+is judged against the Adoption PR block with the Enforced by CI and Process blocks.
 
 ### Enforced by CI
 - [ ] `ruff check` and `ruff format --check` pass
