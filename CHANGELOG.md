@@ -5,7 +5,63 @@ All notable changes to this project are documented here. The format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0: only a breaking change bumps the
 minor, conventions §12).
 
-## [Unreleased]
+## [0.3.1] - 2026-11-13
+
+Documents only: the code is that of 0.3.0. The documents now say what a change must satisfy
+wherever a repository is worked and leave out how a change lands, the 27 decision records
+have an index, a change's entry is a fragment under `changelog/`, and the repository's own
+files name no process of the work. The release also carries the documentation that waited
+since 0.3.0: conventions 1.22 to 1.27 and the records of Google Mail, the host and X
+(ADR-0025 to ADR-0027).
+
+### Added
+
+- The 27 decision records have an index, `docs/adr.md` for people and `docs/adr.json` for
+  machines, which `scripts/adr_index.py` writes from the records' headers. With `--check` it
+  writes nothing and exits 1 when either file is stale, a record's first line does not read
+  `# ADR-NNNN: <title>` or two records take one number. Each header reads
+  `Status: <status> · Date: <date>`, then its other fields, and `docs/reports/` holds the dated
+  reports a record cites.
+  (https://github.com/xippios/sdk-core/issues/193)
+- Every change brings its changelog entry as a fragment, a file of its own under `changelog/`
+  holding its bullet, which the release assembles into its section of `CHANGELOG.md`.
+  `changelog/README.md` gives a fragment's name, its bullet and its Hand-apply note, for a
+  change that a source's adoption follows by hand.
+  (https://github.com/xippios/sdk-core/issues/197)
+
+### Changed
+
+- Conventions 1.27: §13 names `xippios/.github` as the organization's repository whose
+  reusable workflows are called at `@main`, where it named the retired gates' repository.
+  §12 has a dependent that bundles its adoption with feature work say so in its release's
+  section of `CHANGELOG.md`, where it said a briefing. (ADR-0018, ADR-0021, §12, §13,
+  https://github.com/xippios/sdk-core/issues/207)
+- A pull request runs the organization's checks from `xippios/.github`:
+  `.github/workflows/organization.yml` calls the conventions review as the job
+  `conventions` and the ADR-index check as the job `adr-index`, and `gates.yml`, which
+  called the two workflows of the retired gates, is deleted. `mypy --strict` reads
+  `scripts/` beside `src` and `tests`. (§11, §13,
+  https://github.com/xippios/sdk-core/issues/191,
+  https://github.com/xippios/sdk-core/issues/206)
+- The repository works alone, and its own files name no process of the work: `README.md`
+  lists its documents under `## Documents`, each by its URL on GitHub, and `CLAUDE.md` gives
+  the package, its layout, its commands and its code rules and links that list.
+  `.claude/settings.json` allows the checks and local git and no push, pull request or
+  merge, and the pull request template copies the definition of done, the fragment under
+  `changelog/` among it, as a reminder that the description need not tick.
+  (ADR-0018, https://github.com/xippios/sdk-core/issues/191,
+  https://github.com/xippios/sdk-core/issues/202,
+  https://github.com/xippios/sdk-core/issues/216)
+- Conventions 1.26: the documents say what a change must satisfy wherever a repository is
+  worked and no longer how it lands, so §13, §15, the definition of done and the review
+  checklist drop the merge classes, the auto-merge of an adoption or release PR, the
+  branch names and the rule that a PR's description is the checklist. A change's entry is
+  a fragment under `changelog/`, which a release PR assembles and deletes as one of the
+  files §12 lets it change, and a repository without the folder keeps a line under
+  `## [Unreleased]`. §2 names an existing source's rename PR without ambiguity, §10 lets a
+  fixture over the cap move with its directory, and the hand-over and the roadmap lose
+  their stale sentences. (ADR-0018, §2, §10, §12, §15,
+  https://github.com/xippios/sdk-core/issues/203)
 
 ### Documentation
 
