@@ -652,9 +652,7 @@ which §12 bounds to one minor.
   the merge commit → environment `pypi` → a human approves → the trusted publisher
   uploads. A tag ruleset admits no other `v*` tag. sdk-template, which publishes nothing
   to PyPI, tags from the top `## [X.Y.Z] - ` heading of its `CHANGELOG.md` with its own
-  `release.yml`, under the same ruleset. Until a repository's workflow tags itself (core
-  0.2.1 and template v0.2.1 ship it), its tag is pushed by a maintainer from their own
-  account. Yanks are a human action. No tokens anywhere.
+  `release.yml`, under the same ruleset. Yanks are a human action. No tokens anywhere.
 - A source may depend on another source package, consuming its task layer only: it
   imports `xippios.<dep>.tasks` and its models, never `api/` or `_client`, and declares
   `xippios-<dep>~=X.Y.0`, one minor, like core (ADR-0021). Both share one core minor:
