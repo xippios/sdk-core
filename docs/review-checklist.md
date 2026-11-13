@@ -1,8 +1,7 @@
 # Review checklist
 
-The checklist a reviewer applies to a PR in any `sdk-*` repository, the local `reviewer`
-subagent and the `family-review` workflow alike. A review changes nothing in the
-repository it reviews.
+The checklist a reviewer applies to a PR in any `sdk-*` repository. A review changes
+nothing in the repository it reviews.
 
 ## Before judging
 
@@ -28,46 +27,42 @@ repository it reviews.
    (§6).
 4. **Fixtures**: recorded, never hand-written; scrubbed; free of key patterns and of
    production tenant names; the fixture files this PR adds or changes under 256 KiB, a
-   truncated one marked `truncated: true` (ADR-0019; binds from the source's 0.3.0
-   adoption, or from its first PR when it starts on a git pin of core 0.3.0).
-5. **Checks green**: the local reviewer runs `uv run ruff check . && uv run ruff format
-   --check . && uv run mypy && uv run pytest && uv run pre-commit run --all-files`
-   itself; the `family-review` workflow runs nothing and reads the PR's `ci` check from
-   the material the workflow prepares for it.
-6. **Definition of done**: the checklist is in the description and ticked honestly; an
-   unticked item carries a one-line reason. The `family-review` workflow checks that the
-   checklist is present and reads the PR's `ci` check.
-7. **CHANGELOG**: an entry under Unreleased.
-8. **Nothing forbidden**: nothing committed to `main`, no secrets, no tag pushed by the
-   session; the tag a merged release PR gets from its workflow, from 0.2.1 on, is
-   legitimate (conventions §12).
-9. **Decisions taken**: the description carries a `## Decisions taken` block after the
-   checklist, and every line is backed by a convention, an ADR, a coordination rule, a
-   decision of Johannes's with its date, or `gap, row N`. A reviewer without the queue
-   accepts a named row; the local reviewer verifies it. A line backed by none of these
-   is a blocking finding.
+   file it only moves, its content unchanged, being neither, and a truncated one marked
+   `truncated: true` (ADR-0019; binds from the source's 0.3.0 adoption).
+5. **Checks green**: the PR's `ci` check passes; a reviewer who runs the checks runs
+   `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest
+   && uv run pre-commit run --all-files`.
+6. **Definition of done**: the change meets each item of `docs/definition-of-done.md`
+   that applies to it.
+7. **CHANGELOG**: the change's entry is a fragment under `changelog/`, in the form
+   `changelog/README.md` gives; a release PR assembles the fragments instead, and
+   Dependabot's carries none (conventions §12).
+8. **Nothing forbidden**: nothing committed to `main`, no secrets, no tag pushed by hand;
+   the tag a merged release PR gets from its workflow, from 0.2.1 on, is legitimate
+   (conventions §12).
+9. **Decisions taken**: the description carries a `## Decisions taken` block, and every
+   line is backed by a convention, an ADR, a maintainer's decision with its date, or the
+   issue that records the gap. A line backed by none of these is a blocking finding.
 10. **Live calls**: the description counts the live calls the PR spent, keyed calls by
-    number (`none` is a count). The `family-review` workflow checks that the count is
-    present and reads the PR's `ci` check.
+    number (`none` is a count).
 11. **Core PR** (`sdk-core`, code added): it names the two consumers of what it adds (in
     its ADR, or in its description when it has none), or, in its ADR, the one-consumer
     reason of ADR-0023 decision 3.
-12. **Adoption PR** (`chore/template-update*`): judged against conventions §15 and
-    nothing else, that is the definition of done's Adoption PR block with its Enforced by
-    CI and Process blocks; it deletes only what the adoption itself makes dead
-    (ADR-0018, amendment 2026-10-26). On §15's routes (1) and (3), a core release
-    without a template tag (queue row 232) and a source frozen on a template tag (queue
-    row 118), §15's item 2 does not apply: the first raises the bound with
-    `copier update --vcs-ref=:current:`, the second runs no `copier update` and lists
-    the template changes it hand-applies file by file (ADR-0018, amendment (i)).
-13. **Release PR** (`chore/release-*`; the version in `pyproject.toml` changed, or for
-    sdk-template the top heading of `CHANGELOG.md`): it changes only the subset of
-    conventions §12 (`pyproject.toml`, `uv.lock`, `CHANGELOG.md`, `README.md`,
-    `CLAUDE.md`, `docs/handover.md`, and `scripts/check-siblings.sh` until the siblings
-    check is template-owned); the reference-data refresh ran before it, in a PR of its
-    own only when a record changed or `fetched` went from a bare date to the full time,
-    otherwise as a coordination log line the release PR cites (conventions §12;
-    ADR-0018, amendment (h)).
+12. **Adoption PR** (conventions §15): judged against conventions §15 and nothing else,
+    that is the definition of done's Adoption PR block with its Enforced by CI and
+    Process blocks; it deletes only what the adoption itself makes dead (ADR-0018,
+    amendment 2026-10-26). On §15's routes (1) and (3), a core release without a
+    template tag and a source frozen on a template tag, §15's item 2 does not apply: the
+    first raises the bound with `copier update --vcs-ref=:current:`, the second runs no
+    `copier update` and lists the template changes it hand-applies file by file
+    (ADR-0018, amendment (i)).
+13. **Release PR** (the version in `pyproject.toml` changed, or for sdk-template the top
+    heading of `CHANGELOG.md`): it changes only the files of conventions §12
+    (`pyproject.toml`, `uv.lock`, `CHANGELOG.md`, `README.md`, `CLAUDE.md`,
+    `docs/handover.md`, and the fragments under `changelog/`, which it deletes); the
+    reference-data refresh ran before it, in a PR of its own only when a record changed
+    or `fetched` went from a bare date to the full time, otherwise cited by the release
+    PR (conventions §12; ADR-0018, amendment (h)).
 14. **Stale sentences**: no sentence in a changed `README.md`, `CLAUDE.md`, docstring or
     document contradicts the state after the change (a version, a count, a file name, a
     rule the PR replaced).
@@ -76,7 +71,7 @@ repository it reviews.
 16. **Wrapper and fixture names** (conventions §2, §10): a new endpoint wrapper's module
     and function carry the upstream operation name by §2's rule, and its fixtures live
     under `tests/fixtures/<wrapper>/`; the verbatim operation id is in the first line of
-    the wrapper's docstring and in the `endpoint=` it passes.
+    the wrapper function's docstring and in the `endpoint=` it passes.
 
 ## Report
 
