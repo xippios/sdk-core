@@ -172,3 +172,41 @@ by file in the PR description, as https://github.com/xippios/sdk-cashctrl/pull/1
 Conventions §12 states (g) and (h) from 1.23 on, §15 (i); the review checklist's items
 12 and 13, the definition of done's `copier update` line and its last Process line, and
 their copies in the PR template, state (h) and (i).
+
+## Amendment 2026-11-13
+
+The family's documents say what a change must satisfy wherever a repository is worked, and
+how a change lands is not theirs (https://github.com/xippios/sdk-core/issues/191). No rule
+of what an adoption or a release changes in a repository changes with this amendment.
+
+(j) **The merge leaves the documents.** Decision 3, that an adoption PR and a release PR
+auto-merge after the reviewer's `ready`, amendment (a), which extended it to sdk-template's
+release PRs, and amendment (e), which limited it to a pull request of merge class `auto`,
+with the note of 2026-10-28 under (e), say who merges and when: the process of the work,
+not a rule of the family. They stand as written on their dates and bind no repository from
+conventions 1.26 on. What an adoption PR and a release PR may change stays: decision 2,
+amendments (d), (h) and (i), conventions §12 and §15.
+
+(k) **No branch name, and the description is not the checklist.** The definition of done
+is what a change satisfies, no longer a list its pull request's description copies and
+ticks. An adoption PR is judged against its Adoption PR block with the Enforced by CI and
+Process blocks, as decision 2 has it; a release PR, which changes no code, test or fixture,
+has nothing for the Code and Tests blocks to judge. No document names a branch a change
+must carry: a release PR is told by its version, an adoption PR by what §15 lists, and
+route (1) of (i) loses its branch name. Conventions §15 no longer names sdk-template's
+`/adopt-release` (decision 4), which is the template's to keep.
+
+(l) **The refresh is cited by the release PR.** A refresh run of (h) whose records are
+unchanged gets no PR of its own, and the release PR cites it; where the run is recorded is
+not the family's rule.
+
+(m) **The changelog entry is a fragment.** Every pull request but a release's and
+Dependabot's brings its changelog entry as a fragment, a file of its own under
+`changelog/`, which the release PR assembles into its section of `CHANGELOG.md` and
+deletes, as `changelog/README.md` says; the files a release PR may change (amendment (b),
+conventions §12) include the fragments. A repository that keeps no `changelog/` yet writes
+its entry under `## [Unreleased]`, as before. The clause for `scripts/check-siblings.sh`
+leaves §12, since the siblings check is template-owned from template v0.3.0.
+
+Conventions 1.26 states (j) to (m) in §12, §13 and §15; the definition of done and the
+review checklist follow.

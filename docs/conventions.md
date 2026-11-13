@@ -1,6 +1,6 @@
 # xippios SDK family — conventions
 
-Version 1.25 · 2026-10-30 · applies to every `sdk-*` repository under
+Version 1.26 · 2026-11-13 · applies to every `sdk-*` repository under
 github.com/xippios, and to the host `xippios-mcp` where ADR-0026 binds it.
 Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
 The rules of ADR-0019 and ADR-0022, all of them (the download and decode calls, the
@@ -12,8 +12,7 @@ rules, the spared `key`, the packaged-answer rule and the packaged-list file,
 holds, §8), bind a source from its 0.3.0 adoption (§15), since the code that serves them
 ships in core 0.3.0; until then a source records what its upstream answers and names a
 fixture over the cap in the PR
-description; a source that starts on a git pin of core 0.3.0 (the roadmap's pin rule) is
-bound by each rule from its first PR on a pin that carries the rule's code.
+description.
 
 ## 1. Naming
 
@@ -32,7 +31,7 @@ package that depends on `usda-esmis`; ADR-0020, ADR-0021), `comtrade`, `eurostat
 `faostat`, `cashctrl`, `google-mail` (one repository per Google API under the shared
 namespace `google`, as the USDA sources share `usda`; Google Drive later as
 `google-drive`; ADR-0025), `x` (ADR-0027). The names are upstream's, with one departure
-dated 2026-10-29: in `google-mail`, `mail` is Johannes's name for the product upstream
+dated 2026-10-29: in `google-mail`, `mail` is the family's name for the product upstream
 calls Gmail (ADR-0025).
 No domain prefixes (`ag`, `agri`): sources are domain-neutral; grouping happens via
 GitHub topics (`xippios-sdk`) and the org README.
@@ -78,23 +77,24 @@ Every source package has three layers, top to bottom, and nothing skips a layer.
    `GATSData_GetHS6Commodities` is `get_hs6_commodities`, `GATSData_GetUNTradeExports`
    is `get_un_trade_exports`. Upstream's spelling survives the transform, so a singular
    stays singular (`GATSData_GetCensusImport` is `get_census_import`). The verbatim id
-   stays in the first line of the wrapper's docstring and in the `endpoint=` the wrapper
+   stays in the first line of the wrapper function's docstring and in the `endpoint=` it
    passes, so `meta.endpoint` keeps upstream's exact name (§4); the task layer and the
    MCP tool names are unchanged by the rule. Where an API's operation ids repeat, across
    its services or across the resources of one service, the wrappers of such a service
    share one module named after the service (sdk-eurostat's `api/statistics.py` and
    `api/sdmx.py`); ids counted as absent do not trigger it (sdk-comtrade's data wrappers
    stay one module per operation); another service of the same API may keep its service
-   module (sdk-eurostat's `api/catalogue.py` holds `getTocXml` alone and stays). A
-   module may hold, beside its wrapper, a second function on the same endpoint, named
-   after the wrapper with a suffix that says what differs (sdk-comtrade's `api/get.py`
-   holds `get` and `get_count_only`, its `api/reference.py` `reference` and
+   module (sdk-eurostat's `api/catalogue.py` holds the wrapper of `getTocXml` alone and
+   stays). A module may hold, beside its wrapper, a second function on the same
+   endpoint, named after the wrapper with a suffix that says what differs (sdk-comtrade's
+   `api/get.py` holds `get` and `get_count_only`, its `api/reference.py` `reference` and
    `reference_rows`); a helper that calls no endpoint is not a wrapper and keeps a plain
    name (sdk-eurostat's `codelist_path` and `data_path` in `api/sdmx.py`). An existing
    source applies the rule to its wrappers and fixture directories in one PR of its own,
-   right after its core 0.3.0 adoption and never inside the adoption PR, or, when it is
-   past that adoption as 1.22 lands, in the first PR of its next version; an adoption PR
-   is judged against the rest of 1.22 until the rename PR merges.
+   never inside an adoption PR: right after its core 0.3.0 adoption, or, when it is past
+   that adoption as 1.22 lands, right after its next adoption PR, or in the first PR of
+   its next version when no adoption is pending; an adoption PR is judged against the
+   rest of 1.22 until the rename PR merges.
 2. **Task-shaped functions** — `xippios/<pkg>/tasks.py`. The functions a person
    or an agent actually wants: `get_balance_sheet(commodity, marketing_year)`. They
    compose endpoint wrappers, handle pagination and reference lookups, and return
@@ -351,7 +351,7 @@ the query can carry a key (ADR-0005).
   package's CLAUDE.md names as such; longer-window quotas (hourly, daily) may be
   exhausted, not rationed (ADR-0010), and per-endpoint windows shorter than an hour
   (X's 15-minute windows) are left to `classify`, with no `QuotaPolicy` until a policy
-  keyed per endpoint exists (queue row 318; ADR-0010, amendment 2026-10-30). `classify`
+  keyed per endpoint exists (ADR-0010, amendment 2026-10-30). `classify`
   interprets the upstream's 429, or its documented answer to a spent limit, as
   `RateLimitError` with `retry_after` (from `Retry-After`, the quota headers or a
   documented fallback), the client keeps a quota snapshot from the quota headers
@@ -477,8 +477,8 @@ tenants and variables, never a value (ADR-0005).
   when there are several, never pydantic's rendered error (its URL, input type or input
   value) (ADR-0014, amendment 2026-10-27). An error answer also sets `isError` on its
   tool result, binding from a source's adoption of the core release that carries the
-  code (core 0.4.0 as planned, queue row 283; ADR-0026, decision 6); until then a client
-  tells an error answer by the text.
+  code (core 0.4.0 as planned, https://github.com/xippios/sdk-core/issues/168; ADR-0026,
+  decision 6); until then a client tells an error answer by the text.
 - An entry point, `xippios-<source>-mcp` or, for a source with a write server,
   `xippios-<source>-mcp-read` and `xippios-<source>-mcp-write`, runs stdio by default;
   `--http` for streamable HTTP.
@@ -505,14 +505,15 @@ route: `router_from_tasks` skips it, and no route returns a file path (ADR-0019)
   (`CH_2026_8.json`). A fixture recorded through a task rather than a wrapper, such as a
   download's metadata or a helper's answer, lives under the task's name; file samples
   keep `tests/fixtures/files/<file_kind>/` as before (ADR-0020).
-- A fixture file a PR adds or changes stays under 256 KiB (ADR-0019); a fixture over the
-  cap recorded before the rule bound stays until a PR re-records it. A download fixture
-  holds a small real answer (a short date range, one commodity) or the first N rows or
-  bytes of the file: the recorder truncates on request (`max_bytes=`), marks the fixture
-  `truncated: true` and keeps `original_bytes` and the sha256 of the full file. An XML,
-  ZIP, gzip, XLS or XLSX fixture is a small real sample (a short query, one member of
-  the archive, a few rows), never a byte-truncated file, since a cut-off binary or
-  compressed file cannot be parsed and a cut-off XML document is not well-formed; byte
+- A fixture file a PR adds or changes stays under 256 KiB (ADR-0019). A file the PR only
+  moves, its content unchanged, is neither, so a fixture over the cap recorded before the
+  rule bound moves with its directory (§2) and stays until a PR re-records it. A download
+  fixture holds a small real answer (a short date range, one commodity) or the first N
+  rows or bytes of the file: the recorder truncates on request (`max_bytes=`), marks the
+  fixture `truncated: true` and keeps `original_bytes` and the sha256 of the full file.
+  An XML, ZIP, gzip, XLS or XLSX fixture is a small real sample (a short query, one
+  member of the archive, a few rows), never a byte-truncated file, since a cut-off binary
+  or compressed file cannot be parsed and a cut-off XML document is not well-formed; byte
   truncation (`max_bytes=`) applies to text bodies, and the recorder refuses it for those
   formats and for a body that is not UTF-8 text; a JSON array is truncated by elements:
   the recorder cuts its original text after the first N elements that fit, never
@@ -633,22 +634,27 @@ which §12 bounds to one minor.
   a source adopts it through §15 before its next release. From 1.0 a breaking change
   bumps the major (SemVer), and the `~=` bound stays. A source already published with an
   open bound stays as published and gets the bound with its next release.
-- `CHANGELOG.md` in Keep a Changelog format; every PR adds an entry under Unreleased.
+- `CHANGELOG.md` in Keep a Changelog format. Every PR but a release's and Dependabot's
+  brings its entry as a fragment, a file of its own under `changelog/` that holds the
+  entry's bullet, in the form `changelog/README.md` gives; the release PR assembles the
+  fragments into its section of `CHANGELOG.md` and deletes them (ADR-0018, amendment
+  2026-11-13). A repository that keeps no `changelog/` yet, a source before its adoption
+  of the template release that brings the folder, adds its entry under
+  `## [Unreleased]` of `CHANGELOG.md` instead.
 - The release train (ADR-0018, amendment 2026-10-26): the reference-data refresh, where
   a source has one, runs before the release. It is a PR of its own, merged before the
   release PR, only when a record changed or `fetched` goes from a bare date to the full
-  time (§4); otherwise the run is a coordination log line the release PR cites,
+  time (§4); otherwise the run gets no PR of its own and the release PR cites it,
   "unchanged" meaning the records, not the files (ADR-0018, amendment (h)). A release PR
-  changes only `pyproject.toml`, `uv.lock`, `CHANGELOG.md`, `README.md`, `CLAUDE.md` and
-  `docs/handover.md` (and `scripts/check-siblings.sh` until the siblings check is
-  template-owned). Release = the release PR merges on `main` → `publish.yml` tags
-  `vX.Y.Z` from `pyproject.toml` on the merge commit → environment `pypi` → a human
-  approves → the trusted publisher uploads. A tag ruleset admits no other `v*` tag.
-  sdk-template, which publishes nothing to PyPI, tags from the top `## [X.Y.Z] - `
-  heading of its `CHANGELOG.md` with its own `release.yml`, under the same ruleset.
-  Until a repository's workflow tags itself (core 0.2.1 and template v0.2.1 ship it),
-  its tag is pushed by Johannes from his own account. Yanks are a human action. No
-  tokens anywhere.
+  changes only `pyproject.toml`, `uv.lock`, `CHANGELOG.md`, `README.md`, `CLAUDE.md`,
+  `docs/handover.md` and the fragments under `changelog/`, which it deletes. Release =
+  the release PR merges on `main` → `publish.yml` tags `vX.Y.Z` from `pyproject.toml` on
+  the merge commit → environment `pypi` → a human approves → the trusted publisher
+  uploads. A tag ruleset admits no other `v*` tag. sdk-template, which publishes nothing
+  to PyPI, tags from the top `## [X.Y.Z] - ` heading of its `CHANGELOG.md` with its own
+  `release.yml`, under the same ruleset. Until a repository's workflow tags itself (core
+  0.2.1 and template v0.2.1 ship it), its tag is pushed by a maintainer from their own
+  account. Yanks are a human action. No tokens anywhere.
 - A source may depend on another source package, consuming its task layer only: it
   imports `xippios.<dep>.tasks` and its models, never `api/` or `_client`, and declares
   `xippios-<dep>~=X.Y.0`, one minor, like core (ADR-0021). Both share one core minor:
@@ -664,8 +670,8 @@ which §12 bounds to one minor.
 
 ## 13. Repository hygiene
 
-- Branches: trunk-based. `main` protected by the org ruleset; feature branches
-  `feature/`, `fix/`, `chore/`, `docs/`. Conventional Commits.
+- Trunk-based: `main` protected by the org ruleset, a change reaching it through a pull
+  request. Conventional Commits.
 - Required files: `README.md`, `CHANGELOG.md`, `LICENSE` (Apache-2.0), `CLAUDE.md`,
   `docs/upstream/FETCHED.md`, `pyproject.toml`, `uv.lock`. `sdk-core` wraps no upstream
   and is exempt from `docs/upstream/` (ADR-0005).
@@ -693,16 +699,8 @@ logic. Those live in product repositories that depend on these packages.
 ## 15. Adopting a core or template release
 
 A source adopts a new core minor, and the sdk-template release that goes with it, in one
-adoption PR before its next release (§12, ADR-0018). The PR description is this
-checklist, ticked; an unticked item needs a one-line reason, an item the release does
-not touch included. A template-only update, with no new core minor, is judged against
-the items it touches. sdk-template's `/adopt-release` command walks the list step by
-step. An adoption PR is a `chore/template-update*` PR: when its merge class is `auto` the
-session enables auto-merge after the reviewer's `ready`, and GitHub merges it once `ci` is
-green and review threads are resolved; a `human` adoption (a source-owned workflow, a
-changed template answer, a protected path, a build or install route) waits for Johannes
-(ADR-0018, amendment (e); the merge classes are in the README of the gates repository,
-`xippios/sdk-gates`).
+adoption PR before its next release (§12, ADR-0018). The PR is judged against this list;
+a template-only update, with no new core minor, is judged against the items it touches.
 
 1. The core floor is raised: `xippios-core` and each of its extras name the new minor
    with the bound of §12 (`xippios-core~=0.2.0`), and, where the source depends on
@@ -715,14 +713,14 @@ changed template answer, a protected path, a build or install route) waits for J
    ADR-0015); the release's ADRs and CHANGELOG list them per source. In the other
    direction, code that core removed for its one consumer (ADR-0023, decision 5) is
    copied into that consumer as part of its adoption, from the commit core's handover
-   names (`git show <sha>:<path>`); the PR description lists every copied file under the
-   Adoption PR block with the ADR that moved it (ADR-0024 for sdk-cashctrl at 0.3.0), and
-   the reviewer judges the copy against that list.
+   names (`git show <sha>:<path>`); the PR description lists every copied file with the
+   ADR that moved it (ADR-0024 for sdk-cashctrl at 0.3.0), and the reviewer judges the
+   copy against that list.
 4. Logic duplicated across sources is moved into core or dropped: what core now provides
    is dropped here; what it does not provide yet is carried by the source, named in the
-   PR description and in a queue row; a second source may carry the same helper when
-   the row names both; a third never: core takes it in that minor (ADR-0023). A core row
-   names its consumers (ADR-0023).
+   PR description and in an issue of sdk-core; a second source may carry the same helper
+   when the issue names both; a third never: core takes it in that minor (ADR-0023). An
+   issue of sdk-core names its consumers (ADR-0023).
 5. Every test that asserted a limiter wait, a quota pause or key resolution is marked or
    overridden: a limiter wait or a quota pause marked `rate_limited` (ADR-0013,
    ADR-0015), key resolution given a module-level `placeholder_api_key` override that
@@ -733,23 +731,20 @@ changed template answer, a protected path, a build or install route) waits for J
 7. `mypy --strict` covers `scripts/` too (`files = ["src", "tests", "scripts"]`).
 8. The current conventions version is applied (1.22's name rule excepted, §2): every rule
    changed since the version the source last applied holds in the source.
-9. `CHANGELOG.md` has a line under Unreleased naming the core, template and conventions
-   versions adopted.
+9. The PR's changelog entry, a fragment under `changelog/` (§12), names the core,
+   template and conventions versions adopted.
 
 Three routes depart from the list (ADR-0018, amendment (i)):
 
-- (1) **A core release without a template tag** (queue row 232): the bound is raised
-  with `copier update --vcs-ref=:current: -d core_version=X.Y.Z`, so
-  `.copier-answers.yml` does not drift, on a branch `chore/template-update-core-X.Y.Z`,
-  and item 2 is not applicable. A core minor without its template release is no adoption
-  until the template follows. The `/adopt-release` mode for this route is the
-  template's.
-- (2) **A dependency's minor whose new surface the dependent uses** (queue row 273): the
-  adoption PR stays pure, and the use is the next PR, as the sdk-usda-wasde 0.2.0
-  briefing splits its PR 1 and PR 2 (ADR-0021, amendment 2026-10-29).
-- (3) **A source frozen on a template tag** (queue row 118; sdk-cashctrl on template
-  v0.2.2): no `copier update`, so item 2 is not applicable, and the core floor of item 1
-  is raised by hand. The template-rendered files are the source's own and listed in its
+- (1) **A core release without a template tag**: the bound is raised with
+  `copier update --vcs-ref=:current: -d core_version=X.Y.Z`, so `.copier-answers.yml`
+  does not drift, and item 2 is not applicable. A core minor without its template
+  release is no adoption until the template follows.
+- (2) **A dependency's minor whose new surface the dependent uses**: the adoption PR
+  stays pure, and the use is the next PR (ADR-0021, amendment 2026-10-29).
+- (3) **A source frozen on a template tag** (sdk-cashctrl on template v0.2.2): no
+  `copier update`, so item 2 is not applicable, and the core floor of item 1 is raised
+  by hand. The template-rendered files are the source's own and listed in its
   `CLAUDE.md`; the template changes the new conventions version needs are hand-applied
   and listed file by file in the PR description, as
   https://github.com/xippios/sdk-cashctrl/pull/18 did.
