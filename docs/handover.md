@@ -1,6 +1,6 @@
 # Handover — from planning to Claude Code
 
-Date: 2026-10-20 · Author: Johannes Didaskalu (with Claude) · Refreshed 2026-10-22 with the state after sessions 1 and 2, 2026-10-25 with the state after the core 0.2.0 release PR, 2026-10-26 with core 0.2.1, the release train and the family check (the sections from "Core 0.2.1" on), 2026-10-27 with `sdk-core`'s state line at the core 0.2.1 release PR, and 2026-10-27 at the core 0.3.0 release PR (the State block, the session model, the sections from "Core 0.3.0" on, and notes where 0.3.0 changed an earlier line).
+Date: 2026-10-20 · Author: Johannes Didaskalu (with Claude) · Refreshed 2026-10-22 with the state after sessions 1 and 2, 2026-10-25 with the state after the core 0.2.0 release PR, 2026-10-26 with core 0.2.1, the release train and the family check (the sections from "Core 0.2.1" on), 2026-10-27 with `sdk-core`'s state line at the core 0.2.1 release PR, and 2026-10-27 at the core 0.3.0 release PR (the State block, the session model, the sections from "Core 0.3.0" on, and notes where 0.3.0 changed an earlier line), and 2026-11-13, when the process of the work left this file (the session model, the standing gates, the plan for issue-driven work and the switch of the retired gates) and the documents' own rules stayed.
 
 ## State
 
@@ -29,20 +29,10 @@ set, `pypi` environments with required reviewer `jdidaskalu`; PyPI account `xipp
   lists. `sdk-usda-esmis` and `sdk-eurostat`, the first of the next sources
   (`docs/roadmap.md` §4), started on core 0.2.1 and template v0.2.2; by the roadmap's
   pin rule (`docs/roadmap.md` §3) each re-pins core's `main` to the SHA its next PR
-  needs and moves to `~=0.3.0` in its one v0.3.0 adoption.
-
-Work runs as parallel sessions from the workspace root, on the rules of
-`coordination/RULES.md` (rules v2 since 2026-10-26): one `family` session owns sdk-core,
-sdk-template, the coordination repository and the gates repository `xippios/sdk-gates`,
-and one session per source owns its `sdk-<source>` (`coordination/owners.toml`); a
-source never writes core or the template, it queues a row. A session is an orchestrator:
-it plans, delegates to the `worker` subagent, passes every branch through the `reviewer`
-subagent, and works in worktrees under `.worktrees/`. sdk-core and sdk-template are
-changed only under their lock, which `family` alone takes. `coordination/` holds the
-live state (claims, locks, the queue, the log, the human inbox, the ledger, and
-`state.md`, generated hourly from GitHub and PyPI), and a dashboard rendered from it
-locally points to the rules. This file is the narrative; session briefings live in
-`.claude/briefings/`.
+  needs and moves to `~=0.3.0` in its one v0.3.0 adoption. (2026-10-28: sdk-eurostat
+  moved to `~=0.3.0` from PyPI with no re-pin, in
+  https://github.com/xippios/sdk-eurostat/pull/3 on 2026-10-27, and its v0.3.0
+  adoption, https://github.com/xippios/sdk-eurostat/pull/8, changed no bound.)
 
 ## Sessions 3 and 4 — `sdk-usda-nass` and `sdk-comtrade`: done
 
@@ -80,18 +70,17 @@ ADR-0017 is a rule for sources: nothing in core implements it. The release PR me
 through auto-merge after the reviewer's `ready` (ADR-0018). 0.2.0 was the last release
 tagged by hand. From 0.2.1 on the release train runs it (conventions §12): the release
 PR's merge runs `publish.yml`, which tags `vX.Y.Z` from `pyproject.toml` on the merge
-commit, runs CI, checks the tag against the version and builds; Johannes's gate is the
-approval of the run in the environment `pypi`. A source adopts a release from PyPI once
-it is there.
+commit, runs CI, checks the tag against the version and builds; the human gate is a
+maintainer's approval of the run in the environment `pypi`. A source adopts a release
+from PyPI once it is there.
 
 ## Adopting core 0.2.0
 
 Each source adopts core 0.2.0, and the sdk-template release that goes with it, in one
-adoption PR, a `chore/template-update*` PR, before its next release (conventions §12 and
-§15, ADR-0018). Its description is the §15 checklist, ticked; the reviewer judges it
-against the definition of done's Adoption PR block and nothing else, and it auto-merges
-after the reviewer's `ready`. Below, the checklist is pre-filled from the ADRs'
-consequences, the CHANGELOG's `[0.2.0]` section and each source's `main` on 2026-10-25:
+adoption PR before its next release (conventions §12 and §15, ADR-0018); the reviewer
+judges it against the definition of done's Adoption PR block and nothing else. Below,
+the checklist is pre-filled from the ADRs' consequences, the CHANGELOG's `[0.2.0]`
+section and each source's `main` on 2026-10-25:
 each local workaround a source deletes with the core change that replaced it (§15 item
 3), and what it declares or marks (item 5). The adoption PR confirms every item against
 the source as it is then. This section is the record of 0.2.0; where 0.3.0 replaced an
@@ -281,10 +270,6 @@ ADR-0015), not a copy of PSD's client, and meets the §15 checklist from its fir
 - **Sources**: each adopts core 0.2.0 and that template release as "Adopting core 0.2.0"
   lists, once both are published. Sources already published with an open bound stay as
   published and get the bound with their next release.
-- **Later**: install the Claude GitHub App on the org and move to issue-driven work: one
-  issue per endpoint or change, `@claude` in the issue, PR arrives, CI gates, a human
-  merges. Auto-merge waits for every required approving review, so the ruleset must
-  require none for adoption and release PRs to merge on `ci` alone (ADR-0018).
 
 ## Core 0.2.1 (session `family`)
 
@@ -298,7 +283,7 @@ Step 0 of the roadmap, before 0.3.0: one feature PR and its release PR.
 The release PR changes only the subset of conventions §12. Its merge runs `publish.yml`,
 which tags `v0.2.1` on the merge commit and waits at `pypi`; the first run also shows
 whether the environment's deployment-branch policy "protected branches only" admits a
-ruleset-protected `main`, and if it does not, Johannes sets the policy to `main` and
+ruleset-protected `main`, and if it does not, a maintainer sets the policy to `main` and
 re-runs the failed jobs. Once the tag exists, only "Re-run failed jobs" finishes the
 release: a dispatch or "Re-run all jobs" stops at `release-check`, which finds the tag.
 The tag precedes the build, so a build that fails for good leaves a tag without a
@@ -309,10 +294,8 @@ waiting at `pypi` would be lost. Two pushes to `main` close together can therefo
 see an untagged version: the second run's tag push then fails red, or, if the first
 run's `ci` failed, the second tags a later commit. The fix: re-run the failed jobs of
 the run whose commit is the release; if the other run already tagged a later commit,
-Johannes rejects its `pypi` deployment and the release is re-done as a patch. A release
-is not merged while another release run is waiting.
-`gates.yml` stays off until Johannes sets the repository variable `GATES_CALLER` to `1`,
-which he does only if the ruleset editor offers no "Require workflows" rule.
+a maintainer rejects its `pypi` deployment and the release is re-done as a patch. A
+release is not merged while another release run is waiting.
 
 ## Adopting core 0.2.1
 
@@ -421,6 +404,11 @@ After its own adoption of 0.2.0 (`chore/template-update-v0.2.0`):
 
 ### Template v0.2.1: the two family checks that are CI steps
 
+The excerpt below is template v0.2.1's, kept as the record of that release. From v0.3.0
+the CHANGELOG step exempts a release and Dependabot only, no longer an adoption, whose
+entry conventions §15 item 9 asks for; from v0.3.2 the fixture-cap step reads renames as
+the paragraph after the excerpt says.
+
 Two family checks read the pull request, not the package, so they are steps of the
 template's `ci.yml`, not tests; the checkout needs the history (`fetch-depth: 0`):
 
@@ -468,8 +456,10 @@ template's `ci.yml`, not tests; the checkout needs the history (`fetch-depth: 0`
 
 The cap binds a source from its 0.3.0 adoption (conventions, header of 1.14), so
 template v0.2.1 renders the second step with `LEVEL: warning`, a warning and no failing
-exit, and template v0.3.0 with `LEVEL: error`. Without `--no-renames`, git would report a
-moved fixture as a rename, which `--diff-filter=AM` leaves out. Dependabot's branches
+exit, and template v0.3.0 with `LEVEL: error`. From template v0.3.2 the step diffs with
+`--find-renames=100%`: a fixture a PR only moves, its content unchanged, is a rename,
+which `--diff-filter=AM` leaves out, so it passes, and one moved and changed is listed as
+added, so one moved and grown is judged (conventions §10). Dependabot's branches
 (`dependabot/`) are exempt from the first step, since Dependabot writes no CHANGELOG
 entry (the family session, 2026-10-26, confirmed at the merge; the merge gates'
 Dependabot rule).
@@ -502,9 +492,9 @@ against the family review's target of about 4,500 to 5,000; the lead of the CHAN
 ## Adopting core 0.3.0
 
 Each source adopts core 0.3.0 and template v0.3.0, which tags with it (`docs/roadmap.md`
-§3), in one adoption PR, a `chore/template-update*` PR, before its next release
-(conventions §12 and §15, ADR-0018), with `/adopt-release`; the reviewer judges it
-against the definition of done's Adoption PR block and nothing else. The rules of
+§3), in one adoption PR before its next release (conventions §12 and §15, ADR-0018),
+with `/adopt-release`; the reviewer judges it against the definition of done's Adoption
+PR block and nothing else. The rules of
 ADR-0019 and ADR-0022, and the renderer rule of conventions 1.20, bind a source from
 this adoption (conventions, header of 1.21). Pre-filled below from the CHANGELOG's
 `[0.3.0]` section, whose Hand-apply list names the files and the changed texts, and from
@@ -761,13 +751,3 @@ Then, by the CHANGELOG's Hand-apply list:
 - Its tests: as psd's for the gateway; the 429 test of `get_census_export_series`
   brackets `retry_after` with `CLOCK_SLACK`, since it is read through the client.
 - Item 8: `CLAUDE.md`'s rate-limit row names `pause_cap` and `xippios.core.data_gov`.
-
-## Standing human gates
-
-Every `pypi` approval (a merged release PR tags itself through `publish.yml`; until a
-repository's workflow does, its tag comes from Johannes, conventions §12); the merge of
-every PR except an adoption (`chore/template-update*`) or `chore/release-*` PR of merge
-class `auto`, which a session sets to auto-merge after the reviewer's `ready` (ADR-0018,
-amendment (e)); new API keys and org secrets; changes to `docs/conventions.md`; repository
-creation (approved at the prompt); the decisions asked as an interview before each work
-package.
