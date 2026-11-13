@@ -1,10 +1,11 @@
 # Definition of done
 
-Copy this list into every PR description and tick honestly. An unticked item needs a
-one-line reason. CI enforces the first block; the rest is checked in review
-(`docs/review-checklist.md`). Every PR leaves the Adoption PR block out, except an
-adoption PR (conventions §15), which copies the Enforced by CI and Process blocks with it
-and leaves Code, Tests and Docs out.
+What a change satisfies before its pull request is opened, each item that applies to it.
+CI enforces the first block; the rest is checked in review (`docs/review-checklist.md`).
+The Adoption PR block is an adoption PR's alone (conventions §15), which is judged against
+it with the Enforced by CI and Process blocks and nothing else: the Code, Tests and Docs
+blocks do not apply to it. A release PR changes only the files of conventions §12, no
+code, test or fixture, so the Code and Tests blocks have nothing to judge in it.
 
 ## Enforced by CI
 - [ ] `ruff check` and `ruff format --check` pass
@@ -24,40 +25,34 @@ and leaves Code, Tests and Docs out.
 - [ ] each new task function has a fixture-backed unit test (`tests/fixtures/...` recorded, not hand-written)
 - [ ] each new task function has a `@pytest.mark.live` smoke test
 - [ ] fixtures contain no credentials: grep `tests/fixtures/` for key patterns and for the values of fields the source keeps out of its projections (ADR-0017) before committing
-- [ ] the fixture files this PR adds or changes stay under 256 KiB; a truncated one is marked `truncated: true` with the full count or byte size and sha256 (ADR-0019; binds from the source's 0.3.0 adoption, or from its first PR when it starts on a git pin of core 0.3.0)
+- [ ] the fixture files this PR adds or changes stay under 256 KiB, a file it only moves, its content unchanged, being neither; a truncated one is marked `truncated: true` with the full count or byte size and sha256 (ADR-0019; binds from the source's 0.3.0 adoption)
 - [ ] a file-distributed source: each file kind has a sample under `tests/fixtures/files/<file_kind>/` with its provenance line and one live parser test (ADR-0020)
 
 ## Docs
 - [ ] docstrings written for agents: one-line summary, `Args:` with valid-value examples
-- [ ] `CHANGELOG.md` has an entry under Unreleased
+- [ ] the change's entry is a fragment under `changelog/`, in the form `changelog/README.md` gives (conventions §12)
 - [ ] README updated if install, usage, or endpoint coverage changed
 - [ ] if `docs/upstream/` was refreshed: `FETCHED.md` updated and the diff summarised in the PR
 
 ## Adoption PR (conventions §15)
 The reviewer judges an adoption PR against this list and nothing else: no new endpoints,
 tasks or fixtures ride along, and it deletes only the fixtures, mounts and tests the
-adoption itself makes dead (ADR-0018, amendment 2026-10-26). An adoption PR is a
-`chore/template-update*` PR: when its merge class is `auto` the session enables
-auto-merge after the reviewer's `ready`, and GitHub merges it once `ci` is green and
-review threads are resolved; a `human` adoption (a source-owned workflow, a changed
-template answer, a protected path, a build or install route) waits for Johannes
-(ADR-0018, amendment (e); the merge classes are in the README of the gates repository,
-`xippios/sdk-gates`).
+adoption itself makes dead (ADR-0018, amendment 2026-10-26).
 - [ ] core floor raised: `xippios-core~=X.Y.0`, or `~=X.Y.Z` when patch Z shipped what the source adopts (§12), and its extras likewise; a source package the source depends on bound to its own minor the same way (ADR-0021); from PyPI, no git pin, `uv.lock` updated
 - [ ] `copier update` to the template release, conflicts resolved; not applicable on §15's routes (1), a core release without a template tag, and (3), a source frozen on a template tag, whose hand-applied template changes are listed file by file in the PR description
 - [ ] every local workaround a core change replaced is deleted, its tests with it, the core change named for each in the PR description
-- [ ] code core removed for this source alone is copied in from the commit core's handover names, every copied file listed under this block with the ADR that moved it (conventions §15 item 3; ADR-0023, decision 5; ADR-0024)
-- [ ] logic duplicated across sources moved into core or dropped; what core lacks is carried by the source and named in a queue row, a second copy only when the row names both sources, never a third (ADR-0023)
+- [ ] code core removed for this source alone is copied in from the commit core's handover names, every copied file listed in the PR description with the ADR that moved it (conventions §15 item 3; ADR-0023, decision 5; ADR-0024)
+- [ ] logic duplicated across sources moved into core or dropped; what core lacks is carried by the source and named in an issue of sdk-core, a second copy only when the issue names both sources, never a third (ADR-0023)
 - [ ] every test that asserted a limiter wait or a quota pause is marked `rate_limited`, and one that asserted key resolution has a module-level `placeholder_api_key` override that pins nothing (ADR-0013, ADR-0015)
 - [ ] generated enum files re-rendered once through the template's refresh script and committed as formatted, after its `ruff format && ruff check --fix`
 - [ ] `mypy --strict` covers `scripts/` too
 - [ ] the current conventions version applied (1.22's name rule excepted, §2)
-- [ ] `CHANGELOG.md` line under Unreleased naming the core, template and conventions versions adopted
+- [ ] the changelog fragment names the core, template and conventions versions adopted (§15 item 9)
 
 ## Process
-- [ ] branch named `feature/`, `fix/`, `chore/`, or `docs/`; Conventional Commits
-- [ ] no tag, release, merge, or secret operation performed by the session; the one exception is enabling auto-merge on an adoption or `chore/release-*` PR when its merge class is `auto`, after the reviewer's `ready`, ADR-0018, amendment (e)
+- [ ] commit messages follow Conventional Commits
+- [ ] no tag pushed by hand: a `v*` tag comes from the release train alone (conventions §12)
 - [ ] assumptions and open questions listed in the PR description
 - [ ] live calls spent by this PR are counted in the description (keyed calls by number; `none` is a count)
-- [ ] the description carries, after this checklist, a `## Decisions taken` block: one line per decision the session made, each backed by a convention, an ADR, a coordination rule, a decision of Johannes's with its date, or `gap, row N`; a line backed by none of these is a blocking finding
-- [ ] a release PR changes only the subset of conventions §12; the reference refresh ran before it, in a PR of its own only when a record changed or `fetched` went from a bare date to the full time, otherwise as a coordination log line the release PR cites
+- [ ] the description carries a `## Decisions taken` block: one line per decision the change takes, each backed by a convention, an ADR, a maintainer's decision with its date, or the issue that records the gap; a line backed by none of these is a blocking finding
+- [ ] a release PR changes only the files of conventions §12; the reference refresh ran before it, in a PR of its own only when a record changed or `fetched` went from a bare date to the full time, otherwise cited by the release PR
