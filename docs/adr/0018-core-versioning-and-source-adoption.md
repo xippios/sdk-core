@@ -176,10 +176,14 @@ their copies in the PR template, state (h) and (i).
 ## Amendment 2026-11-13
 
 The family's documents say what a change must satisfy wherever a repository is worked, and
-how a change lands is not theirs (https://github.com/xippios/sdk-core/issues/191). No rule
-of what an adoption or a release changes in a repository changes with this amendment, but
-where the changelog entry is written and that the release PR deletes the fragments, (m), and
-where a dependent says that its release bundles its adoption, (o).
+how a change lands is not theirs (https://github.com/xippios/sdk-core/issues/191). Points
+(j), (k) and (l) take the process of the work out of the documents and change no rule. The
+rules this amendment changes are these: where the changelog entry is written and that the
+release PR deletes the fragments, (m); the repository whose reusable workflows a repository
+calls at `@main`, and where a dependent says that its release bundles its adoption, (o); and
+two clauses that bind no repository any more leave, the tag pushed by hand until a
+repository's workflow tags itself, (n), and the clause on a source that starts on a git pin
+of core 0.3.0, (p).
 
 (j) **The merge leaves the documents.** Decision 3, that an adoption PR and a release PR
 auto-merge after the reviewer's `ready`, amendment (a), which extended it to sdk-template's
@@ -222,5 +226,14 @@ bundles its adoption with feature work says so in its release's section of `CHAN
 a document of the repository that a reader of the release sees, where §12 and point 1 of
 ADR-0021's amendment of 2026-10-29 named a briefing, which no repository holds.
 
-Conventions 1.26 states (j) to (n) in §12, §13 and §15, and 1.27 states (o) in §12 and §13;
-the definition of done and the review checklist follow.
+(p) **The git pin of core 0.3.0 leaves.** The conventions' header bound a source that starts
+on a git pin of core 0.3.0, the roadmap's pin rule, by each rule the header names from its
+first PR on a pin that carries the rule's code, and the definition of done's fixture-cap line
+and the review checklist's item 4 said the same of the fixture cap. The clause binds no
+source: v0.3.0 is tagged since 2026-10-27, and every source that started on such a pin,
+sdk-usda-esmis, sdk-eurostat, sdk-usda-wasde and sdk-faostat, bounds `xippios-core~=0.3.0`
+from PyPI.
+
+Conventions 1.26 states (j) to (n) in §12, §13 and §15 and drops (p)'s clause from its
+header, and 1.27 states (o) in §12 and §13; the definition of done and the review checklist
+follow.
