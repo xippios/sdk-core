@@ -599,7 +599,7 @@ flagged.
 
 ## Status
 
-Release 0.3.0, alpha.
+Release 0.3.1, alpha.
 [CHANGELOG.md](https://github.com/xippios/sdk-core/blob/main/CHANGELOG.md) lists what
 changed in each release, and a change's entry waits under
 [changelog/](https://github.com/xippios/sdk-core/blob/main/changelog/README.md) as a
