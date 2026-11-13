@@ -1,0 +1,37 @@
+# The organization's checks of a pull request, reusable workflows of xippios/.github called
+# at @main (conventions §13), their contract in that repository's README.
+#
+# `conventions` reviews the pull request against the documents README.md lists under
+# `## Documents`, read from main, by the mode the variable CONVENTIONS_REVIEW sets: the
+# default, `release`, reviews a release pull request, and the callee's own condition passes
+# any other as skipped. It gets ANTHROPIC_API_KEY by name, never `secrets: inherit`, and the
+# permissions the callee asks for: `pull-requests: write` for its one comment and
+# `checks: read` for the head's checks. `adr-index` runs scripts/adr_index.py --check on the
+# checkout and takes no input and no secret.
+#
+# `edited` because the review reads the title and the description, `labeled` because the
+# label `release` set after the opening starts the review. A label starts the workflow
+# whatever its name, so on `labeled` both jobs run for `release` alone.
+name: Organization
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, labeled]
+
+permissions:
+  contents: read
+
+jobs:
+  conventions:
+    if: github.event.action != 'labeled' || github.event.label.name == 'release'
+    uses: xippios/.github/.github/workflows/conventions.yml@main
+    permissions:
+      contents: read
+      pull-requests: write
+      checks: read
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+  adr-index:
+    if: github.event.action != 'labeled' || github.event.label.name == 'release'
+    uses: xippios/.github/.github/workflows/adr-index.yml@main

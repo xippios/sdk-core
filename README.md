@@ -623,14 +623,14 @@ backward compatibility across minors; patch releases stay compatible. A source d
 on one minor (`xippios-core~=0.3.0`) and adopts the next through conventions §15
 (ADR-0018).
 
-## Conventions
+## Documents
 
-The rules this package implements live in [docs/conventions.md](docs/conventions.md)
-and the decisions behind them in [docs/adr/](docs/adr/). Changes to a convention are
-their own PR plus an ADR. [docs/roadmap.md](docs/roadmap.md) gives the order of the next
-core, template and source releases, and
-[docs/review-checklist.md](docs/review-checklist.md) the checklist every `sdk-*` PR is
-reviewed against.
+- sdk-core: [docs/conventions.md](https://github.com/xippios/sdk-core/blob/main/docs/conventions.md) — the rules of the family, which this package implements and every `sdk-*` repository follows; a change to one comes with an ADR.
+- sdk-core: [docs/definition-of-done.md](https://github.com/xippios/sdk-core/blob/main/docs/definition-of-done.md) — what a change satisfies before its pull request is opened.
+- sdk-core: [docs/review-checklist.md](https://github.com/xippios/sdk-core/blob/main/docs/review-checklist.md) — the checklist every `sdk-*` pull request is reviewed against.
+- sdk-core: [docs/handover.md](https://github.com/xippios/sdk-core/blob/main/docs/handover.md) — the record of each core release and how a source adopts it.
+- sdk-core: [docs/roadmap.md](https://github.com/xippios/sdk-core/blob/main/docs/roadmap.md) — the order of the next core, template and source releases.
+- sdk-core: [docs/adr.md](https://github.com/xippios/sdk-core/blob/main/docs/adr.md) — the index of the architecture decision records under `docs/adr/`, the decisions behind the rules.
 
 ## Licence
 

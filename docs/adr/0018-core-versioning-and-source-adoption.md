@@ -178,7 +178,8 @@ their copies in the PR template, state (h) and (i).
 The family's documents say what a change must satisfy wherever a repository is worked, and
 how a change lands is not theirs (https://github.com/xippios/sdk-core/issues/191). No rule
 of what an adoption or a release changes in a repository changes with this amendment, but
-where the changelog entry is written and that the release PR deletes the fragments, (m).
+where the changelog entry is written and that the release PR deletes the fragments, (m), and
+where a dependent says that its release bundles its adoption, (o).
 
 (j) **The merge leaves the documents.** Decision 3, that an adoption PR and a release PR
 auto-merge after the reviewer's `ready`, amendment (a), which extended it to sdk-template's
@@ -214,5 +215,12 @@ workflow tags itself leaves §12: every repository's workflow tags its own relea
 `publish.yml` in sdk-core and the sources and `release.yml` in sdk-template, and a `v*` tag
 comes from the release train alone.
 
-Conventions 1.26 states (j) to (n) in §12, §13 and §15; the definition of done and the
-review checklist follow.
+(o) **The organization's workflows and the release's own section.** §13 names
+`xippios/.github`, the organization's repository, as the one whose reusable workflows a
+repository calls at `@main`, where it named the retired gates' repository. A dependent that
+bundles its adoption with feature work says so in its release's section of `CHANGELOG.md`,
+a document of the repository that a reader of the release sees, where §12 and point 1 of
+ADR-0021's amendment of 2026-10-29 named a briefing, which no repository holds.
+
+Conventions 1.26 states (j) to (n) in §12, §13 and §15, and 1.27 states (o) in §12 and §13;
+the definition of done and the review checklist follow.
