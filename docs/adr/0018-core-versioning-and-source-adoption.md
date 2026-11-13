@@ -177,7 +177,8 @@ their copies in the PR template, state (h) and (i).
 
 The family's documents say what a change must satisfy wherever a repository is worked, and
 how a change lands is not theirs (https://github.com/xippios/sdk-core/issues/191). No rule
-of what an adoption or a release changes in a repository changes with this amendment.
+of what an adoption or a release changes in a repository changes with this amendment, but
+where the changelog entry is written and that the release PR deletes the fragments, (m).
 
 (j) **The merge leaves the documents.** Decision 3, that an adoption PR and a release PR
 auto-merge after the reviewer's `ready`, amendment (a), which extended it to sdk-template's
@@ -208,5 +209,10 @@ conventions §12) include the fragments. A repository that keeps no `changelog/`
 its entry under `## [Unreleased]`, as before. The clause for `scripts/check-siblings.sh`
 leaves §12, since the siblings check is template-owned from template v0.3.0.
 
-Conventions 1.26 states (j) to (m) in §12, §13 and §15; the definition of done and the
+(n) **No tag by hand.** The clause of (b) that a tag is pushed by hand until a repository's
+workflow tags itself leaves §12: every repository's workflow tags its own release,
+`publish.yml` in sdk-core and the sources and `release.yml` in sdk-template, and a `v*` tag
+comes from the release train alone.
+
+Conventions 1.26 states (j) to (n) in §12, §13 and §15; the definition of done and the
 review checklist follow.
