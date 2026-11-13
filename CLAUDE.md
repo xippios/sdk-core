@@ -6,30 +6,10 @@ helpers that turn SDK functions into MCP tools and FastAPI routes. Every
 `xippios-<source>` package depends on it. Nothing in this repo knows about any
 particular upstream API.
 
-## Read first, in this order
+## Documents
 
-1. `docs/conventions.md` — the family-wide rules this repo implements and enforces
-2. `docs/adr/` — the decisions behind them (0001 layering, 0002 runtime stack,
-   0003 upstream fidelity, 0004 core layout and MCP SDK, 0005 no credentials in the envelope,
-   0006 nested import paths, 0007 InvalidRequestError and POST routes,
-   0008 hardening from the first source, 0009 one key variable per issuer,
-   0010 rate-limit policy, 0011 retries and non-idempotent methods,
-   0012 upstream totals in the result envelope, 0013 offline tests guaranteed by the
-   plugin, 0014 multi-tenant sources, 0015 client request hooks and quota policy,
-   0016 per-tool result caps, 0017 sensitive upstream fields, 0018 core versioning and
-   source adoption,
-   0019 bulk downloads and non-JSON payloads,
-   0020 file-distributed sources,
-   0021 dependencies between source packages,
-   0022 packaged answers and release times,
-   0023 core scope: code enters core with two consumers,
-   0024 cashctrl stands alone: tenants, the lock and the recorder extras leave core,
-   0025 Google Mail: loopback, the renewing bearer, scopes, the kit's return, the decoded view,
-   0026 the host xippios-mcp,
-   0027 X as a metered, content-bearing source)
-3. `docs/definition-of-done.md` — what a PR must satisfy before it is opened
-
-The family file `../CLAUDE.md` applies as well.
+The README's [`## Documents`](README.md#documents) lists the documents this repository
+follows. Read them before you change a file.
 
 ## Layout
 
@@ -61,15 +41,19 @@ src/xippios/core/
                      credentials by redaction), adapters (mcp_call), clock (slack for wall-clock
                      reads), family (the conformance check)                              [extra: testing]
 tests/               mirrors the tree: tests/client/, tests/mcp/, tests/http/, tests/testing/
+scripts/
+  adr_index.py       writes docs/adr.md and docs/adr.json from the records; --check writes nothing
+changelog/           one fragment per change, assembled into CHANGELOG.md by the release (README.md)
 docs/
-  conventions.md  adr/  definition-of-done.md  handover.md  roadmap.md  review-checklist.md
+  conventions.md  definition-of-done.md  review-checklist.md  handover.md  roadmap.md
+  adr/  adr.md  adr.json  reports/
 .github/workflows/
   ci.yml             job name MUST be `ci` (the org ruleset requires that check); pull requests, and
                      called by publish.yml; no push trigger of its own
   publish.yml        every push to main: tags vX.Y.Z from pyproject.toml when a release PR merged,
-                     builds, waits in environment `pypi` for Johannes's approval (the release train)
-  gates.yml          calls the merge-class and family-review workflows of xippios/sdk-gates; runs only
-                     when the repository variable GATES_CALLER is "1"
+                     builds, waits in environment `pypi` for a maintainer's approval
+  gates.yml          the organization's checks of a pull request from xippios/.github: the
+                     conventions review and the ADR index
 ```
 
 `src/xippios/` has **no** `__init__.py` — it is a PEP 420 namespace package shared
@@ -102,26 +86,24 @@ uv sync --all-extras          # environment with every optional extra
 uv run pytest                 # unit tests (recorded fixtures only)
 uv run pytest -m live         # live tests; skipped unless XIPPIOS_LIVE_TESTS=1
 uv run ruff check . && uv run ruff format --check .
-uv run mypy
+uv run mypy                   # --strict over src, tests and scripts
 uv run pre-commit run --all-files
+uv run python scripts/adr_index.py   # after a record changes; --check verifies the index
 ```
 
-## Workflow rules
+## Rules of the work
 
-- Branch from `main` as `feature/<topic>`, `fix/<topic>`, `chore/<topic>` or `docs/<topic>`.
-  Never commit to `main`.
 - Commit small, with Conventional Commits messages (`feat(client): add retry budget`).
-- Open the PR with `gh pr create`, body = the definition-of-done checklist, ticked honestly.
-- A session never tags, merges, releases, force-pushes, or touches `gh secret`. Releases
-  run on the release train (conventions §12): the release PR's merge runs `publish.yml`,
-  which tags `vX.Y.Z` from `pyproject.toml` on the merge commit, and Johannes approves the
-  run in the environment `pypi`.
+- Every change brings its changelog entry as a fragment under `changelog/`, in the form
+  `changelog/README.md` gives.
+- No tag by hand: the release PR's merge runs `publish.yml`, which tags `vX.Y.Z` from
+  `pyproject.toml` on the merge commit (conventions §12).
 - Never read or print `.envrc`, `.env`, or any variable ending in `_API_KEY`,
   `_REFRESH_TOKEN` or `_SECRET`.
 - `ruff` is configured to leave `docs/` alone; never reformat code blocks in the
   governing documents.
 - If a convention seems wrong, say so in the PR description and follow it anyway; changing
-  a convention is its own PR against `docs/conventions.md` plus an ADR.
+  a convention is its own change to `docs/conventions.md` with an ADR.
 
 ## When something is unclear
 
