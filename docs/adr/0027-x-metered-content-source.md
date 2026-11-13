@@ -49,7 +49,7 @@ automation label an automated account carries (the plan, §2).
 
 Johannes answered the sdk-x briefing's interview items, cited here as sdk-x D1 to D8,
 with the 429 handling and the recording accounts, at its G1 and G5 of 2026-10-29.
-Gate P, the probe of 2026-10-29 over 59 curated accounts (345 requests, 5.74 USD),
+Gate P, the probe of 2026-10-29 over 59 curated accounts (345 requests),
 measured 49 of them, 36 active and 32 core in 9 categories, and Johannes answered go on
 2026-10-29, bounding a tool call at 0.50 USD for posts and 1.00 USD for users (decision
 4). On 2026-10-30 he kept the per-tool caps.
