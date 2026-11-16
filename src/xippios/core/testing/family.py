@@ -47,13 +47,14 @@ two task checks and the status table only (ADR-0024).
 
 **Two family checks are CI steps, not tests**, since they read the pull request rather
 than the package; sdk-template's ``ci.yml`` carries them, on ``pull_request`` with the
-whole history checked out (``fetch-depth: 0``, for ``git diff origin/<base>...HEAD``): a
-pull request that is neither a release (``chore/release-*``), an adoption
-(``chore/template-update*``) nor Dependabot's (``dependabot/``, which writes no entry)
-changes ``CHANGELOG.md`` (conventions §12, the definition of done); and the fixture files
-it adds or changes under ``tests/fixtures/``, a moved one included, stay under 256 KiB
-(ADR-0019). The cap binds a source from its 0.3.0 adoption (conventions, header of 1.14),
-so the step warns in template v0.2.1 and fails from v0.3.0.
+whole history checked out (``fetch-depth: 0``, for ``git diff origin/<base>...HEAD``):
+every pull request but Dependabot's (``dependabot/``, which writes no entry) brings its
+changelog entry, a fragment it adds or changes under ``changelog/`` or a change of
+``CHANGELOG.md``, a release's and an adoption's included (conventions §12, §15, the
+definition of done); and the fixture files it adds or changes under ``tests/fixtures/``
+stay under 256 KiB, a fixture it only moves being neither, one moved and changed judged
+under its new path (ADR-0019). The cap binds a source from its 0.3.0 adoption
+(conventions, header of 1.14), so the step warns in template v0.2.1 and fails from v0.3.0.
 """
 
 import importlib
