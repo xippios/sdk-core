@@ -7,10 +7,10 @@
 # pyproject.toml or CHANGELOG.md (every dispatch): a new source's first release PR changes
 # no version, since the scaffold already says 0.1.0, only the CHANGELOG. It lets the push
 # through when pyproject.toml's version has no tag yet and CHANGELOG.md has that version's
-# `## [X.Y.Z] - ` heading. Anything else ends there quietly (an Unreleased entry on an
-# ordinary PR among it), except a changed pyproject.toml whose version has no CHANGELOG
-# section, which leaves a notice. CI runs here, once, for a release: ci.yml has no push
-# trigger of its own (the strict up-to-date policy tests every tree before it merges).
+# `## [X.Y.Z] - ` heading. Anything else ends there quietly, except a changed pyproject.toml
+# whose version has no CHANGELOG section, which leaves a notice. CI runs here, once, for a
+# release: ci.yml has no push trigger of its own (the strict up-to-date policy tests every
+# tree before it merges).
 # One workflow, because a tag pushed with GITHUB_TOKEN starts no other workflow. The file
 # name stays publish.yml: PyPI's trusted publisher names it.
 #
