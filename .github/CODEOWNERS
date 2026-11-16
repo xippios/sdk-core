@@ -1,17 +1,14 @@
-# Written by `coordinate sync` from this core's human paths (C50, C70): `[paths] human` of the root's
-# workspace.toml and the core's defaults. A change to these paths needs the human's review. Edit
-# workspace.toml, not this file; the next PR of the session carries it (coordinate-core#76).
+# The code owners of this repository: GitHub asks the owner named on a path to review every
+# pull request that changes a file under it. The paths below steer how the repository is
+# built, checked and worked on: `.github/`, its workflows among them, `CLAUDE.md` and
+# `.claude/`, the instructions and commands for Claude Code, `rules/`, `pyproject.toml`, its
+# manifest, and `.copier-answers.yml`, the answers a generated repository keeps. They are
+# the paths that sdk-template renders for a source; `rules/` and `.copier-answers.yml` hold
+# no file here, and stay so that a file added there is reviewed as in a source. No template
+# renders this file and no tool writes it: a change of the paths is a change of this file.
 /.github/** @jdidaskalu
 /CLAUDE.md @jdidaskalu
-/rules/** @jdidaskalu
-/workspace.toml @jdidaskalu
-/composer.json @jdidaskalu
-/pyproject.toml @jdidaskalu
 /.claude/** @jdidaskalu
+/rules/** @jdidaskalu
+/pyproject.toml @jdidaskalu
 /.copier-answers.yml @jdidaskalu
-/package.json @jdidaskalu
-/src/**/guard.py @jdidaskalu
-/src/**/shell.py @jdidaskalu
-/src/**/identities.py @jdidaskalu
-/src/**/apps.py @jdidaskalu
-/src/**/refusals.py @jdidaskalu
