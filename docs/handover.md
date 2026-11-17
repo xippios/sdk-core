@@ -1,6 +1,6 @@
 # Handover — from planning to Claude Code
 
-Date: 2026-10-20 · Author: Johannes Didaskalu (with Claude) · Refreshed 2026-10-22 with the state after sessions 1 and 2, 2026-10-25 with the state after the core 0.2.0 release PR, 2026-10-26 with core 0.2.1, the release train and the family check (the sections from "Core 0.2.1" on), 2026-10-27 with `sdk-core`'s state line at the core 0.2.1 release PR, and 2026-10-27 at the core 0.3.0 release PR (the State block, the session model, the sections from "Core 0.3.0" on, and notes where 0.3.0 changed an earlier line), and 2026-11-13, when the process of the work left this file (the session model, the standing gates, the plan for issue-driven work and the switch of the retired gates) and the documents' own rules stayed.
+Date: 2026-10-20 · Author: Johannes Didaskalu (with Claude) · Refreshed 2026-10-22 with the state after sessions 1 and 2, 2026-10-25 with the state after the core 0.2.0 release PR, 2026-10-26 with core 0.2.1, the release train and the family check (the sections from "Core 0.2.1" on), 2026-10-27 with `sdk-core`'s state line at the core 0.2.1 release PR, and 2026-10-27 at the core 0.3.0 release PR (the State block, the session model, the sections from "Core 0.3.0" on, and notes where 0.3.0 changed an earlier line), 2026-11-13, when the process of the work left this file (the session model, the standing gates, the plan for issue-driven work and the switch of the retired gates) and the documents' own rules stayed, and 2026-11-17 at the core 0.3.2 release PR (the State block's `sdk-core` line).
 
 ## State
 
@@ -13,10 +13,13 @@ set, `pypi` environments with required reviewer `jdidaskalu`; PyPI account `xipp
 - **`sdk-core`**: 0.1.0 on PyPI since 2026-10-22 and 0.2.0, what the first four sources
   taught core (below), since 2026-10-25, both tagged by Johannes; 0.2.1 since
   2026-10-27, the first release whose release PR tagged itself (`publish.yml` tagged
-  `v0.2.1` on the merge commit, Johannes approved the `pypi` run). 0.3.0 (below) brings
-  the family review's core scope, the code of ADR-0019 and ADR-0022, and ADR-0024; its
-  release PR, `chore/release-0.3.0`, releases it the same way: the merge tags `v0.3.0`
-  and waits at `pypi` for Johannes's approval.
+  `v0.2.1` on the merge commit, Johannes approved the `pypi` run). 0.3.0 (below), the
+  family review's core scope, the code of ADR-0019 and ADR-0022, and ADR-0024, since
+  2026-10-27, released the same way. 0.3.1 since 2026-11-13, documents only: conventions
+  1.22 to 1.27, the index of the 27 decision records and the changelog's fragments. 0.3.2
+  keeps the code of 0.3.0 but for a docstring: the repository's own `.github/` names
+  nothing that stands around it. Its release PR's merge tags `v0.3.2` and waits at `pypi`
+  for the maintainer's approval.
 - **`sdk-template`**: v0.2.0 tagged 2026-10-25; v0.2.1 and v0.2.2 on 2026-10-27, each
   tagged by its own `release.yml` on its release PR's merge (v0.2.2 renders `gates.yml`
   calling the renamed gates repository, `xippios/sdk-gates`). Template v0.3.0, the
