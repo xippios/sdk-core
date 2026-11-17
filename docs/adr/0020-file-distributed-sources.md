@@ -88,3 +88,15 @@ the body on the `Fixture` that `fixture_from_response` returns and writes it wit
 `write_fixture` (ADR-0024's amendment of this date). The sample under
 `tests/fixtures/files/` stays, with its provenance row. sdk-usda-wasde's download fixtures
 carry its XML and XLS samples so, marked `truncated` until its adoption of core 0.4.0.
+
+(b) **A bulk parser may yield its records** (decision 1; step 14;
+https://github.com/xippios/sdk-core/issues/90, found by sdk-eurostat). Decision 1 types
+every parser `parse_<file_kind>(path) -> list[Model]`. sdk-eurostat's `parse_sdmx_csv`
+reads SDMX-CSV files of hundreds of MB and sdk-faostat's `parse_bulk_csv` the normalized
+table of a bulk ZIP of up to 400 MB; a list would hold the whole file in memory, which
+ADR-0019 keeps a bulk download from doing, so both are generators. A parser of a bulk file
+kind, a file that a bulk task downloads (ADR-0019, decision 4), may therefore return
+`Iterator[Model]`, as both write it a generator: it reads the file as the records are
+taken, in the file's order, closes it when it ends or is closed, and its docstring says
+so. Every other parser returns `list[Model]` as before. Conventions §2 states it from 1.28
+on.

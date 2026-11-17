@@ -21,10 +21,12 @@ nothing in the repository it reviews.
 1. **Layering** (ADR-0001): the adapters register `tasks.__all__`, minus `BULK_TASKS`
    (ADR-0019), and hold no logic.
 2. **Fidelity** (ADR-0003): upstream names and semantics, no cross-source
-   normalisation; every parameter and default traceable to `docs/upstream/` or listed as
-   an assumption in the description.
+   normalisation; every parameter and default traceable to `docs/upstream/`, its
+   hand-written `OBSERVED.md` included (conventions §3), or listed as an assumption in the
+   description.
 3. **Errors**: mapped through the taxonomy (conventions §5) and the `classify` hook
-   (§6).
+   (§6); each shape `classify` maps is documented in `docs/upstream/` or recorded in a
+   fixture that a test passes to it (ADR-0008, amendment 2026-11-18, point a).
 4. **Fixtures**: recorded, never hand-written; scrubbed; free of key patterns and of
    production tenant names; the fixture files this PR adds or changes under 256 KiB, a
    file it only moves, its content unchanged, being neither, and a truncated one marked
