@@ -1,6 +1,6 @@
 # ADR-0013: Offline tests guaranteed by the plugin
 
-Status: Accepted · Date: 2026-10-23
+Status: Accepted · Date: 2026-10-23 · Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240
 
 ## Context
 
@@ -207,3 +207,15 @@ check of the amendment of 2026-10-26 no longer tests the tasks the write server 
 (Johannes's decision of 2026-10-27): a source's write server is its own to test, and the
 write tasks stay in the task checks and the status table. Conventions §10 states both from
 1.21 on.
+
+## Amendment 2026-11-18
+
+Core 0.4.0, the package of https://github.com/xippios/sdk-core/issues/240, whose steps
+each add their points here.
+
+(a) **Four request loggers** (the paragraph after decision 4; step 1,
+https://github.com/xippios/sdk-core/issues/176). `quiet_request_logging` sets the `httpx2`
+and `httpcore2` loggers to `WARNING` beside `httpx` and `httpcore`, since the `mcp` SDK 2.x
+builds its own HTTP client on httpx2, which logs each request's full URL at `INFO` as httpx
+does. Every test, `live` or not, gets all four levels back when it ends, and conventions
+§10 names the four.

@@ -2,7 +2,8 @@
 
 Status: Accepted · Date: 2026-10-29 · Decided by Johannes on 2026-10-29 (D109, D110 (4);
 panel B's decisions 2 to 4 as amended; drafted by the family; decision 5's loopback rule
-the session's recommendation, queue row 296)
+the session's recommendation, queue row 296) · Amended 2026-11-18 by
+https://github.com/xippios/sdk-core/issues/240
 
 ## Context
 
@@ -190,3 +191,23 @@ lands at the host's first minor after core 0.4.0 and template v0.4.0, not at 0.2
 decision 8's "the host's 0.2.0 interface", with decision 5's reading of `loopback_only`
 from it, means that minor. The sources keep D110 (1) and conventions §12's patch slot
 for the `~=` bound of their dependents.
+
+## Amendment 2026-11-18
+
+Core 0.4.0, the package of https://github.com/xippios/sdk-core/issues/240, whose steps
+each add their points here.
+
+(a) **What the host imports** (decisions 4, 5 and 8, and the amendment of 2026-10-30,
+part (a); step 1, https://github.com/xippios/sdk-core/issues/170). `xippios.core.mcp`
+exports `register_tasks`, `is_write_server` and `quiet_request_logging`, which decision 5
+names as importable from `xippios.core.mcp.server` only, and `tool_functions(tasks)`, the
+functions of `tasks.__all__` that become tools, with `BULK_TASKS` read from the module it is
+given, in place of the private `is_bulk_task` that the host read. A task's name is its entry
+in `__all__`: `tool_functions` refuses an entry whose function carries another `__name__`,
+so decision 4's exact task name, a tool's name and an `MCP_CAPS` key are one name, which
+nothing guaranteed before. Decision 5's loopback rule reads `is_loopback_only`, true for a
+write server and for a read server built with `loopback_only=True`, against the public
+`LOOPBACK_HOSTS` (ADR-0025, D-a and its amendment of 2026-11-18). So the host's copy of the
+list goes, and an endpoint with `auth: none` that mounts sdk-google-mail's read server is
+held as a write server is, once the host and sdk-google-mail run on core 0.4.0 rather than
+at the package contract's minor that the amendment of 2026-10-30, part (e), names.

@@ -433,9 +433,12 @@ tenants and variables, never a value (ADR-0005).
   and returns a dry-run preview when `confirm=False`. `register_tasks(read_only=False)`
   enforces it: a task without `confirm: bool = False` is refused before anything is
   registered (ADR-0014). A write server carries no authentication, so `--http` serves
-  it on a loopback host only (`127.0.0.1`, `localhost`, `::1`) unless `--allow-remote`
-  is passed, with a gateway in front. A write server exposes write tools only;
-  reference tools stay on the read server.
+  it on a loopback host only (`LOOPBACK_HOSTS`: `127.0.0.1`, `localhost`, `::1`) unless
+  `--allow-remote` is passed, with a gateway in front. A read server that reaches what
+  no deployment may serve without authentication, sdk-google-mail's mailboxes, is built
+  with `build_server(..., loopback_only=True)` and held the same way; `is_loopback_only`
+  tells a host either kind (ADR-0025, D-a and its amendment of 2026-11-18). A write server exposes write tools only; reference tools
+  stay on the read server.
 - Server names (ADR-0026): a source with a write server names its servers
   `xippios-<source>-mcp-read` and `xippios-<source>-mcp-write`, with no alias for the
   old name; a read-only source keeps `xippios-<source>-mcp`. `server.name` stays the
@@ -470,7 +473,11 @@ tenants and variables, never a value (ADR-0005).
   `MCP_CAPS: Mapping[str, ResultCap]` in `tasks.py` next to `__all__`, and its `mcp.py`
   passes them through as `caps=getattr(tasks, "MCP_CAPS", None)`.
 - A task named in `BULK_TASKS` (a frozenset in `tasks.py` beside `MCP_CAPS`) is not a
-  tool: `register_tasks` skips it (ADR-0019). No tool returns a file path to an agent.
+  tool: `register_tasks` skips it (ADR-0019), and `tool_functions(tasks)` gives
+  `tasks.__all__` without it. No tool returns a file path to an agent. A task's name is
+  its entry in `__all__`, and its function's `__name__` is the same, which
+  `tool_functions` checks: a tool's name, an `MCP_CAPS` key and a `BULK_TASKS` entry read
+  that `__name__` (ADR-0026, amendment 2026-11-18).
   The MCP surface of a bulk source is its catalog tasks (which files exist, with sizes
   and release identifiers) and, where the slice fits the result cap, a filtered read of
   the file.
@@ -600,8 +607,8 @@ route: `router_from_tasks` skips it, and no route returns a file path (ADR-0019)
     `xippios_placeholder_key_envs` hold it; the fixture `placeholder_api_key` returns
     it, `None` in a live test. A source names its key variable there and carries no
     placeholder fixture of its own.
-  - Logger levels: the `httpx` and `httpcore` logger levels are restored after every
-    test, live ones included. They are saved per test, after fixtures of wider scope
+  - Logger levels: the `httpx`, `httpcore`, `httpx2` and `httpcore2` logger levels are
+    restored after every test, live ones included (ADR-0013, amendment 2026-11-18). They are saved per test, after fixtures of wider scope
     are set up, so one of those that changes a level leaves it behind.
 - The family conformance check, `xippios.core.testing.family`, tests once, in core, what
   every source shares: the empty namespace levels, `py.typed` and `__version__`; the
