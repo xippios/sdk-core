@@ -1,14 +1,13 @@
 # The code owners of this repository: GitHub asks the owner named on a path to review every
 # pull request that changes a file under it. The paths below steer how the repository is
 # built, checked and worked on: `.github/`, its workflows among them, `CLAUDE.md` and
-# `.claude/`, the instructions and settings for Claude Code, `rules/`, `pyproject.toml`, its
-# manifest, and `.copier-answers.yml`, the answers a generated repository keeps. They are
-# the paths that sdk-template renders for a source; `rules/` and `.copier-answers.yml` hold
-# no file here, and stay so that a file added there is reviewed as in a source. No template
-# renders this file and no tool writes it: a change of the paths is a change of this file.
+# `.claude/`, the instructions and settings for Claude Code, `pyproject.toml`, its manifest,
+# and `.copier-answers.yml`, the answers a generated repository keeps. They are the paths
+# that sdk-template renders for a source. `.copier-answers.yml` is not a file here, and its
+# line stays so that one added later is reviewed as in a source. No template renders this
+# file and no tool writes it: a change of the paths is a change of this file.
 /.github/** @jdidaskalu
 /CLAUDE.md @jdidaskalu
 /.claude/** @jdidaskalu
-/rules/** @jdidaskalu
 /pyproject.toml @jdidaskalu
 /.copier-answers.yml @jdidaskalu

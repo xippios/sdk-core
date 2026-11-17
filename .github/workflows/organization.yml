@@ -3,27 +3,28 @@
 #
 # `conventions` reviews the pull request against the documents README.md lists under
 # `## Documents`, read from main, by the mode the variable CONVENTIONS_REVIEW sets: the
-# default, `release`, reviews a release pull request, and the callee's own condition passes
-# any other as skipped. It gets ANTHROPIC_API_KEY by name, never `secrets: inherit`, and the
-# permissions the callee asks for: `pull-requests: write` for its one comment and
-# `checks: read` for the head's checks. `adr-index` runs scripts/adr_index.py --check on the
-# checkout and takes no input and no secret.
+# default, `release`, reviews a release pull request, which the callee tells by its own
+# condition, and passes any other as skipped. It gets ANTHROPIC_API_KEY by name, never
+# `secrets: inherit`, and the permissions the callee asks for: `pull-requests: write` for its
+# one comment and `checks: read` for the head's checks. `adr-index` runs
+# scripts/adr_index.py --check on the checkout and takes no input and no secret.
 #
-# `edited` because the review reads the title and the description, `labeled` because the
-# label `release` set after the opening starts the review. A label starts the workflow
-# whatever its name, so on `labeled` both jobs run for `release` alone.
+# The workflow runs on the opening, a push, a reopening and an edit: `edited` because the
+# review reads the title and the description, and a change of the base arrives as `edited`.
+# It does not run on `labeled`, and neither job has a condition of its own: GitHub reports a
+# head's checks from its newest run, and a label set at the opening started a run that
+# skipped both jobs. A label set after the opening counts from the next push or edit.
 name: Organization
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, edited, labeled]
+    types: [opened, synchronize, reopened, edited]
 
 permissions:
   contents: read
 
 jobs:
   conventions:
-    if: github.event.action != 'labeled' || github.event.label.name == 'release'
     uses: xippios/.github/.github/workflows/conventions.yml@main
     permissions:
       contents: read
@@ -33,5 +34,4 @@ jobs:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
   adr-index:
-    if: github.event.action != 'labeled' || github.event.label.name == 'release'
     uses: xippios/.github/.github/workflows/adr-index.yml@main
