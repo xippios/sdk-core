@@ -1,3 +1,4 @@
+import functools
 import sys
 import types
 from collections.abc import Mapping
@@ -80,6 +81,23 @@ def test_a_task_in_bulk_tasks_gets_no_route(monkeypatch: pytest.MonkeyPatch) -> 
     tasks.BULK_TASKS = frozenset({"download_series"})  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, tasks.__name__, tasks)
     router = router_from_tasks("example", [get_series, download_series])
+    assert [route.path for route in router.routes] == ["/example/get_series"]  # type: ignore[attr-defined]
+
+
+def test_a_bulk_task_behind_a_wrapper_of_another_module_gets_no_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # https://github.com/xippios/sdk-core/issues/155: __wrapped__ leads to the bulk task.
+    tasks = types.ModuleType("example_bulk_tasks")
+    tasks.BULK_TASKS = frozenset({"download_series"})  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, tasks.__name__, tasks)
+
+    @functools.wraps(download_series)
+    def bound(*args: Any, **kwargs: Any) -> Any:
+        return download_series(*args, **kwargs)
+
+    bound.__module__ = "example_lock"
+    router = router_from_tasks("example", [get_series, bound])
     assert [route.path for route in router.routes] == ["/example/get_series"]  # type: ignore[attr-defined]
 
 

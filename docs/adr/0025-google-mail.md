@@ -3,7 +3,8 @@
 Status: Accepted · Date: 2026-10-29 · Decided by Johannes on 2026-10-29 (D108, D109 (5),
 D110 (4) for the claude.ai edge, D111; drafted by the family from the investigation of
 2026-10-29; the host as the loopback option's second consumer the session's
-recommendation, queue row 296)
+recommendation, queue row 296) · Amended 2026-11-18 by
+https://github.com/xippios/sdk-core/issues/240
 
 ## Context
 
@@ -196,3 +197,21 @@ cap a long `text` or `html` comes back as a preview plus the note (ADR-0016).
   read no header and validate no token. claude.ai needs an OAuth authorization server at
   the edge (F11), which the host xippios-mcp brings when it first serves claude.ai
   (D108; ADR-0026, decision 10; D110 (4)).
+
+## Amendment 2026-11-18
+
+Core 0.4.0, the package of https://github.com/xippios/sdk-core/issues/240, whose steps
+each add their points here.
+
+(a) **The loopback option in core** (D-a; step 1,
+https://github.com/xippios/sdk-core/issues/167). D-a's core option is
+`build_server(..., loopback_only=True)`, and `register_tasks` takes it as well, so that a
+host that combines several packages' tasks on one server holds that server the same way.
+`is_loopback_only(server)` reads it and answers true for a write server too, since `main`
+and a host ask one question of a server: whether it goes beyond loopback only with
+`--allow-remote`, or the host's `allow_remote`. The list of loopback hosts is public as
+`LOOPBACK_HOSTS`, and all three come from `xippios.core.mcp`, so sdk-google-mail's check
+in `apply_options` with its copy of `_LOOPBACK_HOSTS`, and the host's copy, go with their
+adoptions of core 0.4.0 (ADR-0023, decision 4). `main`'s usage line names the entry point
+that runs, and its refusal and the help of `--allow-remote` name the server's kind, "a read
+server held to loopback" beside "a write server". Conventions §8 states the option.

@@ -643,6 +643,8 @@ def test_a_source_fixture_of_the_same_name_overrides_the_plugin(
     result.assert_outcomes(passed=1)
 
 
+REQUEST_LOGGERS = ("httpx", "httpcore", "httpx2", "httpcore2")
+
 LOGGER_TESTS = """
 import logging
 
@@ -650,13 +652,13 @@ import pytest
 
 from xippios.core.mcp import build_server
 
-NAMES = ("httpx", "httpcore")
+NAMES = ("httpx", "httpcore", "httpx2", "httpcore2")
 BEFORE = [logging.getLogger(name).level for name in NAMES]
 
 
 def test_building_a_server_quiets_the_request_loggers():
     build_server("example", [])
-    assert [logging.getLogger(name).level for name in NAMES] == [logging.WARNING] * 2
+    assert [logging.getLogger(name).level for name in NAMES] == [logging.WARNING] * 4
 
 
 def test_the_next_test_gets_the_levels_back():
@@ -678,12 +680,19 @@ def test_request_logger_levels_are_restored_after_every_test(
 ) -> None:
     # Row 8 (sdk-cashctrl): core restored the levels in its own conftest only.
     monkeypatch.setenv(LIVE_ENV, "1")
-    for name in ("httpx", "httpcore"):
+    for name in REQUEST_LOGGERS:
         logging.getLogger(name).setLevel(logging.NOTSET)
     pytester.makepyfile(LOGGER_TESTS)
     result = pytester.runpytest("-p", "xippios.core.testing.plugin", "--strict-markers")
     result.assert_outcomes(passed=4)
-    assert [logging.getLogger(name).level for name in ("httpx", "httpcore")] == [0, 0]
+    assert [logging.getLogger(name).level for name in REQUEST_LOGGERS] == [0, 0, 0, 0]
+
+
+def test_the_plugin_restores_every_logger_that_building_a_server_quiets() -> None:
+    from xippios.core.mcp import server
+    from xippios.core.testing import plugin
+
+    assert plugin._REQUEST_LOGGERS == server._REQUEST_LOGGERS == REQUEST_LOGGERS
 
 
 PLUGIN_CONFTEST = """

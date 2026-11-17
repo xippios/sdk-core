@@ -1,12 +1,33 @@
 import argparse
 import logging
+import sys
 from typing import Any
 
 import pytest
 from mcp.server.mcpserver import MCPServer
 
 from xippios.core import ConfigError, InvalidRequestError, XippiosError
-from xippios.core.mcp import build_parser, build_server, main
+from xippios.core.mcp import LOOPBACK_HOSTS, build_parser, build_server, main
+
+REQUEST_LOGGERS = ("httpx", "httpcore", "httpx2", "httpcore2")
+ENTRY_POINT = "xippios-example-mcp-read"
+
+
+@pytest.fixture(autouse=True)
+def entry_point(monkeypatch: pytest.MonkeyPatch) -> str:
+    """The program name ``main`` runs under: the entry point's script, as installed.
+
+    An installed script runs as ``__main__`` without a module spec, which argparse reads
+    to tell it from ``python -m``, whichever way pytest itself was started.
+    """
+    monkeypatch.setattr(sys, "argv", [f"/opt/venv/bin/{ENTRY_POINT}"])
+    monkeypatch.setattr(sys.modules["__main__"], "__spec__", None)
+    return ENTRY_POINT
+
+
+def test_the_loopback_hosts_are_the_mcp_sdks() -> None:
+    # The SDK's DNS-rebinding protection covers exactly these hosts (mcp 2.3.0).
+    assert LOOPBACK_HOSTS == ("127.0.0.1", "localhost", "::1")
 
 
 def test_parser_defaults() -> None:
@@ -40,14 +61,16 @@ def test_main_quiets_request_loggers_before_running(monkeypatch: pytest.MonkeyPa
     seen: dict[str, int] = {}
 
     def fake_run(transport: str = "stdio", **kwargs: Any) -> None:
-        seen.update({name: logging.getLogger(name).level for name in ("httpx", "httpcore")})
+        seen.update({name: logging.getLogger(name).level for name in REQUEST_LOGGERS})
 
     monkeypatch.setattr(server, "run", fake_run)
     # Something between build_server and main puts the request log back on.
     logging.getLogger("httpx").setLevel(logging.INFO)
     logging.getLogger("httpcore").setLevel(logging.DEBUG)
+    logging.getLogger("httpx2").setLevel(logging.INFO)
+    logging.getLogger("httpcore2").setLevel(logging.DEBUG)
     main(server, [])
-    assert seen == {"httpx": logging.WARNING, "httpcore": logging.WARNING}
+    assert seen == dict.fromkeys(REQUEST_LOGGERS, logging.WARNING)
 
 
 def test_parser_has_allow_remote_off_by_default() -> None:
@@ -107,7 +130,45 @@ def test_help_lists_core_and_source_options(capsys: pytest.CaptureFixture[str]) 
     for option in ("--http", "--host", "--port", "--allow-remote", "--org"):
         assert option in out
     help_text = " ".join(out.split())  # argparse wraps the help lines
-    assert "serve a write server beyond loopback; it carries no authentication, put it" in help_text
+    assert "--allow-remote changes nothing: this read server is not held to loopback" in help_text
+
+
+def help_of(server: MCPServer, capsys: pytest.CaptureFixture[str]) -> str:
+    with pytest.raises(SystemExit) as info:
+        main(server, ["--help"])
+    assert info.value.code == 0
+    return " ".join(capsys.readouterr().out.split())  # argparse wraps the help lines
+
+
+def test_the_usage_line_names_the_entry_point(capsys: pytest.CaptureFixture[str]) -> None:
+    # https://github.com/xippios/sdk-core/issues/167: server.name is one slug for both servers
+    assert help_of(build_server("example", []), capsys).startswith(f"usage: {ENTRY_POINT} ")
+
+
+def test_the_help_of_allow_remote_names_the_server_kind(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    write = build_server("example", [create_thing], read_only=False)
+    assert (
+        "--allow-remote serve this write server beyond loopback; it carries no "
+        "authentication, put it behind a gateway"
+    ) in help_of(write, capsys)
+    held = build_server("example", [], loopback_only=True)
+    assert (
+        "--allow-remote serve this read server beyond loopback; it carries no "
+        "authentication, put it behind a gateway"
+    ) in help_of(held, capsys)
+
+
+def test_a_parser_built_without_a_server_names_both_kinds() -> None:
+    parser = build_parser("xippios-example-mcp")
+    assert parser.prog == "xippios-example-mcp"
+    help_text = " ".join(parser.format_help().split())
+    assert (
+        "--allow-remote serve a write server, or a read server built with loopback_only=True, "
+        "beyond loopback; it carries no authentication, put it behind a gateway"
+    ) in help_text
+    assert build_parser().prog == ENTRY_POINT  # argparse's default: the script's name
 
 
 def test_unknown_options_still_fail(
@@ -145,7 +206,7 @@ def test_an_error_from_apply_options_exits_2_without_a_traceback(
         main(server, ["--org", "nope"], add_options=add_org, apply_options=apply)
     assert info.value.code == 2
     err = capsys.readouterr().err
-    assert f"xippios-example: error: {message}" in err
+    assert f"{ENTRY_POINT}: error: {message}" in err
     assert "Traceback" not in err
     assert runs.calls == []
 
@@ -184,7 +245,7 @@ def test_allow_remote_serves_a_write_server_beyond_loopback(
     assert runs.calls == [(server, "streamable-http", {"host": "0.0.0.0", "port": 8000})]
 
 
-@pytest.mark.parametrize("host", ["127.0.0.1", "localhost", "::1"])
+@pytest.mark.parametrize("host", LOOPBACK_HOSTS)
 def test_a_write_server_is_served_on_loopback(monkeypatch: pytest.MonkeyPatch, host: str) -> None:
     runs = Runs(monkeypatch)
     server = runs.attach(build_server("example", [create_thing], read_only=False))
@@ -201,6 +262,41 @@ def test_a_read_only_server_is_served_anywhere(monkeypatch: pytest.MonkeyPatch) 
     server = runs.attach(build_server("example", []))
     main(server, ["--http", "--host", "0.0.0.0"])
     assert runs.calls == [(server, "streamable-http", {"host": "0.0.0.0", "port": 8000})]
+
+
+@pytest.mark.parametrize("host", ["0.0.0.0", "192.0.2.10", "::", "example.test"])
+def test_a_read_server_held_to_loopback_is_not_served_beyond_it(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], host: str
+) -> None:
+    # ADR-0025, D-a; https://github.com/xippios/sdk-core/issues/167
+    runs = Runs(monkeypatch)
+    server = runs.attach(build_server("example", [], loopback_only=True))
+    with pytest.raises(SystemExit) as info:
+        main(server, ["--http", "--host", host])
+    assert info.value.code == 2
+    err = capsys.readouterr().err
+    assert (
+        f"{ENTRY_POINT}: error: xippios-example is a read server held to loopback and carries "
+        "no authentication; serve it over --http on a loopback --host (127.0.0.1, localhost, "
+        "::1), or pass --allow-remote and put it behind a gateway"
+    ) in err
+    assert runs.calls == []
+
+
+def test_allow_remote_serves_a_read_server_held_to_loopback_beyond_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runs = Runs(monkeypatch)
+    server = runs.attach(build_server("example", [], loopback_only=True))
+    main(server, ["--http", "--host", "0.0.0.0", "--allow-remote"])
+    for host in LOOPBACK_HOSTS:
+        main(server, ["--http", "--host", host])
+    main(server, ["--host", "0.0.0.0"])  # stdio: --host is not used
+    assert runs.calls == [
+        (server, "streamable-http", {"host": "0.0.0.0", "port": 8000}),
+        *[(server, "streamable-http", {"host": host, "port": 8000}) for host in LOOPBACK_HOSTS],
+        (server, "stdio", {}),
+    ]
 
 
 def test_the_server_from_apply_options_is_the_one_checked(
@@ -223,15 +319,15 @@ def test_the_request_log_is_quiet_when_the_server_from_apply_options_runs(
     seen: dict[str, int] = {}
 
     def fake_run(transport: str = "stdio", **kwargs: Any) -> None:
-        seen.update({name: logging.getLogger(name).level for name in ("httpx", "httpcore")})
+        seen.update({name: logging.getLogger(name).level for name in REQUEST_LOGGERS})
 
     monkeypatch.setattr(server, "run", fake_run)
 
     def apply(args: argparse.Namespace, given: MCPServer) -> MCPServer:
         # Something the source does here, building a server another way say, raises it.
-        logging.getLogger("httpx").setLevel(logging.INFO)
-        logging.getLogger("httpcore").setLevel(logging.DEBUG)
+        for name in REQUEST_LOGGERS:
+            logging.getLogger(name).setLevel(logging.INFO)
         return given
 
     main(server, [], apply_options=apply)
-    assert seen == {"httpx": logging.WARNING, "httpcore": logging.WARNING}
+    assert seen == dict.fromkeys(REQUEST_LOGGERS, logging.WARNING)

@@ -176,7 +176,12 @@
       "status": "Accepted",
       "date": "2026-10-23",
       "decided_by": "",
-      "amended": [],
+      "amended": [
+        {
+          "date": "2026-11-18",
+          "by": "https://github.com/xippios/sdk-core/issues/240"
+        }
+      ],
       "amends": [],
       "supersedes": [],
       "other": [],
@@ -348,7 +353,12 @@
       "status": "Accepted",
       "date": "2026-10-29",
       "decided_by": "Johannes on 2026-10-29 (D108, D109 (5), D110 (4) for the claude.ai edge, D111; drafted by the family from the investigation of 2026-10-29; the host as the loopback option's second consumer the session's recommendation, queue row 296)",
-      "amended": [],
+      "amended": [
+        {
+          "date": "2026-11-18",
+          "by": "https://github.com/xippios/sdk-core/issues/240"
+        }
+      ],
       "amends": [],
       "supersedes": [],
       "other": [],
@@ -362,7 +372,12 @@
       "status": "Accepted",
       "date": "2026-10-29",
       "decided_by": "Johannes on 2026-10-29 (D109, D110 (4); panel B's decisions 2 to 4 as amended; drafted by the family; decision 5's loopback rule the session's recommendation, queue row 296)",
-      "amended": [],
+      "amended": [
+        {
+          "date": "2026-11-18",
+          "by": "https://github.com/xippios/sdk-core/issues/240"
+        }
+      ],
       "amends": [],
       "supersedes": [],
       "other": [],

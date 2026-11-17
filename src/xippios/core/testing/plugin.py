@@ -31,7 +31,8 @@ PLACEHOLDER_KEY = "placeholder-for-fixture-replay"
 _KEY_ENVS = "xippios_placeholder_key_envs"
 PACKAGE_INI = "xippios_package"
 """The ini option naming the package the family check tests (``xippios.core.testing.family``)."""
-_REQUEST_LOGGERS = ("httpx", "httpcore")
+_REQUEST_LOGGERS = ("httpx", "httpcore", "httpx2", "httpcore2")
+"""The loggers ``quiet_request_logging`` sets, the mcp SDK's httpx2 and httpcore2 among them."""
 _MARKERS = (
     "live: hits the real upstream; skipped unless XIPPIOS_LIVE_TESTS=1",
     "network: may reach the network through httpx's default transports; refused otherwise",
@@ -313,7 +314,10 @@ def placeholder_api_key(
 
 @pytest.fixture(autouse=True)
 def _restore_request_logger_levels() -> Iterator[None]:
-    """Give the ``httpx`` and ``httpcore`` loggers their levels back after every test.
+    """Give the request loggers their levels back after every test.
+
+    The four that ``quiet_request_logging`` sets: ``httpx``, ``httpcore``, ``httpx2`` and
+    ``httpcore2``.
 
     ADR-0013, the paragraph after decision 4: live tests included.
     """

@@ -37,6 +37,9 @@ EXPORTS = {
     "xippios.core.mcp": {
         "ResultCap", "build_parser", "build_server", "cap_result", "error_to_text", "main",
         "tool_name",
+        # what the host imports (https://github.com/xippios/sdk-core/issues/170, #167)
+        "LOOPBACK_HOSTS", "is_loopback_only", "is_write_server", "quiet_request_logging",
+        "register_tasks", "tool_functions",
     },
     "xippios.core.http": {"is_scalar", "router_from_tasks", "status_for"},
 }  # fmt: skip

@@ -428,10 +428,10 @@ source = render_enums(
 
 ```python
 # xippios/example/mcp.py
-from xippios.core.mcp import build_server, main
+from xippios.core.mcp import build_server, main, tool_functions
 from xippios.example import tasks
 
-server = build_server("example", [tasks.get_series, tasks.list_commodities])
+server = build_server("example", tool_functions(tasks))  # tasks.__all__ minus BULK_TASKS
 
 
 def run() -> None:  # entry point: xippios-example-mcp = "xippios.example.mcp:run"
@@ -460,13 +460,30 @@ promises no filter; a tool with filters names them in its cap, `ResultCap(note="
 by year to see the rest")`. `ResultCap` comes from `xippios.core`, so the `MCP_CAPS` in
 a source's `tasks.py` need no `mcp` extra. A write server (`build_server(...,
 read_only=False)`) refuses, with `ValueError`, a task that does not take `confirm: bool
-= False`, and `--http` serves it on a loopback `--host` only (`127.0.0.1`, `localhost`,
-`::1`): it carries no authentication. `--allow-remote` serves it beyond loopback, behind
-a gateway that adds it. A task named in its `tasks.py`'s `BULK_TASKS` is skipped, so
-`mcp.py` may pass every name of `tasks.__all__`; a cap named for it is refused. Request
-URLs are not logged: `build_server` and `main` set the `httpx` and `httpcore` loggers to
-`WARNING` (`quiet_request_logging`), because a URL can carry an API key or a tenant
-host.
+= False`, and `--http` serves it on a loopback `--host` only (`LOOPBACK_HOSTS`:
+`127.0.0.1`, `localhost`, `::1`): it carries no authentication. `--allow-remote` serves
+it beyond loopback, behind a gateway that adds it. A read server that reaches what no
+deployment may serve without authentication, a mailbox say, is held the same way with
+`build_server(..., loopback_only=True)` (ADR-0025, D-a); `is_loopback_only(server)`
+answers for both kinds. The usage line names the entry point that runs, and the help of
+`--allow-remote` and the refusal name the server's kind.
+
+`tool_functions(tasks)` gives the functions of `tasks.__all__` that become tools, those in
+its `BULK_TASKS` left out, read from the module it is given; it refuses an entry whose
+function carries another `__name__`, since a task's name is its entry in `__all__` for its
+tool name, its `MCP_CAPS` key and its `BULK_TASKS` entry alike. A task named in
+`BULK_TASKS` is skipped by `register_tasks` too, a wrapper whose `__wrapped__` leads to it
+included, so `mcp.py` may pass every name of `tasks.__all__`; a cap named for it is
+refused. Request URLs are not logged: `build_server` and `main` set the `httpx`,
+`httpcore`, `httpx2` and `httpcore2` loggers to `WARNING` (`quiet_request_logging`),
+because a URL can carry an API key or a tenant host; httpx2 is the `mcp` SDK's own HTTP
+client.
+
+A host that builds its servers itself, such as xippios-mcp, imports what `build_server`
+and `main` use from `xippios.core.mcp`: `register_tasks` with `read_only` and
+`loopback_only`, `tool_functions`, `quiet_request_logging` after each `MCPServer` it
+constructs, and `is_write_server`, `is_loopback_only` and `LOOPBACK_HOSTS` to hold a
+server to loopback as `main` does (ADR-0026, decision 5).
 
 A source's own options go through `main`'s hooks, so the command line is parsed once:
 `add_options` puts them on core's parser, so `--help` lists them; `apply_options(namespace,
@@ -541,7 +558,8 @@ xippios_placeholder_key_envs = ["EXAMPLE_API_KEY"]
   cache backend of the source's own is the source's to clear), and every `EnvKeyAuth`
   sends `PLACEHOLDER_KEY` while the variables named in `xippios_placeholder_key_envs`
   hold it (fixture `placeholder_api_key`), whatever the shell or an earlier live test
-  left behind. The `httpx` and `httpcore` logger levels come back after every test.
+  left behind. The `httpx`, `httpcore`, `httpx2` and `httpcore2` logger levels come back
+  after every test.
   After a live run the summary prints each quota policy's last reading, `quota after the
   live run: usda-psd: 986 of 1000 requests left as of ...`. ADR-0013 states the edges of
   these guarantees.
@@ -617,7 +635,7 @@ fragment until the release assembles it.
 | `xippios.core.models` | `UpstreamModel` with `dump_upstream`, `Result`, `ResultMeta` with `published_at_naive`, `ResultCap`, `parse` | alpha |
 | `xippios.core.reference` | packaged CSV/JSON loaders, `PackagedList`, `matches`, `closest`, generated `StrEnum`/`IntEnum` modules | alpha |
 | `xippios.core.pagination` | `paginate_offset` (a page-numbered endpoint maps the offset to its page), `collect` | alpha |
-| `xippios.core.mcp` | tool registration with the argument check and the write server's `confirm` rule, result caps, error text, CLI with option hooks and the loopback rule, quiet request log | alpha |
+| `xippios.core.mcp` | tool registration with the argument check and the write server's `confirm` rule, `tool_functions`, result caps, error text, CLI with option hooks and the loopback rule for write and `loopback_only` servers, quiet request log | alpha |
 | `xippios.core.http` | router factory, problem details | alpha |
 | `xippios.core.testing` | live gate, offline run, record (with `max_bytes=`), replay, scrub of named secrets with a plain verify, `mcp_call`, family check | alpha |
 
