@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from types import TracebackType
-from typing import IO, Any, Final, Self, final
+from typing import IO, Any, Final, Self, final, overload
 
 import httpx
 
@@ -39,6 +39,7 @@ from xippios.core.errors import (
     _raise,
     raise_for_status,
 )
+from xippios.core.models import parse as parse_payload
 
 __all__ = ["Answer", "AsyncClient", "Params", "decode_csv", "decode_json", "decode_text"]
 
@@ -144,9 +145,8 @@ class AsyncClient:
     ) -> httpx.Response:
         """Send one request and return the response.
 
-        Retries, rate limiting and caching (GET only, narrowed by
-        ``ClientConfig.cache_filter``, a body over ``ClientConfig.cache_max_bytes`` not
-        stored) apply as configured. A cache hit returns at once;
+        Retries, rate limiting and the cache lookup (GET only, narrowed by
+        ``ClientConfig.cache_filter``) apply as configured. A cache hit returns at once;
         otherwise ``ClientConfig.before_request`` runs once, before the rate limiter, and
         ``ClientConfig.observe`` sees every response from the wire, retried attempts
         included. The source's ``classify`` hook, if any, is asked before a 429 or 5xx
@@ -154,6 +154,8 @@ class AsyncClient:
         ``UpstreamError`` for a 5xx stops the retries, ADR-0015) and sees the final
         response first; otherwise a 4xx/5xx that survives the retry policy is raised as
         the matching error from the taxonomy; a transport failure as ``TransportError``.
+        Nothing is stored in the cache here: ``get_answer`` stores an answer once it has
+        decoded it, so a body that fails to decode is requested again (conventions §6).
 
         Args:
             method: HTTP method.
@@ -177,6 +179,35 @@ class AsyncClient:
         Raises:
             ValueError: Both ``json`` and ``data`` were given; a request has one body.
         """
+        response, _ = await self._request(
+            method,
+            path,
+            params=params,
+            json=json,
+            data=data,
+            headers=headers,
+            raise_on_error=raise_on_error,
+            auth=auth,
+        )
+        return response
+
+    async def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: Params = None,
+        json: Any = None,
+        data: Mapping[str, Any] | None = None,
+        headers: Mapping[str, str] | None = None,
+        raise_on_error: bool = True,
+        auth: httpx.Auth | _ClientAuth | None = _CLIENT_AUTH,
+    ) -> tuple[httpx.Response, str | None]:
+        """``request``'s work, and the key that ``get_answer`` stores the answer under.
+
+        The key is ``None`` for an answer from the cache, which is stored already, and
+        for a request the cache, its filter or an ``auth`` of the call's own leaves out.
+        """
         if json is not None and data is not None:
             raise ValueError("pass json= or data=, not both: a request has one body")
         pool = self._pool()
@@ -192,7 +223,7 @@ class AsyncClient:
         if key is not None and self.config.cache is not None:
             cached = self.config.cache.get(key)
             if cached is not None:
-                return _from_cache(cached, probe)
+                return _from_cache(cached, probe), None
         before_request = self.config.before_request
         if before_request is not None:
             # Built as each attempt is, before auth applies; a change to it is not sent.
@@ -230,24 +261,28 @@ class AsyncClient:
                 if classified is not None:
                     raise classified
             raise_for_status(response, source=self.source)
+        return response, key
+
+    def _store(self, key: str, response: httpx.Response, stored_at: float) -> None:
+        """Keep a 200 within ``cache_max_bytes`` under ``key``, stored at ``stored_at``."""
+        cache = self.config.cache
         if (
-            key is not None
-            and self.config.cache is not None
-            and response.status_code == 200
-            and len(response.content) <= self.config.cache_max_bytes
+            cache is None
+            or response.status_code != 200
+            or len(response.content) > self.config.cache_max_bytes
         ):
-            # The content is already decoded: keeping content-encoding would make the
-            # replay decode it a second time (httpx.DecodingError on a gzip answer).
-            self.config.cache.set(
-                key,
-                CachedResponse(
-                    status=response.status_code,
-                    headers=tuple(strip_wire_headers(response.headers.multi_items())),
-                    content=response.content,
-                    stored_at=time.time(),
-                ),
-            )
-        return response
+            return
+        # The content is already decoded: keeping content-encoding would make the replay
+        # decode it a second time (httpx.DecodingError on a gzip answer).
+        cache.set(
+            key,
+            CachedResponse(
+                status=response.status_code,
+                headers=tuple(strip_wire_headers(response.headers.multi_items())),
+                content=response.content,
+                stored_at=stored_at,
+            ),
+        )
 
     async def get(
         self,
@@ -270,12 +305,34 @@ class AsyncClient:
     ) -> Any:
         """GET and decode a JSON body, raising ``ValidationError`` when it is not JSON.
 
-        ``auth`` as for ``request``: ``None`` sends no credentials. A wrapper whose
-        answer may come from the cache calls ``get_answer``, which also says when the
-        answer was retrieved.
+        ``auth`` as for ``request``: ``None`` sends no credentials. A cache hit answers it,
+        but it stores nothing: a wrapper whose answer may come from the cache calls
+        ``get_answer``, which stores it and says when it was retrieved.
         """
         response = await self.get(path, params=params, headers=headers, auth=auth)
         return decode_json(response, source=self.source, path=path)
+
+    @overload
+    async def get_answer(
+        self,
+        path: str,
+        *,
+        params: Params = None,
+        headers: Mapping[str, str] | None = None,
+        auth: httpx.Auth | _ClientAuth | None = _CLIENT_AUTH,
+    ) -> "Answer[Any]": ...
+
+    @overload
+    async def get_answer[T](
+        self,
+        path: str,
+        *,
+        params: Params = None,
+        headers: Mapping[str, str] | None = None,
+        auth: httpx.Auth | _ClientAuth | None = _CLIENT_AUTH,
+        parse: type[T],
+        endpoint: str,
+    ) -> "Answer[T]": ...
 
     async def get_answer(
         self,
@@ -284,13 +341,19 @@ class AsyncClient:
         params: Params = None,
         headers: Mapping[str, str] | None = None,
         auth: httpx.Auth | _ClientAuth | None = _CLIENT_AUTH,
-    ) -> "Answer":
+        parse: type[Any] | None = None,
+        endpoint: str | None = None,
+    ) -> "Answer[Any]":
         """GET and decode a JSON body with the time it was retrieved (conventions §4).
 
-        ``get_json``'s call and decoding, and the ``retrieved_at`` a task puts into its
-        ``ResultMeta``: on a cache hit the time the entry was stored, read from
-        ``xippios_cache_stored_at`` (ADR-0015, decision 5), else the time the answer
-        arrived. ``auth`` as for ``request``.
+        ``get_json``'s call and decoding, the parse into ``parse`` when it is given, and
+        the ``retrieved_at`` a task puts into its ``ResultMeta``: on a cache hit the time
+        the entry was stored, read from ``xippios_cache_stored_at`` (ADR-0015, decision
+        5), else the time the answer arrived. A 200 from the wire is stored in the cache,
+        where the cache takes it, only once its body decoded and its payload parsed, at
+        the time its ``retrieved_at`` carries: one reading of the clock for both, and a
+        body that fails is requested again on the next call (ADR-0015, amendment
+        2026-11-18). ``auth`` as for ``request``.
 
         Args:
             path: Path joined onto the base URL, e.g. ``"/api/gats/regions"``.
@@ -298,18 +361,30 @@ class AsyncClient:
             headers: Extra headers for this request only.
             auth: The client's credentials by default, ``None`` for none, an
                 ``httpx.Auth`` to replace them.
+            parse: The type the payload is parsed into with ``parse``, a model or a
+                generic such as ``list[Region]``; ``None`` leaves it as decoded.
+            endpoint: The upstream operation that ``parse``'s error names, e.g.
+                ``"regions"``; given with ``parse`` and only then.
 
         Returns:
-            The ``Answer``: the decoded payload and ``retrieved_at``, timezone-aware UTC.
+            The ``Answer``: the payload, ``Answer[T]`` for ``parse=T``, and
+            ``retrieved_at``, timezone-aware UTC.
 
         Raises:
-            ValidationError: The body is not JSON.
+            TypeError: ``parse`` was given without ``endpoint``; nothing is sent.
+            ValidationError: The body is not JSON, or its payload is not a ``parse``.
         """
-        response = await self.get(path, params=params, headers=headers, auth=auth)
-        stored_at = response.extensions.get("xippios_cache_stored_at")
+        if parse is not None and endpoint is None:
+            raise TypeError("get_answer() takes endpoint= with parse=, for the parse's error")
+        response, key = await self._request("GET", path, params=params, headers=headers, auth=auth)
         payload = decode_json(response, source=self.source, path=path)
+        if parse is not None and endpoint is not None:
+            payload = parse_payload(parse, payload, source=self.source, endpoint=endpoint)
+        stored_at = response.extensions.get("xippios_cache_stored_at")
         if stored_at is None:
-            return Answer(payload, datetime.now(UTC))
+            stored_at = time.time()
+            if key is not None:
+                self._store(key, response, stored_at)
         return Answer(payload, datetime.fromtimestamp(stored_at, UTC))
 
     async def download(
@@ -465,16 +540,24 @@ class AsyncClient:
 
 
 @dataclass(frozen=True, slots=True)
-class Answer:
-    """A decoded JSON answer and when it was retrieved: what ``get_answer`` returns.
+class Answer[T]:
+    """An answer's payload and when it was retrieved: what ``get_answer`` returns.
+
+    Generic over the payload: ``get_answer(path)`` gives an ``Answer[Any]``,
+    ``get_answer(path, parse=list[Region], endpoint="regions")`` an
+    ``Answer[list[Region]]``. A wrapper that returns a value it derives from the payload
+    keeps the time with it as ``Answer(value, answer.retrieved_at)``, an ``Answer`` of
+    the value's type, and needs no pair of its own.
 
     Attributes:
-        payload: The body as ``get_json`` decodes it, e.g. ``{"data": [...]}``.
+        payload: The body as ``get_json`` decodes it, e.g. ``{"data": [...]}``, or as
+            ``parse`` reads it, e.g. ``[Region(...), ...]``.
         retrieved_at: Timezone-aware UTC: on a cache hit the time the entry was stored,
-            else the time the answer arrived; a task's ``ResultMeta.retrieved_at``.
+            else the time the answer arrived, which a miss stores; a task's
+            ``ResultMeta.retrieved_at``.
     """
 
-    payload: Any
+    payload: T
     retrieved_at: datetime
 
 

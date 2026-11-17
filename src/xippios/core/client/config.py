@@ -123,7 +123,8 @@ class ClientConfig:
         timeouts: Connect/read/write/pool timeouts.
         retry: Retry policy for 429, 5xx and transport failures.
         rate_limit: Client-side limit; ``None`` disables it.
-        cache: Backend for GET responses; ``None`` disables caching.
+        cache: Backend for GET responses; ``None`` disables caching. Every GET looks it
+            up, and ``get_answer`` alone stores in it, a 200 once the body decoded.
         cache_filter: Which GET requests the cache takes: called with the request as
             built from the base URL, path and query parameters (``request.url.path``,
             ``request.url.params``; credentials from ``auth`` are not on it yet); a GET
