@@ -5,14 +5,18 @@ schema and the description from them. The body awaits the task's async twin, tur
 taxonomy errors into text and applies the result cap: the tool's own from ``caps``,
 else the server's (ADR-0016).
 
-A task its ``tasks.py`` names in ``BULK_TASKS`` is no tool and is skipped (ADR-0019).
+A task its ``tasks.py`` names in ``BULK_TASKS`` is no tool and is skipped (ADR-0019);
+``tool_functions(tasks)`` gives the rest of ``tasks.__all__``.
 
 Every server answers arguments a tool's schema refuses in conventions §8's form, through
 one middleware ``register_tasks`` installs before the tool runs, instead of the SDK's
 MCP error. A server whose tasks were registered with ``read_only=False`` is a write
-server (``is_write_server``), which ``main`` keeps on loopback unless told otherwise.
+server (``is_write_server``); it and a read server registered with
+``loopback_only=True`` are held to loopback (``is_loopback_only``), which ``main``
+serves on a loopback ``--host`` only unless told otherwise.
 
-Building a server also quiets httpx's request log (``quiet_request_logging``).
+Building a server also quiets the request log of httpx and httpx2
+(``quiet_request_logging``).
 """
 
 import functools
@@ -31,7 +35,7 @@ from mcp.server.mcpserver.utilities.func_metadata import FuncMetadata, func_meta
 from mcp.types import CallToolResult, TextContent, ToolAnnotations
 
 from xippios.core._loop import as_async
-from xippios.core._tasks import is_bulk_task
+from xippios.core._tasks import is_bulk_task, tool_functions
 from xippios.core.errors import XippiosError
 from xippios.core.mcp.errors import _refused_arguments, error_to_text
 from xippios.core.mcp.results import cap_result
@@ -39,17 +43,19 @@ from xippios.core.models import ResultCap
 
 __all__ = [
     "build_server",
+    "is_loopback_only",
     "is_write_server",
     "quiet_request_logging",
     "register_tasks",
+    "tool_functions",
     "tool_name",
 ]
 
-_REQUEST_LOGGERS = ("httpx", "httpcore")
+_REQUEST_LOGGERS = ("httpx", "httpcore", "httpx2", "httpcore2")
 
 
 def quiet_request_logging() -> None:
-    """Keep httpx and httpcore from logging request URLs: set both loggers to ``WARNING``.
+    """Keep httpx and httpx2 from logging request URLs: set their loggers to ``WARNING``.
 
     Constructing an ``MCPServer`` (``mcp`` SDK 2.x) calls the SDK's
     ``configure_logging`` with the default level ``INFO``: ``logging.basicConfig`` sets
@@ -60,16 +66,19 @@ def quiet_request_logging() -> None:
     a source that sends it as a query parameter (``QueryKeyAuth``) and names the tenant
     for a source with one host per tenant; neither belongs in a log (ADR-0005).
     httpcore's ``DEBUG`` traces name the host as well, so httpcore is quieted with it.
+    The ``mcp`` SDK 2.x builds its own HTTP client on httpx2 and httpcore2, which log
+    the same way under the loggers ``httpx2`` and ``httpcore2``, so a process that also
+    calls through the SDK's client, a proxy or a test harness, keeps its URLs out too.
 
     ``build_server`` calls this right after constructing the server, and ``main`` calls
-    it again before running one. It only sets the two logger levels: no handler is added
-    and no other logger is touched, so calling it again changes nothing.
+    it again before running one. It only sets the four logger levels: no handler is
+    added and no other logger is touched, so calling it again changes nothing.
 
     A consumer who wants the request log on purpose, knowing that it writes keys and
     tenant hosts wherever the log goes, raises the level after building the server and
     runs the server itself, since ``main`` quiets the loggers again::
 
-        server = build_server("usda-nass", tasks)
+        server = build_server("usda-nass", tool_functions(tasks))
         logging.getLogger("httpx").setLevel(logging.INFO)
         server.run(transport="stdio")
     """
@@ -89,11 +98,25 @@ class _ServerRecord:
 
 _RECORDS: weakref.WeakKeyDictionary[MCPServer, _ServerRecord] = weakref.WeakKeyDictionary()
 _WRITE_SERVERS: weakref.WeakSet[MCPServer] = weakref.WeakSet()
+_LOOPBACK_SERVERS: weakref.WeakSet[MCPServer] = weakref.WeakSet()
 
 
 def is_write_server(server: MCPServer) -> bool:
     """True when tasks were registered on ``server`` with ``read_only=False``."""
     return server in _WRITE_SERVERS
+
+
+def is_loopback_only(server: MCPServer) -> bool:
+    """True when ``server`` is held to loopback: a write server, or one built ``loopback_only``.
+
+    ``main`` serves such a server over ``--http`` on a loopback ``--host`` only
+    (``LOOPBACK_HOSTS``) unless ``--allow-remote`` is passed, since it carries no
+    authentication; a host that serves the server itself holds it the same way
+    (ADR-0014, decision 9; ADR-0025, D-a; ADR-0026, decision 5). Tasks registered with
+    ``loopback_only=True`` (``register_tasks``, ``build_server``) or ``read_only=False``
+    hold the server from then on.
+    """
+    return server in _LOOPBACK_SERVERS or server in _WRITE_SERVERS
 
 
 def _answer(error: XippiosError) -> CallToolResult:
@@ -217,6 +240,7 @@ def register_tasks(
     cap: ResultCap | None = None,
     caps: Mapping[str, ResultCap] | None = None,
     read_only: bool = True,
+    loopback_only: bool = False,
 ) -> list[str]:
     """Add each task function to ``server`` as a tool and return the tool names.
 
@@ -232,13 +256,21 @@ def register_tasks(
     A task the module that defines it names in ``BULK_TASKS`` (``tasks.py``, beside
     ``MCP_CAPS``) is skipped: a bulk task returns a file, or a list read from one, and is
     Python-only; no tool returns a file path to an agent (conventions §8, ADR-0019). So
-    an adapter may pass every name of ``tasks.__all__``.
+    an adapter may pass every name of ``tasks.__all__``. A wrapper is skipped as the
+    task it wraps when ``__wrapped__`` leads to it, whatever its own ``__module__``
+    (``functools.wraps`` sets it); ``tool_functions(tasks)`` leaves the bulk tasks out
+    before any wrapper is made.
 
     With ``read_only=False`` every task must take ``confirm: bool = False`` and return a
     dry-run preview unless it is true (conventions §8); the tasks are checked before any
     is registered, so a task without it registers nothing. The server is then a write
     server (``is_write_server``), which ``main`` serves over HTTP on loopback only unless
     ``--allow-remote`` is passed.
+
+    With ``loopback_only=True`` a read server is held to loopback the same way
+    (``is_loopback_only``): for one that reaches data no deployment may serve without
+    authentication, a mailbox say (ADR-0025, D-a). A host that combines several
+    packages' tasks on one server passes it when one of them is held.
 
     Args:
         server: The server to register on.
@@ -257,13 +289,15 @@ def register_tasks(
             cap still cuts. A field the per-tool cap leaves unset takes the family
             default (200 rows, 65,536 bytes, the default note), not ``cap``'s.
         read_only: Mark the tools read-only. Write tools belong in a separate server.
+        loopback_only: Hold the server to loopback (``is_loopback_only``); a write
+            server is held whatever this says.
 
     Raises:
         ValueError: ``read_only`` is ``False`` and a task has no parameter ``confirm``
             annotated ``bool`` with the default ``False``; the message names the tool.
             Or a key of ``caps`` is not the ``__name__`` of one of ``tasks`` that becomes a
             tool, a task in ``BULK_TASKS`` included; the message names it. Nothing is
-            registered or installed then.
+            registered, installed or marked then.
     """
     cap = cap or ResultCap()
     caps = caps or {}
@@ -283,6 +317,8 @@ def register_tasks(
         server.middleware.append(record.checking)
     if not read_only:
         _WRITE_SERVERS.add(server)
+    if loopback_only:
+        _LOOPBACK_SERVERS.add(server)
     annotations = ToolAnnotations(
         read_only_hint=read_only,
         destructive_hint=not read_only,
@@ -315,19 +351,21 @@ def build_server(
     cap: ResultCap | None = None,
     caps: Mapping[str, ResultCap] | None = None,
     read_only: bool = True,
+    loopback_only: bool = False,
 ) -> MCPServer:
     """Create an ``MCPServer`` named ``xippios-<source>`` with the tasks registered.
 
     The ``mcp`` SDK configures root logging at ``INFO`` while the server is constructed
-    (unless it was configured before); the httpx and httpcore loggers are set to
-    ``WARNING`` right after, so request URLs, which may carry a key or a tenant host,
-    stay out of the log. See ``quiet_request_logging``.
+    (unless it was configured before); the httpx, httpcore, httpx2 and httpcore2 loggers
+    are set to ``WARNING`` right after, so request URLs, which may carry a key or a
+    tenant host, stay out of the log. See ``quiet_request_logging``.
 
     Args:
         source: Source slug.
-        tasks: Task functions to expose, e.g. ``[getattr(tasks, n) for n in
-            tasks.__all__]``; a task in its module's ``BULK_TASKS`` is skipped
-            (ADR-0019), no tool returns a file path to an agent.
+        tasks: Task functions to expose, e.g. ``tool_functions(tasks)``, which is
+            ``tasks.__all__`` minus ``BULK_TASKS``; a task in its module's
+            ``BULK_TASKS`` is skipped here too (ADR-0019), no tool returns a file path to
+            an agent.
         name: Server name; defaults to ``xippios-<source>``.
         version: Source package version, shown to clients.
         instructions: Server-level guidance for agents, e.g. which tool to call first.
@@ -338,6 +376,9 @@ def build_server(
             family default, not ``cap``'s (see ``register_tasks``).
         read_only: Whether the tools are read-only; ``False`` for a write server, whose
             every task takes ``confirm: bool = False`` (see ``register_tasks``).
+        loopback_only: ``True`` for a read server that ``main`` serves over ``--http``
+            on a loopback ``--host`` only unless ``--allow-remote`` is passed, as it
+            serves a write server (``is_loopback_only``; ADR-0025, D-a).
 
     Raises:
         ValueError: ``read_only`` is ``False`` and a task does not take
@@ -353,5 +394,6 @@ def build_server(
         cap=cap,
         caps=caps,
         read_only=read_only,
+        loopback_only=loopback_only,
     )
     return server
