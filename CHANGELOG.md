@@ -5,6 +5,39 @@ All notable changes to this project are documented here. The format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0: only a breaking change bumps the
 minor, conventions §12).
 
+## [0.3.2] - 2026-11-17
+
+No behavior changes: the code is that of 0.3.0 but for a docstring. The repository's own
+`.github/` names nothing that stands around it, its organization's checks start on no label
+as sdk-template renders them for a source, and the family check's docstring tells a source's
+two CI steps as sdk-template 0.3.3 renders them. A source takes nothing by hand: its bound
+`~=0.3.0` takes 0.3.2.
+
+### Changed
+
+- `.github/workflows/organization.yml` runs on the opening, a push, a reopening and an edit
+  of a pull request, no longer on `labeled`, and neither of its jobs has a condition of its
+  own, as sdk-template renders the file for a source: GitHub reports a head's checks from
+  its newest run, and a label set at the opening started a run that skipped both jobs.
+  `.github/CODEOWNERS` no longer owns `/rules/**`, a path that the same render drops and
+  that holds no file here. (https://github.com/xippios/sdk-template/issues/152,
+  https://github.com/xippios/sdk-core/issues/231)
+- `.github/CODEOWNERS` is the repository's own file: its header says so, and it names the
+  paths that sdk-template renders for a source, without the lines under `src/` and of
+  `workspace.toml`, `composer.json` and `package.json`, which matched no file here. The
+  comment of `.github/workflows/publish.yml` names the maintainer who approves the `pypi` run
+  by role and says that nobody pushes the tag by hand, and no step of the workflow changes.
+  (https://github.com/xippios/sdk-core/issues/224, https://github.com/xippios/sdk-core/issues/215)
+
+### Fixed
+
+- The docstring of `xippios.core.testing.family` describes the two CI steps of a source as
+  sdk-template 0.3.3 renders them: every pull request but Dependabot's brings an entry, a
+  fragment under `changelog/` or a change of `CHANGELOG.md`, and no branch name exempts a
+  release or an adoption. A fixture that a pull request only moves is neither added nor
+  changed under the cap, as ADR-0019's amendment of 2026-11-13 reads it.
+  (ADR-0019, §12, https://github.com/xippios/sdk-core/issues/209)
+
 ## [0.3.1] - 2026-11-13
 
 Documents only: the code is that of 0.3.0. With conventions 1.26 and 1.27 the documents say
