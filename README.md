@@ -441,7 +441,10 @@ def run() -> None:  # entry point: xippios-example-mcp = "xippios.example.mcp:ru
 Tool names are `<source>_<function>` (`example_get_series`), the docstring is the tool
 description, the signature is the input schema. Results are capped at 200 rows or
 64 KB with a note on how to narrow the query, and a capped list whose `meta.request`
-records an integer `start` says where to resume (`; resume with start=200`); errors come
+records an integer `start` says where to resume (`; resume with start=200`), unless not
+even its first row fits, which the note then says instead. A model that holds one list of
+rows keeps its other fields whole past 64 KB and has its rows cut the same way; any other
+result past it is the note and a preview of its first 64 KB. Errors come
 back as `error: <Class>: <message>`, arguments the tool's schema refuses too
 (`error: InvalidRequestError: year: Input should be a valid integer, ...`), before the
 tool runs and never with pydantic's rendered error (its URL, input type or input value).

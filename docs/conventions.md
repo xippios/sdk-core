@@ -446,23 +446,29 @@ tenants and variables, never a value (ADR-0005).
   0.4.0, a breaking change of an entry point (§12), and sdk-google-mail from its 0.1.0.
 - Result cap: default 200 rows or 64 KB, whichever first, bytes counted in the UTF-8
   encoding of the compact JSON text. Over the cap, return the first page plus a note on
-  how to narrow the query. Never truncate silently. A reference tool whose whole list an
-  agent needs gets a cap of its own, keyed by the task function's name, with the rows
-  and bytes the source judges it needs (`register_tasks(..., caps={"list_partners":
-  ResultCap(max_rows=400, max_bytes=100_000)})`). So does a tool whose result is one
-  upstream page that must return whole, a cursor-paged page with the `next_token` the
-  caller needs for the next page or a bounded lookup, which a cut at the default would
-  turn into a preview: a byte bound of its own, the row bound unchanged (sdk-x's post
-  tools and `lookup_users`; ADR-0016, amendment 2026-10-30). A byte bound above the
-  default is a deliberate choice for that tool, and every other tool keeps the default
-  (ADR-0016).
+  how to narrow the query. Never truncate silently. A result whose `data` is a model that
+  holds one list of rows, and no other field a list, returns whole within the byte bound
+  and past it is cut by those rows, its other fields whole; any other result past the
+  byte bound is the note and a preview of its first bytes (ADR-0016, amendment
+  2026-11-18, (a)). A reference tool whose whole list an agent needs gets a cap of its
+  own, keyed by the task function's name, with the rows and bytes the source judges it
+  needs (`register_tasks(..., caps={"list_partners": ResultCap(max_rows=400,
+  max_bytes=100_000)})`). So does a tool whose result is one upstream page that must
+  return whole, a cursor-paged page with the `next_token` the caller needs for the next
+  page or a bounded lookup, which a cut at the default would turn into a preview or cut
+  by its rows, its cursor then past the rows the cut left out: a byte bound of its own,
+  the row bound unchanged (sdk-x's post tools and `lookup_users`; ADR-0016, amendment
+  2026-10-30). A byte bound above the default is a deliberate choice for that tool, and
+  every other tool keeps the default (ADR-0016).
   The note never promises a filter the tool lacks: the default says "narrow the query to
   see the rest", and a tool with filters names them in its cap's `note`. A cut list whose
   `meta.request` records an integer `start`, an offset-paged task's, ends its note with
-  `; resume with start=<start + shown>` (ADR-0016, amendment 2026-10-27). Since that note
-  names a task's filters, a source keeps its caps with its tasks, as `MCP_CAPS:
-  Mapping[str, ResultCap]` in `tasks.py` next to `__all__`, and its `mcp.py` passes them
-  through as `caps=getattr(tasks, "MCP_CAPS", None)`.
+  `; resume with start=<start + shown>` (ADR-0016, amendment 2026-10-27). A cut that
+  shows no row, since the first row alone passes the byte bound, says so, naming the row
+  at that `start`, and names no resume offset (ADR-0016, amendment 2026-11-18, (b)).
+  Since a cap's note names a task's filters, a source keeps its caps with its tasks, as
+  `MCP_CAPS: Mapping[str, ResultCap]` in `tasks.py` next to `__all__`, and its `mcp.py`
+  passes them through as `caps=getattr(tasks, "MCP_CAPS", None)`.
 - A task named in `BULK_TASKS` (a frozenset in `tasks.py` beside `MCP_CAPS`) is not a
   tool: `register_tasks` skips it (ADR-0019). No tool returns a file path to an agent.
   The MCP surface of a bulk source is its catalog tasks (which files exist, with sizes

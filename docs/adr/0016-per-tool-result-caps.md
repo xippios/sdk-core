@@ -137,3 +137,39 @@ text), and its `lookup_users` 160,000, for a lookup of 100 users (about 70 with
 carries the note. Where the upstream bills per result, the tool's docstring states the
 price per result (ADR-0027, decision 4), so a larger page is a known cost. Conventions
 §8 states it from 1.25 on.
+
+## Amendment 2026-11-18
+
+The points of core 0.4.0 (https://github.com/xippios/sdk-core/issues/240), each from a
+step of its plan.
+
+(a) **A model's rows** (decisions 3 and 4 and the amendment of 2026-10-30;
+https://github.com/xippios/sdk-core/issues/131, found by sdk-comtrade). A result whose
+`data` is a model that holds one list of rows, and no other field a list (a field left
+`None` is none), is cut by those rows once its text passes the byte bound: the rows are
+cut as a list result's are, to the row and the byte bound, with decision 3's note and its
+resume offset, and the model's other fields stay whole beside them. Within the byte bound
+such a model returns whole, however many rows it holds, as before: a model is one
+upstream answer, often a page whose cursor follows its last row, and a cut by the row
+bound alone would drop rows behind that cursor where nothing else passed the cap. A model
+with no list or with two, and one whose other fields alone pass the byte bound, keeps
+decision 4's note and preview, so every result stays bounded. The amendment of 2026-10-30
+holds: a page that must return whole still takes a byte bound of its own, since a cut
+keeps its `next_token`, which points past the rows the cut left out. Its consumers are
+the models that came back as a preview until now: sdk-comtrade's `get_bilateral_data`,
+sdk-cashctrl's `get_report_data` and sdk-x's pages past their bounds, `count_posts`'s
+among them.
+
+(b) **No row fits** (decision 3 and the amendment of 2026-10-27;
+https://github.com/xippios/sdk-core/issues/175, found by sdk-google-mail). When the first
+row alone passes the byte bound, the cut shows no row, and its note says after the counts
+`the first row alone exceeds the byte cap`, or `the row at offset <start> alone exceeds
+the byte cap` where `meta.request` records an integer `start`, then the cap's own note or
+the default, and names no resume offset: `; resume with start=<start>` named the start
+the call had just used, so a tool that followed it asked for the same row again. Where
+not even zero rows with that note fit, decision 4's tiny bound or long note, no row is to
+blame, and the note gives the counts and the cap's own note alone, again with no resume
+offset. A source names the tool that reads one long row in its cap's note, as
+sdk-google-mail's `get_thread` names `google_mail_get_message`.
+
+Conventions §8 states both from 1.28 on.
