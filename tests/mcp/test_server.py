@@ -1,3 +1,4 @@
+import functools
 import logging
 import sys
 import types
@@ -7,13 +8,22 @@ from enum import StrEnum
 from typing import Annotated, Any
 
 import httpx
+import httpx2
 import pytest
 from pydantic import BaseModel, field_validator
 
 from xippios.core import sync
 from xippios.core.errors import InvalidRequestError, NotFoundError
-from xippios.core.mcp import ResultCap, build_server, tool_name
-from xippios.core.mcp.server import is_write_server, quiet_request_logging, register_tasks
+from xippios.core.mcp import (
+    ResultCap,
+    build_server,
+    is_loopback_only,
+    is_write_server,
+    quiet_request_logging,
+    register_tasks,
+    tool_functions,
+    tool_name,
+)
 from xippios.core.models import Result, ResultMeta, UpstreamModel
 from xippios.core.testing import mcp_call, mcp_call_text
 
@@ -231,6 +241,106 @@ async def test_a_task_in_bulk_tasks_is_no_tool(monkeypatch: pytest.MonkeyPatch) 
     assert len(await build_server("example", [download_series]).list_tools()) == 1
 
 
+def locked(fn: Callable[..., Any]) -> Callable[..., Any]:
+    """A tenant lock's wrapper, defined in a module of its own: its ``__module__`` is the lock's."""
+
+    @functools.wraps(fn)
+    def bound(*args: Any, **kwargs: Any) -> Any:
+        return fn(*args, **kwargs)
+
+    bound.__module__ = "example_lock"
+    return bound
+
+
+@pytest.mark.anyio
+async def test_a_bulk_task_behind_a_wrapper_of_another_module_is_no_tool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # https://github.com/xippios/sdk-core/issues/155: the wrapper's __module__ names no
+    # tasks module, and its __wrapped__ leads to the task that its module names in BULK_TASKS.
+    tasks = types.ModuleType("example_bulk_tasks")
+    tasks.BULK_TASKS = frozenset({"download_series"})  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, tasks.__name__, tasks)
+    server = build_server("example", [locked(get_series), locked(download_series)])
+    assert [tool.name for tool in await server.list_tools()] == ["example_get_series"]
+
+
+def test_the_bulk_check_ends_on_a_wrapper_that_wraps_itself() -> None:
+    from xippios.core._tasks import is_bulk_task
+
+    looped = locked(plain)
+    looped.__wrapped__ = looped  # type: ignore[attr-defined]
+    assert is_bulk_task(looped) is False
+
+
+def tasks_module(name: str, **functions: Callable[..., Any]) -> types.ModuleType:
+    """A tasks module named ``name`` whose ``__all__`` lists ``functions`` by their keys."""
+    module = types.ModuleType(name)
+    for key, fn in functions.items():
+        setattr(module, key, fn)
+    module.__all__ = list(functions)  # type: ignore[attr-defined]
+    return module
+
+
+def test_tool_functions_are_the_tasks_of_all_minus_bulk_tasks() -> None:
+    tasks = tasks_module(
+        "example_tasks", get_series=get_series, download_series=download_series, plain=plain
+    )
+    assert tool_functions(tasks) == [get_series, download_series, plain]
+    # BULK_TASKS is read from the module given, whatever module a function names
+    tasks.BULK_TASKS = frozenset({"download_series"})  # type: ignore[attr-defined]
+    assert tool_functions(tasks) == [get_series, plain]
+
+
+@pytest.mark.anyio
+async def test_a_server_built_from_tool_functions_serves_them() -> None:
+    tasks = tasks_module("example_tasks", get_series=get_series, download_series=download_series)
+    tasks.BULK_TASKS = frozenset({"download_series"})  # type: ignore[attr-defined]
+    server = build_server("example", tool_functions(tasks))
+    assert [tool.name for tool in await server.list_tools()] == ["example_get_series"]
+
+
+def test_tool_functions_refuse_an_entry_that_names_another_function() -> None:
+    tasks = tasks_module("example_tasks", get_series=get_series, list_series=plain)
+    tasks.__all__.append("list_nothing")
+    rule = (
+        r"^example_tasks\.__all__: list_series is the function plain, list_nothing is not in "
+        r"the module; a task's name is its entry in __all__, which tool names, MCP_CAPS and "
+        r"BULK_TASKS read as the function's __name__$"
+    )
+    with pytest.raises(ValueError, match=rule):
+        tool_functions(tasks)
+    tasks.BULK_TASKS = frozenset({"list_series"})  # type: ignore[attr-defined]
+    with pytest.raises(ValueError, match=r"list_series is the function plain"):
+        tool_functions(tasks)  # a bulk task's entry too
+    with pytest.raises(ValueError, match=r"^example_none has no __all__, the names of its tasks$"):
+        tool_functions(types.ModuleType("example_none"))
+
+
+@pytest.mark.anyio
+async def test_a_read_server_built_loopback_only_is_held_to_loopback() -> None:
+    # ADR-0025, D-a; https://github.com/xippios/sdk-core/issues/167
+    held = build_server("example", [get_series], loopback_only=True)
+    assert is_loopback_only(held)
+    assert not is_write_server(held)
+    tool = (await held.list_tools())[0]
+    assert tool.annotations is not None
+    assert tool.annotations.read_only_hint is True
+    assert not is_loopback_only(build_server("example", [get_series]))
+    # a write server is held to loopback whatever the option says
+    assert is_loopback_only(build_server("example", [create_thing], read_only=False))
+    server = build_server("example", [])
+    with pytest.raises(ValueError, match=r"^caps names no task among the tasks: list_nothing;"):
+        register_tasks(
+            server, "example", [get_series], caps={"list_nothing": ResultCap()}, loopback_only=True
+        )
+    assert not is_loopback_only(server)  # a refused registration marks nothing
+    register_tasks(server, "example", [get_series], loopback_only=True)
+    assert is_loopback_only(server)
+    register_tasks(server, "example", [plain])
+    assert is_loopback_only(server)  # once held, the server stays held
+
+
 @pytest.mark.anyio
 async def test_taxonomy_errors_become_text_not_errors() -> None:
     server = build_server("example", [get_series])
@@ -395,7 +505,8 @@ async def test_a_read_only_server_ignores_the_confirm_rule() -> None:
     assert names == ["example_confirm_required"]
 
 
-REQUEST_LOGGERS = ("httpx", "httpcore")
+# httpx2 and httpcore2 are the mcp SDK's own HTTP client (https://github.com/xippios/sdk-core/issues/176)
+REQUEST_LOGGERS = ("httpx", "httpcore", "httpx2", "httpcore2")
 
 
 def _unset_request_logger_levels() -> None:
@@ -410,6 +521,12 @@ def _request_with_key() -> None:
         assert client.get("https://example.test/x?key=FAKE-KEY-123").status_code == 200
 
 
+def _httpx2_request_with_key() -> None:
+    transport = httpx2.MockTransport(lambda request: httpx2.Response(200, json={}))
+    with httpx2.Client(transport=transport) as client:
+        assert client.get("https://example.test/y?key=FAKE-KEY-456").status_code == 200
+
+
 def test_build_server_quiets_request_loggers() -> None:
     _unset_request_logger_levels()
     build_server("example", [])
@@ -422,8 +539,18 @@ def test_request_urls_are_not_logged_after_build_server(caplog: pytest.LogCaptur
     build_server("example", [])
     with caplog.at_level(logging.INFO):
         _request_with_key()
+        _httpx2_request_with_key()
     assert [r for r in caplog.records if r.name.split(".")[0] in REQUEST_LOGGERS] == []
-    assert not any("FAKE-KEY-123" in r.getMessage() for r in caplog.records)
+    assert not any("FAKE-KEY" in r.getMessage() for r in caplog.records)
+
+
+def test_httpx2_logs_request_urls_unless_quieted(caplog: pytest.LogCaptureFixture) -> None:
+    # The reason it is quieted: httpx2 logs each request's full URL at INFO, as httpx does.
+    _unset_request_logger_levels()
+    with caplog.at_level(logging.INFO):
+        _httpx2_request_with_key()
+    assert [r.name for r in caplog.records] == ["httpx2"]
+    assert "example.test/y?key=FAKE-KEY-456" in caplog.records[0].getMessage()
 
 
 def test_consumer_can_raise_the_request_log_level_again(caplog: pytest.LogCaptureFixture) -> None:
@@ -443,6 +570,6 @@ def test_quiet_request_logging_is_idempotent() -> None:
     root_before = (logging.getLogger().level, logging.getLogger().handlers[:])
     quiet_request_logging()
     quiet_request_logging()
-    assert [lg.level for lg in loggers] == [logging.WARNING, logging.WARNING]
+    assert [lg.level for lg in loggers] == [logging.WARNING] * len(REQUEST_LOGGERS)
     assert [(lg.handlers, lg.propagate, lg.disabled) for lg in loggers] == before
     assert (logging.getLogger().level, logging.getLogger().handlers) == root_before
