@@ -8,7 +8,7 @@ from typing import assert_type
 import httpx
 import pytest
 import respx
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from xippios.core import UpstreamModel
 from xippios.core.client import (
@@ -378,6 +378,34 @@ async def test_a_miss_carries_the_time_its_entry_was_stored(respx_mock: respx.Mo
     assert stored is not None
     assert route.call_count == 1
     assert miss.retrieved_at == hit.retrieved_at == datetime.fromtimestamp(stored.stored_at, UTC)
+
+
+@pytest.mark.anyio
+async def test_a_miss_is_retrieved_when_it_arrived_not_once_it_parsed(
+    respx_mock: respx.MockRouter,
+) -> None:
+    # Review of https://github.com/xippios/sdk-core/pull/266: the miss read the clock
+    # after the parse, so a slow validator moved retrieved_at and stored_at later.
+    parsed_at: list[float] = []
+
+    class SlowRegion(UpstreamModel):
+        region_code: str = Field(alias="regionCode")
+
+        @field_validator("region_code")
+        @classmethod
+        def take_time(cls, value: str) -> str:
+            parsed_at.append(time.time())
+            time.sleep(0.01)
+            return value
+
+    respx_mock.get(f"{BASE}/v1/regions").respond(200, json=[{"regionCode": "AF"}])
+    cache = MemoryCache(ttl=None)
+    client = AsyncClient(ClientConfig(source="example", version="1", base_url=BASE, cache=cache))
+    miss = await client.get_answer("/v1/regions", parse=list[SlowRegion], endpoint="regions")
+    stored = cache.get(cache_key("GET", httpx.URL(f"{BASE}/v1/regions")))
+    assert stored is not None
+    assert miss.retrieved_at == datetime.fromtimestamp(stored.stored_at, UTC)
+    assert stored.stored_at <= parsed_at[0]
 
 
 @pytest.mark.anyio
