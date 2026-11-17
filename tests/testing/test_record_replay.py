@@ -1,4 +1,6 @@
+import hashlib
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -19,6 +21,7 @@ from xippios.core.testing import (
     ReplayFixture,
     Scrub,
     fixture_from_response,
+    fixture_text,
     load_fixture,
     record,
     record_sync,
@@ -26,11 +29,16 @@ from xippios.core.testing import (
     response_from_fixture,
     sent_query,
     sent_urls,
+    write_fixture,
 )
-from xippios.core.testing.fixtures import write_fixture
 from xippios.core.testing.replay import mount_fixture, replay
 
 BASE = "https://api.example.test"
+
+
+def _write(response: httpx.Response, path: Path) -> None:
+    """Write ``response`` as a fixture, scrubbed of credentials only."""
+    write_fixture(fixture_from_response(response), path)
 
 
 @pytest.fixture
@@ -179,7 +187,7 @@ def test_match_params_refuses_a_credential_or_absent_name(
 ) -> None:
     request = httpx.Request("GET", f"{BASE}/v1/x?token=SECRET&year=2024")
     path = tmp_path / "x.json"
-    write_fixture(httpx.Response(200, json={}, request=request), path)
+    _write(httpx.Response(200, json={}, request=request), path)
     with pytest.raises(ValueError, match=r"^match_params: 'token' names a credential") as info:
         replay(respx_mock, path, match_params=["year", "token"])
     assert "SECRET" not in str(info.value)
@@ -248,7 +256,7 @@ async def test_sent_urls_are_scrubbed_strings_in_order(
 def fixtures_dir(tmp_path: Path) -> Path:
     """The plugin's ``replay_fixture`` reads from here: one recorded ``GET /v1/x?year=2024``."""
     request = httpx.Request("GET", f"{BASE}/v1/x", params={"year": 2024})
-    write_fixture(httpx.Response(200, json={"n": 1}, request=request), tmp_path / "x" / "y.json")
+    _write(httpx.Response(200, json={"n": 1}, request=request), tmp_path / "x" / "y.json")
     return tmp_path
 
 
@@ -272,10 +280,68 @@ async def test_a_truncated_array_records_replays_and_decodes(
     written = load_fixture(fixtures_dir / "rows" / "cut.json").response
     assert written == recorded.response
     assert (written.truncated, written.original_count) == (True, 1000)
+    assert (fixtures_dir / "rows" / "cut.json").read_text(encoding="utf-8") == fixture_text(
+        recorded
+    )
 
     respx_mock.routes.clear()
     replay_fixture("rows", "cut")
     assert await client.get_json("/v1/rows") == [{"n": n} for n in range(7)]
+
+
+@pytest.mark.anyio
+async def test_an_object_s_array_records_its_last_elements_and_replays(
+    respx_mock: respx.MockRouter, replay_fixture: ReplayFixture, fixtures_dir: Path
+) -> None:
+    # Row 127 (sdk-usda-nass, sdk-usda-psd): {"data": [...]} ordered oldest first.
+    answer = {"data": [{"year": year} for year in range(1960, 2024)], "count": 64}
+    respx_mock.get(f"{BASE}/api/api_GET").respond(200, json=answer)
+    client = AsyncClient(ClientConfig(source="example", version="1", base_url=BASE))
+    path = fixtures_dir / "api_GET" / "latest.json"
+    choices: list[dict[str, Any]] = [{"array_key": "data"}, {"keep": "last"}]
+    for options in choices:
+        with pytest.raises(ValueError, match=r"^array_key and keep='last' choose what max_bytes"):
+            await record(client, "/api/api_GET", path, **options)
+    assert respx_mock.calls.call_count == 0  # refused before anything is sent
+    recorded = await record(
+        client, "/api/api_GET", path, max_bytes=60, array_key="data", keep="last"
+    )
+    assert (recorded.response.truncated, recorded.response.original_count) == (True, 64)
+
+    respx_mock.routes.clear()
+    replay_fixture("api_GET", "latest")
+    replayed = await client.get_json("/api/api_GET")
+    assert replayed == {"data": [{"year": 2022}, {"year": 2023}], "count": 64}
+
+
+@pytest.mark.anyio
+async def test_a_download_replays_its_sample_body_and_the_mark_survives(
+    respx_mock: respx.MockRouter,
+    replay_fixture: ReplayFixture,
+    fixtures_dir: Path,
+    config: ClientConfig,
+) -> None:
+    # Row 125 (sdk-usda-wasde): the replay fixture carries the sample the parser tests
+    # read, marked a sample, so `truncated` keeps meaning the recorder's cut.
+    whole = b"<report>" + b"<page/>" * 1000 + b"</report>"
+    sample = b"<report><page/></report>"
+    request = httpx.Request("GET", f"{BASE}/files/wasde.xml")
+    xml = {"Content-Type": "application/xml"}
+    recorded = fixture_from_response(
+        httpx.Response(200, content=whole, headers=xml, request=request)
+    )
+    marks = {"original_bytes": len(whole), "sha256": hashlib.sha256(whole).hexdigest()}
+    body = recorded.response.model_copy(update={"body": sample.decode(), "sample": True, **marks})
+    path = fixtures_dir / "download_report" / "sr12.json"
+    write_fixture(recorded.model_copy(update={"response": body}), path)
+    loaded = load_fixture(path).response
+    assert (loaded.sample, loaded.truncated, loaded.original_bytes) == (True, False, len(whole))
+    assert loaded.sha256 == marks["sha256"]
+
+    replay_fixture("download_report", "sr12")
+    got = await AsyncClient(config).download(f"{BASE}/files/wasde.xml", fixtures_dir / "sr12.xml")
+    assert (fixtures_dir / "sr12.xml").read_bytes() == sample
+    assert got.bytes == len(sample)
 
 
 def test_sent_query_is_the_last_query_scrubbed(respx_mock: respx.MockRouter) -> None:
@@ -301,7 +367,7 @@ def test_recorded_query_is_the_scrubbed_recorded_query(tmp_path: Path) -> None:
     # sdk-comtrade (recorded_params, _recorded) and sdk-cashctrl (recorded_query).
     request = httpx.Request("GET", f"{BASE}/v1/x?token=SECRET&year=2024&q=")
     path = tmp_path / "x.json"
-    write_fixture(httpx.Response(200, json={}, request=request), path)
+    _write(httpx.Response(200, json={}, request=request), path)
     assert recorded_query(load_fixture(path)) == {"token": REDACTED, "year": "2024", "q": ""}
 
 
@@ -312,7 +378,7 @@ def test_a_recorded_answer_is_served_at_another_url(
     # 404 recorded for 1900 stands in for a year without data inside a range.
     request = httpx.Request("GET", f"{BASE}/v1/year/1900")
     path = tmp_path / "data" / "unknown_year.json"
-    write_fixture(httpx.Response(404, content=b"", request=request), path)
+    _write(httpx.Response(404, content=b"", request=request), path)
     route = replay(respx_mock, path, url=f"{BASE}/v1/year/2022")
     assert httpx.get(f"{BASE}/v1/year/2022").status_code == 404
     with pytest.raises(AllMockedAssertionError):
@@ -332,7 +398,7 @@ def test_response_from_fixture_carries_the_recorded_request(tmp_path: Path) -> N
     # (test_errors.py) each carried recorded(): a recorded answer for classify.
     request = httpx.Request("GET", f"{BASE}/v1/x?token=SECRET")
     path = tmp_path / "x.json"
-    write_fixture(httpx.Response(404, json={"error": "none"}, request=request), path)
+    _write(httpx.Response(404, json={"error": "none"}, request=request), path)
     response = response_from_fixture(load_fixture(path))
     assert (response.status_code, response.json()) == (404, {"error": "none"})
     assert (response.request.method, str(response.request.url)) == (
