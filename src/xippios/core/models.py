@@ -275,7 +275,8 @@ class ResultCap:
     without the ``mcp`` extra; ``xippios.core.mcp.cap_result`` applies it.
 
     Attributes:
-        max_rows: Most items of a list result that are returned.
+        max_rows: Most rows of a result that are returned: the items of a list result,
+            or those of the one list a model holds once the model passes ``max_bytes``.
         max_bytes: Bytes of JSON text, encoded as UTF-8, a soft bound: it bounds the
             rows and the preview, and the envelope and the note can add to it (see
             ``cap_result``).
