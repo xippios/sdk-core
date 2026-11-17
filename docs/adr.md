@@ -22,12 +22,12 @@ script runs again.
 - [ADR-0016](adr/0016-per-tool-result-caps.md): Per-tool result caps · Accepted · 2026-10-24
 - [ADR-0017](adr/0017-sensitive-upstream-fields.md): Sensitive upstream fields — personal identifiers stay out of task projections · Accepted · 2026-10-25
 - [ADR-0018](adr/0018-core-versioning-and-source-adoption.md): Core versioning and source adoption · Accepted · 2026-10-25
-- [ADR-0019](adr/0019-bulk-downloads-and-non-json-payloads.md): Bulk downloads and non-JSON payloads in core · Accepted · 2026-10-26
-- [ADR-0020](adr/0020-file-distributed-sources.md): File-distributed sources · Accepted · 2026-10-26
+- [ADR-0019](adr/0019-bulk-downloads-and-non-json-payloads.md): Bulk downloads and non-JSON payloads in core · Accepted · 2026-10-26 · amended 2026-11-18
+- [ADR-0020](adr/0020-file-distributed-sources.md): File-distributed sources · Accepted · 2026-10-26 · amended 2026-11-18
 - [ADR-0021](adr/0021-dependencies-between-source-packages.md): Dependencies between source packages · Accepted · 2026-10-26
 - [ADR-0022](adr/0022-packaged-answers-and-release-times.md): Packaged answers and release times in `ResultMeta` · Accepted · 2026-10-26
 - [ADR-0023](adr/0023-core-scope-two-consumers.md): Core scope — code enters `xippios-core` with two consumers · Accepted · 2026-10-26
-- [ADR-0024](adr/0024-cashctrl-stands-alone.md): cashctrl stands alone — tenants, the tenant lock and the recorder extras leave core · Accepted · 2026-10-27
+- [ADR-0024](adr/0024-cashctrl-stands-alone.md): cashctrl stands alone — tenants, the tenant lock and the recorder extras leave core · Accepted · 2026-10-27 · amended 2026-11-18
 - [ADR-0025](adr/0025-google-mail.md): Google Mail — loopback, the renewing bearer, scopes, the kit's return and the decoded view · Accepted · 2026-10-29 · amended 2026-11-18
 - [ADR-0026](adr/0026-the-host-xippios-mcp.md): The host xippios-mcp · Accepted · 2026-10-29 · amended 2026-11-18
 - [ADR-0027](adr/0027-x-metered-content-source.md): X as a metered, content-bearing source · Accepted · 2026-10-30

@@ -1,7 +1,7 @@
 # ADR-0020: File-distributed sources
 
 Status: Accepted · Date: 2026-10-26 · Decided by Johannes on 2026-10-26 (architect
-interview)
+interview) · Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240
 
 ## Context
 
@@ -67,3 +67,24 @@ a PDF is ever read.
   fixtures path when a source answers `has_files` (template cleanup).
 - A file kind changing its layout upstream breaks the live test first and the parser
   second; the fix is a parser change with a CHANGELOG line, as for an endpoint change.
+
+## Amendment 2026-11-18
+
+Core 0.4.0, the package of https://github.com/xippios/sdk-core/issues/240, whose steps
+each add their points here.
+
+(a) **A download's replay fixture may carry the sample as its body** (step 10;
+https://github.com/xippios/sdk-core/issues/125, found by sdk-usda-wasde; decided by
+Johannes on 2026-11-17, https://github.com/xippios/sdk-core/issues/236). Decision 6 keeps
+the recorded exchange of a download, which the plugin replays for the download call, apart
+from the sample under `tests/fixtures/files/<file_kind>/` that the parser tests read. The
+exchange may now carry that sample as its body, so that the download replays the file the
+parser tests read. Such a body is marked `sample: true`, a field of its own, with the
+whole file's `original_bytes` and `sha256`, and never `truncated`, which keeps meaning the
+recorder's cut of ADR-0019, decision 5. `FixtureResponse`, `write_fixture` and
+`load_fixture` refuse a fixture with both marks, one with either and without those two
+fields, and one whose whole body carries them or `original_count`. The source replaces
+the body on the `Fixture` that `fixture_from_response` returns and writes it with
+`write_fixture` (ADR-0024's amendment of this date). The sample under
+`tests/fixtures/files/` stays, with its provenance row. sdk-usda-wasde's download fixtures
+carry its XML and XLS samples so, marked `truncated` until its adoption of core 0.4.0.

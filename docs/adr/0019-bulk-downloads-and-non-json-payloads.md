@@ -2,7 +2,8 @@
 
 Status: Accepted · Date: 2026-10-26 · Decided by Johannes on 2026-10-26 (architect
 interview; the family review of 2026-10-25, C15; decision 5's two format rules from the
-briefings review of the same day)
+briefings review of the same day) ·
+Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240
 
 ## Context
 
@@ -148,3 +149,39 @@ sdk-template 0.3.2 put this reading into its fixture-cap step, which diffs with
 (https://github.com/xippios/sdk-template/pull/110); core's documents follow it
 (https://github.com/xippios/sdk-core/issues/192). Conventions 1.26 states it in §10, and the
 definition of done's fixture-cap line and the review checklist's item 4 follow.
+
+## Amendment 2026-11-18
+
+Core 0.4.0, the package of https://github.com/xippios/sdk-core/issues/240, whose steps
+each add their points here.
+
+(a) **The cut takes the array of a top-level key, and its last elements** (step 10;
+https://github.com/xippios/sdk-core/issues/127, found by sdk-usda-nass and sdk-usda-psd;
+decided by Johannes on 2026-11-17, https://github.com/xippios/sdk-core/issues/237).
+Decision 5's cut, as the amendment of 2026-10-27 shapes it, takes two arguments more on
+`record`, `record_sync` and `fixture_from_response`. `array_key=` names a top-level key of
+a JSON object, and the cut takes the array it holds at its element boundaries, the rest of
+the object kept as upstream wrote it and counted in `max_bytes`. `keep="last"` keeps the
+array's last whole elements that fit, after the opening `[`, for a list ordered oldest
+first; `"first"`, the default, keeps the first ones. Either cut is marked as before,
+`truncated` with `original_bytes`, the array's `original_count` and `sha256`. A JSON
+object with no `array_key` is still refused, and so are a key it lacks, a key whose value
+is no array, either argument on a body that is not JSON, and either without `max_bytes`,
+the last before anything is sent. The text after a top-level array, a final newline say,
+is kept too. A cut by a JSON pointer at any depth was the option not taken, since no
+source needs a nested array. sdk-usda-nass and sdk-comtrade wrap their records in a
+top-level key, and sdk-usda-psd's list runs oldest first.
+
+(b) **The recorder drops the headers that only identify a request** (step 10;
+https://github.com/xippios/sdk-core/issues/161, found by sdk-faostat). Decision 5's
+fixture keeps the response headers but the wire-encoding ones; it now also leaves out
+those that only identify a request, `REQUEST_ID_HEADERS` of
+`xippios.core.testing.fixtures`: `x-amz-cf-id`, `x-amz-id-2`, `x-amz-request-id`,
+`x-amzn-requestid` and `x-amzn-trace-id` of AWS, `x-request-id`, X's `x-transaction-id`,
+`x-api-umbrella-request-id` of api.data.gov, `x-vcap-request-id` of Cloud Foundry,
+`x-ms-request-id` of Azure, `x-oracle-dms-ecid` of Oracle's middleware, and Cloudflare's
+`cf-ray` and `origin-cf-ray`. Each holds a new value in every recording and says nothing
+of the answer, and the secret scan read a long one as a secret in every fixture of
+sdk-faostat and sdk-x, each with an audited baseline entry. S3's `x-amz-version-id`, which
+names the version of the object answered, is provenance as an `ETag` is, and stays. A
+fixture recorded before keeps its headers until a PR records it again.
