@@ -166,8 +166,10 @@ row alone passes the byte bound, the cut shows no row, and its note says after t
 `the first row alone exceeds the byte cap`, or `the row at offset <start> alone exceeds
 the byte cap` where `meta.request` records an integer `start`, then the cap's own note or
 the default, and names no resume offset: `; resume with start=<start>` named the start
-the call had just used, so a tool that followed it asked for the same row again. A source
-names the tool that reads one long row in its cap's note, as sdk-google-mail's
-`get_thread` names `google_mail_get_message`.
+the call had just used, so a tool that followed it asked for the same row again. Where
+not even zero rows with that note fit, decision 4's tiny bound or long note, no row is to
+blame, and the note gives the counts and the cap's own note alone, again with no resume
+offset. A source names the tool that reads one long row in its cap's note, as
+sdk-google-mail's `get_thread` names `google_mail_get_message`.
 
 Conventions §8 states both from 1.28 on.

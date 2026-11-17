@@ -44,11 +44,15 @@ def _how(cap: ResultCap) -> str:
     return _DEFAULT_NOTE if cap.note is None else cap.note
 
 
-def _note(shown: int, total: int, cap: ResultCap, start: int | None) -> str:
+def _note(
+    shown: int, total: int, cap: ResultCap, start: int | None, *, name_row: bool = True
+) -> str:
     counts = f"showing {shown} of {total} rows (cap: {cap.max_rows} rows or {cap.max_bytes} bytes)"
     if shown == 0:
         # No resume offset: it would name the start just used, and a tool that follows
         # the note would ask for the same row again.
+        if not name_row:
+            return f"{counts}; {_how(cap)}"
         row = "the first row" if start is None else f"the row at offset {start}"
         return f"{counts}; {row} alone exceeds the byte cap; {_how(cap)}"
     resume = "" if start is None else f"; resume with start={start + shown}"
@@ -88,10 +92,11 @@ def cap_result(value: Any, cap: ResultCap | None = None) -> str:
     ``note``: ``"showing <shown> of <total> rows (cap: <max_rows> rows or <max_bytes>
     bytes); "`` and then the cap's ``note``, or ``"narrow the query to see the rest"``;
     where ``meta.request`` records an integer ``start``, an offset-paged task's, the note
-    ends ``"; resume with start=<start + shown>"``. When it shows no row, the counts are
+    ends ``"; resume with start=<start + shown>"``. When it shows no row, the note names
+    no resume offset: where zero rows with the note fit ``max_bytes``, the counts are
     followed by ``"the first row alone exceeds the byte cap; "``, or by ``"the row at
     offset <start> alone exceeds the byte cap; "`` where ``start`` is recorded, and then
-    the cap's ``note``, with no resume offset.
+    the cap's ``note``; where they do not, by the cap's ``note`` alone.
     A bare list is wrapped as ``{"data": [...]}`` so the shape is the same either way.
 
     A ``Result`` whose ``data`` is a model that holds one list, and no other field a list,
@@ -154,17 +159,30 @@ def _cut(payload: dict[str, Any], rows: list[Any], field: str | None, cap: Resul
             low = mid
         else:
             high = mid
-    return _render(payload, rows, field, low, cap)
+    text = _render(payload, rows, field, low, cap)
+    if low == 0 and _size(text) > cap.max_bytes:
+        # Not even zero rows fit, a tiny bound or a long note: no row is to blame.
+        return _render(payload, rows, field, 0, cap, name_row=False)
+    return text
 
 
 def _render(
-    payload: dict[str, Any], rows: list[Any], field: str | None, shown: int, cap: ResultCap
+    payload: dict[str, Any],
+    rows: list[Any],
+    field: str | None,
+    shown: int,
+    cap: ResultCap,
+    *,
+    name_row: bool = True,
 ) -> str:
-    """The result with its first ``shown`` rows, in ``data`` or in its model's ``field``."""
+    """The result with its first ``shown`` rows, in ``data`` or in its model's ``field``.
+
+    ``name_row`` says whether a note that shows no row blames the first row for it.
+    """
     total = len(rows)
     if shown >= total:
         return _dumps(payload)
     kept = rows[:shown]
     data = kept if field is None else {**payload["data"], field: kept}
-    note = _note(shown, total, cap, _start(payload))
+    note = _note(shown, total, cap, _start(payload), name_row=name_row)
     return _dumps({**payload, "data": data, "note": note})
