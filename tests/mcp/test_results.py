@@ -306,6 +306,23 @@ def test_when_no_row_fits_without_a_start_the_note_names_the_first_row() -> None
     }
 
 
+def test_when_not_even_zero_rows_fit_the_note_names_no_row_and_no_resume_offset() -> None:
+    # A tiny bound: each row is one byte, so no row is to blame, and a cap note that names
+    # a tool for one long row would send the agent the wrong way.
+    cap = ResultCap(max_bytes=10, note="read a long message alone with get_message")
+    assert _utf8(_compact({"data": [1, 2, 3]})) > 10
+    assert json.loads(cap_result([1, 2, 3], cap)) == {
+        "data": [],
+        "note": "showing 0 of 3 rows (cap: 200 rows or 10 bytes); "
+        "read a long message alone with get_message",
+    }
+    result = Result[list[int]](data=[1, 2, 3], meta=envelope(0, request={"start": 5}).meta)
+    note = json.loads(cap_result(result, ResultCap(max_bytes=50)))["note"]
+    assert (
+        note == "showing 0 of 3 rows (cap: 200 rows or 50 bytes); narrow the query to see the rest"
+    )
+
+
 class Thread(UpstreamModel):
     """A model whose one list holds texts, as a thread holds its messages."""
 
