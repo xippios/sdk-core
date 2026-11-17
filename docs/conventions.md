@@ -216,8 +216,8 @@ dropped (ADR-0012, amendment 2026-10-27). On a cache hit, `retrieved_at` is the 
 entry was stored, which the client puts on the response as
 `extensions["xippios_cache_stored_at"]` (ADR-0015); a wrapper reads it with
 `get_answer()`, whose `Answer` carries the payload and that `retrieved_at` (§6). The miss
-that stored the entry carries the same time, one reading of the clock for both
-(ADR-0015, amendment 2026-11-18, point b).
+that stored the entry carries the same time, one reading of the clock for both, taken
+when the answer arrived (ADR-0015, amendment 2026-11-18, point b).
 
 `published_at` carries a zone. A naive value, a time upstream printed without one (FAS:
 `2026-10-06T08:00:00`), is accepted only with `published_at_naive=True` and is stored as

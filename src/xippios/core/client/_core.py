@@ -349,11 +349,11 @@ class AsyncClient:
         ``get_json``'s call and decoding, the parse into ``parse`` when it is given, and
         the ``retrieved_at`` a task puts into its ``ResultMeta``: on a cache hit the time
         the entry was stored, read from ``xippios_cache_stored_at`` (ADR-0015, decision
-        5), else the time the answer arrived. A 200 from the wire is stored in the cache,
-        where the cache takes it, only once its body decoded and its payload parsed, at
-        the time its ``retrieved_at`` carries: one reading of the clock for both, and a
-        body that fails is requested again on the next call (ADR-0015, amendment
-        2026-11-18). ``auth`` as for ``request``.
+        5), else the time the answer arrived, read before the decode and the parse. A 200
+        from the wire is stored in the cache, where the cache takes it, only once its
+        body decoded and its payload parsed, at the time its ``retrieved_at`` carries:
+        one reading of the clock for both, and a body that fails is requested again on
+        the next call (ADR-0015, amendment 2026-11-18). ``auth`` as for ``request``.
 
         Args:
             path: Path joined onto the base URL, e.g. ``"/api/gats/regions"``.
@@ -377,14 +377,15 @@ class AsyncClient:
         if parse is not None and endpoint is None:
             raise TypeError("get_answer() takes endpoint= with parse=, for the parse's error")
         response, key = await self._request("GET", path, params=params, headers=headers, auth=auth)
+        stored_at = response.extensions.get("xippios_cache_stored_at")
+        if stored_at is None:
+            # When the answer arrived: a slow decode or parse must not move it later.
+            stored_at = time.time()
         payload = decode_json(response, source=self.source, path=path)
         if parse is not None and endpoint is not None:
             payload = parse_payload(parse, payload, source=self.source, endpoint=endpoint)
-        stored_at = response.extensions.get("xippios_cache_stored_at")
-        if stored_at is None:
-            stored_at = time.time()
-            if key is not None:
-                self._store(key, response, stored_at)
+        if key is not None:  # from the wire, and the cache takes it
+            self._store(key, response, stored_at)
         return Answer(payload, datetime.fromtimestamp(stored_at, UTC))
 
     async def download(

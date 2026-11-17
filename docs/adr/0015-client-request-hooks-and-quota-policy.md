@@ -254,7 +254,8 @@ https://github.com/xippios/sdk-core/issues/79, found by sdk-eurostat and sdk-usd
 Decision 5's `xippios_cache_stored_at` came from one reading of the clock and the miss's
 `retrieved_at` from a second, 41 to 119 microseconds later as sdk-usda-nass measured it,
 so a later hit reported an earlier time than the miss that stored it. `get_answer` reads
-the clock once, and that reading is both the entry's `stored_at` and the miss's
+the clock once, when the answer arrives and before the decode and point (c)'s parse, so a
+slow parse moves neither, and that reading is both the entry's `stored_at` and the miss's
 `retrieved_at`: a hit and the miss that stored it carry one `retrieved_at`, which a test
 asserts equal instead of bracketing it with `CLOCK_SLACK`.
 

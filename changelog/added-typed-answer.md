@@ -4,12 +4,24 @@
   replaces the pairs of a value and its `retrieved_at` that sources kept of their own.
   (ADR-0015, ADR-0023, §6, https://github.com/xippios/sdk-core/issues/123)
   - Hand-apply: `src/xippios/comtrade/api/reference.py` (sdk-comtrade) — `ReferenceFile[T]`
-    goes, `reference_rows` returns the `Answer[list[dict[str, Any]]]` it builds from
-    `get_answer(..., parse=_ReferenceFile, endpoint=...)`, `reference` returns an
-    `Answer[list[M]]`, `api/__init__.py` drops the name, and `tasks.py`,
-    `scripts/refresh_reference.py`, `tests/test_tasks.py` and `tests/test_live.py` read
-    `.payload` for `.rows` — core's typed answer replaces the pair (ADR-0023, decision 4).
-    `src/xippios/usda/nass/api/get_param_values.py` (sdk-usda-nass) — `ParamValues` goes,
-    `get_param_values` returns `Answer[list[str]]`, `api/__init__.py` drops the name, and
-    `tasks.py` and `tests/test_tasks.py` read `.payload` and `.retrieved_at` where they
-    unpacked the pair — core's typed answer replaces the pair (ADR-0023, decision 4).
+    goes, `reference_rows` returns `Answer[list[dict[str, Any]]]` from
+    `get_answer(..., parse=_ReferenceFile, endpoint=...)`, and `reference` returns
+    `Answer[list[M]]` — core's typed answer replaces the pair (ADR-0023, decision 4).
+    `src/xippios/comtrade/api/__init__.py` (sdk-comtrade) — `__all__` drops
+    `ReferenceFile` — the class goes.
+    `src/xippios/comtrade/tasks.py` (sdk-comtrade) — `.payload` for `.rows` — `Answer`
+    names the rows `payload`.
+    `scripts/refresh_reference.py` (sdk-comtrade) — `.payload` for `.rows` — `Answer`
+    names the rows `payload`.
+    `tests/test_live.py` (sdk-comtrade) — `.payload` for `.rows` — `Answer` names the
+    rows `payload`.
+    `tests/test_tasks.py` (sdk-comtrade, sdk-usda-nass) — `.payload` for `.rows`, and
+    `.payload` and `.retrieved_at` where a test unpacked `ParamValues` — `Answer` is
+    not a tuple and names its value `payload`.
+    `src/xippios/usda/nass/api/get_param_values.py` (sdk-usda-nass) — `ParamValues`
+    goes, and `get_param_values` returns `Answer[list[str]]` — core's typed answer
+    replaces the pair (ADR-0023, decision 4).
+    `src/xippios/usda/nass/api/__init__.py` (sdk-usda-nass) — `__all__` drops
+    `ParamValues` — the class goes.
+    `src/xippios/usda/nass/tasks.py` (sdk-usda-nass) — `.payload` and `.retrieved_at`
+    where it unpacked the pair — `Answer` is not a tuple.
