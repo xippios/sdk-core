@@ -8,14 +8,19 @@ and written once (``Scrub``).
 
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 
 from xippios.core._loop import sync
 from xippios.core.client import AsyncClient
 from xippios.core.client._core import _CLIENT_AUTH, Params, _ClientAuth
-from xippios.core.testing.fixtures import Fixture, _write, fixture_from_response
+from xippios.core.testing.fixtures import (
+    Fixture,
+    _check_cut,
+    fixture_from_response,
+    write_fixture,
+)
 from xippios.core.testing.scrub import Scrub
 
 __all__ = ["record", "record_sync"]
@@ -34,12 +39,16 @@ async def record(
     scrub: Scrub | None = None,
     auth: httpx.Auth | _ClientAuth | None = _CLIENT_AUTH,
     max_bytes: int | None = None,
+    array_key: str | None = None,
+    keep: Literal["first", "last"] = "first",
 ) -> Fixture:
     """Perform one live request through ``client`` and write the scrubbed exchange.
 
     The client's own retry policy and timeouts apply. A recording that should spend no
     retry on a 5xx, or needs a longer read timeout, records through a client built for
-    it, e.g. on ``dataclasses.replace(config, retry=RetryPolicy(max_attempts=1))``.
+    it, e.g. on ``dataclasses.replace(config, retry=RetryPolicy(max_attempts=1))``. The
+    file is laid out as ``write_fixture`` writes it, without the response headers that
+    only identify a request (``REQUEST_ID_HEADERS``).
 
     A refusal writes nothing. One raised after the request was sent (a binary body, a
     body ``max_bytes`` cannot cut, or the verify step finding a secret value) comes after
@@ -66,17 +75,23 @@ async def record(
             ``fixture_from_response``). It bounds the body, not the file, which escapes
             the body as a JSON string, text outside ASCII up to three times as long:
             ``80_000`` keeps a file under the 256 KiB cap. ``None`` keeps it whole.
+        array_key: The top-level key of a JSON object whose array ``max_bytes`` cuts,
+            the rest of the object kept as upstream wrote it, e.g. ``"data"`` for
+            ``{"data": [...]}``. ``None`` cuts a body that is an array.
+        keep: ``"first"`` keeps an array's first whole elements, ``"last"`` its last,
+            for a list ordered oldest first.
 
     Raises:
-        ValueError: Both ``json`` and ``data``, or ``max_bytes`` below 1, before anything
-            is sent. After the request: a request or response body that is not UTF-8
-            text without ``Scrub(allow_binary=True)``; the verify step finding a secret
-            value left by the scrub; a body ``max_bytes`` cannot cut (a JSON object, XML,
-            ZIP, XLSX, gzip, XLS, or not UTF-8 text: record a small real answer or sample
+        ValueError: Both ``json`` and ``data``, ``max_bytes`` below 1, ``keep`` neither
+            ``"first"`` nor ``"last"``, or ``array_key`` or ``keep="last"`` without
+            ``max_bytes``, before anything is sent. After the request: a request or
+            response body that is not UTF-8 text without ``Scrub(allow_binary=True)``;
+            the verify step finding a secret value left by the scrub; a body
+            ``max_bytes`` cannot cut (a JSON object without ``array_key``, XML, ZIP,
+            XLSX, gzip, XLS, or not UTF-8 text: record a small real answer or sample
             instead).
     """
-    if max_bytes is not None and max_bytes < 1:
-        raise ValueError("max_bytes must be at least 1")
+    _check_cut(max_bytes, array_key, keep)
     response = await client.request(
         method,
         path,
@@ -87,7 +102,10 @@ async def record(
         raise_on_error=False,
         auth=auth,
     )
-    return _write(fixture_from_response(response, scrub=scrub, max_bytes=max_bytes), fixture)
+    recorded = fixture_from_response(
+        response, scrub=scrub, max_bytes=max_bytes, array_key=array_key, keep=keep
+    )
+    return write_fixture(recorded, fixture)
 
 
 record_sync = sync(record)
