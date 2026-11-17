@@ -1,6 +1,6 @@
 # ADR-0015: Client request hooks and a quota policy
 
-Status: Accepted · Date: 2026-10-24
+Status: Accepted · Date: 2026-10-24 · Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240
 
 ## Context
 
@@ -230,3 +230,43 @@ Amended by ADR-0022's amendment of 2026-10-27 (core 0.3.0): decision 5's wrapper
 returns `Answer(payload, retrieved_at)`, a hit's stored time read from
 `xippios_cache_stored_at` or the time the answer arrived, and takes decision 4's `auth=`
 as `get_json` does; `get`, `decode_json` and `get_json` stay.
+
+## Amendment 2026-11-18
+
+Core 0.4.0, the package of https://github.com/xippios/sdk-core/issues/240, whose steps
+each add their points here.
+
+(a) **Only `get_answer` stores** (step 6; https://github.com/xippios/sdk-core/issues/122,
+found by sdk-usda-nass). `request` stored a 200 before anything had decoded it, so a body
+that was not JSON answered from the cache as the same `ValidationError` until its entry
+expired, a day for sdk-usda-nass's `get_param_values`, with nothing sent. Every GET still
+reads the cache, but `request`, `get`, `get_json` and `record` store nothing:
+`get_answer` stores a 200 within `cache_max_bytes`, where the cache and `cache_filter`
+take it, once its body decoded and, with point (c)'s `parse=`, its payload parsed. A body
+that fails either is requested again on the next call. `CacheBackend` gains no `discard`,
+the row's other option, since nothing that failed is stored. Every cached path of the
+family's sources is read through `get_answer` (sdk-comtrade, sdk-eurostat, sdk-faostat,
+sdk-usda-gats, sdk-usda-nass), so none caches less; a wrapper that reads through `get`
+and `decode_json` is answered by an entry `get_answer` stored and stores none itself.
+
+(b) **A miss carries its stored time** (step 6;
+https://github.com/xippios/sdk-core/issues/79, found by sdk-eurostat and sdk-usda-nass).
+Decision 5's `xippios_cache_stored_at` came from one reading of the clock and the miss's
+`retrieved_at` from a second, 41 to 119 microseconds later as sdk-usda-nass measured it,
+so a later hit reported an earlier time than the miss that stored it. `get_answer` reads
+the clock once, and that reading is both the entry's `stored_at` and the miss's
+`retrieved_at`: a hit and the miss that stored it carry one `retrieved_at`, which a test
+asserts equal instead of bracketing it with `CLOCK_SLACK`.
+
+(c) **`Answer` is generic** (step 6; https://github.com/xippios/sdk-core/issues/123;
+ADR-0023, decisions 2 and 4). `Answer[T]` carries `payload: T` with `retrieved_at`.
+`get_answer(path, ...)` returns an `Answer[Any]` as before, and `get_answer(path, ...,
+parse=T, endpoint="<operation>")` parses the payload with core's `parse(T, payload,
+source=<the client's source>, endpoint=...)` and returns an `Answer[T]`. `endpoint` comes
+with `parse` and only then: `parse` without it raises `TypeError` before anything is
+sent. An entry stored without `parse=`, or for another type, is parsed again on each hit,
+and a hit that fails to parse raises and keeps its entry. A wrapper that returns a value
+it derives from the payload returns `Answer(value, answer.retrieved_at)`, an `Answer` of
+the value's type. It replaces sdk-comtrade's `ReferenceFile[T]` (`Answer[list[T]]`) and
+sdk-usda-nass's `ParamValues` (`Answer[list[str]]`), which their adoption of core 0.4.0
+deletes, with no alias, since no user depends on either yet.

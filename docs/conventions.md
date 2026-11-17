@@ -215,7 +215,9 @@ class Result(BaseModel, Generic[T]):
 dropped (ADR-0012, amendment 2026-10-27). On a cache hit, `retrieved_at` is the time the
 entry was stored, which the client puts on the response as
 `extensions["xippios_cache_stored_at"]` (ADR-0015); a wrapper reads it with
-`get_answer()`, whose `Answer` carries the payload and that `retrieved_at` (§6).
+`get_answer()`, whose `Answer` carries the payload and that `retrieved_at` (§6). The miss
+that stored the entry carries the same time, one reading of the clock for both
+(ADR-0015, amendment 2026-11-18, point b).
 
 `published_at` carries a zone. A naive value, a time upstream printed without one (FAS:
 `2026-10-06T08:00:00`), is accepted only with `published_at_naive=True` and is stored as
@@ -345,7 +347,12 @@ the query can carry a key (ADR-0005).
   whose answer may come from the cache calls `get_answer()`: its `Answer(payload,
   retrieved_at)` carries a hit's stored time, from `xippios_cache_stored_at`, or else
   the arrival time, for `meta.retrieved_at` (ADR-0015, amendment 2026-10-27); one that
-  needs more of the response calls `get()`, then `decode_json()`.
+  needs more of the response calls `get()`, then `decode_json()`. `Answer` is generic
+  over its payload: `get_answer(path, parse=list[Region], endpoint="regions")` parses
+  the payload with `parse` and returns an `Answer[list[Region]]`, and a wrapper that
+  returns a value it derives from the payload returns `Answer(value,
+  answer.retrieved_at)`, never a pair of its own (ADR-0015, amendment 2026-11-18,
+  point c).
 - A per-source rate limiter sets a fast pace within the source's documented per-second
   or per-minute limit or, where none is documented, a self-imposed pace that the
   package's CLAUDE.md names as such; longer-window quotas (hourly, daily) may be
@@ -374,7 +381,11 @@ the query can carry a key (ADR-0005).
 - Optional response cache (in-memory by default, pluggable) keyed on method+URL+params.
   A body larger than `ClientConfig.cache_max_bytes` (default 8 MiB) passes through and
   is not stored; `cache_filter` stays for finer rules. A source that wants a larger
-  answer cached raises the bound and says why in its `CLAUDE.md` (ADR-0019).
+  answer cached raises the bound and says why in its `CLAUDE.md` (ADR-0019). Every GET
+  reads the cache, and only `get_answer()` stores an answer in it: a 200 once its body
+  decoded and, with `parse=`, its payload parsed, so a body that fails is requested
+  again on the next call; `get()`, `get_json()` and `request()` store nothing
+  (ADR-0015, amendment 2026-11-18, point a).
 - A file is downloaded, never held in memory (ADR-0019): `download(url, dest, *,
   auth=...) -> Downloaded` streams the body to `dest` under a temporary name, renames it
   when complete and removes it on failure, and never touches the response cache. The
