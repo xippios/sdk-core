@@ -230,8 +230,10 @@ amendment 2026-11-18, (a)).
 https://github.com/xippios/sdk-core/issues/166; ADR-0024, amendment 2026-11-18, (b)).
 `Tenants` and `list_task` come from `xippios.core`, out of the module `xippios.core.tenants`,
 with three changes to the decisions as written. Decision 1:
-`Tenants(source, *, var_prefix=None, list_var, fields, reserved=(), validate=None,
-hints=None)` keeps a tenant's values in `<PREFIX>_<NAME>_<FIELD>`, the prefix `var_prefix`
+`Tenants(source, *, var_prefix=None, list_var, param, fields, reserved=(), validate=None,
+hints=None)`, its `param` the task parameter that names a tenant (ADR-0036, decision 13,
+https://github.com/xippios/sdk-core/issues/299), keeps a tenant's values in
+`<PREFIX>_<NAME>_<FIELD>`, the prefix `var_prefix`
 where the source gives one, `GOOGLE` for sdk-google-mail, and otherwise the source
 upper-cased with `-` made `_`, so sdk-cashctrl's scheme is unchanged; the source slug names
 the source in every error either way, and `hints` tells the operator what a field holds
@@ -244,9 +246,10 @@ written.
 (d) **Decision 7 holds in core again, as the binding wrapper** (the amendment of
 2026-10-29; step 4, https://github.com/xippios/sdk-core/issues/166; ADR-0024, amendment
 2026-11-18, (d)). The lock returns as the wrapper that sdk-cashctrl built in place of the
-middleware and sdk-google-mail copied, not as the middleware: `TenantLock(param, value,
-noun=None)`, `bind_tasks(tasks, lock)` and `tenant_instructions(text, lock, *, bound=None)`
-come from `xippios.core`, out of the module `xippios.core.tenants`. A bound task keeps its
+middleware and sdk-google-mail copied, not as the middleware: `TenantLock(tenants, value,
+noun=None)`, whose `param` is the registry's (ADR-0036, decision 13), `bind_tasks(tasks,
+lock)` and `tenant_instructions(text, lock, *, bound=None)` come from `xippios.core`, out of
+the module `xippios.core.tenants`. A bound task keeps its
 `__name__` and awaits the task with `param=value`; its signature, annotations and docstring
 lose `param`, so no tool of a bound server declares the tenant's argument and the argument
 check refuses a call that names it ((a)). No `tenant_lock=` parameter, no refusal of a
@@ -255,10 +258,10 @@ lists the bound tenant alone, and its instructions end "This server is bound to 
 <value>; every tool acts on that <noun> and takes no <param>.", the noun the lock's or else
 `param`, after `bound`, the bound server's own text, where the source gives one, since its
 unbound text may say that every tool takes the argument. Decision 8's locked server is
-core's as well: `xippios.core.mcp.serve_tenants(server, build, tenants, *, param,
-noun=None, check=None)` puts `--<param>` on `main`'s parser through the hooks, checks the
-named tenant with `tenants.require` and then with the source's `check`, and runs
-`build(TenantLock(param, name, noun=noun))`; an undeclared tenant or an error of the check
+core's as well: `xippios.core.mcp.serve_tenants(server, build, tenants, *, noun=None,
+check=None)` puts `--<param>`, the registry's `param`, on `main`'s parser through the hooks,
+checks the named tenant with `tenants.require` and then with the source's `check`, and runs
+`build(TenantLock(tenants, name, noun=noun))`; an undeclared tenant or an error of the check
 stops the process with exit status 2 before the bound server is built. A multi-tenant
 source's servers are bound so: its entry point runs `serve_tenants`, and its `build(lock)`
 passes its tasks through `bind_tasks` and its instructions through `tenant_instructions`.

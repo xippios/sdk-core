@@ -1,9 +1,10 @@
 - `Tenants` and `list_task` are back in core, exported from `xippios.core` out of the module
   `xippios.core.tenants`: a multi-tenant source's tenants declared in the environment, one
   client each, which closes the client that a changed variable replaces, and the tool that
-  names them. `Tenants(source, var_prefix=...)` takes the variables' prefix apart from the
-  source slug, so its errors name the source, and `list_task(..., source=...)` names the
-  `meta.source` of a registry that several sources share, the registry's slug by default.
+  names them. `Tenants(source, var_prefix=..., param=...)` takes the variables' prefix
+  apart from the source slug, so its errors name the source, and `list_task(...,
+  source=...)` names the `meta.source` of a registry that several sources share, the
+  registry's slug by default.
   (ADR-0014, ADR-0024, ADR-0025, https://github.com/xippios/sdk-core/issues/166)
   - Hand-apply: `src/xippios/cashctrl/_tenants.py` (sdk-cashctrl) — deleted — core's module
     is this copy, the close of a replaced client included, and its default prefix is the

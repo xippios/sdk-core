@@ -25,8 +25,8 @@ environment, the contract of conventions §7, and every task takes the tenant's 
     list_tenants = list_task(tenants, name="list_tenants")  # the tool example_list_tenants
 
 A source whose variables carry a prefix other than its slug names it apart,
-``Tenants("google-mail", var_prefix="GOOGLE", ...)`` for ``GOOGLE_<NAME>_REFRESH_TOKEN``,
-and its errors still name the source.
+``Tenants("google-mail", var_prefix="GOOGLE", param="account", ...)`` for
+``GOOGLE_<NAME>_REFRESH_TOKEN``, and its errors still name the source.
 
 A server bound to one tenant takes a ``TenantLock``: ``bind_tasks`` gives the source's
 tool set (``xippios.core.mcp.ToolSet``) the tasks with the tenant's argument bound, so no

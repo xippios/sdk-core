@@ -145,10 +145,11 @@ close that the consequences left to sdk-cashctrl (queue row 24 b): `client_for` 
 client that a changed variable replaces, on the running loop or, outside one, on core's
 background loop. Where the copies differ, core takes sdk-google-mail's: `list_task(...,
 source=None)` names the source of `meta.source`, the registry's slug by default. New in
-neither copy, `Tenants(source, *, var_prefix=None, ...)` takes the variables' prefix apart
-from the source slug, since sdk-google-mail's copy took the `GOOGLE_` prefix as its source
-and its errors named `google` (ADR-0014, amendment 2026-11-18, (c); ADR-0025, amendment
-2026-11-18, (b)). The lock wrapper, `assert_write_tools`, the conftest strip and the serve
+neither copy, `Tenants(source, *, var_prefix=None, list_var, param, ...)` takes the
+variables' prefix apart from the source slug, since sdk-google-mail's copy took the
+`GOOGLE_` prefix as its source and its errors named `google` (ADR-0014, amendment
+2026-11-18, (c); ADR-0025, amendment 2026-11-18, (b)), and declares `param`, the parameter
+that names a tenant (ADR-0036, decision 13). The lock wrapper, `assert_write_tools`, the conftest strip and the serve
 command stay the sources' until they return in turn.
 
 (c) **`Scrub` reads secrets from the answer** (decisions 2 and 3; step 11;

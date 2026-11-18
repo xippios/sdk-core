@@ -10,13 +10,19 @@ organisations and Gmail's mailboxes, needs a source that knows its tenants, a cl
 tenant, a server that can serve one tenant alone and a write server that cannot be reached
 unprotected. This record states ADR-0014 with its supersession in part by ADR-0024 of
 2026-10-27, its amendments of 2026-10-27, 2026-10-29 (by ADR-0025 and by ADR-0026) and
-2026-11-18 as they stand, and changes no decision; their history stays in ADR-0014. Its
+2026-11-18 as they stand, and changes no decision of theirs but by decision 13; their
+history stays in ADR-0014. Its
 decisions 1 to 4, 6, 7 and 11 left core with the kit in 0.3.0, when ADR-0024 moved the code
 to sdk-cashctrl. ADR-0025, D-d named the pieces that return in 0.4.0, which bring decisions 1
 to 4, 6 and 7 back, decision 7 as the binding wrapper, and the human's answer of 2026-11-18
 (https://github.com/xippios/sdk-core/issues/298) returns decision 11 with them. Decision 13,
 the line of decision 11 for a source's own tasks and core's checks of it, is new in this
 record, the human's answer of 2026-11-18 (https://github.com/xippios/sdk-core/issues/299).
+It changes three signatures that ADR-0014's amendment of 2026-11-18 first gave, as
+decisions 1, 7 and 8 state them: `Tenants` takes `param`, the parameter that names a tenant,
+`TenantLock(tenants, value, noun=None)` takes the registry in place of a parameter, and
+`serve_tenants` takes no `param` of its own; that amendment's points (c) and (d) give the
+forms of decision 13 since.
 
 ## Decision
 
@@ -159,4 +165,5 @@ Conventions §1, §4, §7 and §8, the README and the docstrings of `xippios.cor
 `xippios.core.mcp`, `main`, `serve_tenants`, `register_tasks` and `InvalidRequestError`
 state its decisions from 1.28 on; decisions 11 and 13 conventions §7, item 17 of the review
 checklist, the README and the docstrings of `xippios.core.tenants`, `bind_tasks` and the
-family check.
+family check, and the parameter that decision 13 declares on the registry conventions §8 and
+the docstrings of `Tenants`, `TenantLock` and `serve_tenants` too.

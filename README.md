@@ -496,10 +496,11 @@ and closes the one it replaces. A name that is not declared is the caller's
 `InvalidRequestError`, which lists the declared ones; a malformed list, or a missing or
 refused value of a declared tenant, is the operator's `ConfigError`, which names the
 variable. A source whose variables carry a prefix other than its slug names it:
-`Tenants("google-mail", var_prefix="GOOGLE", ...)` reads `GOOGLE_WORK_REFRESH_TOKEN`, and
-its errors name `google-mail`. The list task takes no argument and returns names only,
-`meta.tenant` `None`, on the read server; `list_task(..., source=...)` names another
-source than the registry's, for a registry that several sources share.
+`Tenants("google-mail", var_prefix="GOOGLE", param="account", ...)` reads
+`GOOGLE_WORK_REFRESH_TOKEN`, and its errors name `google-mail`. The list task takes no
+argument and returns names only, `meta.tenant` `None`, on the read server;
+`list_task(..., source=...)` names another source than the registry's, for a registry that
+several sources share.
 
 Every other task takes the tenant's name as the registry's `param`, `org` here, and sets
 `ResultMeta(tenant=name, ...)`; its messages and results name tenants and variables, never
