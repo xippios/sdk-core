@@ -425,8 +425,9 @@ async def download_crops_async(dest: Path) -> Result[Downloaded]:
     """
     url = "https://files.example.org/bulk/qs.crops.txt"  # a link from the catalog
     got = await client.download(url, dest)  # another host: the client's key stays off it
+    # endpoint: the file's name as upstream names it, never its kind (conventions §4)
     # a signed link's signature reads REDACTED in meta.request
-    meta = ResultMeta(source="example", endpoint="qs.crops", request={"url": url})
+    meta = ResultMeta(source="example", endpoint="qs.crops.txt", request={"url": url})
     return Result(data=got, meta=meta)
 
 

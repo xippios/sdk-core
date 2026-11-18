@@ -38,7 +38,7 @@
     `Tenants`, whose errors name `google-mail` — the variables keep the shared prefix, and
     an unknown account's `InvalidRequestError` and the registry's `ConfigError` name the
     source, `google` before, in an HTTP problem's `source` too (ADR-0025, amendment
-    2026-11-18, (b)).
+    2026-11-18, (b), https://github.com/xippios/sdk-core/issues/279).
     `src/xippios/google/mail/tasks.py` (sdk-google-mail) — `from
     xippios.google.mail._tenants import list_task` (line 34) → `from xippios.core import
     list_task`, `source=SOURCE` dropped from the call (line 112), and the docstring's

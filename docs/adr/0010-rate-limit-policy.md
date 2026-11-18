@@ -138,9 +138,14 @@ paces apart. Each case keeps decision 1 whole by pacing every host with one limi
    `www.usda.gov` refuses, and as the history task of its 0.2.0
    (https://github.com/xippios/sdk-usda-wasde/issues/8) is to read the archive of past
    releases there (https://github.com/xippios/sdk-core/issues/239, decided by Johannes on
-   2026-11-17). `meta.endpoint` names the URL sent, the canonical
-   host's pace applies, one limiter for both hosts where the source sends to both, and the
-   source's `docs/upstream/` names both hosts. A mirror that anyone else runs is never
+   2026-11-17). `meta.endpoint` names the URL sent, but a file read there keeps the file's
+   name in `meta.endpoint`, and the mirror's URL goes in `meta.request` (ADR-0020,
+   amendment 2026-11-18, point c; step 15.1, decided by Johannes on 2026-11-18,
+   https://github.com/xippios/sdk-core/issues/276, which reads
+   https://github.com/xippios/sdk-core/issues/239 for a file by
+   https://github.com/xippios/sdk-core/issues/244). The canonical host's pace applies, one
+   limiter for both hosts where the source sends to both, and the source's
+   `docs/upstream/` names both hosts. A mirror that anyone else runs is never
    sent to, since the provenance of ADR-0003 would then rest on the bytes alone.
 3. **A host that a dependency paces.** A dependent sends nothing to a host that its
    dependency sends to: it reaches that host through the dependency's tasks, as ADR-0021,

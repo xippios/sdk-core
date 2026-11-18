@@ -78,7 +78,10 @@ def test_the_rest_of_the_prefix_stays(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_a_registry_whose_slug_is_its_prefix_strips_the_same(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """sdk-google-mail's two forms (https://github.com/xippios/sdk-core/issues/279)."""
+    """sdk-google-mail's registry, its prefix apart, strips as the copy's did.
+
+    The registry's name: https://github.com/xippios/sdk-core/issues/279.
+    """
     copy = Tenants(
         "fictive", list_var="FICTIVE_ACCOUNTS", fields=("REFRESH_TOKEN",), reserved=("demo",)
     )

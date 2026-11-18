@@ -216,17 +216,21 @@ adoptions of core 0.4.0 (ADR-0023, decision 4). `main`'s usage line names the en
 that runs, and its refusal and the help of `--allow-remote` name the server's kind, "a read
 server held to loopback" beside "a write server". Conventions §8 states the option.
 
-(b) **The registry and the tenant list in core** (D-d (a) and (b); step 3,
-https://github.com/xippios/sdk-core/issues/166). `Tenants` and `list_task` come from
-`xippios.core` (ADR-0024, amendment 2026-11-18, (b)), so sdk-google-mail's `_tenants.py` and
-sdk-cashctrl's go with their adoptions of core 0.4.0 (ADR-0023, decision 4). D-b's registry
-is then `Tenants("google-mail", var_prefix="GOOGLE", list_var="GOOGLE_ACCOUNTS",
-fields=("REFRESH_TOKEN",), reserved=("demo",))`: its variables keep the `GOOGLE_` prefix
-that every Google source shares, and its errors name the source, `google-mail`, where the
-copy, whose first argument was the prefix, named `google`. The `source=` that
-sdk-google-mail's `list_task` took for the same reason stays in core, the registry's slug by
-default, for the account registry that the Google sources will share as
-`xippios.core.google` (D-d).
+(b) **The registry and the tenant list in core** (D-d (a) and (b), and D-b's registry; step
+3, https://github.com/xippios/sdk-core/issues/166; the registry's name decided by Johannes
+on 2026-11-18, https://github.com/xippios/sdk-core/issues/279). `Tenants` and `list_task`
+come from `xippios.core` (ADR-0024, amendment 2026-11-18, (b)), so sdk-google-mail's
+`_tenants.py` and sdk-cashctrl's go with their adoptions of core 0.4.0 (ADR-0023, decision
+4). This amends D-b's registry, `Tenants("google", ...)`, whose errors say "google": with
+core 0.4.0 sdk-google-mail declares its registry under its own slug with the variable
+prefix `GOOGLE`, `Tenants("google-mail", var_prefix="GOOGLE", list_var="GOOGLE_ACCOUNTS",
+fields=("REFRESH_TOKEN",), reserved=("demo",))`, so its variables keep the `GOOGLE_` prefix
+that every Google source shares, and its registry's errors and an HTTP problem's `source`
+name `google-mail`, where the copy, whose first argument was the prefix, named `google`.
+The `source=` that sdk-google-mail's `list_task` took for the same reason stays in core, the
+registry's slug by default, for the account registry that the Google sources will share as
+`xippios.core.google` (D-d). Conventions §7 states the registry's return, and the README
+the declaration.
 
 (c) **The renewing bearer in core** (D-b; step 8;
 https://github.com/xippios/sdk-core/issues/156, found by sdk-faostat and sdk-google-mail;
@@ -267,7 +271,7 @@ sdk-google-mail's `_account_lock.py` and `_cli.py`, the copy of `assert_write_to
 `TenantLock("account", name)`, and its `--account` is `serve_tenants(..., param="account",
 check=...)`, the check that the account's refresh token is set, its message naming the
 consent command, kept in the source. The serve command's text and the strip name the
-registry's tenants, variables and prefix, never its source, so they read the same whether
-the registry declares `Tenants("google-mail", var_prefix="GOOGLE", ...)`, as (b) has it, or
-the copy's `Tenants("google", ...)`, which https://github.com/xippios/sdk-core/issues/279
-decides.
+registry's tenants, variables and prefix, never its source, so under the registry that (b)
+declares, `Tenants("google-mail", var_prefix="GOOGLE", ...)`
+(https://github.com/xippios/sdk-core/issues/279), they read as they did under the copy's
+`Tenants("google", ...)`.

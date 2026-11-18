@@ -103,7 +103,9 @@ on.
 
 (c) **A file task's `meta.endpoint` names the file** (decision 5; step 15;
 https://github.com/xippios/sdk-core/issues/135, found by sdk-usda-wasde; decided by
-Johannes on 2026-11-17, https://github.com/xippios/sdk-core/issues/244). Decision 5 names
+Johannes on 2026-11-17, https://github.com/xippios/sdk-core/issues/244; its two cases, step
+15.1, decided by Johannes on 2026-11-18, https://github.com/xippios/sdk-core/issues/280 and
+https://github.com/xippios/sdk-core/issues/276). Decision 5 names
 the file kind (`wasde.xls`, `qs.crops`). The released sources that read ESMIS's files name
 the file itself: sdk-usda-esmis's `download_release_file` the name ESMIS catalogs
 (`wasde1026.txt`), and sdk-usda-wasde's file tasks and the lists it packages from a
@@ -114,13 +116,21 @@ released file names that file the same way as its `endpoint` (ADR-0022, decision
 narrative read from a PDF that prints a date but no month label keeps the ESMIS release
 id as `vintage`, which decision 5 allows, as sdk-usda-wasde's `read_report_text` does. A
 download of an operation's answer is no file upstream names and keeps the operation's
-name, as sdk-eurostat's SDMX `dataQuery`, streamed to a file, does. Two cases are open: a
-file whose name upstream builds from the dataset's name, as FAOSTAT's
-`<Name>_E_All_Data_(Normalized).csv`, which sdk-faostat's `download_dataset` names
-`All_Data_(Normalized).csv`, under https://github.com/xippios/sdk-core/issues/280, and a
-file read from an origin or mirror that the publisher runs, under
-https://github.com/xippios/sdk-core/issues/276. Neither sdk-usda-esmis nor sdk-usda-wasde
-changes. Conventions §4 states it from 1.28 on.
+name, as sdk-eurostat's SDMX `dataQuery`, streamed to a file, does. Where upstream's file
+name carries the dataset's name, `meta.endpoint` names the part that every dataset's file
+shares, and the dataset stays in `meta.request`: FAOSTAT names a bulk ZIP's normalized
+table `<Name>_E_All_Data_(Normalized).csv`, and sdk-faostat's `download_dataset` names it
+`All_Data_(Normalized).csv`, with the domain and the file's URL in `meta.request`
+(https://github.com/xippios/sdk-core/issues/280). A file read from an origin or mirror that
+the publisher runs (ADR-0010, amendment 2026-11-18, point a, case 2) keeps the file's name
+in `meta.endpoint`, and the mirror's URL goes in `meta.request`, where decision 5 puts a
+file's URL (https://github.com/xippios/sdk-core/issues/276), which reads the decision of
+https://github.com/xippios/sdk-core/issues/239, "meta.endpoint names the URL sent", for a
+file by the one of https://github.com/xippios/sdk-core/issues/244. sdk-usda-wasde's
+history task, planned for its 0.2.0 (https://github.com/xippios/sdk-usda-wasde/issues/8),
+is to name its files so when it reads them from USDA's CDN origin. None of sdk-usda-esmis,
+sdk-usda-wasde and sdk-faostat changes. Conventions §4 states it from 1.28 on, and §6 the
+mirror's case.
 
 (d) **A written sample of a file over the cap** (decision 6; step 16;
 https://github.com/xippios/sdk-core/issues/100, found by sdk-usda-wasde, with

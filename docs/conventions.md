@@ -366,10 +366,15 @@ query `REDACTED`, and the fixture of that download carries no key, neither the
 placeholder nor a credential header, so a leak check counts none in it (ADR-0015,
 amendment 2026-11-18, point d). A download of an
 operation's answer is no file upstream names and keeps the operation's name
-(sdk-eurostat's `dataQuery`). Two cases are open: a file whose name upstream builds from
-the dataset's name (FAOSTAT's `<Name>_E_All_Data_(Normalized).csv`), under
-https://github.com/xippios/sdk-core/issues/280, and a file read from an origin or mirror
-that the publisher runs (§6), under https://github.com/xippios/sdk-core/issues/276.
+(sdk-eurostat's `dataQuery`). Where upstream's file name carries the dataset's name,
+`endpoint` names the part that every dataset's file shares, and the dataset stays in
+`request`: sdk-faostat's `download_dataset` names `All_Data_(Normalized).csv` for
+FAOSTAT's `<Name>_E_All_Data_(Normalized).csv`, with the domain and the file's URL in
+`request` (ADR-0020, amendment 2026-11-18, point c;
+https://github.com/xippios/sdk-core/issues/280). A file read from an origin or mirror that
+the publisher runs (§6) keeps the file's name in `endpoint`, and the mirror's URL goes in
+`request` (ADR-0020, amendment 2026-11-18, point c;
+https://github.com/xippios/sdk-core/issues/276).
 
 `request` records what was sent: a parameter the caller left `None` is omitted
 (ADR-0022, rule 3). `ResultMeta` drops a top-level `None` at construction, so a task
@@ -541,10 +546,10 @@ without case).
   one client by its absolute URL, which httpx takes over the base URL: one limiter, one
   cache and one `classify`, whose path checks name both bases. A request to an origin or
   mirror that the publisher runs itself (§2) takes the canonical host's pace, one limiter
-  for both hosts where the source sends to both; its `meta.endpoint` names the URL sent
-  (for a file, open under https://github.com/xippios/sdk-core/issues/276, §4), and
-  `docs/upstream/` names both hosts (sdk-usda-wasde's USDA CDN origin for
-  `www.usda.gov`). A dependent's own client sends nothing to its dependency's host, which
+  for both hosts where the source sends to both; its `meta.endpoint` names the URL sent,
+  but a file keeps the file's name there, the mirror's URL going in `meta.request` (§4;
+  https://github.com/xippios/sdk-core/issues/276), and `docs/upstream/` names both hosts
+  (sdk-usda-wasde's USDA CDN origin for `www.usda.gov`). A dependent's own client sends nothing to its dependency's host, which
   the dependency's limiter alone paces, since a second limiter there would allow up to
   twice the pace each package meant.
 - Two hooks on `ClientConfig` see what passes through the client (ADR-0015):

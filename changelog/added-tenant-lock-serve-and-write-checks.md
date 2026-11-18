@@ -92,8 +92,7 @@
     "REFRESH_TOKEN")` is unset or blank, with `CONSENT_COMMAND` imported from `_auth` (line
     48), added after `TENANTS` and to `__all__` (line 58) — `serve_tenants` runs the
     source's own startup check, so an unset refresh token still stops a bound server at
-    startup, its message naming the variable and the consent command and no source,
-    whichever slug https://github.com/xippios/sdk-core/issues/279 gives the registry.
+    startup, its message naming the variable and the consent command and no source.
     `src/xippios/google/mail/mcp.py` (sdk-google-mail) — the imports of `AccountLock`,
     `bind_tasks` and `instructions` from `_account_lock` and of `serve` from `_cli` (lines
     15 to 16) → `from xippios.core import TenantLock, bind_tasks, tenant_instructions`, with
