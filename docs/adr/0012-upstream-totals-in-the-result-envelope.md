@@ -1,6 +1,6 @@
 # ADR-0012: Upstream totals in the result envelope
 
-Status: Accepted · Date: 2026-10-23
+Status: Accepted · Date: 2026-10-23 · Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240
 
 ## Context
 
@@ -66,3 +66,27 @@ Johannes on 2026-10-27): the context's "a plain pydantic model that drops unknow
 no longer holds. `ResultMeta` refuses a field it does not define (`extra="forbid"`), so
 a misspelt field is an error at construction, never a value lost without a word;
 conventions 1.19 §4 says so.
+
+## Amendment 2026-11-18
+
+Core 0.4.0, the package of https://github.com/xippios/sdk-core/issues/240, whose steps
+each add their points here.
+
+(a) **A task that returns one upstream page per call** (decision 2; step 15;
+https://github.com/xippios/sdk-core/issues/177, found by sdk-google-mail, with sdk-x).
+Decision 2 has a paginated task called without its page parameter collect every page, and
+the amendment by ADR-0023 extends it to a cursor-paginated source's own loop. Two kinds of
+list make collecting cost what no call bounds. A list unbounded by nature would spend
+hundreds of calls for a result the MCP cap cuts at 200 rows: a mailbox holds tens of
+thousands of messages, so sdk-google-mail's `list_messages` (`messages.list`, up to 500
+ids a page, five quota units a call) returns one page, as Johannes approved its
+parameters at the source's G1 on 2026-10-29. A metered upstream bills per resource
+returned, so no call would bound what collecting costs: sdk-x returns one page per call,
+and ADR-0027, decision 4 (Johannes, gate P, 2026-10-29) rejected collecting against this
+decision. A task over a list of either kind may return one upstream page per call and
+collect nothing: the cursor upstream returns stays on its data under upstream's name
+(sdk-google-mail's `next_page_token`, sdk-x's `data.meta.next_token`), the caller passes
+it back to the page parameter upstream names, and the docstring says that the task
+returns one page and collects nothing. `total` stays upstream's count for the whole
+request, or `None`, as decision 3 has it for a task that returns one page. Conventions §4
+states it from 1.28 on.

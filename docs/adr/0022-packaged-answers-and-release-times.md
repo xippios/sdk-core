@@ -1,7 +1,8 @@
 # ADR-0022: Packaged answers and release times in `ResultMeta`
 
 Status: Accepted · Date: 2026-10-26 · Decided by Johannes on 2026-10-26 (architect
-interview; the family review of 2026-10-25; the gats ruling of 2026-10-26)
+interview; the family review of 2026-10-25; the gats ruling of 2026-10-26) · Amended
+2026-11-18 by https://github.com/xippios/sdk-core/issues/240
 
 ## Context
 
@@ -129,3 +130,90 @@ identifier nor a release time, and a newest `load_time` computed across datasets
 maximum the package computes, which queue row 199 (2) calls a guess. Johannes decided it
 on 2026-10-29 (D110 (3)); sdk-usda-nass 0.3.0's PR 4, which waited on the question, is
 dropped. Conventions §4 states it from 1.23 on.
+
+## Amendment 2026-11-18
+
+Core 0.4.0, the package of https://github.com/xippios/sdk-core/issues/240, whose steps
+each add their points here.
+
+(a) **A printed zone that upstream contradicts** (decision 2; step 15;
+https://github.com/xippios/sdk-core/issues/53, found by sdk-usda-esmis). Decision 2 flags
+a time upstream printed without a zone. ESMIS prints one, `+0000` on `release_datetime`,
+while the same site publishes its release calendar in Eastern time with the releases at
+noon and writes the release files at 16:01 UTC, 12:01 Eastern (the WASDE of 2026-10-09),
+so the printed zone does not say when the release happened. The flag also marks a time
+whose printed zone upstream's own calendar and files contradict: the task keeps the
+printed wall-clock time with its offset dropped, never converted, and sets the flag, and
+the wrapper's model keeps the time as printed. Rule 2 refuses the flag with an aware
+value, so the task drops the offset itself. The time is upstream's text, not comparable
+across sources, as decision 2 says of a time printed without a zone. Johannes decided it
+for sdk-usda-esmis on 2026-10-27, at its boundary interview, and sdk-usda-wasde reads the
+time through it (ADR-0021).
+
+(b) **A frozen feed whose answers carry their releases** (amendment 2026-10-27, point 5;
+step 15; https://github.com/xippios/sdk-core/issues/108, found by sdk-usda-gats). Point 5
+puts a frozen series' last release in `vintage`. sdk-usda-gats's UN Trade data, a feed
+whose last release was 2021-01-18, answers one reporter and statistical year, and the
+feed's release list gives each reporter-year a release time of its own
+(`2020-06-03T05:50:46` for Iceland's 2019 exports). Where each answer of a frozen feed
+carries its own release, `vintage` keeps that answer's release, and the feed's last
+release goes to the README status value and the docstring only. The feed's list of
+release dates keeps `vintage` empty, since it is no single release. Johannes confirmed
+this option for sdk-usda-gats on 2026-10-28 (G5, at its PR 1 boundary) and left the
+wording to the next batch of the documents.
+
+(c) **A parameter that takes back a vintage** (decision 2; step 15;
+https://github.com/xippios/sdk-core/issues/119, found by sdk-usda-esr, with
+sdk-usda-psd). sdk-usda-esr's `get_release_dates(since=...)` takes the `meta.vintage`
+text of an earlier call, ESR's naive release time, to return only the commodities
+released since, and sdk-usda-psd's `get_release_dates` and `get_latest_release` take a
+release month in the form its `meta.vintage` takes. Such a parameter takes the text as
+`vintage` wrote it and keeps what is strictly later, an equal release being no newer.
+`meta.vintage` and `meta.published_at` stay those of the whole upstream answer, not of
+the filtered subset, so an empty answer still carries the marker to store for the next
+call. Against a naive release time, a value with a zone is refused with
+`InvalidRequestError`, never converted, since comparing the two would invent a zone
+(ADR-0003), and so is a text the parameter cannot read (ADR-0007). Johannes decided
+sdk-usda-esr's parameter on 2026-10-28 (G5): the text as input and the meta of the whole
+answer; the refusal of a zone was the package's own.
+
+(d) **Decisions 6 and 7 read as the sources apply them** (decisions 6 and 7; step 15;
+https://github.com/xippios/sdk-core/issues/136, found by sdk-usda-nass; decided by
+Johannes on 2026-11-17, https://github.com/xippios/sdk-core/issues/238). Decision 6
+tells an unreleased period from a period without data by upstream's empty answer, and
+refuses the range where it cannot. Four cases met it without a reading:
+
+1. **No release calendar.** Where upstream names no release, so the latest released
+   period is unknown, a range ends at the current period, and a period that counts zero
+   is skipped, the docstring saying that a zero may be a period not yet released.
+   sdk-usda-nass's `get_data(split_by_year=True)` refuses a year past the current UTC
+   year with `InvalidRequestError` and skips a year counting 0, which Quick Stats does
+   not tell apart from a year without records (Johannes, 2026-10-28).
+2. **One period.** A task that fetches one period refuses a period after the latest
+   released one where it knows that period, with decision 7's `NotFoundError`, as
+   sdk-usda-gats's month tasks refuse a month their release list lacks. Where it does
+   not know it, its docstring says that an empty answer may be a period not yet
+   released.
+3. **A split mode.** A split mode of a free-form query task, which fetches its range
+   one period per call, is a period series, with its ceiling: sdk-usda-nass's
+   `split_by_year`, 20 years, 5 on the MCP server.
+4. **The calls a tool call spends.** The cap note counts the upstream calls that one
+   tool call spends: the note that states the ceiling of a tool that assembles a period
+   series, the cap on the periods one call fetches, counts them at that ceiling, as each
+   of the four sources with such a tool does: sdk-usda-nass's 5 years on the MCP server
+   at most 11 keyed calls, a first count and two calls a year; sdk-usda-gats's 24 months
+   on the MCP server 24 requests; sdk-usda-esr's ten market years ten requests and one
+   for the release list; sdk-usda-psd's 100 market years about 67 requests, from 1960,
+   where its data starts, to the current forecast years.
+
+(e) **A date-only release identifier** (decision 2; step 15;
+https://github.com/xippios/sdk-core/issues/158, found by sdk-faostat, with
+sdk-usda-psd). A release identifier that is a day or a month, with no time, such as
+FAOSTAT's `date_update` (`2025-12-31`) or PSD's release month (`2026-10`), is neither a
+time nor a time printed without a zone. It stays in `vintage` as upstream prints it, and
+`published_at` stays empty: decision 2's flag covers a time printed without a zone, not
+a day, and 00:00 of the day or the first of the month would date the release before it
+happened, a look-ahead in an as-of store. The plan of core 0.4.0 settled it as both
+sources have it.
+
+Conventions §4 states the five points from 1.28 on.

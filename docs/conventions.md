@@ -240,10 +240,10 @@ Every task function returns `xippios.core.models.Result[T]`:
 ```python
 class ResultMeta(BaseModel):
     source: str                       # "usda-nass"
-    endpoint: str                     # upstream operation name, or a file kind (ADR-0020)
+    endpoint: str                     # upstream operation name, or a file's name (ADR-0020)
     retrieved_at: datetime            # UTC, when we fetched it
     published_at: datetime | None     # upstream publication/release time if known
-    published_at_naive: bool = False  # True when upstream printed it without a zone
+    published_at_naive: bool = False  # True for upstream's wall-clock text, no zone
     vintage: str | None               # upstream release identifier if the source has one
     request: dict[str, Any]           # the parameters used, for reproducibility
     total: int | None                 # upstream's record count, if it reports one
@@ -268,35 +268,59 @@ when the answer arrived (ADR-0015, amendment 2026-11-18, point b).
 given, no zone attached; a naive value without the flag is refused, and so is the flag
 with an aware value or with none. The flag says the time is upstream's text, not
 comparable across sources; a consumer that knows the publisher's zone assigns it outside
-the family (ADR-0003, ADR-0022). `vintage` keeps the release identifier as upstream
-names it; where that identifier is the timestamp text, `vintage` holds the text and
-`published_at` its parsed value with the flag. A load time is never a vintage: a source
-whose only time is the time upstream loaded the data (sdk-usda-nass's `load_time`)
-leaves `vintage` and `published_at` empty, and a newest load time computed across
-datasets is no release time either (ADR-0022, reading of 2026-10-29).
+the family (ADR-0003, ADR-0022). The flag also marks a time whose printed zone
+upstream's own calendar and files contradict: the task keeps the printed wall-clock time
+with its offset dropped, never converted, and sets the flag, and the wrapper's model
+keeps the time as printed (ESMIS prints `+0000` for a release that its calendar and its
+files' times put at noon Eastern; ADR-0022, amendment 2026-11-18, point a). `vintage`
+keeps the release identifier as upstream names it; where that identifier is the
+timestamp text, `vintage` holds the text and `published_at` its parsed value with the
+flag. A release identifier that is a day or a month, with no time (sdk-faostat's
+`date_update`, `2025-12-31`; sdk-usda-psd's release month, `2026-10`), stays in
+`vintage` as upstream prints it, and `published_at` stays empty: the flag covers a time
+printed without a zone, not a day, and 00:00 of the day or the first of the month would
+date the release before it happened (ADR-0022, amendment 2026-11-18, point e). A load
+time is never a vintage: a source whose only time is the time upstream loaded the data
+(sdk-usda-nass's `load_time`) leaves `vintage` and `published_at` empty, and a newest
+load time computed across datasets is no release time either (ADR-0022, reading of
+2026-10-29).
+
+A parameter that takes the `meta.vintage` of an earlier call to return only what changed
+since (sdk-usda-esr's and sdk-usda-psd's `since`) takes the text as `vintage` wrote it
+and keeps what is strictly later, an equal release being no newer. `meta.vintage` and
+`meta.published_at` stay those of the whole upstream answer, not of the filtered subset,
+so an empty answer still carries the marker to store for the next call. Against a naive
+release time, a value with a zone is refused with `InvalidRequestError`, never
+converted, and so is a text the parameter cannot read (ADR-0007; ADR-0022, amendment
+2026-11-18, point c).
 
 A task that answers from packaged reference data (§3) fills `meta` by ADR-0022:
 `retrieved_at` is the time the packaged list was fetched from upstream (the file's
 `fetched` value, as a cache hit uses the entry's stored time); `endpoint` names the
 upstream operation the list came from (operationId or path, or the full URL for a list
 fetched from a second base URL, since the path alone names the first base's operation;
-ADR-0010, amendment 2026-11-18, point a), never "reference" or a file path; `vintage` is
-an upstream release identifier, or `None` when upstream has
-none, since a fetch date is not a vintage; `total` is `None` unless upstream reports a
-count (ADR-0012). `PackagedList` builds this meta, so no source writes it by hand:
-`PackagedList.load(package, name)` reads the file (§3), `.meta(source, request=...,
-vintage=...)` builds the meta and `.parse(Model, source=...)` the records. A `fetched`
-that is a bare date, as refresh scripts wrote it before template v0.3.0, reads as 00:00
-UTC of that day, the start of the day the old scripts truncated the time to, until the
-source's next refresh writes the full time (ADR-0022, amendment 2026-10-27). A `list_*`
-task's `search` keeps a record when the text occurs in one of its fields, ignoring case
-(`xippios.core.matches`).
+ADR-0010, amendment 2026-11-18, point a), or, for a list packaged from a released file,
+that file's name as a task that reads it sets it (below; ADR-0020, amendment 2026-11-18,
+point c), never "reference" or a file path; `vintage` is an upstream release identifier,
+or `None` when upstream has none, since a fetch date is not a vintage; `total` is `None`
+unless upstream reports a count (ADR-0012). `PackagedList` builds this meta, so no source
+writes it by hand: `PackagedList.load(package, name)` reads the file (§3),
+`.meta(source, request=..., vintage=...)` builds the meta and `.parse(Model, source=...)`
+the records. A `fetched` that is a bare date, as refresh scripts wrote it before template
+v0.3.0, reads as 00:00 UTC of that day, the start of the day the old scripts truncated
+the time to, until the source's next refresh writes the full time (ADR-0022, amendment
+2026-10-27). A `list_*` task's `search` keeps a record when the text occurs in one of its
+fields, ignoring case (`xippios.core.matches`).
 
 A frozen series, one upstream no longer updates (a discontinued report, a dataset
 upstream stopped publishing), is marked where agents and readers look: its task's row in
 the README status table carries a status that names the last release (`frozen, last
 release 2024-09`), the task's docstring says so, and `vintage` holds that release's
-identifier. `ResultMeta` has no field for it (ADR-0022, amendment 2026-10-27).
+identifier. `ResultMeta` has no field for it (ADR-0022, amendment 2026-10-27). Where each
+answer of a frozen feed carries its own release, as a reporter-year of sdk-usda-gats's UN
+Trade data does, `vintage` keeps that answer's release, and the feed's last release goes
+to the README status value and the docstring only; the feed's list of release dates keeps
+`vintage` empty, since it is no single release (ADR-0022, amendment 2026-11-18, point b).
 
 A task that assembles a period series from one upstream call per period (a month, a
 marketing year) states its ceiling, the most periods one call fetches (the MCP tool's,
@@ -308,17 +332,40 @@ whole range is refused, naming the latest released period, where it cannot (an
 unreleased month answers sdk-usda-gats with `[]`, as a month without trade does). The
 refusal is `NotFoundError` naming the latest released period; `InvalidRequestError`
 stays for a malformed request (ADR-0007). An empty answer that cannot be told from no
-data is never passed off as data (ADR-0022, amendment 2026-10-27).
+data is never passed off as data (ADR-0022, amendment 2026-10-27). Four cases read as
+the sources apply them (ADR-0022, amendment 2026-11-18, point d;
+https://github.com/xippios/sdk-core/issues/238):
 
-A task that reads a file (§2) sets `endpoint` to the file kind as upstream names it
-(`wasde.xls`, `qs.crops`), `vintage` to the release identifier (an ESMIS release id, a
-report date as printed), `published_at` to the catalog's release time, and `request` to
-the file's URL or release id plus the filters applied in Python (ADR-0020). A file it
-downloads from another origin than the base URL's, a link a catalog names, goes without
-the client's credentials (§6): `endpoint` is the file kind all the same, `request` holds
-the link as `ResultMeta` writes it, a signature in its query `REDACTED`, and the fixture
-of that download carries no key, neither the placeholder nor a credential header, so a
-leak check counts none in it (ADR-0015, amendment 2026-11-18, point d).
+- Where upstream names no release, so the latest released period is unknown, a range
+  ends at the current period, and a period that counts zero is skipped, the docstring
+  saying that a zero may be a period not yet released (sdk-usda-nass's `split_by_year`
+  refuses a year past the current UTC year and skips a year counting 0).
+- A task that fetches one period refuses a period after the latest released one where it
+  knows that period, with `NotFoundError` (sdk-usda-gats's month tasks); where it does
+  not know it, its docstring says that an empty answer may be a period not yet released.
+- A split mode of a free-form query task is a period series, with its ceiling
+  (sdk-usda-nass's `split_by_year`: 20 years, 5 on the MCP server).
+- The note that states a period-series tool's ceiling counts the upstream calls that one
+  tool call spends at that ceiling (sdk-usda-nass's 5 years on the MCP server: at most 11
+  keyed calls, a first count and two calls a year; sdk-usda-gats's 24 months: 24
+  requests).
+
+A task that reads a file (§2) sets `endpoint` to the file's name as upstream names it,
+which may change with each release and carry a revision's suffix (`wasde1026.xml` and
+`wasde0626v2.xml` as ESMIS catalogs them; sdk-faostat's `All_Data_(Normalized).csv`),
+`vintage` to the release identifier (an ESMIS release id, a report date as printed),
+`published_at` to the catalog's release time, and `request` to the file's URL or release
+id plus the filters applied in Python (ADR-0020; amendment 2026-11-18, point c;
+https://github.com/xippios/sdk-core/issues/244). A narrative read from a PDF that prints
+a date but no month label keeps the ESMIS release id as `vintage`. A file it downloads
+from another origin than the base URL's, a link a catalog names, goes without the
+client's credentials (§6): `endpoint` is named as above all the same, `request` holds the
+link as `ResultMeta` writes it, a signature in its query `REDACTED`, and the fixture of
+that download carries no key, neither the placeholder nor a credential header, so a leak
+check counts none in it (ADR-0015, amendment 2026-11-18, point d). A file read from an
+origin or mirror that the publisher runs (§2) is named the same way, and the URL sent,
+the mirror's, is the file's URL in `request`. A download of an operation's answer is no
+file upstream names and keeps the operation's name (sdk-eurostat's `dataQuery`).
 
 `request` records what was sent: a parameter the caller left `None` is omitted
 (ADR-0022, rule 3). `ResultMeta` drops a top-level `None` at construction, so a task
@@ -363,6 +410,16 @@ of `meta`: set only from what upstream reports, never computed from `len(data)`.
 every page is collected, the count kept is the one upstream reported on the last page
 fetched, and a mismatch with `len(data)` is upstream's and is not corrected; a task that
 returns one page, or caps what it collects, can have `total > len(data)` by design.
+
+A paginated task may instead return one upstream page per call and collect nothing in
+the two cases where collecting would cost what no call bounds: a list unbounded by
+nature, where collecting would spend hundreds of calls for a result the cap cuts at 200
+rows (sdk-google-mail's `list_messages`, a mailbox), and a metered upstream, which bills
+per resource returned (sdk-x; ADR-0027, decision 4). The cursor upstream returns stays
+on its data under upstream's name (`next_page_token`, sdk-x's `data.meta.next_token`),
+the caller passes it back to the page parameter upstream names, and the docstring says
+that the task returns one page and collects nothing (ADR-0012, amendment 2026-11-18,
+point a).
 
 ## 5. Errors (`xippios.core.errors`)
 
@@ -443,10 +500,11 @@ the query can carry a key (ADR-0005).
   cache and one `classify`, whose path checks name both bases. A request to an origin or
   mirror that the publisher runs itself (§2) takes the canonical host's pace, one limiter
   for both hosts where the source sends to both; its `meta.endpoint` names the URL sent,
-  and `docs/upstream/` names both hosts (sdk-usda-wasde's USDA CDN origin for
-  `www.usda.gov`). A dependent's own client sends nothing to its dependency's host, which
-  the dependency's limiter alone paces, since a second limiter there would allow up to
-  twice the pace each package meant.
+  or for a file the file's name, the URL sent then in `meta.request` (§4; ADR-0020,
+  amendment 2026-11-18, point c), and `docs/upstream/` names both hosts
+  (sdk-usda-wasde's USDA CDN origin for `www.usda.gov`). A dependent's own client sends
+  nothing to its dependency's host, which the dependency's limiter alone paces, since a
+  second limiter there would allow up to twice the pace each package meant.
 - Two hooks on `ClientConfig` see what passes through the client (ADR-0015):
   `before_request`, called once per call after the cache lookup and before the rate
   limiter, may wait or raise a taxonomy error, and then nothing is sent; `observe` sees
