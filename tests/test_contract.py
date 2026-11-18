@@ -30,7 +30,7 @@ def test_a_pattern_names_one_variable_per_tenant() -> None:
 def test_secret_and_required_are_named_at_every_entry() -> None:
     # Swapped positions would mark a key as no secret: both are keyword-only, neither defaults.
     with pytest.raises(TypeError):
-        EnvVar("FICTIVE_API_KEY", True, True)  # type: ignore[misc]
+        EnvVar("FICTIVE_API_KEY", True, True)  # type: ignore[call-arg]
     with pytest.raises(TypeError):
         EnvVar("FICTIVE_API_KEY", secret=True)  # type: ignore[call-arg]
     with pytest.raises(TypeError):

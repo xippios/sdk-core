@@ -20,6 +20,7 @@ from xippios.core.mcp import (
     build_server,
     is_loopback_only,
     is_write_server,
+    main,
     register_tasks,
 )
 from xippios.core.testing import mcp_call, mcp_call_text
@@ -141,6 +142,8 @@ def test_a_tool_set_is_frozen_and_replace_narrows_it() -> None:
     narrowed = dataclasses.replace(tools, tasks=[get_series], caps={})
     assert narrowed.tasks == (get_series,)
     assert narrowed.instructions == tools.instructions
+    with pytest.raises(TypeError, match="entry 1 of tasks is no function"):
+        dataclasses.replace(tools, tasks=[None])  # type: ignore[list-item]
 
 
 def test_a_tool_set_refuses_an_empty_source_and_a_task_that_is_no_function() -> None:
@@ -324,3 +327,25 @@ def test_a_host_applies_the_hooks_with_their_defaults(monkeypatch: pytest.Monkey
     assert tools.apply_options is not None
     assert tools.apply_options(tools.option_defaults(), server) is server
     assert CEILING["years"] == 5, "what the entry point run without --split-years holds"
+
+
+def test_the_entry_point_runs_the_server_with_the_tool_sets_hooks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The source's run() of the module docstring: main with the tool set's hooks.
+    monkeypatch.setitem(CEILING, "years", 20)
+    tools = example_tools()
+    server = build_server(tools)
+    runs: list[str] = []
+
+    def fake_run(transport: str = "stdio", **kwargs: Any) -> None:
+        runs.append(transport)
+
+    monkeypatch.setattr(server, "run", fake_run)
+    main(
+        server,
+        ["--split-years", "7"],
+        add_options=tools.add_options,
+        apply_options=tools.apply_options,
+    )
+    assert (runs, CEILING["years"]) == (["stdio"], 7)
