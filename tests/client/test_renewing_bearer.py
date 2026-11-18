@@ -35,6 +35,7 @@ from xippios.core.testing.plugin import PLACEHOLDER_KEY
 
 BASE = "https://api.example.test/v1"
 TOKEN_URL = "https://login.example.test/token"
+TOKEN_HOST = "login.example.test"
 FILES = "https://files.example.test/bulk/data.csv"
 USER = "EXAMPLE_TEST_USERNAME"
 PASSWORD = "EXAMPLE_TEST_PASSWORD"  # pragma: allowlist secret
@@ -100,7 +101,7 @@ class Upstream:
         self.api: Callable[[httpx.Request], httpx.Response] | None = None
 
     async def __call__(self, request: httpx.Request) -> httpx.Response:
-        if str(request.url) == TOKEN_URL:
+        if request.url.host == TOKEN_HOST:
             self.exchanges.append(request)
             count = len(self.exchanges)
             if self.hold is not None:
@@ -408,13 +409,14 @@ ECHOED = "an-echoed-value-never-shown"
         (404, NotFoundError, "404 from POST /token: Not Found"),
         (429, RateLimitError, "429 from POST /token: Too Many Requests"),
         (503, UpstreamError, "503 from POST /token: Service Unavailable"),
+        (599, UpstreamError, "599 from POST /token: no reason phrase"),
         (
             204,
             UpstreamError,
             "POST /token answered HTTP 204, not the documented 200; nothing of it is shown",
         ),
     ],
-    ids=["400", "401", "403", "404", "429", "503", "204"],
+    ids=["400", "401", "403", "404", "429", "503", "599", "204"],
 )
 async def test_a_refused_exchange_is_mapped_by_its_status_and_quotes_nothing(
     status: int, error: type[XippiosError], text: str
@@ -437,6 +439,40 @@ async def test_a_refused_exchange_is_mapped_by_its_status_and_quotes_nothing(
         assert (raised.value.status, raised.value.body) == (status, "")
     if isinstance(raised.value, RateLimitError):
         assert raised.value.retry_after == 7
+    await client.aclose()
+
+
+class TenantLoginAuth(LoginAuth):
+    """A token request with a query and a ``User-Agent`` of its own."""
+
+    def token_request(self, request: httpx.Request) -> httpx.Request:
+        login = super().token_request(request)
+        return httpx.Request(
+            "POST",
+            f"{TOKEN_URL}?tenant=never-named",
+            content=login.content,
+            headers={**login.headers, "User-Agent": "its-own-agent"},
+        )
+
+
+@pytest.mark.anyio
+async def test_a_refused_exchange_names_the_method_and_path_alone() -> None:
+    """``request_description``'s words: no host, no query (conventions §5)."""
+    upstream = Upstream()
+    upstream.token_answer = lambda _: httpx.Response(503, text="busy")
+    client, _ = make_client(upstream, TenantLoginAuth(source="example"))
+    with pytest.raises(UpstreamError) as raised:
+        await client.get("/data")
+    assert str(raised.value) == "503 from POST /token: Service Unavailable"
+    await client.aclose()
+
+
+@pytest.mark.anyio
+async def test_a_token_request_keeps_a_user_agent_of_its_own() -> None:
+    upstream = Upstream()
+    client, _ = make_client(upstream, TenantLoginAuth(source="example"))
+    await client.get("/data")
+    assert upstream.exchanges[0].headers["user-agent"] == "its-own-agent"
     await client.aclose()
 
 
