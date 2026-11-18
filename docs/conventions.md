@@ -475,7 +475,9 @@ amendment 2026-11-18).
   and, where upstream documents none for an answer, the shapes the source recorded, each
   backed by a fixture of that answer that a test passes to `classify` through
   `response_from_fixture` (ADR-0008, amendment 2026-11-18, point a). Its endpoint
-  wrappers then use `get_json` and never inspect status codes themselves. A wrapper
+  wrappers then use `get_json`, and a write wrapper `post_json` or `delete_json`, which
+  return `None` for an answer with no body (ADR-0015, amendment 2026-11-18, point g),
+  and never inspect status codes themselves. A wrapper
   whose answer may come from the cache calls `get_answer()`: its `Answer(payload,
   retrieved_at)` carries a hit's stored time, from `xippios_cache_stored_at`, or else
   the arrival time, for `meta.retrieved_at` (ADR-0015, amendment 2026-10-27); one that
@@ -542,14 +544,17 @@ amendment 2026-11-18).
   as they do to `get()`, and `auth` works as it does there; a retry restarts the file;
   except that `observe` and `classify` see a success's status and headers only, its
   body going to the file unread, and a 1xx or 3xx raises `UpstreamError`, since
-  redirects are not followed (ADR-0019, amendment 2026-10-27). `Downloaded` carries
-  `path`, `bytes`, `content_type`, the file name from `Content-Disposition` when sent,
-  `etag`, `last_modified` and `retrieved_at`.
+  redirects are not followed (ADR-0019, amendment 2026-10-27). A `dest` that is a
+  directory, or whose directory does not exist, is refused with `InvalidRequestError`
+  before anything is sent, and the file is written with mode `0600` (ADR-0019, amendment
+  2026-11-18, point g). `Downloaded` carries `path`, `bytes`, `content_type`, the file
+  name from `Content-Disposition` when sent, `etag`, `last_modified` and `retrieved_at`.
 - `decode_text(response)` (charset from `Content-Type`, UTF-8 by default, a BOM
-  stripped) and `decode_csv(data, *, delimiter=",", source=None)` (a path or a
-  response; the stdlib's `csv.DictReader`, headers as upstream prints them) sit beside
-  `decode_json`. The source opens gzip and zip with the stdlib; core ships no XML,
-  spreadsheet or PDF parser (ADR-0019, ADR-0020).
+  stripped) and `decode_csv(data, *, delimiter=",", source=None)` (a path, a response or
+  an open text stream, such as a gzip or ZIP member the source opens, ADR-0019,
+  amendment 2026-11-18, point f; the stdlib's `csv.DictReader`, headers as upstream
+  prints them) sit beside `decode_json`. The source opens gzip and zip with the stdlib;
+  core ships no XML, spreadsheet or PDF parser (ADR-0019, ADR-0020).
 - Credentials come from the client's `auth`, which goes to the base URL's origin, its
   scheme, host and port, and to no other: a request to another origin, a file link on
   another host, is sent without them, and a call that must send credentials there passes

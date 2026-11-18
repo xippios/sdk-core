@@ -321,3 +321,22 @@ failure in transit is the `TransportError` it is for `request`. A recorder that 
 through `client.request` to rewrite a fixture before the write (sdk-cashctrl,
 sdk-google-mail, sdk-x, sdk-usda-wasde) keeps its one-attempt client, since `record`
 writes the file itself and ADR-0024, decision 4, gives it no hook.
+
+(g) **The write counterparts of `get_json`** (decisions 4 and 5; step 9;
+https://github.com/xippios/sdk-core/issues/178, found by sdk-google-mail and sdk-cashctrl;
+ADR-0023, decision 2). Decision 5 gave a wrapper's read `get_json`, or `get` and then
+`decode_json`, and no call for a write, so a write wrapper sent through `request` and
+decoded the answer itself: sdk-google-mail's five, `drafts_delete` without reading an
+answer that has no body, and sdk-cashctrl's `post_form` with an error text of its own.
+`AsyncClient.post_json(path, *, json=None, data=None, params=None, headers=None,
+auth=...)` and `delete_json(path, *, params=None, headers=None, auth=...)` send through
+`request`, so `classify`, the hooks, the limiter and ADR-0011's rule for a method that is
+not idempotent apply as there, `auth=` takes decision 4's three states, and the cache is
+neither read nor written, as for every method but GET. They decode the answer as
+`get_json` does, its `ValidationError` naming the path, and return `None` for an answer
+with no body at all, a 204 say, or Gmail's answer to `drafts.delete`; a body of
+whitespace is a body, and not JSON. `get_json` still refuses an empty body. A DELETE sends no body,
+since no source's does; one that must sends it through `request`. One
+`request_json(method, ...)` was the option not taken, since the family names a call by what
+it sends, as `get_json` does, and a method passed as text would admit a GET past
+`get_answer`'s cache.

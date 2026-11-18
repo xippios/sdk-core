@@ -1,6 +1,7 @@
 """The async client: one request path with retries, rate limiting, caching and errors."""
 
 import asyncio
+import codecs
 import contextlib
 import csv
 import inspect
@@ -11,12 +12,12 @@ import tempfile
 import threading
 import time
 import weakref
-from collections.abc import Awaitable, Callable, Iterator, Mapping
+from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PurePath
 from types import TracebackType
-from typing import IO, Any, Final, Self, final, overload
+from typing import IO, Any, Final, Self, cast, final, overload
 
 import httpx
 
@@ -33,6 +34,7 @@ from xippios.core.client.ratelimit import TokenBucket
 from xippios.core.client.retry import send_with_retries
 from xippios.core.errors import (
     BODY_LIMIT,
+    InvalidRequestError,
     UpstreamError,
     ValidationError,
     XippiosError,
@@ -459,6 +461,71 @@ class AsyncClient:
         response = await self.get(path, params=params, headers=headers, auth=auth)
         return decode_json(response, source=self.source, path=path)
 
+    async def post_json(
+        self,
+        path: str,
+        *,
+        json: Any = None,
+        data: Mapping[str, Any] | None = None,
+        params: Params = None,
+        headers: Mapping[str, str] | None = None,
+        auth: httpx.Auth | _ClientAuth | None = _CLIENT_AUTH,
+    ) -> Any:
+        """POST and decode a JSON answer, ``None`` for an answer with no body.
+
+        The write counterpart of ``get_json``: ``request("POST", ...)``, so ``classify``,
+        the hooks, the limiter and the retry rule apply as they do there, a 5xx or a
+        transport failure retried only where ``RetryPolicy.retry_non_idempotent`` allows
+        it (ADR-0011), and the cache is neither read nor written. An answer with no body
+        at all, a 204 say, returns ``None``; any other body is decoded as ``get_json``
+        decodes it.
+
+        Args:
+            path: Path joined onto the base URL, e.g. ``"/drafts"``.
+            json: JSON body, e.g. ``{"message": {"raw": raw}}``.
+            data: Form body, sent form-encoded, e.g. ``{"title": "Corn"}``, for an
+                upstream whose writes take form fields; never with ``json``.
+            params: Query parameters.
+            headers: Extra headers for this request only.
+            auth: As for ``request``: the client's credentials by default, ``None`` for
+                none, an ``httpx.Auth`` to replace them.
+
+        Raises:
+            ValueError: Both ``json`` and ``data`` were given; nothing is sent.
+            ValidationError: The answer has a body that is not JSON, naming ``path``.
+        """
+        response = await self.request(
+            "POST", path, params=params, json=json, data=data, headers=headers, auth=auth
+        )
+        return _json_or_none(response, source=self.source, path=path)
+
+    async def delete_json(
+        self,
+        path: str,
+        *,
+        params: Params = None,
+        headers: Mapping[str, str] | None = None,
+        auth: httpx.Auth | _ClientAuth | None = _CLIENT_AUTH,
+    ) -> Any:
+        """DELETE and decode a JSON answer, ``None`` for an answer with no body.
+
+        ``post_json`` for a DELETE, which sends no body: ``request("DELETE", ...)``, a
+        5xx or a transport failure retried only where
+        ``RetryPolicy.retry_non_idempotent`` allows it (ADR-0011), and the cache neither
+        read nor written. An answer with no body at all, a 204 say, returns ``None``.
+
+        Args:
+            path: Path joined onto the base URL, e.g. ``"/drafts/r-1"``.
+            params: Query parameters.
+            headers: Extra headers for this request only.
+            auth: As for ``request``.
+
+        Raises:
+            ValidationError: The answer has a body that is not JSON, naming ``path``.
+        """
+        response = await self.request("DELETE", path, params=params, headers=headers, auth=auth)
+        return _json_or_none(response, source=self.source, path=path)
+
     @overload
     async def get_answer(
         self,
@@ -562,6 +629,11 @@ class AsyncClient:
         as for ``get()``, but a 1xx or 3xx answer raises ``UpstreamError`` where
         ``get()`` returns it.
 
+        The file is written with mode ``0600``, readable and writable by its owner alone,
+        as ``tempfile.mkstemp`` creates the temporary file, whose mode the rename keeps:
+        not the ``0644`` a new file gets under the usual umask of ``022``, nor the mode of
+        a file it replaces. A caller that shares the file sets its mode itself.
+
         Args:
             url: An absolute URL, e.g. a file link from a catalog, or a path joined onto
                 the base URL, e.g. ``"/files/qs.crops_20261027.txt.gz"``.
@@ -577,17 +649,22 @@ class AsyncClient:
             ``Last-Modified`` and when it was complete.
 
         Raises:
-            ValueError: ``dest`` is a directory, or its directory does not exist;
-                nothing is sent.
+            InvalidRequestError: ``dest`` is a directory, or its directory does not
+                exist, a bad argument (conventions §5); nothing is sent, the hooks
+                included.
             XippiosError: The taxonomy error for the answer (``classify`` first, then the
                 status), ``UpstreamError`` for a 1xx or 3xx, ``TransportError`` for a
                 transport failure that is not retried; ``dest`` is untouched.
         """
         target = Path(dest)
         if target.is_dir():
-            raise ValueError("dest is a directory; name the file to write")
+            raise InvalidRequestError(
+                "dest is a directory; name the file to write", source=self.source
+            )
         if not target.parent.is_dir():
-            raise ValueError("dest's directory does not exist; create it first")
+            raise InvalidRequestError(
+                "dest's directory does not exist; create it first", source=self.source
+            )
         pool = self._pool()
         reach = self._reach(auth)
         handle, name = tempfile.mkstemp(
@@ -745,6 +822,17 @@ def decode_json(
         )
 
 
+def _json_or_none(response: httpx.Response, *, source: str, path: str) -> Any:
+    """``decode_json`` for a write's answer, ``None`` when it has no body at all.
+
+    A 204 has none, and an upstream may answer a write with an empty 200 or 202; a body
+    of whitespace is a body, and not JSON.
+    """
+    if not response.content:
+        return None
+    return decode_json(response, source=source, path=path)
+
+
 def _reason(exc: ValueError) -> str:
     """What a decoder said and where, never the text it read (queue row 42)."""
     if isinstance(exc, json.JSONDecodeError):
@@ -805,50 +893,124 @@ def decode_text(
 
 
 def decode_csv(
-    data: Path | str | httpx.Response, *, delimiter: str = ",", source: str | None = None
+    data: Path | str | httpx.Response | IO[str],
+    *,
+    delimiter: str = ",",
+    source: str | None = None,
 ) -> Iterator[dict[str, str]]:
-    r"""The rows of a CSV file or answer, one mapping per row, headers as upstream prints them.
+    r"""The rows of a CSV file, answer or text stream, one mapping per row, headers as printed.
 
     The stdlib's ``csv.DictReader`` reads the first row as the header and each further
     row as a mapping from header to text; nothing is converted, renamed or stripped
     (ADR-0003). A row shorter than the header maps the missing columns to ``None``, and
     a longer one keeps the extra values as a list under ``None``, as ``DictReader``
-    does. A generator: a file of hundreds of MB is read row by row, never whole, and is
-    closed when the generator ends or is closed; ``list(decode_csv(path))`` reads it all.
+    does. A generator: a file of hundreds of MB is read row by row, never whole, and a
+    path is closed when the generator ends or is closed; ``list(decode_csv(path))``
+    reads it all.
 
     Args:
         data: A downloaded file, as a path, read as UTF-8 with a byte order mark
-            stripped, e.g. ``downloaded.path``; or a response with its body read,
-            decoded by ``decode_text``. A gzip or zip file is opened by the source with
-            the stdlib.
+            stripped, e.g. ``downloaded.path``; a response with its body read, decoded
+            by ``decode_text``; or an open text stream, such as a gzip or ZIP member the
+            source opens with the stdlib, e.g. ``io.TextIOWrapper(gzip.open(path),
+            encoding="utf-8-sig", newline="")``. A stream is read from where it stands, a
+            leading byte order mark stripped, and left open, for the caller that opened
+            it to close. A binary stream is refused with ``TypeError`` at the first row:
+            an ``io.RawIOBase`` or ``io.BufferedIOBase`` by its class, before it is read,
+            and any other once its first line reads as ``bytes``.
         delimiter: The field separator, e.g. ``"\t"`` for a tab-separated file.
         source: Source slug for the error, e.g. ``"usda-nass"``.
 
     Raises:
-        ValidationError: The text is not UTF-8 (or not in the response's charset), or
-            not CSV the stdlib can read, e.g. a field over its size limit; raised while
-            iterating, at the row where it is found, ``from None``, naming the decoder's
-            or the csv module's message, never the text.
+        ValidationError: The text is not UTF-8 (or not in the response's charset, or
+            the stream's encoding), or not CSV the stdlib can read, e.g. a field over
+            its size limit; raised while iterating, at the row where it is found,
+            ``from None``, naming the file's name (a stream's, ``stream`` for one
+            without a name, ``response`` for a response) and the decoder's or the csv
+            module's message, never the text.
     """
     if isinstance(data, httpx.Response):
         text = io.StringIO(decode_text(data, source=source), newline="")
         yield from _rows(text, delimiter, "response", source)
         return
-    path = Path(data)
+    given: object = data  # typing's IO is no runtime class: the checks read the object
+    if isinstance(given, io.IOBase) or hasattr(given, "read"):
+        if isinstance(given, io.RawIOBase | io.BufferedIOBase):
+            raise TypeError(_binary_refusal(given))
+        stream = cast(IO[str], given)
+        yield from _rows(stream, delimiter, _stream_name(stream), source, from_stream=True)
+        return
+    path = Path(cast("str | os.PathLike[str]", data))
     with path.open(encoding="utf-8-sig", newline="") as handle:
         yield from _rows(handle, delimiter, path.name, source)
 
 
+def _stream_name(stream: IO[str]) -> str:
+    """The name a stream's errors carry: its file's name without the directories.
+
+    ``gzip.open(path, "rt")`` names the path, a ZIP member's ``TextIOWrapper`` the
+    member; a stream without a ``str`` name, a ``StringIO`` say, is ``stream``.
+    """
+    name = getattr(stream, "name", None)
+    if isinstance(name, str) and name:
+        return PurePath(name).name or name
+    return "stream"
+
+
+def _binary_refusal(stream: object) -> str:
+    """The ``TypeError`` text for a binary stream, which names the wrapper that reads it."""
+    return (
+        f"decode_csv reads text, and {type(stream).__name__} is a binary stream: wrap it in "
+        "io.TextIOWrapper(stream, encoding='utf-8-sig', newline='')"
+    )
+
+
+def _without_bom(handle: IO[str]) -> Iterator[str]:
+    """``handle``'s lines, a byte order mark at the start of the first one stripped.
+
+    A stream's: a path is opened as ``utf-8-sig`` and ``decode_text`` strips a
+    response's, so neither passes through here. A stream that is binary by what it reads,
+    not by its class, such as a ``tempfile.SpooledTemporaryFile`` in ``"w+b"``, gives
+    ``bytes`` for its first line and is refused there.
+    """
+    lines = iter(handle)
+    first: object = next(lines, None)
+    if first is None:
+        return
+    if not isinstance(first, str):
+        raise TypeError(_binary_refusal(handle))
+    yield first.removeprefix("\ufeff")
+    yield from lines
+
+
+def _charset(handle: IO[str]) -> str:
+    """The encoding an error names: ``UTF-8`` for UTF-8 with or without a signature."""
+    encoding = getattr(handle, "encoding", None)
+    if not isinstance(encoding, str):
+        return "UTF-8"
+    try:
+        known = codecs.lookup(encoding).name
+    except LookupError:
+        return encoding
+    return "UTF-8" if known in ("utf-8", "utf-8-sig") else encoding
+
+
 def _rows(
-    handle: IO[str], delimiter: str, name: str, source: str | None
+    handle: IO[str],
+    delimiter: str,
+    name: str,
+    source: str | None,
+    *,
+    from_stream: bool = False,
 ) -> Iterator[dict[str, str]]:
     prefix = f"{source}: " if source else ""
+    lines: Iterable[str] = _without_bom(handle) if from_stream else handle
     try:
-        yield from csv.DictReader(handle, delimiter=delimiter)
+        yield from csv.DictReader(lines, delimiter=delimiter)
     except UnicodeDecodeError as exc:
         _raise(
             ValidationError(
-                f"{prefix}{name} is not UTF-8 text: {exc.reason}",
+                f"{prefix}{name} is not {_charset(handle)} text: {exc.reason}",
                 raw=exc.object[:BODY_LIMIT],
                 source=source,
             )
