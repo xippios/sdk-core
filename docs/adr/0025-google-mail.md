@@ -224,7 +224,8 @@ come from `xippios.core` (ADR-0024, amendment 2026-11-18, (b)), so sdk-google-ma
 4). This amends D-b's registry, `Tenants("google", ...)`, whose errors say "google": with
 core 0.4.0 sdk-google-mail declares its registry under its own slug with the variable
 prefix `GOOGLE`, `Tenants("google-mail", var_prefix="GOOGLE", list_var="GOOGLE_ACCOUNTS",
-fields=("REFRESH_TOKEN",), reserved=("demo",))`, so its variables keep the `GOOGLE_` prefix
+param="account", fields=("REFRESH_TOKEN",), reserved=("demo",))`, its tasks' parameter
+`account` (ADR-0036, decision 13), so its variables keep the `GOOGLE_` prefix
 that every Google source shares, and its registry's errors and an HTTP problem's `source`
 name `google-mail`, where the copy, whose first argument was the prefix, named `google`.
 The `source=` that sdk-google-mail's `list_task` took for the same reason stays in core, the
@@ -268,10 +269,11 @@ sdk-google-mail's `_account_lock.py` and `_cli.py`, the copy of `assert_write_to
 `tests/test_tasks_write.py` and the strip in its `tests/conftest.py`, and sdk-cashctrl's
 `_org_lock.py`, `_cli.py` and copies alike, go with their adoptions of core 0.4.0
 (ADR-0023, decision 4). sdk-google-mail's `AccountLock("account", name)` is then
-`TenantLock("account", name)`, and its `--account` is `serve_tenants(..., param="account",
-check=...)`, the check that the account's refresh token is set, its message naming the
+`TenantLock(TENANTS, name)`, and its `--account` is `serve_tenants(..., check=...)`, the
+option its registry's `param` (ADR-0036, decision 13), with the check that the account's
+refresh token is set, its message naming the
 consent command, kept in the source. The serve command's text and the strip name the
 registry's tenants, variables and prefix, never its source, so under the registry that (b)
-declares, `Tenants("google-mail", var_prefix="GOOGLE", ...)`
+declares, `Tenants("google-mail", var_prefix="GOOGLE", param="account", ...)`
 (https://github.com/xippios/sdk-core/issues/279), they read as they did under the copy's
 `Tenants("google", ...)`.

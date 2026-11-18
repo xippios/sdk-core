@@ -1,9 +1,10 @@
 - `Tenants` and `list_task` are back in core, exported from `xippios.core` out of the module
   `xippios.core.tenants`: a multi-tenant source's tenants declared in the environment, one
   client each, which closes the client that a changed variable replaces, and the tool that
-  names them. `Tenants(source, var_prefix=...)` takes the variables' prefix apart from the
-  source slug, so its errors name the source, and `list_task(..., source=...)` names the
-  `meta.source` of a registry that several sources share, the registry's slug by default.
+  names them. `Tenants(source, var_prefix=..., param=...)` takes the variables' prefix
+  apart from the source slug, so its errors name the source, and `list_task(...,
+  source=...)` names the `meta.source` of a registry that several sources share, the
+  registry's slug by default.
   (ADR-0014, ADR-0024, ADR-0025, https://github.com/xippios/sdk-core/issues/166)
   - Hand-apply: `src/xippios/cashctrl/_tenants.py` (sdk-cashctrl) — deleted — core's module
     is this copy, the close of a replaced client included, and its default prefix is the
@@ -11,7 +12,8 @@
     `src/xippios/cashctrl/_client.py` (sdk-cashctrl) — `from xippios.cashctrl._tenants
     import Tenants` (line 45) → `from xippios.core import Tenants`, and the docstring's
     sentence on `_tenants.py` (lines 9 to 11) names core's `Tenants`, the declaration
-    (line 97) as it stands — core's registry reads the same variables.
+    (line 97) as it stands but for `param="org"`, which core's `Tenants` requires — core's
+    registry reads the same variables.
     `src/xippios/cashctrl/tasks.py` (sdk-cashctrl) — `from xippios.cashctrl._tenants import
     list_task` (line 79) → `from xippios.core import list_task`, and the docstring's
     `_tenants.list_task` (line 9) → core's `list_task`, the call (line 2273) as it stands
@@ -34,7 +36,8 @@
     `src/xippios/google/mail/_client.py` (sdk-google-mail) — `from
     xippios.google.mail._tenants import Tenants` (line 55) → `from xippios.core import
     Tenants`, the declaration's first argument, `"google"` (line 105) → `SOURCE,
-    var_prefix="GOOGLE"`, and the docstring's lines 10 to 11 and 22 to 23 → core's
+    var_prefix="GOOGLE"` with `param="account"`, which core's `Tenants` requires, and the
+    docstring's lines 10 to 11 and 22 to 23 → core's
     `Tenants`, whose errors name `google-mail` — the variables keep the shared prefix, and
     an unknown account's `InvalidRequestError` and the registry's `ConfigError` name the
     source, `google` before, in an HTTP problem's `source` too (ADR-0025, amendment

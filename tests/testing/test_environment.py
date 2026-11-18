@@ -16,6 +16,7 @@ from xippios.core.testing import keep_reserved_tenants
 TENANTS = Tenants(
     "fictive-src",
     list_var="FICTIVE_SRC_ORGS",
+    param="org",
     fields=("SUBDOMAIN", "API_KEY"),
     reserved=("demo",),
 )
@@ -23,6 +24,7 @@ SHARED = Tenants(
     "fictive-mail",
     var_prefix="FICTIVE",
     list_var="FICTIVE_ACCOUNTS",
+    param="account",
     fields=("REFRESH_TOKEN",),
     reserved=("demo",),
 )
@@ -83,7 +85,11 @@ def test_a_registry_whose_slug_is_its_prefix_strips_the_same(
     The registry's name: https://github.com/xippios/sdk-core/issues/279.
     """
     copy = Tenants(
-        "fictive", list_var="FICTIVE_ACCOUNTS", fields=("REFRESH_TOKEN",), reserved=("demo",)
+        "fictive",
+        list_var="FICTIVE_ACCOUNTS",
+        param="account",
+        fields=("REFRESH_TOKEN",),
+        reserved=("demo",),
     )
     variables = ("FICTIVE_ACCOUNTS", "FICTIVE_WORK_REFRESH_TOKEN", "FICTIVE_DEMO_REFRESH_TOKEN")
     left: list[set[str]] = []
@@ -96,7 +102,7 @@ def test_a_registry_whose_slug_is_its_prefix_strips_the_same(
 
 
 def test_without_a_reserved_tenant_no_tenant_stays(monkeypatch: pytest.MonkeyPatch) -> None:
-    registry = Tenants("fictive-src", list_var="FICTIVE_SRC_ORGS", fields=("API_KEY",))
+    registry = Tenants("fictive-src", list_var="FICTIVE_SRC_ORGS", param="org", fields=("API_KEY",))
     for name in ("FICTIVE_SRC_ORGS", "FICTIVE_SRC_DEMO_API_KEY", "FICTIVE_SRC_ACME_API_KEY"):
         monkeypatch.setenv(name, "placeholder")
     keep_reserved_tenants(registry)

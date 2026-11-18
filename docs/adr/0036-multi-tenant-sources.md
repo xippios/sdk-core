@@ -10,17 +10,26 @@ organisations and Gmail's mailboxes, needs a source that knows its tenants, a cl
 tenant, a server that can serve one tenant alone and a write server that cannot be reached
 unprotected. This record states ADR-0014 with its supersession in part by ADR-0024 of
 2026-10-27, its amendments of 2026-10-27, 2026-10-29 (by ADR-0025 and by ADR-0026) and
-2026-11-18 as they stand, and changes no decision; their history stays in ADR-0014. Its
+2026-11-18 as they stand, and changes no decision of theirs but by decision 13; their
+history stays in ADR-0014. Its
 decisions 1 to 4, 6, 7 and 11 left core with the kit in 0.3.0, when ADR-0024 moved the code
 to sdk-cashctrl. ADR-0025, D-d named the pieces that return in 0.4.0, which bring decisions 1
 to 4, 6 and 7 back, decision 7 as the binding wrapper, and the human's answer of 2026-11-18
-(https://github.com/xippios/sdk-core/issues/298) returns decision 11 with them.
+(https://github.com/xippios/sdk-core/issues/298) returns decision 11 with them. Decision 13,
+the line of decision 11 for a source's own tasks and core's checks of it, is new in this
+record, the human's answer of 2026-11-18 (https://github.com/xippios/sdk-core/issues/299).
+It changes three signatures that ADR-0014's amendment of 2026-11-18 first gave, as
+decisions 1, 7 and 8 state them: `Tenants` takes `param`, the parameter that names a tenant,
+`TenantLock(tenants, value, noun=None)` takes the registry in place of a parameter, and
+`serve_tenants` takes no `param` of its own; that amendment's points (c) and (d) give the
+forms of decision 13 since.
 
 ## Decision
 
 1. **Tenants come from the environment.** `Tenants(source, *, var_prefix=None, list_var,
-   fields, reserved=(), validate=None, hints=None)`, exported from `xippios.core` out of the
-   module `xippios.core.tenants`, holds a source's scheme. `list_var` lists the tenant names,
+   param, fields, reserved=(), validate=None, hints=None)`, exported from `xippios.core` out
+   of the module `xippios.core.tenants`, holds a source's scheme and `param`, the task
+   parameter that names a tenant (decision 13). `list_var` lists the tenant names,
    comma-separated, each matching `^[a-z0-9_]+$`, read on every call. Each tenant's values
    sit in `<PREFIX>_<NAME>_<FIELD>`, the name upper-cased, the prefix `var_prefix` where the
    source gives one, `GOOGLE` for sdk-google-mail, and otherwise the source upper-cased with
@@ -53,10 +62,11 @@ to 4, 6 and 7 back, decision 7 as the binding wrapper, and the human's answer of
    an agent can form valid calls (conventions §8). Its `source` names `meta.source` where the
    registry's slug is not the source's, for a registry that several sources share. It stays
    on the read server: a write server exposes write tools only.
-7. **The lock binds a server's tools to one tenant.** `TenantLock(param, value, noun=None)`,
-   `bind_tasks(tasks, lock)` and `tenant_instructions(text, lock, *, bound=None)` come from
-   `xippios.core`, out of the module `xippios.core.tenants`. A bound task keeps its
-   `__name__` and awaits the task with `param=value`; its signature, annotations and
+7. **The lock binds a server's tools to one tenant.** `TenantLock(tenants, value,
+   noun=None)`, `bind_tasks(tasks, lock)` and `tenant_instructions(text, lock, *,
+   bound=None)` come from `xippios.core`, out of the module `xippios.core.tenants`. The lock
+   takes the source's registry, and its `param` is the registry's (decision 13). A bound
+   task keeps its `__name__` and awaits the task with `param=value`; its signature, annotations and
    docstring lose `param`, so no tool of a bound server declares the tenant's argument and
    the argument check refuses a call that names it (decision 12). The lock is no
    middleware, takes no `tenant_lock=` parameter and refuses no defaulted tenant parameter.
@@ -72,10 +82,10 @@ to 4, 6 and 7 back, decision 7 as the binding wrapper, and the human's answer of
    `apply_options(namespace, server)` returns the server to run. A `XippiosError` it raises,
    an undeclared tenant or a missing variable, ends the process like an argparse error: the
    message on stderr, exit status 2, nothing served. The bound server is core's:
-   `xippios.core.mcp.serve_tenants(server, build, tenants, *, param, noun=None, check=None)`
-   puts `--<param>` on `main`'s parser through the hooks, checks the named tenant with
-   `tenants.require` and then with the source's `check`, and runs
-   `build(TenantLock(param, name, noun=noun))`; an undeclared tenant or an error of the check
+   `xippios.core.mcp.serve_tenants(server, build, tenants, *, noun=None, check=None)` puts
+   `--<param>`, the registry's `param`, on `main`'s parser through the hooks, checks the
+   named tenant with `tenants.require` and then with the source's `check`, and runs
+   `build(TenantLock(tenants, name, noun=noun))`; an undeclared tenant or an error of the check
    stops the process with exit status 2 before the bound server is built. A multi-tenant
    source's servers are bound so: its entry point runs `serve_tenants`, and its
    `build(lock)` passes its tasks through `bind_tasks` and its instructions through
@@ -119,10 +129,33 @@ to 4, 6 and 7 back, decision 7 as the binding wrapper, and the human's answer of
     source's schema-typed arguments. Johannes decided the check on 2026-10-27. The HTTP
     router keeps a parameter's `Annotated` metadata too (ADR-0007, amendment 2026-11-18,
     point a).
+13. **One tenant per call, in a source's own tasks too.** A multi-tenant source's tasks keep
+    the line of decision 11: each task takes exactly one tenant, required, the tenant list
+    returns names only, and nothing is shared between tenants. The source declares the
+    parameter that names a tenant once, `Tenants(..., param="org")`, required: the family
+    check, the serve command's option and every `TenantLock`, which takes the registry, read
+    it there, so none names another parameter. Core checks the rule where it can break
+    unseen. `bind_tasks` refuses with `ValueError`, naming the task and the parameter
+    and binding nothing, a task that lacks the lock's parameter, unless it is the tenant
+    list of decision 6 or its module declares it by name as touching no tenant, in
+    `NO_TENANT_TASKS`, a frozenset of task names beside `BULK_TASKS` in `tasks.py` or
+    `tasks_write.py`; a task so declared is served as it is on a bound server. The family
+    check holds every task of a source with a `Tenants` registry, which its `_client`,
+    `tasks` or `tasks_write` module holds, to the rule, with no opt-in: the registry's
+    `param` once, required with no default, of a type that names one tenant, a `str`, the
+    tenant list and the declared tasks excepted. The lock still binds a defaulted tenant parameter
+    (decision 7); the family check refuses one. Both read signatures, which show neither
+    what a task reaches nor what it shares: a task that takes one tenant and opens another's
+    client is the review's to find (https://github.com/xippios/sdk-core/issues/302). The
+    rule binds a source from its adoption of core 0.4.0. Johannes decided it on 2026-11-18
+    (https://github.com/xippios/sdk-core/issues/299).
 
 ## Consequences
 
 - A changed key rebuilds a tenant's client.
+- A multi-tenant source's registry names its tenant's parameter, which it cannot leave out,
+  and a task that touches no tenant is named in `NO_TENANT_TASKS`, or its bound server is
+  not built and its family check fails.
 - The `mcp` SDK's middleware API is provisional in 2.x and core declares no upper bound for
   it; the argument check's tests through `mcp_call_text` guard it.
 - Core adds no authentication to MCP servers. A write server beyond loopback is the
@@ -130,4 +163,7 @@ to 4, 6 and 7 back, decision 7 as the binding wrapper, and the human's answer of
 
 Conventions §1, §4, §7 and §8, the README and the docstrings of `xippios.core.tenants`,
 `xippios.core.mcp`, `main`, `serve_tenants`, `register_tasks` and `InvalidRequestError`
-state its decisions from 1.28 on, decision 11 the docstring of `xippios.core.tenants` alone.
+state its decisions from 1.28 on; decisions 11 and 13 conventions §7, item 17 of the review
+checklist, the README and the docstrings of `xippios.core.tenants`, `bind_tasks` and the
+family check, and the parameter that decision 13 declares on the registry conventions §8 and
+the docstrings of `Tenants`, `TenantLock` and `serve_tenants` too.

@@ -10,11 +10,15 @@ tenant's argument, which no tool declares (ADR-0036, decision 12).
 
 import asyncio
 import dataclasses
+import functools
 import inspect
 import json
 import os
+import sys
 import threading
+import types
 import typing
+from collections.abc import Callable
 from typing import Annotated
 
 import pytest
@@ -45,8 +49,13 @@ DEMO = "demo"
 SENTENCE = (
     "This server is bound to org demo; every tool acts on that organisation and takes no org."
 )
-LOCK = TenantLock("org", DEMO, noun="organisation")
-TENANTS = Tenants(SOURCE, list_var="FICTIVE_SRC_TENANTS", fields=("SUBDOMAIN",), reserved=(DEMO,))
+TENANTS = Tenants(
+    SOURCE, list_var="FICTIVE_SRC_TENANTS", param="org", fields=("SUBDOMAIN",), reserved=(DEMO,)
+)
+ACCOUNTS = Tenants(
+    "fictive-mail", list_var="FICTIVE_MAIL_ACCOUNTS", param="account", fields=("REFRESH_TOKEN",)
+)
+LOCK = TenantLock(TENANTS, DEMO, noun="organisation")
 list_tenants = list_task(TENANTS, name="list_tenants")
 
 
@@ -98,29 +107,32 @@ def find_things(org: str, query: str | None = None, *, limit: int = 10) -> list[
 # The lock ----------------------------------------------------------------------------
 
 
-def test_a_lock_is_a_frozen_parameter_tenant_and_noun() -> None:
-    assert (LOCK.param, LOCK.value, LOCK.noun) == ("org", DEMO, "organisation")
-    assert TenantLock(param="org", value=DEMO, noun="organisation") == LOCK
-    assert TenantLock("account", DEMO).noun is None, "the parameter stands for the noun"
+def test_a_lock_is_a_frozen_registry_tenant_and_noun() -> None:
+    assert (LOCK.tenants, LOCK.value, LOCK.noun) == (TENANTS, DEMO, "organisation")
+    assert TenantLock(tenants=TENANTS, value=DEMO, noun="organisation") == LOCK
+    assert TenantLock(ACCOUNTS, DEMO).noun is None, "the parameter stands for the noun"
     with pytest.raises(dataclasses.FrozenInstanceError):
         LOCK.value = "other"  # type: ignore[misc]
 
 
+def test_a_lock_binds_the_parameter_its_registry_declares_and_no_other() -> None:
+    """https://github.com/xippios/sdk-core/issues/299: one declaration, ``Tenants(param=)``."""
+    assert (LOCK.param, TenantLock(ACCOUNTS, DEMO).param) == ("org", "account")
+    with pytest.raises(TypeError, match=r"^a lock takes the source's Tenants registry"):
+        TenantLock("org", DEMO)  # type: ignore[arg-type]
+
+
 @pytest.mark.parametrize(
-    ("param", "value", "noun", "message"),
+    ("value", "noun", "message"),
     [
-        ("", "acme", None, "param must be a parameter name"),
-        ("an org", "acme", None, "param must be a parameter name"),
-        ("org", "", None, "value must name the tenant"),
-        ("org", "acme", "", "noun must be a word"),
-        ("org", "acme", " ", "noun must be a word"),
+        ("", None, "value must name the tenant"),
+        ("acme", "", "noun must be a word"),
+        ("acme", " ", "noun must be a word"),
     ],
 )
-def test_a_lock_needs_a_parameter_name_a_tenant_and_a_noun(
-    param: str, value: str, noun: str | None, message: str
-) -> None:
+def test_a_lock_needs_a_tenant_and_a_noun(value: str, noun: str | None, message: str) -> None:
     with pytest.raises(ValueError, match=message):
-        TenantLock(param, value, noun=noun)
+        TenantLock(TENANTS, value, noun=noun)
 
 
 # The wrapper -------------------------------------------------------------------------
@@ -168,14 +180,122 @@ def test_an_args_block_the_entry_emptied_goes() -> None:
     assert list(inspect.signature(bound).parameters) == []
 
 
-def test_a_task_without_the_parameter_and_an_unbound_server_are_left_as_they_are() -> None:
+def test_an_unbound_server_takes_its_tasks_as_they_are() -> None:
     def ping() -> dict[str, bool]:
         """Answer without an organisation."""
         return {"pong": True}
 
-    assert bind_tasks([ping], LOCK)[0] is ping
     assert bind_tasks([ping, find_things], None) == [ping, find_things]
     assert bind_tasks(iter([ping]), None) == [ping], "any iterable, a list back"
+
+
+def test_a_task_without_the_parameter_is_refused_naming_it_and_the_parameter() -> None:
+    """https://github.com/xippios/sdk-core/issues/299: a bound server would serve it unbound."""
+
+    def ping() -> dict[str, bool]:
+        """Answer without an organisation."""
+        return {"pong": True}
+
+    def count_all(limit: int = 10) -> int:
+        """Count every organisation's things.
+
+        Args:
+            limit: At most this many, e.g. ``5``.
+        """
+        return limit
+
+    with pytest.raises(ValueError, match=r"^ping takes no org, the tenant's parameter") as one:
+        bind_tasks([find_things, ping], LOCK)
+    assert "NO_TENANT_TASKS" in str(one.value), "it names the declaration"
+    listed: list[Callable[..., object]] = [ping, find_things, count_all]
+    with pytest.raises(ValueError, match=r"^ping, count_all take no org, the tenant's parameter"):
+        bind_tasks(iter(listed), LOCK)
+
+
+NO_TENANT_TASKS_MODULE = '''
+from xippios.core import sync
+
+
+async def list_currencies_async() -> dict[str, list[str]]:
+    """List the currencies every organisation may book in."""
+    return {"currencies": ["CHF", "EUR"]}
+
+
+def convert(amount: int) -> int:
+    """Convert an amount.
+
+    Args:
+        amount: An amount in cents, e.g. ``100``.
+    """
+    return amount
+
+
+def ping() -> str:
+    """Answer without an organisation; not declared."""
+    return "pong"
+
+
+def echo(org: str) -> str:
+    """Return the organisation; declared, yet it takes org.
+
+    Args:
+        org: A declared organisation, e.g. ``demo``.
+    """
+    return org
+
+
+list_currencies = sync(list_currencies_async)
+NO_TENANT_TASKS = frozenset({"list_currencies", "convert", "echo"})
+'''
+
+
+@pytest.fixture
+def no_tenant_tasks(monkeypatch: pytest.MonkeyPatch) -> types.ModuleType:
+    """A fictitious tasks module that declares three of its tasks as touching no tenant."""
+    module = types.ModuleType("fictive_src_no_tenant_tasks")
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+    exec(NO_TENANT_TASKS_MODULE, module.__dict__)  # its functions' __module__ is the module
+    return module
+
+
+def test_a_task_its_module_declares_as_touching_no_tenant_is_served_as_it_is(
+    no_tenant_tasks: types.ModuleType,
+) -> None:
+    """``NO_TENANT_TASKS`` of the task's module, read as ``BULK_TASKS`` is (conventions §7)."""
+    tasks = no_tenant_tasks
+
+    @functools.wraps(tasks.convert)
+    def elsewhere(amount: int) -> int:
+        return int(tasks.convert(amount))
+
+    elsewhere.__module__ = __name__  # this module declares nothing: its __wrapped__ leads on
+    served = [tasks.list_currencies, tasks.convert, elsewhere, list_tenants]
+    bound = bind_tasks(served, LOCK)
+    assert bound[:3] == served[:3], "a sync facade by its name minus _async, a wrapper by its task"
+    assert bound[3] is not list_tenants, "the tenant list lists the bound tenant alone"
+    with pytest.raises(ValueError, match=r"^ping takes no org"):
+        bind_tasks([tasks.ping], LOCK)
+
+
+@pytest.mark.anyio
+async def test_a_declared_task_that_takes_the_parameter_is_bound_as_every_such_task(
+    no_tenant_tasks: types.ModuleType,
+) -> None:
+    (bound,) = bind_tasks([no_tenant_tasks.echo], LOCK)
+    assert list(inspect.signature(bound).parameters) == []
+    assert await bound() == DEMO
+
+
+@pytest.mark.anyio
+async def test_a_bound_server_serves_a_declared_task_as_it_is(
+    no_tenant_tasks: types.ModuleType,
+) -> None:
+    server = build_server(SOURCE, bind_tasks([no_tenant_tasks.list_currencies, list_tenants], LOCK))
+    tools = {tool.name: tool for tool in await server.list_tools()}
+    assert set(tools) == {"fictive_src_list_currencies", LIST}
+    assert tools["fictive_src_list_currencies"].input_schema.get("properties", {}) == {}
+    served = await mcp_call(server, "fictive_src_list_currencies", {})
+    assert served == {"currencies": ["CHF", "EUR"]}
 
 
 @pytest.mark.anyio
@@ -316,7 +436,7 @@ async def test_the_tenant_list_shows_the_bound_tenant_only(
 
 @pytest.mark.anyio
 async def test_a_lock_on_an_undeclared_tenant_lists_nothing() -> None:
-    server = Echo().server(TenantLock("org", "gone"))
+    server = Echo().server(TenantLock(TENANTS, "gone"))
     assert (await mcp_call(server, LIST, {}))["data"] == []
 
 
@@ -360,7 +480,7 @@ def test_a_bound_server_s_text_ends_with_the_lock_s_sentence() -> None:
 
 
 def test_the_sentence_names_the_lock_s_noun_or_else_its_parameter() -> None:
-    assert tenant_instructions(None, TenantLock("account", "work")) == (
+    assert tenant_instructions(None, TenantLock(ACCOUNTS, "work")) == (
         "This server is bound to account work; every tool acts on that account and takes no "
         "account."
     )

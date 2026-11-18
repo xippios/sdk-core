@@ -73,6 +73,7 @@ def check_subdomain(value: str) -> str:
 def make(**overrides: object) -> Tenants:
     arguments: dict[str, object] = {
         "list_var": LIST_VAR,
+        "param": "org",
         "fields": FIELDS,
         "reserved": ("demo",),
         "validate": {"SUBDOMAIN": check_subdomain},
@@ -86,6 +87,7 @@ def make_mail() -> Tenants:
         MAIL_SOURCE,
         var_prefix=MAIL_PREFIX,
         list_var=MAIL_LIST_VAR,
+        param="account",
         fields=("REFRESH_TOKEN",),
         reserved=("demo",),
     )
@@ -114,7 +116,7 @@ def test_variable_names_follow_the_scheme() -> None:
     tenants = make()
     assert tenants.var("acme_test", "SUBDOMAIN") == "FICTIVE_SRC_ACME_TEST_SUBDOMAIN"
     assert tenants.var("demo", "API_KEY") == "FICTIVE_SRC_DEMO_API_KEY"  # pragma: allowlist secret
-    assert Tenants("cashctrl", list_var="CASHCTRL_ORGS", fields=["SUBDOMAIN"]).var(
+    assert Tenants("cashctrl", list_var="CASHCTRL_ORGS", param="org", fields=["SUBDOMAIN"]).var(
         "acme", "SUBDOMAIN"
     ) == ("CASHCTRL_ACME_SUBDOMAIN")
     with pytest.raises(ValueError, match="unknown field 'subdomain'; fields: SUBDOMAIN, API_KEY"):
@@ -127,11 +129,12 @@ def test_attributes_and_repr_name_the_scheme_only(monkeypatch: pytest.MonkeyPatc
     assert tenants.source == SOURCE
     assert tenants.var_prefix == "FICTIVE_SRC"  # the slug upper-cased, "-" made "_"
     assert tenants.list_var == LIST_VAR
+    assert tenants.param == "org"
     assert tenants.fields == FIELDS
     assert tenants.reserved == ("demo",)
     assert repr(tenants) == (
         "Tenants('fictive-src', var_prefix='FICTIVE_SRC', list_var='FICTIVE_SRC_TENANTS', "
-        "fields=('SUBDOMAIN', 'API_KEY'), reserved=('demo',))"
+        "param='org', fields=('SUBDOMAIN', 'API_KEY'), reserved=('demo',))"
     )
 
 
@@ -139,6 +142,9 @@ def test_attributes_and_repr_name_the_scheme_only(monkeypatch: pytest.MonkeyPatc
     ("overrides", "error", "match"),
     [
         ({"list_var": ""}, ValueError, "list_var must not be empty"),
+        ({"param": ""}, ValueError, "param '' is not a parameter name"),
+        ({"param": "an org"}, ValueError, "param 'an org' is not a parameter name"),
+        ({"param": "org-name"}, ValueError, "param 'org-name' is not a parameter name"),
         ({"var_prefix": ""}, ValueError, "var_prefix '' is not upper-case"),
         ({"var_prefix": "fictive"}, ValueError, "var_prefix 'fictive' is not upper-case"),
         ({"var_prefix": "FICTIVE-SRC"}, ValueError, "var_prefix 'FICTIVE-SRC' is not upper"),
@@ -167,7 +173,17 @@ def test_construction_refuses_a_malformed_scheme(
 
 def test_construction_refuses_an_empty_source() -> None:
     with pytest.raises(ValueError, match="source must not be empty"):
-        Tenants("", list_var=LIST_VAR, fields=FIELDS)
+        Tenants("", list_var=LIST_VAR, param="org", fields=FIELDS)
+
+
+def test_construction_needs_the_tenant_s_parameter() -> None:
+    """The one declaration of the parameter that names a tenant (ADR-0036, decision 13).
+
+    The family check, the serve command's option and a lock read it from the registry, so a
+    source cannot declare its tenants without it.
+    """
+    with pytest.raises(TypeError, match="param"):
+        Tenants(SOURCE, list_var=LIST_VAR, fields=FIELDS)  # type: ignore[call-arg]
 
 
 # -- the variable prefix apart from the source slug ---------------------------------------
@@ -183,7 +199,7 @@ def test_the_variable_prefix_names_the_variables_and_the_slug_the_source(
     assert tenants.var("work", "REFRESH_TOKEN") == "FICTIVE_WORK_REFRESH_TOKEN"
     assert repr(tenants) == (
         "Tenants('fictive-mail', var_prefix='FICTIVE', list_var='FICTIVE_ACCOUNTS', "
-        "fields=('REFRESH_TOKEN',), reserved=('demo',))"
+        "param='account', fields=('REFRESH_TOKEN',), reserved=('demo',))"
     )
     monkeypatch.setenv(MAIL_LIST_VAR, "work")
     monkeypatch.setenv("FICTIVE_DEMO_REFRESH_TOKEN", "demo-token")
@@ -698,7 +714,11 @@ def test_list_task_names_the_source_it_is_given(monkeypatch: pytest.MonkeyPatch)
     """sdk-google-mail's ``source=``: a registry several sources share names each one's."""
     monkeypatch.setenv(MAIL_LIST_VAR, "work")
     tenants = Tenants(
-        "fictive", list_var=MAIL_LIST_VAR, fields=("REFRESH_TOKEN",), reserved=("demo",)
+        "fictive",
+        list_var=MAIL_LIST_VAR,
+        param="account",
+        fields=("REFRESH_TOKEN",),
+        reserved=("demo",),
     )
     task = list_task(tenants, name="list_accounts", source=MAIL_SOURCE)
     result = task()

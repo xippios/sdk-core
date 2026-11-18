@@ -40,10 +40,19 @@ than one fails every test here, naming the option. The repository's files (``REA
   commas; whatever follows the first non-backticked text is prose;
 - ``.copier-answers.yml`` names a template tag, ``_commit: vX.Y.Z`` (conventions §15);
 - ``pyproject.toml`` bounds ``xippios-core`` and each of its extras to one minor,
-  ``~=X.Y.Z``, all alike (conventions §12, ADR-0039).
+  ``~=X.Y.Z``, all alike (conventions §12, ADR-0039);
+- every task, read and write, of a multi-tenant source, one whose ``_client``, ``tasks``
+  or ``tasks_write`` module holds a ``Tenants`` registry, takes exactly one tenant: the
+  parameter the registry declares, ``Tenants(..., param="org")``, with no default,
+  annotated ``str`` or ``Annotated[str, ...]``, neither ``*`` nor ``**``; the tenant list
+  of ``list_task`` and the tasks its module names in ``NO_TENANT_TASKS`` are excepted,
+  and ``NO_TENANT_TASKS`` names tasks of that module's ``__all__`` alone (conventions §7;
+  ADR-0036, decision 13). A source with no ``Tenants`` registry passes. The check reads
+  signatures: what a task reaches inside is the review's
+  (https://github.com/xippios/sdk-core/issues/302).
 
 A write server is its source's to test: the family check reads ``tasks_write`` for the
-two task checks and the status table only (ADR-0042).
+task checks and the status table only (ADR-0042).
 
 **Two family checks are CI steps, not tests**, since they read the pull request rather
 than the package; sdk-template's ``ci.yml`` carries them, on ``pull_request`` with the
@@ -74,7 +83,9 @@ from packaging.requirements import InvalidRequirement, Requirement
 from packaging.utils import canonicalize_name
 from packaging.version import Version
 
+from xippios.core._tasks import touches_no_tenant
 from xippios.core.models import Result
+from xippios.core.tenants import Tenants, _lists_tenants
 from xippios.core.testing.plugin import PACKAGE_INI
 
 __all__ = [
@@ -89,6 +100,7 @@ __all__ = [
     "test_family_readme_status_table_lists_the_tasks",
     "test_family_tasks_carry_agent_docstrings",
     "test_family_tasks_return_results",
+    "test_family_tasks_take_one_tenant",
 ]
 
 _TAG = re.compile(r"v\d+\.\d+\.\d+")
@@ -108,6 +120,9 @@ class FamilySource:
         source: The source slug, ``_client.SOURCE``, e.g. ``"usda-psd"``.
         tasks: The ``tasks`` module.
         tasks_write: The ``tasks_write`` module, or ``None`` for a read-only source.
+        tenants: The ``Tenants`` registry of a multi-tenant source, which its ``_client``,
+            ``tasks`` or ``tasks_write`` module holds, ``_client.TENANTS`` say; ``None``
+            for a source with none.
     """
 
     root: Path
@@ -116,6 +131,7 @@ class FamilySource:
     source: str
     tasks: ModuleType
     tasks_write: ModuleType | None
+    tenants: Tenants | None = None
 
     @property
     def package_dir(self) -> Path:
@@ -170,13 +186,22 @@ def family_source(request: pytest.FixtureRequest) -> FamilySource:
     package = importlib.import_module(import_path)
     client = importlib.import_module(f"{import_path}._client")
     has_write = importlib.util.find_spec(f"{import_path}.tasks_write") is not None
+    tasks = importlib.import_module(f"{import_path}.tasks")
+    tasks_write = importlib.import_module(f"{import_path}.tasks_write") if has_write else None
+    registries = [
+        value
+        for module in filter(None, [client, tasks, tasks_write])
+        for value in vars(module).values()
+        if isinstance(value, Tenants)
+    ]
     return FamilySource(
         root=request.config.rootpath,
         import_path=import_path,
         package=package,
         source=client.SOURCE,
-        tasks=importlib.import_module(f"{import_path}.tasks"),
-        tasks_write=importlib.import_module(f"{import_path}.tasks_write") if has_write else None,
+        tasks=tasks,
+        tasks_write=tasks_write,
+        tenants=registries[0] if registries else None,
     )
 
 
@@ -338,6 +363,69 @@ def test_family_tasks_carry_agent_docstrings(family_source: FamilySource) -> Non
         if inspect.signature(fn).parameters and "Args:" not in doc:
             problems.append(f"{name}: explain every parameter under Args: with valid values")
     _fail(problems, "task docstrings are written for agents:")
+
+
+def _one_tenant_problem(fn: Callable[..., Any], param: str) -> str | None:
+    """Why ``fn`` does not take exactly one tenant as ``param``, or ``None`` when it does."""
+    parameter = inspect.signature(fn).parameters.get(param)
+    if parameter is None:
+        return f"takes no {param}"
+    if parameter.kind is inspect.Parameter.VAR_POSITIONAL:
+        return f"takes *{param}, several tenants"
+    if parameter.kind is inspect.Parameter.VAR_KEYWORD:
+        return f"takes **{param}, several tenants"
+    if parameter.default is not inspect.Parameter.empty:
+        return f"gives {param} the default {parameter.default!r}; the tenant is required"
+    try:
+        annotation = typing.get_type_hints(fn, include_extras=True).get(param)
+    except Exception:  # an annotation that does not resolve
+        return "has annotations that do not resolve"
+    if typing.get_origin(annotation) is typing.Annotated:
+        annotation = typing.get_args(annotation)[0]
+    if not (
+        typing.get_origin(annotation) is None
+        and isinstance(annotation, type)
+        and issubclass(annotation, str)
+    ):
+        shown = annotation.__name__ if isinstance(annotation, type) else repr(annotation)
+        return f"takes {param} as {shown}, not one tenant's name, a str"
+    return None
+
+
+def test_family_tasks_take_one_tenant(family_source: FamilySource) -> None:
+    """Every task of a multi-tenant source takes exactly one tenant, required (conventions §7).
+
+    A source whose ``_client``, ``tasks`` or ``tasks_write`` module holds a ``Tenants``
+    registry is multi-tenant, with no opt-in: every task of ``tasks.__all__`` and
+    ``tasks_write.__all__`` takes the parameter the registry declares, ``tenants.param``,
+    once, with no default, of a type that names one tenant, a ``str``, except the tenant
+    list and the tasks its module names in ``NO_TENANT_TASKS``, which touch no tenant
+    (ADR-0036, decision 13).
+    """
+    if family_source.tenants is None:
+        return
+    problems: list[str] = []
+    for module in filter(None, [family_source.tasks, family_source.tasks_write]):
+        unknown = sorted(
+            set(getattr(module, "NO_TENANT_TASKS", ())) - set(getattr(module, "__all__", ()))
+        )
+        if unknown:
+            problems.append(
+                f"NO_TENANT_TASKS of {module.__name__} names {unknown}, not in its __all__"
+            )
+    param = family_source.tenants.param
+    for name, fn in _every_task(family_source).items():
+        if _lists_tenants(fn) or touches_no_tenant(fn):
+            continue
+        problem = _one_tenant_problem(fn, param)
+        if problem is not None:
+            problems.append(f"{name} {problem}")
+    _fail(
+        problems,
+        f"every task of a multi-tenant source takes exactly one tenant, {param}, the parameter "
+        "its Tenants registry declares, required; the tenant list and the tasks named in "
+        "NO_TENANT_TASKS of their module are excepted (conventions §7):",
+    )
 
 
 def _cells(line: str) -> list[str]:

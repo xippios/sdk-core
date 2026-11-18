@@ -649,6 +649,24 @@ the rest of the prefix stays (ADR-0042, decision 1). The registry, the
 strip and §8's lock and serve command bind such a source from its adoption of core 0.4.0,
 which deletes its copies (ADR-0025, amendment 2026-11-18, points b and d).
 
+One tenant per call, in core and in a multi-tenant source's own tasks: no task, tool or
+helper in core works across tenants (ADR-0036, decision 11), and each task of the source
+takes exactly one tenant, required, the tenant list returns names only, and nothing is
+shared between tenants (ADR-0036, decision 13). The source declares the parameter that
+names a tenant once, on its registry, `Tenants(..., param="org")`, required: the family
+check, the serve command's option and every `TenantLock`, which takes the registry, read it
+there, so none names another. Core checks the rule where it can break unseen.
+`bind_tasks` refuses, naming the task and the parameter, a task that lacks the lock's
+parameter, unless it is the tenant list or its module declares it by name as touching no
+tenant, in `NO_TENANT_TASKS`, a frozenset beside `BULK_TASKS` in `tasks.py` or
+`tasks_write.py`; a bound server serves a task so declared as it is. The family check holds
+every task of a source with a `Tenants` registry to the rule, with no opt-in: the
+registry's `param` once, required with no default, of a type that names one tenant, a `str`, the
+tenant list and the declared tasks excepted (ADR-0036, decision 13). Both read signatures:
+a task that takes one tenant and opens another's client is the review's to find
+(https://github.com/xippios/sdk-core/issues/302). The rule binds a source from its adoption
+of core 0.4.0.
+
 A source's `_client.py` declares the variables it needs as `EnvVar` entries,
 `xippios.core.EnvVar(name_or_pattern, *, secret, required)`: a variable's name, or a pattern
 with a placeholder such as `<NAME>` for one variable per tenant (`CASHCTRL_<NAME>_API_KEY`),
@@ -733,8 +751,8 @@ with sdk-template 0.4.0, which renders it (ADR-0026, amendment 2026-11-18, point
   (`cashctrl_list_organisations`, `google_mail_list_accounts`), on the read server
   (ADR-0036, decision 6). Its servers take `--<param>`, sdk-cashctrl's `--org` and
   sdk-google-mail's `--account`, which binds a server to one tenant: the entry point runs
-  `serve_tenants(server, build, TENANTS, param=..., check=...)` from `xippios.core.mcp`,
-  and `build(lock)` passes the tasks through `bind_tasks(tasks, lock)` and the
+  `serve_tenants(server, build, TENANTS, check=...)` from `xippios.core.mcp`, its option
+  the registry's `param` (ADR-0036, decision 13), and `build(lock)` passes the tasks through `bind_tasks(tasks, lock)` and the
   instructions through `tenant_instructions(text, lock, bound=...)` and returns its tool
   set, from which `serve_tenants` builds the bound server, named as `server` is (ADR-0026,
   amendment 2026-11-18, point d). No tool of a bound

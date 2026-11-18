@@ -11,6 +11,7 @@ from xippios.core import (
     Result,
     ResultMeta,
     TenantLock,
+    Tenants,
     UpstreamModel,
     bind_tasks,
     parse_decimal,
@@ -178,7 +179,8 @@ async def test_assert_write_tools_accepts_a_server_a_lock_binds() -> None:
         """
         return {"org": org, "name": name}
 
-    bound = bind_tasks([rename_thing], TenantLock("org", "demo"))
+    tenants = Tenants("fictive-src", list_var="FICTIVE_SRC_TENANTS", param="org", fields=("KEY",))
+    bound = bind_tasks([rename_thing], TenantLock(tenants, "demo"))
     await assert_write_tools(
         build_server("example", bound, read_only=False), bound, source="example"
     )

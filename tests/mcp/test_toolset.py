@@ -13,7 +13,7 @@ import pytest
 from mcp.server.mcpserver import MCPServer
 from pydantic import Field
 
-from xippios.core import Result, ResultMeta, TenantLock, bind_tasks, sync
+from xippios.core import Result, ResultMeta, TenantLock, Tenants, bind_tasks, sync
 from xippios.core.mcp import (
     ResultCap,
     ToolSet,
@@ -303,7 +303,8 @@ async def test_a_server_from_a_tool_set_keeps_the_annotated_constraints() -> Non
 
 @pytest.mark.anyio
 async def test_a_tool_set_of_tasks_a_lock_binds_keeps_their_constraints() -> None:
-    lock = TenantLock("org", "demo", noun="organisation")
+    tenants = Tenants("example", list_var="EXAMPLE_ORGS", param="org", fields=("API_KEY",))
+    lock = TenantLock(tenants, "demo", noun="organisation")
     server = build_server(ToolSet("example", bind_tasks([get_rows], lock)))
     tool = {t.name: t for t in await server.list_tools()}["example_get_rows"]
     assert "org" not in tool.input_schema["properties"]
