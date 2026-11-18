@@ -29,6 +29,8 @@ EXPORTS = {
         "Tenants", "list_task",
         # and the lock that binds a server to one of them (the same amendment, (d))
         "TenantLock", "bind_tasks", "tenant_instructions",
+        # a variable of the package contract (ADR-0026, amendment 2026-11-18, (c))
+        "EnvVar",
     },
     "xippios.core.client": {
         "AsyncClient", "BasicKeyAuth", "BearerAuth", "CachedResponse", "ClientConfig",
@@ -54,6 +56,8 @@ EXPORTS = {
         "register_tasks", "tool_functions",
         # the serve command of a multi-tenant source (ADR-0024, amendment 2026-11-18, (d))
         "serve_tenants",
+        # the tool set of the package contract (ADR-0026, amendment 2026-11-18, (c))
+        "ToolSet",
     },
     "xippios.core.http": {"is_scalar", "router_from_tasks", "status_for"},
 }  # fmt: skip
