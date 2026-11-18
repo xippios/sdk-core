@@ -278,3 +278,22 @@ async def test_a_429_from_another_host_spends_no_gateway_quota() -> None:
     with pytest.raises(RateLimitError):
         await client.get_json("https://files.example.test/psd_alldata.zip")
     assert len(upstream.sent) > sent, "sent again: no gateway quota holds it back"
+
+
+# -- a response built without a request (findings of https://github.com/xippios/sdk-core/pull/275)
+
+
+@pytest.mark.parametrize(
+    ("body", "headers"),
+    [
+        (b'{"Message": "No HTTP resource was found"}', {"content-type": "application/json"}),
+        (b"", TEXT),  # an empty text 404 whose path cannot be read
+    ],
+)
+@pytest.mark.parametrize("data_path", [None, PSD_DATA])
+def test_a_404_built_without_a_request_is_left_to_the_source(
+    body: bytes, headers: dict[str, str], data_path: re.Pattern[str] | None
+) -> None:
+    # As on main: only the gateway's own NOT_FOUND names the path it reads.
+    response = httpx.Response(404, content=body, headers=headers)
+    assert Gateway("usda-psd", data_path=data_path).classify(response) is None

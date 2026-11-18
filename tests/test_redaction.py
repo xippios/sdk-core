@@ -1,3 +1,5 @@
+import re
+
 import httpx
 import pytest
 
@@ -223,3 +225,25 @@ def test_redact_credentials_scrubs_a_signed_link_at_any_depth() -> None:
     assert redacted["links"] == [scrub_url(AZURE_LINK)]
     assert redacted["nested"] == {"url": scrub_url(S3_LINK)}
     assert request["links"] == [AZURE_LINK], "the mapping given is not changed"
+
+
+# One credential word per spelling the rule takes: the rule and register_data_name read the
+# same words (findings of https://github.com/xippios/sdk-core/pull/275).
+WORD_SAMPLES = [
+    "api_key", "apikey", "api-key", "token", "secret", "password", "passwd", "pwd", "auth",
+    "authorization", "sig", "signature", "credential", "credentials",
+]  # fmt: skip
+
+
+def test_every_credential_word_has_a_sample() -> None:
+    for word in redaction._CREDENTIAL_WORDS:
+        assert any(re.fullmatch(f"(?i){word}", sample) for sample in WORD_SAMPLES), word
+
+
+@pytest.mark.parametrize("word", [sample for sample in WORD_SAMPLES if sample != "token"])
+def test_a_token_name_with_any_other_credential_word_stays_a_credential(word: str) -> None:
+    assert is_credential_name(word)
+    name = f"next_token_{word}"
+    with pytest.raises(ValueError, match="cannot be declared data"):
+        register_data_name(name)
+    assert is_credential_name(name)
