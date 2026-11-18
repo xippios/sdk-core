@@ -915,7 +915,9 @@ def decode_csv(
             source opens with the stdlib, e.g. ``io.TextIOWrapper(gzip.open(path),
             encoding="utf-8-sig", newline="")``. A stream is read from where it stands, a
             leading byte order mark stripped, and left open, for the caller that opened
-            it to close; a binary stream is refused with ``TypeError`` at the first row.
+            it to close. A binary stream is refused with ``TypeError`` at the first row:
+            an ``io.RawIOBase`` or ``io.BufferedIOBase`` by its class, before it is read,
+            and any other once its first line reads as ``bytes``.
         delimiter: The field separator, e.g. ``"\t"`` for a tab-separated file.
         source: Source slug for the error, e.g. ``"usda-nass"``.
 
@@ -933,11 +935,8 @@ def decode_csv(
         return
     given: object = data  # typing's IO is no runtime class: the checks read the object
     if isinstance(given, io.IOBase) or hasattr(given, "read"):
-        if isinstance(given, io.IOBase) and not isinstance(given, io.TextIOBase):
-            raise TypeError(
-                f"decode_csv reads text, and {type(given).__name__} is a binary stream: "
-                "wrap it in io.TextIOWrapper(stream, encoding='utf-8-sig', newline='')"
-            )
+        if isinstance(given, io.RawIOBase | io.BufferedIOBase):
+            raise TypeError(_binary_refusal(given))
         stream = cast(IO[str], given)
         yield from _rows(stream, delimiter, _stream_name(stream), source, from_stream=True)
         return
@@ -958,17 +957,29 @@ def _stream_name(stream: IO[str]) -> str:
     return "stream"
 
 
+def _binary_refusal(stream: object) -> str:
+    """The ``TypeError`` text for a binary stream, which names the wrapper that reads it."""
+    return (
+        f"decode_csv reads text, and {type(stream).__name__} is a binary stream: wrap it in "
+        "io.TextIOWrapper(stream, encoding='utf-8-sig', newline='')"
+    )
+
+
 def _without_bom(handle: IO[str]) -> Iterator[str]:
     """``handle``'s lines, a byte order mark at the start of the first one stripped.
 
     A stream's: a path is opened as ``utf-8-sig`` and ``decode_text`` strips a
-    response's, so neither passes through here.
+    response's, so neither passes through here. A stream that is binary by what it reads,
+    not by its class, such as a ``tempfile.SpooledTemporaryFile`` in ``"w+b"``, gives
+    ``bytes`` for its first line and is refused there.
     """
     lines = iter(handle)
-    first = next(lines, None)
+    first: object = next(lines, None)
     if first is None:
         return
-    yield first.removeprefix("﻿")
+    if not isinstance(first, str):
+        raise TypeError(_binary_refusal(handle))
+    yield first.removeprefix("\ufeff")
     yield from lines
 
 
