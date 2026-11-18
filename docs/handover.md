@@ -801,7 +801,13 @@ Before the release PR, one branch in sdk-google-mail
 (https://github.com/xippios/sdk-cashctrl/issues/61) pin core's `main`, delete what core
 then provides and run their tests, the trial that
 https://github.com/xippios/sdk-core/issues/242 decided; each opens no PR before core's
-tag. The release PR changes only what conventions §12 lets a release PR change. Its merge
+tag. Both branches, `trial/core-0.4.0` in each repository, passed on 2026-11-18 on core's
+`main` at `96b16f841add49efe01c4fd32205cc1adcdc0ab3`, the merge of the follow-up 4.1, with
+no misfit and no row filed: sdk-google-mail with 313 tests passed
+(https://github.com/xippios/sdk-google-mail/issues/19#issuecomment-6977372927) and
+sdk-cashctrl with 1,424
+(https://github.com/xippios/sdk-cashctrl/issues/61#issuecomment-6977674083).
+The release PR changes only what conventions §12 lets a release PR change. Its merge
 runs `publish.yml`, which tags `v0.4.0` on the merge commit and waits at `pypi` for the
 maintainer's approval; the recovery path is the one under "Core 0.2.1". sdk-template
 0.4.0 follows the tag and renders the package contract
