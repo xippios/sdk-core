@@ -1,7 +1,11 @@
 # Review checklist
 
-The checklist a reviewer applies to a PR in any `sdk-*` repository. A review changes
-nothing in the repository it reviews.
+The checklist a reviewer applies to a PR in any `sdk-*` repository, and in the host
+`xippios-mcp`, a package that is no source (ADR-0026, decision 1). Items 1 to 4 and 16
+are written for a source's adapters, upstream names, error shapes, fixtures and wrappers,
+and do not apply to the host; item 12 judges its adoption PR against conventions §15's
+items for the host (ADR-0026, amendment 2026-11-18, point e). A review changes nothing in
+the repository it reviews.
 
 ## Before judging
 
@@ -12,25 +16,27 @@ nothing in the repository it reviews.
   a PR that changes one of them is judged against its branch's own version of it. Read
   the repository's `CLAUDE.md`, and its `docs/upstream/` for every claim about the
   upstream API.
-- Never read or print `.envrc`, `.env` or a variable ending in `_API_KEY`,
-  `_REFRESH_TOKEN` or `_SECRET`; a leak check greps the files for key patterns, it never
-  compares against a key.
+- Never read or print `.envrc`, `.env` or a variable that holds a credential, any whose
+  name ends in `_API_KEY`, `_TOKEN` or `_SECRET` among them; a leak check greps the files
+  for key patterns, it never compares against a key (conventions §7; ADR-0005, amendment
+  2026-11-18, point b).
 
 ## Check, in this order
 
-1. **Layering** (ADR-0001): the adapters register `tasks.__all__`, minus `BULK_TASKS`
-   (ADR-0019), and hold no logic.
-2. **Fidelity** (ADR-0003): upstream names and semantics, no cross-source
+1. **Layering** (ADR-0001; not the host's): the adapters register `tasks.__all__`, minus
+   `BULK_TASKS` (ADR-0019), and hold no logic.
+2. **Fidelity** (ADR-0003; not the host's): upstream names and semantics, no cross-source
    normalisation; every parameter and default traceable to `docs/upstream/`, its
    hand-written `OBSERVED.md` included (conventions §3), or listed as an assumption in the
    description.
-3. **Errors**: mapped through the taxonomy (conventions §5) and the `classify` hook
-   (§6); each shape `classify` maps is documented in `docs/upstream/` or recorded in a
-   fixture that a test passes to it (ADR-0008, amendment 2026-11-18, point a).
-4. **Fixtures** (conventions §10): recorded, never hand-written; scrubbed; free of key
-   patterns and of production tenant names; the fixture files this PR adds or changes
-   under 256 KiB, a file it only moves, its content unchanged, being neither, and a
-   truncated one marked `truncated: true` (ADR-0019; binds from the source's 0.3.0
+3. **Errors** (not the host's): mapped through the taxonomy (conventions §5) and the
+   `classify` hook (§6); each shape `classify` maps is documented in `docs/upstream/` or
+   recorded in a fixture that a test passes to it (ADR-0008, amendment 2026-11-18,
+   point a).
+4. **Fixtures** (conventions §10; not the host's): recorded, never hand-written; scrubbed;
+   free of key patterns and of production tenant names; the fixture files this PR adds or
+   changes under 256 KiB, a file it only moves, its content unchanged, being neither, and
+   a truncated one marked `truncated: true` (ADR-0019; binds from the source's 0.3.0
    adoption); a download fixture whose body is its parser tests' sample marked
    `sample: true` with the whole file's size and sha256 (ADR-0020, amendment 2026-11-18,
    point a; binds from the source's adoption of core 0.4.0); a sample a script wrote from
@@ -54,8 +60,10 @@ nothing in the repository it reviews.
 9. **Decisions taken**: the description carries a `## Decisions taken` block, and every
    line is backed by a convention, an ADR, a maintainer's decision with its date, or the
    issue that records the gap. A line backed by none of these is a blocking finding.
-10. **Live calls**: the description counts the live calls the PR spent, keyed calls by
-    number (`none` is a count).
+10. **Live calls**: the description counts the live calls the PR spent, every request it
+    sent to an upstream, a probe's, a recording's or a live test run's, the keyed ones by
+    number (`none` is a count), since a keyed call spends the quota that every source and
+    process holding its key draws on (ADR-0009, amendment 2026-11-18, point c).
 11. **Core PR** (`sdk-core`, code added): it names the two consumers of what it adds (in
     its ADR, or in its description when it has none), or, in its ADR, the one-consumer
     reason of ADR-0023 decision 3.
@@ -66,7 +74,10 @@ nothing in the repository it reviews.
     template tag and a source frozen on a template tag, §15's item 2 does not apply: the
     first raises the bound with `copier update --vcs-ref=:current:`, the second runs no
     `copier update` and lists the template changes it hand-applies file by file
-    (ADR-0018, amendment (i)).
+    (ADR-0018, amendment (i)). The host's adoption PR runs no `copier update` and is
+    judged against §15's items 1, 3, 4, 7, 8 and 9, read for the host as §15 reads them,
+    and lists the template changes it hand-applies file by file (ADR-0026, amendment
+    2026-11-18, point e).
 13. **Release PR** (the version in `pyproject.toml` changed, or for sdk-template the top
     heading of `CHANGELOG.md`): it changes only the files of conventions §12
     (`pyproject.toml`, `uv.lock`, `CHANGELOG.md`, `README.md`, `CLAUDE.md`,
@@ -78,13 +89,16 @@ nothing in the repository it reviews.
     document contradicts the state after the change (a version, a count, a file name, a
     rule the PR replaced).
 15. **Conventions** (`sdk-core`): a change to `docs/conventions.md` carries an ADR or an
-    ADR amendment, and the conventions version bumps once per PR.
-16. **Wrapper and fixture names** (conventions §2, §10): a new endpoint wrapper's module
-    and function carry the upstream operation name by §2's rule, and its fixtures live
-    under `tests/fixtures/<wrapper>/`, under `<service>_<wrapper>/` where two wrappers
-    carry its name, or under the tasks that record its every exchange, where none is its
-    own (ADR-0003, amendment 2026-11-18, point e); the verbatim operation id is in the
-    first line of the wrapper function's docstring and in the `endpoint=` it passes.
+    ADR amendment. The conventions version is raised once per core release, by the
+    release's last change to the conventions; a change before it leaves the version line
+    as it stands.
+16. **Wrapper and fixture names** (conventions §2, §10; not the host's): a new endpoint
+    wrapper's module and function carry the upstream operation name by §2's rule, and its
+    fixtures live under `tests/fixtures/<wrapper>/`, under `<service>_<wrapper>/` where
+    two wrappers carry its name, or under the tasks that record its every exchange, where
+    none is its own (ADR-0003, amendment 2026-11-18, point e); the verbatim operation id
+    is in the first line of the wrapper function's docstring and in the `endpoint=` it
+    passes.
 
 ## Report
 

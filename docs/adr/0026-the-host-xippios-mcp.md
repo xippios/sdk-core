@@ -266,3 +266,33 @@ host serves. So the host has what the amendment of 2026-10-30, part (a), says a 
 lacks, each package's instructions, version and hooks and its tasks as its lock binds them, and it
 reads decision 5's `loopback_only` from the tool set, at the minor that part (e) names.
 `build_server` and `register_tasks` given a slug and tasks answer as before.
+
+(e) **The review documents and the adoption, read for the host** (decision 1; step 17;
+https://github.com/xippios/sdk-core/issues/172, found by xippios-mcp). Decision 1 says
+which conventions bind the host and that the rules written for a source's layers, envelope,
+fixtures and adoption have nothing to bind in it, but the review checklist addressed a pull
+request in an `sdk-*` repository and the definition of done named no host, so each review of
+the host listed the items that do not apply; and conventions §15 gave no route for the
+host's own core bound, `xippios-core[mcp]~=` and `xippios-core[testing]~=`, which the host
+raises by hand, with no `copier update`. The checklist's scope names the host: its items 1 to
+4 and 16, written for a source's adapters, upstream names, error shapes, fixtures and
+wrappers, do not apply to it, nor do the definition of done's Code and Tests blocks and its
+Docs lines on agent docstrings and `docs/upstream/`. The host adopts a core minor in an
+adoption PR without `copier update`, on §15's list read for a hand scaffold: item 1 raises
+the bound of `xippios-core` and of each of its extras, while its sources keep the `>=` floors
+of decision 9; items 3 and 4 delete its workarounds and drop the logic core now carries, its
+private copy of the loopback hosts that (a) replaces among them; items 7, 8 and 9 bind it as
+they bind a source, item 9's fragment naming the core and conventions versions it adopts;
+items 2, 5 and 6 have nothing to bind in it; and the template changes that the new
+conventions version needs in the files it was scaffolded from are hand-applied and listed
+file by file, as on §15's route (3). So decision 1's adoption that binds nothing in the host
+is a source's `copier update`, its enum files and its test markings, not its core bound.
+The host's use of the package contract of points (c) and (d) lands at the minor that the
+amendment of 2026-10-30, part (e), names; whether its adoption PR takes it up or a later
+pull request of that minor does, this point does not say. ADR-0005's amendment of
+2026-11-18, point b, names the `_TOKEN` suffix that the host's bearer variables carry.
+
+Conventions §8 and the README state points (a) and (b) from 1.28 on; conventions §7 and
+§8, the README and the docstrings of `xippios.core.contract`, `xippios.core.mcp` and
+`xippios.core.mcp.server` points (c) and (d); and conventions §15, the review checklist's
+scope and its items 1 to 4, 12 and 16, and the definition of done point (e).

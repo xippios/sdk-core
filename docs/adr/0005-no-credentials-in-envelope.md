@@ -89,3 +89,21 @@ adoption of core 0.4.0 deletes the copies. A message that shows the path as sent
 percent-escapes kept, as sdk-usda-esmis's refusal of an encoded slash does, keeps its own.
 The decoders' subject, `response from <path>`, names a path their caller may give for a
 response built without a request, and stays.
+
+(b) **Nobody who works in a repository reads a credential** (step 17;
+https://github.com/xippios/sdk-core/issues/219, with the suffix of
+https://github.com/xippios/sdk-core/issues/172, found by xippios-mcp). The decision and its
+amendments keep a credential out of the envelope, error text and fixtures; that whoever works
+in a source never reads or prints `.envrc`, `.env` or a credential variable stood in the
+review checklist, for a review alone, and in the template's `.claude/family.md`, which
+sdk-template 0.3.3 deleted (https://github.com/xippios/sdk-template/pull/142). Conventions §7
+states it for every repository of the family: nobody who works in one, a person or an agent,
+reads or prints `.envrc`, `.env` or a variable that holds a credential, each one the package
+reads a credential from and any whose name ends in `_API_KEY`, `_TOKEN` or `_SECRET`, and a
+leak check greps the files for key patterns, never comparing against a key. The suffix
+`_TOKEN` replaces `_REFRESH_TOKEN` beside `_API_KEY` and `_SECRET`: it takes in
+sdk-google-mail's `GOOGLE_DEMO_REFRESH_TOKEN` and the host's bearer variables, whose names a
+config's `token_env` gives and the host requires to end in `_TOKEN`.
+
+Conventions §5, the README and `request_description`'s docstring state point (a) from 1.28
+on, and conventions §7 and the review checklist's Before judging point (b).

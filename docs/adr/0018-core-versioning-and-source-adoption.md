@@ -257,5 +257,37 @@ stays, as a fixture that a source's `CLAUDE.md` or a docstring names as the evid
 upstream answer does. An adoption PR keeps the limit of amendment (d): it deletes what the
 adoption makes dead and nothing else.
 
+(r) **A source's adoption of a core minor takes a minor** (decision 1 and amendment (g);
+step 17; https://github.com/xippios/sdk-core/issues/185, found by sdk-google-mail; decided
+by Johannes on 2026-11-17, https://github.com/xippios/sdk-core/issues/243). Amendment (g)
+bumps a pre-1.0 minor for a breaking change alone and makes added tasks or parameters a
+patch, and no rule said which of the two a source's adoption of a new core minor is, so each
+source chose the version of its adoption release on its own; ADR-0025, D-d, named
+sdk-google-mail's 0.2.0 for its adoption of core 0.4.0 with no rule behind it. The adoption
+moves the source's core bound to the new minor, so, by the first consequence above, its
+release no longer installs beside a package still bound to the old one. A source's adoption
+of a core minor is therefore a breaking change of the source and takes a minor, whatever
+else its release brings, and an added surface alone still makes a patch. The host keeps its
+minors of ADR-0026's amendment of 2026-10-30, part (e).
+
+(s) **A release's section says internal labels in plain words** (amendments (b) and (o);
+step 17; https://github.com/xippios/sdk-core/issues/211). `publish.yml` writes a release's
+section of `CHANGELOG.md` into the message of the tag it pushes (amendment (b)), which a
+reader of the release sees without the issues and plans behind it. The section therefore
+says an internal label, such as a decision's number or a plan's item, in plain words. The
+rule stood only in the template's `.claude/family.md`, which sdk-template 0.3.3 deleted
+(https://github.com/xippios/sdk-template/issues/128).
+
+(t) **A convention that seems wrong is followed** (step 17;
+https://github.com/xippios/sdk-core/issues/219). A change that meets a convention that seems
+wrong to it follows the convention and says so in its pull request, until the convention's
+ADR and its change of the conventions land, since a change of the conventions comes with an
+ADR, as their header requires, and a source applies the version it adopted (decision 2,
+conventions §15 item 8). The rule stood in the template's `.claude/family.md`, which
+sdk-template 0.3.3 deleted (https://github.com/xippios/sdk-template/pull/142), and stands in
+core's `CLAUDE.md` and in the `CLAUDE.md` that the template renders, each for its own
+repository; the conventions state it for every repository they bind.
+
 Conventions §10, the definition of done's Tests block and the review checklist's item 4
-state (q) from 1.28 on.
+state (q) from 1.28 on, conventions §12 states (r) and (s), and the conventions' header
+(t).

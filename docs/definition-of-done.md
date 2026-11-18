@@ -5,7 +5,11 @@ CI enforces the first block; the rest is checked in review (`docs/review-checkli
 The Adoption PR block is an adoption PR's alone (conventions §15), which is judged against
 it with the Enforced by CI and Process blocks and nothing else: the Code, Tests and Docs
 blocks do not apply to it. A release PR changes only the files of conventions §12, no
-code, test or fixture, so the Code and Tests blocks have nothing to judge in it.
+code, test or fixture, so the Code and Tests blocks have nothing to judge in it. In the
+host `xippios-mcp`, a package that is no source (ADR-0026, decision 1), the Code and
+Tests blocks and the Docs block's lines on agent docstrings and `docs/upstream/` are
+written for a source and do not apply, and its adoption PR meets the Adoption PR lines
+that conventions §15 names for the host (ADR-0026, amendment 2026-11-18, point e).
 
 ## Enforced by CI
 - [ ] `ruff check` and `ruff format --check` pass
@@ -39,7 +43,10 @@ code, test or fixture, so the Code and Tests blocks have nothing to judge in it.
 ## Adoption PR (conventions §15)
 The reviewer judges an adoption PR against this list and nothing else: no new endpoints,
 tasks or fixtures ride along, and it deletes only the fixtures, mounts and tests the
-adoption itself makes dead (ADR-0018, amendment 2026-10-26).
+adoption itself makes dead (ADR-0018, amendment 2026-10-26). The host's adoption PR
+meets the lines on the core floor, the workarounds, the duplicated logic, `mypy` over
+`scripts/`, the conventions version and the changelog fragment, as conventions §15 reads
+them for it, and runs no `copier update` (ADR-0026, amendment 2026-11-18, point e).
 - [ ] core floor raised: `xippios-core~=X.Y.0`, or `~=X.Y.Z` when patch Z shipped what the source adopts (§12), and its extras likewise; a source package the source depends on bound to its own minor the same way (ADR-0021); from PyPI, no git pin, `uv.lock` updated
 - [ ] `copier update` to the template release, conflicts resolved; not applicable on §15's routes (1), a core release without a template tag, and (3), a source frozen on a template tag, whose hand-applied template changes are listed file by file in the PR description
 - [ ] every local workaround a core change replaced is deleted, its tests with it, the core change named for each in the PR description
@@ -55,6 +62,6 @@ adoption itself makes dead (ADR-0018, amendment 2026-10-26).
 - [ ] commit messages follow Conventional Commits
 - [ ] no tag pushed by hand: a `v*` tag comes from the release train alone (conventions §12)
 - [ ] assumptions and open questions listed in the PR description
-- [ ] live calls spent by this PR are counted in the description (keyed calls by number; `none` is a count)
+- [ ] live calls spent by this PR are counted in the description: every request it sent to an upstream, a probe's, a recording's or a live test run's, the keyed ones by number (`none` is a count), since a keyed call spends the quota that every source and process holding its key draws on (ADR-0009, amendment 2026-11-18, point c)
 - [ ] the description carries a `## Decisions taken` block: one line per decision the change takes, each backed by a convention, an ADR, a maintainer's decision with its date, or the issue that records the gap; a line backed by none of these is a blocking finding
 - [ ] a release PR changes only the files of conventions §12; the reference refresh ran before it, in a PR of its own only when a record changed or `fetched` went from a bare date to the full time, otherwise cited by the release PR
