@@ -19,12 +19,14 @@ import pytest
 from pydantic import SecretStr
 
 from xippios.core import BearerToken, RenewingBearerAuth
-from xippios.core.client import AsyncClient, ClientConfig
+from xippios.core.client import AsyncClient, ClientConfig, RetryPolicy
 from xippios.core.client.auth import RENEWAL_MARGIN
 from xippios.core.errors import (
     AuthError,
     ConfigError,
+    NotFoundError,
     RateLimitError,
+    TransportError,
     UpstreamError,
     ValidationError,
     XippiosError,
@@ -392,42 +394,83 @@ async def test_the_token_answer_stays_in_the_response_s_history() -> None:
     await client.aclose()
 
 
+ECHOED = "an-echoed-value-never-shown"
+"""What a token endpoint's error answer might repeat of the request: never quoted."""
+
+
 @pytest.mark.anyio
 @pytest.mark.parametrize(
-    ("answer", "error", "text"),
+    ("status", "error", "text"),
     [
+        (400, UpstreamError, "400 from POST /token: Bad Request"),
+        (401, AuthError, "401 from POST /token: Unauthorized"),
+        (403, AuthError, "403 from POST /token: Forbidden"),
+        (404, NotFoundError, "404 from POST /token: Not Found"),
+        (429, RateLimitError, "429 from POST /token: Too Many Requests"),
+        (503, UpstreamError, "503 from POST /token: Service Unavailable"),
         (
-            httpx.Response(503, text="Service Unavailable"),
-            UpstreamError,
-            "503 from POST /token: Service Unavailable",
-        ),
-        (
-            httpx.Response(429, headers={"Retry-After": "7"}),
-            RateLimitError,
-            "429 from POST /token: ",
-        ),
-        (httpx.Response(401, text="no"), AuthError, "401 from POST /token: no"),
-        (
-            httpx.Response(204),
+            204,
             UpstreamError,
             "POST /token answered HTTP 204, not the documented 200; nothing of it is shown",
         ),
     ],
-    ids=["503", "429", "401", "204"],
+    ids=["400", "401", "403", "404", "429", "503", "204"],
 )
-async def test_a_refused_exchange_is_core_s_mapping_and_ends_the_call(
-    answer: httpx.Response, error: type[XippiosError], text: str
+async def test_a_refused_exchange_is_mapped_by_its_status_and_quotes_nothing(
+    status: int, error: type[XippiosError], text: str
 ) -> None:
+    """The taxonomy error of the status, its reason phrase in place of the answer."""
     upstream = Upstream()
-    upstream.token_answer = lambda _: answer
+    upstream.token_answer = lambda _: httpx.Response(
+        status,
+        json={"error": "invalid_grant", "error_description": ECHOED},
+        headers={"Retry-After": "7"},
+    )
     client, _ = make_client(upstream)
     with pytest.raises(error) as raised:
         await client.get("/data")
-    assert str(raised.value).startswith(text)
+    assert str(raised.value) == text
+    assert ECHOED not in repr(vars(raised.value))
     assert raised.value.source == "example"
     assert (len(upstream.exchanges), len(upstream.calls)) == (1, 0), "never retried"
+    if isinstance(raised.value, UpstreamError):
+        assert (raised.value.status, raised.value.body) == (status, "")
     if isinstance(raised.value, RateLimitError):
         assert raised.value.retry_after == 7
+    await client.aclose()
+
+
+@pytest.mark.anyio
+async def test_a_transport_failure_of_the_exchange_is_retried_with_its_request() -> None:
+    """The client's retry policy (ADR-0011) sends a GET again, its exchange included."""
+    upstream = Upstream()
+    failures = [httpx.ConnectError("connection refused")]
+
+    async def failing_once(request: httpx.Request) -> httpx.Response:
+        if str(request.url) == TOKEN_URL and failures:
+            raise failures.pop()
+        return await upstream(request)
+
+    auth = LoginAuth(source="example")
+    client = AsyncClient(
+        ClientConfig(
+            source="example",
+            version="1",
+            base_url=BASE,
+            retry=RetryPolicy(max_attempts=2, jitter=False),
+        ),
+        auth=auth,
+        transport=httpx.MockTransport(failing_once),
+        sleep=no_sleep,
+    )
+    response = await client.get("/data")
+    assert response.status_code == 200
+    assert upstream.bearers() == ["Bearer made-up-bearer-1"]
+    auth.reset()
+    failures.append(httpx.ConnectError("connection refused"))
+    with pytest.raises(TransportError):
+        await client.request("POST", "/data", json={"a": 1})
+    assert len(upstream.calls) == 1, "a POST is not sent again, so neither is its exchange"
     await client.aclose()
 
 
@@ -454,9 +497,10 @@ async def test_token_refused_is_the_source_s_to_write() -> None:
         await client.get("/data")
     assert str(raised.value).endswith("re-run example-auth --account demo --scopes read")
     assert (len(upstream.exchanges), len(upstream.calls)) == (1, 0)
-    upstream.token_answer = lambda _: httpx.Response(503, text="busy")
-    with pytest.raises(UpstreamError, match=r"^503 from POST /token: busy"):
+    upstream.token_answer = lambda _: httpx.Response(503, text=ECHOED)
+    with pytest.raises(UpstreamError) as other:
         await client.get("/data")
+    assert str(other.value) == "503 from POST /token: Service Unavailable", "the default's"
     await client.aclose()
 
 
