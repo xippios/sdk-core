@@ -507,13 +507,14 @@ A server bound to one tenant serves that tenant alone, and none of its tools tak
 tenant's name. `bind_tasks(tasks, lock)` binds them to a `TenantLock`, and
 `tenant_instructions` ends the server's instructions with a sentence that names the
 tenant; `serve_tenants` builds the bound server from `--org` and runs it through `main`
-(ADR-0014, ADR-0024):
+(ADR-0014, ADR-0024). The source's `build(lock)` returns its tool set, as the package
+contract has it, and `serve_tenants` builds the bound server from the tool set, named as
+`server` is (ADR-0026):
 
 ```python
 # xippios/example/mcp.py
-from mcp.server.mcpserver import MCPServer
 from xippios.core import TenantLock, bind_tasks, tenant_instructions
-from xippios.core.mcp import build_server, serve_tenants, tool_functions
+from xippios.core.mcp import ToolSet, build_server, serve_tenants, tool_functions
 from xippios.example import tasks
 from xippios.example._client import TENANTS
 
@@ -521,15 +522,15 @@ INSTRUCTIONS = "Example via xippios. Every tool but example_list_tenants takes o
 BOUND = "Example via xippios."  # the bound server's text: no tool takes org
 
 
-def build(lock: TenantLock | None = None) -> MCPServer:
-    return build_server(
+def build(lock: TenantLock | None = None) -> ToolSet:
+    return ToolSet(
         "example",
         bind_tasks(tool_functions(tasks), lock),
         instructions=tenant_instructions(INSTRUCTIONS, lock, bound=BOUND),
     )
 
 
-server = build()  # every declared tenant
+server = build_server(build())  # every declared tenant
 
 
 def run() -> None:  # xippios-example-mcp --org acme serves acme alone
@@ -810,12 +811,13 @@ def run() -> None:
     main(server, add_options=TOOLS.add_options, apply_options=TOOLS.apply_options)
 ```
 
-Beside a tool set `build_server` takes `name` alone, and a multi-tenant source's
+Beside a tool set `build_server` takes `name` alone. A multi-tenant source's
 `build(lock=None)` passes its tasks through `bind_tasks` and its instructions through
-`tenant_instructions`. A host builds one server from the tool sets of several packages,
-each tool with its own package's caps, a write tool set making it a write server and a
-held one holding it to loopback, and applies each package's hooks as its entry point does
-when it runs without options:
+`tenant_instructions`, and `serve_tenants(server, build, ...)` builds the bound server from
+the tool set it returns (see Multi-tenant sources). A host builds one server from the tool
+sets of several packages, each tool with its own package's caps, a write tool set making it
+a write server and a held one holding it to loopback, and applies each package's hooks as
+its entry point does when it runs without options:
 
 ```python
 server = MCPServer("xippios-group")
@@ -825,6 +827,9 @@ for tools in (example_mcp.build(), other_mcp.build()):
     if tools.apply_options is not None:
         tools.apply_options(tools.option_defaults(), server)  # --split-years at its default
 ```
+
+`option_defaults()` raises `ValueError`, naming the source, for an option of `add_options`
+that has no default, where argparse would print its usage and end the host.
 
 ## HTTP routes in two lines
 

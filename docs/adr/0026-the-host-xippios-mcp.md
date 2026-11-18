@@ -225,37 +225,44 @@ or a task that crashed, which it tells by its text; so ADR-0014's amendment of 2
 by which an unknown tool fails both helpers, holds.
 
 (c) **The contract's types** (decision 8; step 5, https://github.com/xippios/sdk-core/issues/245,
-as https://github.com/xippios/sdk-core/issues/241 decided). Core defines the types of decision
-8's package contract, so the template renders their use and no source defines them (ADR-0023,
-decision 1). `xippios.core.EnvVar(name_or_pattern, *, secret, required)` is a variable a
-package needs: its name, or a pattern with a placeholder such as `<NAME>` for one variable per
-tenant (`CASHCTRL_<NAME>_API_KEY`), with whether it is a secret and whether it is required,
-both keyword-only and without a default, so each entry states them. A source's `_client.py`
-declares the variables it needs as `EnvVar` entries, so the type imports without the `mcp`
-extra. An `EnvVar` names a variable and never reads one. `xippios.core.mcp.ToolSet` is what
-a package serves: `source`, its `tasks` as its lock binds them, `caps`, `instructions`,
-`version`, `read_only` and `loopback_only`, which are `build_server`'s parameters less the
-server's `name` and the default `cap`, and `main`'s two hooks, `add_options` and
-`apply_options` (ADR-0014, decision 8). A source's `mcp.py` defines `build(**options)`, its options
-keyword arguments with defaults, a multi-tenant source's `lock: TenantLock | None = None`,
-which returns its `ToolSet`. Its module-level `server`, which the host's 0.1.0 reads, is
-`build_server(build())`, and its entry point passes the tool set's hooks to `main`. `build`
-takes no `transport_security`, which https://github.com/xippios/sdk-template/issues/81 names:
-the `mcp` SDK 2.3.0 takes it at `streamable_http_app`, where the host passes it already, and a
-tool set holds no server. A source declares its variables and builds its server so from its
-adoption of core 0.4.0 with sdk-template 0.4.0, which renders both
-(https://github.com/xippios/sdk-template/issues/159).
+as https://github.com/xippios/sdk-core/issues/241 decided). Core defines the types of decision 8's
+package contract, so the template renders their use and no source defines them (ADR-0023, decision
+1). `xippios.core.EnvVar(name_or_pattern, *, secret, required)` is a variable a package needs: its
+name, or a pattern with a placeholder such as `<NAME>` for one variable per tenant
+(`CASHCTRL_<NAME>_API_KEY`), with whether it is a secret and whether it is required, both
+keyword-only and without a default, so each entry states them. A source's `_client.py` declares the
+variables it needs as `EnvVar` entries, so the type imports without the `mcp` extra. An `EnvVar`
+names a variable and never reads one. `xippios.core.mcp.ToolSet` is what a package serves:
+`source`, its `tasks` as its lock binds them, `caps`, `instructions`, `version`, `read_only` and
+`loopback_only`, which are `build_server`'s parameters less the server's `name` and the default
+`cap`, and `main`'s two hooks, `add_options` and `apply_options` (ADR-0014, decision 8). Its `caps`
+takes `None` as no cap of a tool's own, as `build_server`'s does, so conventions §8's
+`caps=getattr(tasks, "MCP_CAPS", None)` serves a tool set too. A source's `mcp.py` defines
+`build(**options)`, its options keyword arguments with defaults, a multi-tenant source's
+`lock: TenantLock | None = None`, which returns its `ToolSet`. Its module-level `server`, which the
+host's 0.1.0 reads, is `build_server(build())`, and its entry point passes the tool set's hooks to
+`main`. `build` takes no `transport_security`, which
+https://github.com/xippios/sdk-template/issues/81 names: the `mcp` SDK 2.3.0 takes it at
+`streamable_http_app`, where the host passes it already, and a tool set holds no server. A source
+declares its variables and builds its server so from its adoption of core 0.4.0 with sdk-template
+0.4.0, which renders both (https://github.com/xippios/sdk-template/issues/159).
 
-(d) **Servers from tool sets** (decisions 3, 5 and 8, and the amendment of 2026-10-30, part
-(a); step 5, https://github.com/xippios/sdk-core/issues/245). `build_server(tool_set)` builds a
-package's server from its tool set, named `xippios-<source>` unless `name` names it, and takes
-no other argument beside it. `register_tasks(server, tool_set)` registers one tool set on a
-server, so a host builds one server from the tool sets of several packages: each tool keeps
-its own package's caps, a write tool set makes the server a write server and a held one holds
-it to loopback. `tool_set.option_defaults()` gives the options that `main` hands
-`apply_options` when the command line names none, so a host applies a package's hooks as its
-entry point does without options: sdk-usda-nass's split ceiling of 5 years rather than the 20
-of its Python API. So the host has what the amendment of 2026-10-30, part (a), says a server
-it builds lacks, each package's instructions, version and hooks and its tasks as its lock
-binds them, and it reads decision 5's `loopback_only` from the tool set, at the minor that
-part (e) names. `build_server` and `register_tasks` given a slug and tasks answer as before.
+(d) **Servers from tool sets** (decisions 3, 5 and 8, and the amendment of 2026-10-30, part (a);
+step 5, https://github.com/xippios/sdk-core/issues/245). `build_server(tool_set)` builds a
+package's server from its tool set, named `xippios-<source>` unless `name` names it, and takes no
+other argument beside it. `register_tasks(server, tool_set)` registers one tool set on a server, so
+a host builds one server from the tool sets of several packages: each tool keeps its own package's
+caps, a write tool set makes the server a write server and a held one holds it to loopback.
+`serve_tenants` takes the `build` of a multi-tenant source, whose `build(lock)` returns its tool
+set, and builds the bound server from that tool set with `build_server`, named as the unbound
+`server` is, so the entry point stays `serve_tenants(server, build, TENANTS, ...)` (ADR-0014,
+amendment 2026-11-18, (d)). A `build` that returns a server has that server run, as before.
+`tool_set.option_defaults()` gives the options that `main` hands `apply_options` when the command
+line names none, so a host applies a package's hooks as its entry point does without options:
+sdk-usda-nass's split ceiling of 5 years rather than the 20 of its Python API. An option of
+`add_options` that an empty command line leaves without a value, a required one say, raises
+`ValueError` naming the source, where argparse would end the process, and with it every package a
+host serves. So the host has what the amendment of 2026-10-30, part (a), says a server it builds
+lacks, each package's instructions, version and hooks and its tasks as its lock binds them, and it
+reads decision 5's `loopback_only` from the tool set, at the minor that part (e) names.
+`build_server` and `register_tasks` given a slug and tasks answer as before.

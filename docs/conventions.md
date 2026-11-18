@@ -725,7 +725,9 @@ with sdk-template 0.4.0, which renders it (ADR-0026, amendment 2026-11-18, point
   sdk-google-mail's `--account`, which binds a server to one tenant: the entry point runs
   `serve_tenants(server, build, TENANTS, param=..., check=...)` from `xippios.core.mcp`,
   and `build(lock)` passes the tasks through `bind_tasks(tasks, lock)` and the
-  instructions through `tenant_instructions(text, lock, bound=...)`. No tool of a bound
+  instructions through `tenant_instructions(text, lock, bound=...)` and returns its tool
+  set, from which `serve_tenants` builds the bound server, named as `server` is (ADR-0026,
+  amendment 2026-11-18, point d). No tool of a bound
   server takes the tenant's argument, so a call that names it is refused as an argument
   the tool does not declare; the tenant list lists the bound tenant alone; and the
   instructions end with a sentence that names the tenant, after `bound`, the bound
