@@ -1,6 +1,6 @@
 # ADR-0009: One key variable per issuer when one key serves several sources
 
-Status: Accepted · Date: 2026-10-23
+Status: Accepted · Date: 2026-10-23 · Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240
 
 ## Context
 
@@ -87,3 +87,32 @@ core's. Like `xippios.core.reference`, the module is imported by its path and ke
 sdk-usda-psd, sdk-usda-esr and sdk-usda-gats, which carried the same code as copies, and
 the template's api.data.gov gateway answer, which renders it from template v0.3.0 on
 (ADR-0023). Queue rows 30 d and 39 e are closed. Conventions 1.17 names the module in §7.
+
+## Amendment 2026-11-18
+
+Core 0.4.0, the package of https://github.com/xippios/sdk-core/issues/240, whose steps
+each add their points here.
+
+(a) **The gateway reads its own answers alone** (step 7;
+https://github.com/xippios/sdk-core/issues/163). The `classify` of the amendment of
+2026-10-27 read every answer, so a 429, 401, 403 or 404 from another host, a bulk file that a
+source downloads through its one client, came back as the gateway's error naming
+`DATA_GOV_API_KEY`. It now returns `None` for an answer whose request the client marked as
+sent to another origin than its base URL's (ADR-0015, amendment 2026-11-18, point d), and
+core's status mapping follows; the key does not go there, and the shared policy neither
+holds that request back nor reads its answer (point e there). A response built without the
+marks, as a source's test builds one with `response_from_fixture`, is read as before.
+
+(b) **FAS's empty 404 on a data path** (step 7; https://github.com/xippios/sdk-core/issues/106,
+found by sdk-usda-esr; ADR-0023, decisions 2 and 4). PSD and ESR answer a market year they
+hold no data for with HTTP 404, an empty body and `text/plain`, on every data path, and
+sdk-usda-psd and sdk-usda-esr each carried `NoDataForYear(NotFoundError)` and the same
+branch after the gateway's `classify`. `Gateway(source, data_path=...)` takes the source's
+data paths as a pattern that the whole request path matches, and `classify` maps that
+answer there to `xippios.core.data_gov.NoDataForYear`, a `NotFoundError` in the source's
+name with the request's `path`, whose text names the path and says that the year it names
+holds no data; a task raises it again with a text of its own, `NoDataForYear(path, message,
+source=...)`. An empty 404 on another path, one with a body or another content type, and
+the gateway's `NOT_FOUND` are left to the source and to core, and a gateway without
+`data_path`, sdk-usda-gats's, whose data paths answer `[]`, maps none. The class keeps the
+name both sources gave it, so their adoption changes an import and deletes their copies.

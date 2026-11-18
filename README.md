@@ -130,9 +130,24 @@ names a credential (`api_key`, `token`, `secret`, `sig`, ... as whole words) so 
 envelope is safe to hand to an agent or return over HTTP. A bare `key` is a credential
 only where a `QueryKeyAuth` sends the key under that name, as above, which registers it
 for the process; elsewhere it is data, as Eurostat's SDMX series `key` is, and so is a
-`sort_key`. The fixture recorder and the replay helpers redact by the same rule
+`sort_key`. A link keeps its path and its other parameters and loses the credentials of
+its query, a signed file link's `sig` or `X-Amz-Signature` say, as `scrub_url` writes
+them. The fixture recorder and the replay helpers redact by the same rule
 (`xippios.core.redaction`). A parameter the caller left `None` was not sent and is left
 out of `meta.request`, so a task passes its parameters as they are.
+
+A paging cursor whose name holds `token` as a whole word is data, and its source declares
+it so once, in `_client.py`; every name it does not declare keeps the rule:
+
+```python
+from xippios.core.redaction import register_data_name
+
+register_data_name("next_token")  # X's cursor: kept in meta.request, fixtures and replay
+```
+
+Only a name with the whole word `token` and no other credential word can be declared,
+never `token` alone nor `access_token`, `refresh_token` or `id_token`, and a name a
+`QueryKeyAuth` registers stays a credential.
 
 A release time upstream prints without a zone (FAS: `2026-10-06T08:00:00`) goes into
 `published_at` as printed, with `published_at_naive=True`, and `vintage` keeps the
@@ -187,6 +202,9 @@ The policy reads the quota headers of every response from the wire through
 spent, `ClientConfig.before_request` makes the next request wait until it is back if
 that is within the policy's `pause_cap` (30 s by default), with one warning in the log,
 and otherwise raises `RateLimitError` with `retry_after`, saying that nothing was sent.
+A request sent with `auth=None`, as `list_countries_async` sends one, or to another origin
+than the base URL's spends no quota: the policy neither holds it back nor reads its
+answer, and the limiter still paces it.
 A spent quota is back after a 429's `Retry-After`, else after `window`. An upstream that
 answers a spent limit with something other than a 429 gets `QuotaPolicy(spent=...)`, a
 function that returns the seconds to wait for such an answer, or `None`. A wait from
@@ -200,16 +218,19 @@ one `QuotaPolicy`, `Gateway.policy`, since one key is one quota across every pac
 uses it:
 
 ```python
+import re
+
 import httpx
 
 from xippios.core import AsyncClient, ClientConfig, NotFoundError, XippiosError
 from xippios.core.data_gov import Gateway
 
-gateway = Gateway("usda-psd")
+DATA_PATH = re.compile(r"/api/psd/commodity/[^/]+/(?:country/[^/]+|world)/year/[^/]+")
+gateway = Gateway("usda-psd", data_path=DATA_PATH)
 
 
 def classify(response: httpx.Response) -> XippiosError | None:
-    error = gateway.classify(response)  # API_KEY_*, the 429, NOT_FOUND; else None
+    error = gateway.classify(response)  # API_KEY_*, the 429, NOT_FOUND, NoDataForYear
     if error is None and response.status_code == 404 and not response.content:
         # the source's own documented answers follow the gateway's
         error = NotFoundError(f"no data for {response.request.url.path}", source="usda-psd")
@@ -230,7 +251,11 @@ client = AsyncClient(config, auth=gateway.auth)  # X-Api-Key from DATA_GOV_API_K
 The gateway's 429 is a `RateLimitError` in the source's name whose `retry_after` is the
 wait the shared policy keeps the quota spent for; once it is spent, the next request of
 any source in the process waits within the policy's cap or is refused before sending, as
-`api.data.gov`.
+`api.data.gov`. FAS's answer for a market year it holds no data for, HTTP 404 with an
+empty `text/plain` body, is `NoDataForYear` of `xippios.core.data_gov`, a `NotFoundError`
+with the request's `path`, on the paths `data_path` matches and nowhere else. The gateway
+reads the answers of the base URL's origin alone: a file host's 429 is core's plain
+`RateLimitError`, not the gateway's.
 
 A request the cache answers never waits: `before_request` runs after the cache lookup,
 and a cache hit carries the time its entry was stored in
@@ -266,6 +291,12 @@ client's credentials for one call: `None` sends none, for a keyless endpoint on 
 host, and another `httpx.Auth` replaces them. `None` and the default share the cache; a
 call with an `httpx.Auth` of its own bypasses it, neither looked up nor stored.
 
+The client's own credentials go to the base URL's origin only, its scheme, host and port:
+a request to an absolute URL on another origin is sent without them, and a call that must
+send credentials there passes an `httpx.Auth` of its own. Every request the client builds
+says where they go, for the hooks, in its extensions: `xippios_auth` is `"client"`,
+`"none"` or `"own"`, and `xippios_origin` is `"base"` or `"other"`.
+
 ## Files: download and decode
 
 An upstream that publishes files (a bulk dataset, a release's CSV or XLS) is read with
@@ -291,7 +322,8 @@ async def download_crops_async(dest: Path) -> Result[Downloaded]:
         dest: The file to write, e.g. ``Path("qs.crops.txt")``.
     """
     url = "https://files.example.org/bulk/qs.crops.txt"  # a link from the catalog
-    got = await client.download(url, dest, auth=None)  # another host: no key sent there
+    got = await client.download(url, dest)  # another host: the client's key stays off it
+    # a signed link's signature reads REDACTED in meta.request
     meta = ResultMeta(source="example", endpoint="qs.crops", request={"url": url})
     return Result(data=got, meta=meta)
 
@@ -680,8 +712,8 @@ fragment until the release assembles it.
 | --- | --- | --- |
 | `xippios.core.client` | httpx client, retries, rate limit, cache with a byte bound, quota policy, request hooks, env-key auth, `get_answer`, `download`, `decode_text`, `decode_csv` | alpha |
 | `xippios.core.errors` | taxonomy, `UnknownCode`, response classification | alpha |
-| `xippios.core.data_gov` | `Gateway`: the api.data.gov key, the gateway's `classify`, one quota policy per process | alpha |
-| `xippios.core.redaction` | the one credential rule of the envelope, the recorder and replay | alpha |
+| `xippios.core.data_gov` | `Gateway`: the api.data.gov key, the gateway's `classify` of its own answers with `NoDataForYear` on a data path, one quota policy per process | alpha |
+| `xippios.core.redaction` | the one credential rule of the envelope, the recorder and replay, `register_data_name`, signed links | alpha |
 | `xippios.core.models` | `UpstreamModel` with `dump_upstream`, `Result`, `ResultMeta` with `published_at_naive`, `ResultCap`, `parse` | alpha |
 | `xippios.core.reference` | packaged CSV/JSON loaders, `PackagedList`, `matches`, `closest`, generated `StrEnum`/`IntEnum` modules | alpha |
 | `xippios.core.pagination` | `paginate_offset` (a page-numbered endpoint maps the offset to its page), `collect` | alpha |

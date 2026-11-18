@@ -185,3 +185,35 @@ of the answer, and the secret scan read a long one as a secret in every fixture 
 sdk-faostat and sdk-x, each with an audited baseline entry. S3's `x-amz-version-id`, which
 names the version of the object answered, is provenance as an `ETag` is, and stays. A
 fixture recorded before keeps its headers until a PR records it again.
+
+(c) **A source declares a token name data** (decision 6; step 7;
+https://github.com/xippios/sdk-core/issues/184, found by sdk-x). Decision 6's rule takes
+`token` as a whole word, so X's paging cursors `next_token` and `pagination_token` read
+`REDACTED` in a recorded URL, in `sent_query` and in a task's `meta.request`, where
+conventions §4 means the request as sent and a caller reads the cursor to page on;
+`register_credential_name` added names, and nothing declared one data.
+`register_data_name(name)` of `xippios.core.redaction` declares a name data for the process,
+matched exactly in any letter case, as the amendment of 2026-10-27 registers `key`: the
+envelope, the recorder and replay keep its value, and replay can match it. Only a name that
+holds the whole word `token` and no other credential word can be declared; `token` alone
+and the token names of OAuth 2.0 and OpenID Connect, `access_token`, `refresh_token` and
+`id_token`, are refused with `ValueError`, and a name a `QueryKeyAuth` registers stays a
+credential though declared. The row's other option, the rule matching the whole name only,
+is not taken, since it would make `access_token` data. The module is imported by its path,
+as `xippios.core.data_gov` is (ADR-0009, amendment 2026-10-27). Its one consumer, sdk-x,
+suffices, since credential redaction is core's (ADR-0023, decision 3 (b)); Google's
+camelCase `pageToken` was data already.
+
+(d) **A signed link in the envelope loses its signature** (decision 6; step 7;
+https://github.com/xippios/sdk-core/issues/163). Conventions §4 has a file task record the
+file's URL in `request`, and `ResultMeta` redacted by name alone, so a signed link under a
+name such as `url` kept the signature that the amendment of 2026-10-27 added `sig` to the
+words for. `redact_credentials`, which `ResultMeta` applies at construction, now reads every
+text value at any depth that starts with `http://` or `https://`: a link whose query holds a
+credential name (an Azure SAS `sig`, an S3 `X-Amz-Signature` and `X-Amz-Credential`) or
+whose userinfo is set is written as `scrub_url` writes it, its path and its other
+parameters kept; a link that carries neither is kept byte for byte; and a link that httpx
+cannot read is `REDACTED` whole, since its credentials cannot be told from the rest. A task
+records the link it sent and scrubs nothing itself. No source keeps a signed link yet; the
+file sources whose catalogs may name one are sdk-usda-esmis, sdk-usda-nass, sdk-eurostat
+and sdk-faostat.
