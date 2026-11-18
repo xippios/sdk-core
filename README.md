@@ -591,14 +591,19 @@ xippios_placeholder_key_envs = ["EXAMPLE_API_KEY"]
   two readings around the call and `CLOCK_SLACK` (five seconds) either side, for a host
   whose clock steps back.
 - `record(client, "/v1/series", fixture_path(...), params=...)` records a live response
-  with credentials scrubbed. Never hand-write a fixture. `json=` or `data=` (a form) send
-  a body, recorded with its content type. The recording goes through the client as it
-  is configured; one that must not retry a 5xx goes through a client whose config says
-  `RetryPolicy(max_attempts=1)`. `max_bytes=80_000` cuts a large answer's body: a JSON
-  array after its first whole elements, in upstream's own text, a text after its first
-  bytes, never inside a secret, and the fixture is marked `truncated` with
-  the whole body's size and sha256 (and an array's length); a JSON object, XML, ZIP,
-  XLSX, gzip, XLS or a body that is not UTF-8 text is refused: record a small real
+  with credentials scrubbed and without the response headers that only identify a
+  request (`x-request-id`, `x-amz-cf-id`, `x-transaction-id` and the others of
+  `xippios.core.testing.fixtures.REQUEST_ID_HEADERS`). Never hand-write a fixture.
+  `json=` or `data=` (a form) send a body, recorded with its content type. The recording
+  goes through the client as it is configured; one that must not retry a 5xx goes
+  through a client whose config says `RetryPolicy(max_attempts=1)`. `max_bytes=80_000`
+  cuts a large answer's body: a JSON array after its first whole elements, in upstream's
+  own text, a text after its first bytes, never inside a secret, and the fixture is
+  marked `truncated` with the whole body's size and sha256 (and an array's length).
+  `array_key="data"` cuts the array of that top-level key, `{"data": [...]}`, the rest
+  of the object kept as upstream wrote it, and `keep="last"` keeps an array's last
+  elements, for a list ordered oldest first. A JSON object without `array_key`, XML,
+  ZIP, XLSX, gzip, XLS or a body that is not UTF-8 text is refused: record a small real
   answer or sample instead. It bounds the body, not the file, which escapes the body as
   a JSON string, text outside ASCII up to three times as long: 80,000 bytes keep a file
   under the 256 KiB cap.
@@ -625,9 +630,35 @@ The fixture is scrubbed in memory, verified and written once: if a named value i
 in the URL, a header value or a text body, nothing is written and the error says where,
 never what. A form a value takes that differs from it (percent-encoded, behind a JSON
 escape), or a tenant's host, the source rewrites itself, on the `Fixture` that
-`fixture_from_response` returns, before it writes the file. A body that is not UTF-8 text
-cannot be scrubbed and is refused unless `Scrub(allow_binary=True)` stores it base64,
-flagged.
+`fixture_from_response` returns, and writes the file with `write_fixture(fixture, path)`,
+laid out as `record` writes it; `fixture_text(fixture)` gives that text. A body that is
+not UTF-8 text cannot be scrubbed and is refused unless `Scrub(allow_binary=True)` stores
+it base64, flagged.
+
+A download's replay fixture may carry as its body the sample its parser tests read, so
+the download replays that file. It is marked `sample`, with the whole file's size and
+sha256, and never `truncated`, which stays the recorder's cut:
+
+```python
+import hashlib
+
+from xippios.core.testing import fixture_from_response, fixture_path, write_fixture
+
+recorded = fixture_from_response(response)  # the download's exchange, its body whole
+whole = response.content
+body = recorded.response.model_copy(
+    update={
+        "body": sample.decode(),  # the sample under tests/fixtures/files/<file_kind>/
+        "sample": True,
+        "original_bytes": len(whole),
+        "sha256": hashlib.sha256(whole).hexdigest(),
+    }
+)
+write_fixture(recorded.model_copy(update={"response": body}), fixture_path(FIXTURES, ...))
+```
+
+`model_copy` checks nothing; `write_fixture` refuses a fixture that `load_fixture` would
+not read back, such as a sample without its size and sha256, and writes nothing.
 
 ## Status
 
@@ -648,7 +679,7 @@ fragment until the release assembles it.
 | `xippios.core.pagination` | `paginate_offset` (a page-numbered endpoint maps the offset to its page), `collect` | alpha |
 | `xippios.core.mcp` | tool registration with the argument check and the write server's `confirm` rule, `tool_functions`, result caps, error text, CLI with option hooks and the loopback rule for write and `loopback_only` servers, quiet request log | alpha |
 | `xippios.core.http` | router factory, problem details | alpha |
-| `xippios.core.testing` | live gate, offline run, record (with `max_bytes=`), replay, scrub of named secrets with a plain verify, `mcp_call`, family check | alpha |
+| `xippios.core.testing` | live gate, offline run, record (with `max_bytes=`, `array_key=` and `keep=`), the fixture writer and the `sample` mark, replay, scrub of named secrets with a plain verify, `mcp_call`, family check | alpha |
 
 Alpha: while core is 0.x, a new minor version may change the public surface, with no
 backward compatibility across minors; patch releases stay compatible. A source depends

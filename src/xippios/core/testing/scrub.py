@@ -31,9 +31,9 @@ _BINARY_BODY = (
 class Scrub:
     """What a recording must not keep besides credentials, removed before anything is written.
 
-    ``write_fixture`` and ``record`` apply it in memory to the whole fixture (request
-    URL, request body, response headers, response body) and write the file once,
-    already scrubbed, so the file never holds what was removed, not even briefly
+    ``fixture_from_response`` and ``record`` apply it in memory to the whole fixture
+    (request URL, request body, response headers, response body), and the file is written
+    once, already scrubbed, so the file never holds what was removed, not even briefly
     (conventions §10). The credential scrubbing of ``scrub_url`` and ``scrub_headers``
     always applies as well. No scrub reads a binary body: a request or response body
     that is not UTF-8 text is refused with ``ValueError`` unless ``allow_binary`` is

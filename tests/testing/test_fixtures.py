@@ -3,12 +3,25 @@ import gzip
 import hashlib
 import json
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
+from pydantic import ValidationError
 
-from xippios.core.testing import REDACTED, Scrub, fixture_path, load_fixture
-from xippios.core.testing.fixtures import fixture_from_response, write_fixture
+from xippios.core.testing import (
+    REDACTED,
+    FixtureResponse,
+    Scrub,
+    fixture_from_response,
+    fixture_path,
+    fixture_text,
+    load_fixture,
+    write_fixture,
+)
+from xippios.core.testing.fixtures import REQUEST_ID_HEADERS
+
+MARKS = {"truncated", "sample", "original_bytes", "original_count", "sha256"}
 
 
 def _response(
@@ -33,7 +46,7 @@ def test_fixture_path_layout(tmp_path: Path) -> None:
 
 def test_write_scrubs_and_round_trips(tmp_path: Path) -> None:
     path = tmp_path / "api_GET" / "case.json"
-    written = write_fixture(_response(), path)
+    written = write_fixture(fixture_from_response(_response()), path)
     text = path.read_text()
     assert "SECRET" not in text
     assert text.endswith("\n")
@@ -52,15 +65,95 @@ def test_write_scrubs_and_round_trips(tmp_path: Path) -> None:
     assert written.recorded_at.tzinfo is not None
 
 
+def test_write_fixture_writes_a_rewritten_fixture_as_record_lays_it_out(tmp_path: Path) -> None:
+    # Row 125: sdk-cashctrl, sdk-google-mail, sdk-x and sdk-usda-wasde each copied the
+    # private writer to write a fixture they had rewritten (ADR-0024, decision 4, as amended).
+    recorded = fixture_from_response(_response(content=b'{"org": "acme"}'))
+    response = recorded.response.model_copy(update={"body": '{"org": "ORG"}'})
+    rewritten = recorded.model_copy(update={"response": response})
+    path = tmp_path / "account_list" / "one.json"
+    assert write_fixture(rewritten, path) == rewritten
+    text = path.read_text(encoding="utf-8")
+    assert text == fixture_text(rewritten)
+    assert text == json.dumps(json.loads(text), indent=2, sort_keys=True) + "\n"
+    assert not MARKS & json.loads(text)["response"].keys()  # a fixture not marked
+    assert load_fixture(path) == rewritten
+
+
+def test_the_marks_are_written_for_a_cut_or_a_sample_body_only() -> None:
+    full = b"a,b\n" + b"1,2\n" * 40
+    cut = fixture_from_response(_answer(full, "text/csv"), max_bytes=12)
+    written = json.loads(fixture_text(cut))["response"]
+    assert MARKS & written.keys() == {"truncated", "original_bytes", "original_count", "sha256"}
+    assert (written["truncated"], written["original_count"]) == (True, None)
+
+    whole = fixture_from_response(_answer(full, "text/csv"))
+    marks = {
+        "sample": True,
+        "original_bytes": len(full),
+        "sha256": hashlib.sha256(full).hexdigest(),
+    }
+    response = whole.response.model_copy(update={"body": "a,b\n1,2\n", **marks})
+    sample = whole.model_copy(update={"response": response})
+    written = json.loads(fixture_text(sample))["response"]
+    assert MARKS & written.keys() == {"sample", "original_bytes", "original_count", "sha256"}
+    assert (written["sample"], written["original_bytes"]) == (True, len(full))
+
+
+def test_a_body_is_cut_or_a_sample_never_both_and_either_names_the_whole_body(
+    tmp_path: Path,
+) -> None:
+    whole = {"original_bytes": 100, "sha256": "0" * 64}
+    with pytest.raises(ValidationError, match="never both"):
+        FixtureResponse(status=200, headers=[], body="x", truncated=True, sample=True, **whole)
+    for mark in ("truncated", "sample"):
+        with pytest.raises(ValidationError, match="original_bytes and sha256"):
+            FixtureResponse(status=200, headers=[], body="x", **{mark: True})
+    with pytest.raises(ValidationError, match="this one is neither"):
+        FixtureResponse(status=200, headers=[], body="x", original_count=3)
+    # model_copy skips validation; the writer refuses what load_fixture would not read back.
+    recorded = fixture_from_response(_response())
+    marked = recorded.response.model_copy(update={"sample": True})
+    path = tmp_path / "f.json"
+    with pytest.raises(
+        ValueError, match=r"^the fixture would not load back, so nothing is written"
+    ):
+        write_fixture(recorded.model_copy(update={"response": marked}), path)
+    assert not path.exists()
+
+
 def test_wire_headers_are_dropped(tmp_path: Path) -> None:
     fixture = write_fixture(
-        _response(gzip.compress(b'{"ok": true}'), headers={"Content-Encoding": "gzip"}),
+        fixture_from_response(
+            _response(gzip.compress(b'{"ok": true}'), headers={"Content-Encoding": "gzip"})
+        ),
         tmp_path / "f.json",
     )
     assert fixture.response.body == '{"ok": true}'
     names = {name.lower() for name, _ in fixture.response.headers}
     assert "content-type" in names
     assert not names & {"content-length", "content-encoding", "transfer-encoding"}
+
+
+def test_the_headers_that_only_identify_a_request_are_dropped() -> None:
+    # Row 161: sdk-faostat's x-amz-cf-id and sdk-x's x-transaction-id, a new value in every
+    # recording, each needed an audited entry of the secret scan's baseline.
+    ids = {
+        "X-Amz-Cf-Id": "request-1",
+        "x-amzn-RequestId": "request-2",
+        "X-Amzn-Trace-Id": "request-3",
+        "X-Request-Id": "request-4",
+        "x-transaction-id": "request-5",
+        "x-api-umbrella-request-id": "request-6",
+        "x-vcap-request-id": "request-7",
+    }
+    provenance = {"ETag": '"v1"', "X-Amz-Version-Id": "version-1", "X-Amz-Cf-Pop": "FRA56-P1"}
+    fixture = fixture_from_response(_response(headers={**ids, **provenance}))
+    names = {name for name, _ in fixture.response.headers}
+    assert not names & {name.lower() for name in ids}
+    assert {name.lower() for name in provenance} <= names
+    assert {name.lower() for name in ids} <= REQUEST_ID_HEADERS
+    assert all(name == name.lower() for name in REQUEST_ID_HEADERS)
 
 
 def test_binary_body_is_refused_then_stored_flagged(tmp_path: Path) -> None:
@@ -71,12 +164,11 @@ def test_binary_body_is_refused_then_stored_flagged(tmp_path: Path) -> None:
     )
     for scrub in (None, Scrub(), Scrub(secrets=["tenant"])):
         with pytest.raises(ValueError, match=refusal):
-            write_fixture(_response(content=b"\xff\xfe\x00"), path, scrub=scrub)
-    assert not path.exists()
+            fixture_from_response(_response(content=b"\xff\xfe\x00"), scrub=scrub)
 
     binary = b"\xff\xfe\x00tenant"  # stored as it came: neither scrubbed nor verified
     scrub = Scrub(secrets=["tenant"], allow_binary=True)
-    fixture = write_fixture(_response(content=binary), path, scrub=scrub)
+    fixture = write_fixture(fixture_from_response(_response(content=binary), scrub=scrub), path)
     assert fixture.response.body_base64 is True
     assert fixture.response.content == binary
     assert json.loads(path.read_text())["response"]["body_base64"] is True
@@ -190,14 +282,106 @@ def test_max_bytes_never_keeps_part_of_a_secret() -> None:
         fixture_from_response(_answer("Île".encode() * 10, "text/plain"), max_bytes=1)
 
 
+def _envelope(rows: str) -> str:
+    """Quick Stats' shape: the rows under ``data`` between two other members."""
+    return '{"count": 50, "data": [\n' + rows + '], "note": "Île"}\n'
+
+
+ROWS = '  {"id": 0, "v": 1.50},\n  {"id": 1, "v": 2.50},\n' + "".join(
+    f'  {{"id": {i}, "v": 2.00}},\n' for i in range(2, 49)
+)
+ENVELOPE = _envelope(ROWS + '  {"id": 49}\n')
+
+
+def test_max_bytes_cuts_the_array_a_top_level_key_names() -> None:
+    # Row 127 (sdk-usda-nass): Quick Stats answers {"data": [...]}, and its recorded chunks
+    # were too large to keep; the rest of the object stays as upstream wrote it.
+    kept = _envelope('  {"id": 0, "v": 1.50},\n  {"id": 1, "v": 2.50}')  # cut after the second
+    answer = _answer(ENVELOPE.encode(), "application/json")
+    fixture = fixture_from_response(answer, max_bytes=len(kept.encode()), array_key="data")
+    response = fixture.response
+    assert response.body == kept
+    assert json.loads(response.body)["data"][1] == {"id": 1, "v": 2.5}
+    assert (response.truncated, response.original_count) == (True, 50)
+    assert response.original_bytes == len(ENVELOPE.encode())
+    assert response.sha256 == hashlib.sha256(ENVELOPE.encode()).hexdigest()
+    one_byte_less = fixture_from_response(
+        answer, max_bytes=len(kept.encode()) - 1, array_key="data"
+    )
+    assert json.loads(one_byte_less.response.body)["data"] == [{"id": 0, "v": 1.5}]
+
+
+def test_max_bytes_keeps_the_last_elements_on_request() -> None:
+    # Row 127 (sdk-usda-psd): a list ordered oldest first lost the years its tests read.
+    kept = '{"count": 50, "data": [\n  {"id": 48, "v": 2.00},\n  {"id": 49}\n], "note": "Île"}\n'
+    answer = _answer(ENVELOPE.encode(), "application/json")
+    fixture = fixture_from_response(
+        answer, max_bytes=len(kept.encode()), array_key="data", keep="last"
+    )
+    assert fixture.response.body == kept
+    assert json.loads(fixture.response.body)["data"][-1] == {"id": 49}  # upstream's last
+    assert (fixture.response.truncated, fixture.response.original_count) == (True, 50)
+
+    array = (
+        "[\n" + "".join(f'  {{"year": {1960 + i}}},\n' for i in range(63)) + '  {"year": 2023}\n]\n'
+    )
+    last = fixture_from_response(
+        _answer(array.encode(), "application/json"), max_bytes=40, keep="last"
+    )
+    assert last.response.body == '[\n  {"year": 2022},\n  {"year": 2023}\n]\n'
+    assert last.response.original_count == 64
+
+
+@pytest.mark.parametrize(
+    ("body", "options", "reason"),
+    [
+        (ENVELOPE, {}, "a JSON object is cut by the array that a top-level key names"),
+        (ENVELOPE, {"keep": "last"}, "a JSON object is cut by the array that a top-level key"),
+        (ENVELOPE, {"array_key": "rows"}, "the JSON object has no top-level key 'rows'"),
+        (ENVELOPE, {"array_key": "count"}, "the top-level key 'count' holds no JSON array"),
+        ("[" + "1, " * 30 + "2]", {"array_key": "data"}, "array_key names a top-level key of"),
+        ("a\tb\n" * 30, {"array_key": "data"}, "array_key names a top-level key of a JSON"),
+        ("a\tb\n" * 30, {"keep": "last"}, "keep='last' keeps the last elements of a JSON array"),
+        ('"' + "x" * 60 + '"', {}, "a JSON body that is not an array or an object"),
+        (
+            _envelope('  {"id": 0, "v": 1.50}\n'),
+            {"array_key": "data"},
+            "the JSON array's first element alone is over 50 bytes with the rest of the object",
+        ),
+        (
+            _envelope('  {"id": 0, "v": 1.50}\n'),
+            {"array_key": "data", "keep": "last"},
+            "the JSON array's last element alone is over 50 bytes with the rest of the object",
+        ),
+        (
+            '{"data": [], "note": "' + "x" * 60 + '"}',
+            {"array_key": "data"},
+            "the JSON array is empty",
+        ),
+    ],
+)
+def test_max_bytes_refuses_a_cut_it_cannot_make_of_a_json_body(
+    body: str, options: dict[str, Any], reason: str
+) -> None:
+    with pytest.raises(ValueError, match=f"^max_bytes: {reason}"):
+        fixture_from_response(_answer(body.encode(), "text/plain"), max_bytes=50, **options)
+
+
+def test_array_key_and_keep_need_max_bytes() -> None:
+    choices: list[dict[str, Any]] = [{"array_key": "data"}, {"keep": "last"}]
+    for options in choices:
+        with pytest.raises(ValueError, match=r"^array_key and keep='last' choose what max_bytes"):
+            fixture_from_response(_response(), **options)
+    with pytest.raises(ValueError, match=r"^keep must be 'first' or 'last'"):
+        fixture_from_response(_response(), max_bytes=5, keep="middle")  # type: ignore[arg-type]
+    whole = fixture_from_response(_response(), max_bytes=100, array_key="data", keep="last")
+    assert whole.response.body == '{"ok": true}'  # within max_bytes: neither looked at
+    assert not whole.response.truncated
+
+
 @pytest.mark.parametrize(
     ("content", "content_type", "reason"),
     [
-        (
-            json.dumps({"data": list(range(30))}).encode(),
-            "application/json",
-            "a JSON body that is not an array",
-        ),
         (b"[1, 2, 3" + b", 4" * 20, "application/json", "the body is declared application/json"),
         (b"<data>" + b"<row/>" * 20 + b"</data>", "application/xml", "an XML body"),
         (b"<?xml version='1.0'?><data/>" + b" " * 50, "text/plain", "an XML body"),
@@ -225,9 +409,9 @@ def test_max_bytes_at_or_above_the_size_keeps_the_body_unmarked(tmp_path: Path) 
         whole = fixture_from_response(_response(), max_bytes=max_bytes)
         assert whole.response.body == '{"ok": true}'
         assert (whole.response.truncated, whole.response.sha256) == (False, None)
-    write_fixture(_response(), tmp_path / "f.json")
+    write_fixture(fixture_from_response(_response()), tmp_path / "f.json")
     written = json.loads((tmp_path / "f.json").read_text())["response"]
-    assert not {"truncated", "original_bytes", "original_count", "sha256"} & written.keys()
+    assert not MARKS & written.keys()
     with pytest.raises(ValueError, match="max_bytes must be at least 1"):
         fixture_from_response(_response(), max_bytes=0)
 
@@ -250,7 +434,7 @@ def test_secrets_are_redacted_as_given_in_url_headers_and_bodies(tmp_path: Path)
         request=request,
     )
     path = tmp_path / "f.json"
-    fixture = write_fixture(response, path, scrub=Scrub(secrets=[SECRET]))
+    fixture = write_fixture(fixture_from_response(response, scrub=Scrub(secrets=[SECRET])), path)
     assert SECRET not in path.read_text()
     assert fixture.request.url == f"https://api.example.test/v1/{REDACTED}/x?org={REDACTED}"
     assert fixture.request.body == f"note={REDACTED}"
@@ -274,8 +458,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from xippios.core.testing import Scrub
-from xippios.core.testing.fixtures import write_fixture
+from xippios.core.testing import Scrub, fixture_from_response, write_fixture
 from xippios.core.testing.scrub import _Scrubber
 
 TENANT = "tenant" + "-7"
@@ -290,7 +473,8 @@ def test_refused(monkeypatch, where):
     headers = {"Location": "/" + TENANT} if where == "header" else {}
     answer = TENANT.encode() if where == "response" else b"{}"
     response = httpx.Response(200, headers=headers, content=answer, request=request)
-    write_fixture(response, Path(where + ".json"), scrub=Scrub(secrets=[TENANT]))
+    fixture = fixture_from_response(response, scrub=Scrub(secrets=[TENANT]))
+    write_fixture(fixture, Path(where + ".json"))
 """
 
 

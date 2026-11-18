@@ -2,7 +2,8 @@
 
 Status: Accepted · Date: 2026-10-27 · Decided by Johannes on 2026-10-25 (sdk-cashctrl
 stands alone on one core minor) and on 2026-10-27 (the family check's write-server test,
-the recorder's `rewrite` and verify) · Decision 6 reversed in part by ADR-0025 (2026-10-29)
+the recorder's `rewrite` and verify) · Decision 6 reversed in part by ADR-0025 (2026-10-29) ·
+Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240
 
 ## Context
 
@@ -115,3 +116,21 @@ conftest strip, with (f) the `_cli.py` serve command. sdk-google-mail copies the
 sdk-cashctrl under ADR-0023, decision 4, so each has two consumers (ADR-0023, decision
 2), and they return to core in 0.4.0. The rest of this ADR stands, the recorder's extras
 (decisions 3 and 4) among it.
+
+## Amendment 2026-11-18
+
+Core 0.4.0, the package of https://github.com/xippios/sdk-core/issues/240, whose steps
+each add their points here.
+
+(a) **Core exports the writer** (step 10; https://github.com/xippios/sdk-core/issues/125,
+found by sdk-usda-wasde; decided by Johannes on 2026-11-17,
+https://github.com/xippios/sdk-core/issues/236). Decision 4's "core adds no writer" is
+reversed: four sources copied core's private one, sdk-cashctrl, sdk-google-mail and sdk-x
+in their recorders and sdk-usda-wasde in its sample cutter, and code that two consumers
+carry is core's (ADR-0023, decision 2). `xippios.core.testing` exports
+`write_fixture(fixture, path)`, which writes a `Fixture` laid out as `record` writes it,
+and `fixture_text(fixture)`, which gives that text; both refuse a fixture that
+`load_fixture` would not read back, since `model_copy` checks nothing. `write_fixture`
+took a response before and was no export; `write_fixture(fixture_from_response(response,
+scrub=...), path)` does what it did. The rewrite stays the source's step, and core still
+adds no hook for it.

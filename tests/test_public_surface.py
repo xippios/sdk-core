@@ -31,8 +31,8 @@ EXPORTS = {
     "xippios.core.testing": {
         "CLOCK_SLACK", "REDACTED", "Fixture", "FixtureResponse", "ReplayFixture", "Scrub",
         "assert_projection", "assert_time_between", "fixture_from_response", "fixture_path",
-        "load_fixture", "mcp_call", "mcp_call_text", "record", "record_sync", "recorded_query",
-        "response_from_fixture", "sent_query", "sent_urls",
+        "fixture_text", "load_fixture", "mcp_call", "mcp_call_text", "record", "record_sync",
+        "recorded_query", "response_from_fixture", "sent_query", "sent_urls", "write_fixture",
     },
     "xippios.core.mcp": {
         "ResultCap", "build_parser", "build_server", "cap_result", "error_to_text", "main",

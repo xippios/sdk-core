@@ -532,19 +532,24 @@ route: `router_from_tasks` skips it, and no route returns a file path (ADR-0019)
 - A fixture file a PR adds or changes stays under 256 KiB (ADR-0019). A file the PR only
   moves, its content unchanged, is neither, so a fixture over the cap recorded before the
   rule bound moves with its directory (§2) and stays until a PR re-records it. A download
-  fixture holds a small real answer (a short date range, one commodity) or the first N
-  rows or bytes of the file: the recorder truncates on request (`max_bytes=`), marks the
-  fixture `truncated: true` and keeps `original_bytes` and the sha256 of the full file.
+  fixture holds a small real answer (a short date range, one commodity), the sample of
+  the file that its parser tests read, marked `sample: true` as the next bullet says, or
+  the first N rows or bytes of the file: the recorder truncates on request
+  (`max_bytes=`), marks the fixture `truncated: true` and keeps `original_bytes` and the
+  sha256 of the full file.
   An XML, ZIP, gzip, XLS or XLSX fixture is a small real sample (a short query, one
   member of the archive, a few rows), never a byte-truncated file, since a cut-off binary
   or compressed file cannot be parsed and a cut-off XML document is not well-formed; byte
   truncation (`max_bytes=`) applies to text bodies, and the recorder refuses it for those
   formats and for a body that is not UTF-8 text; a JSON array is truncated by elements:
-  the recorder cuts its original text after the first N elements that fit, never
+  the recorder cuts its original text after the first N elements that fit, or keeps the
+  last N on request (`keep="last"`, for a list ordered oldest first), never
   re-serialising them, marks `truncated: true` and records the full count
-  (`original_count`) and the sha256; a JSON object is refused, and the source records a
-  small real answer (ADR-0019, amendment 2026-10-27). `max_bytes` bounds the body, not
-  the fixture file, which escapes the body as a JSON string.
+  (`original_count`) and the sha256; a JSON object is cut so at the array that a
+  top-level key names (`array_key=`), the rest of the object kept as upstream wrote it,
+  and an object with no key named is refused, and the source records a small real
+  answer (ADR-0019, amendments 2026-10-27 and 2026-11-18). `max_bytes` bounds the body,
+  not the fixture file, which escapes the body as a JSON string.
   A test on a sample or a truncated fixture asserts the parser's shape, never a size.
 - A file-distributed source keeps a sample of each file kind under
   `tests/fixtures/files/<file_kind>/<case>.*` with a provenance line: the release id, the
@@ -553,7 +558,10 @@ route: `router_from_tasks` skips it, and no route returns a file path (ADR-0019)
   `tests/fixtures/files/README.md`. Its parser tests read the sample; the download call
   replays the recorded exchange of the bullet above. One live test per file kind fetches
   the current release and checks that the parser still reads it: shape, headers and
-  sheet names, never values.
+  sheet names, never values. The recorded exchange of a download may carry that sample
+  as its body, so that the download replays the file the parser tests read; it is then
+  marked `sample: true` with the full file's `original_bytes` and sha256, never
+  `truncated`, which stays the recorder's cut (ADR-0020, amendment 2026-11-18).
 - Replay matches a fixture on method, host and path, and on the recorded query
   parameters a test names (`match_params`); a parameter whose recorded value holds
   `REDACTED` cannot be matched and is refused by name. A parameter's absence cannot be
@@ -566,9 +574,13 @@ route: `router_from_tasks` skips it, and no route returns a file path (ADR-0019)
   error naming where, never the value. The verify is a backstop, with the fixture grep of
   the definition of done; a form the source's values take that differs from them
   (percent-encoded, behind a JSON escape), or a tenant's host to replace, the source
-  rewrites in its own recorder step, on the `Fixture` before the write (ADR-0024).
+  rewrites in its own recorder step, on the `Fixture`, and writes it with core's
+  `write_fixture`, laid out as the recorder writes it (ADR-0024, amendment 2026-11-18).
   A body that is not UTF-8 text cannot be scrubbed and is refused unless the recording
-  flags it (`allow_binary=True`, stored base64 with `body_base64`).
+  flags it (`allow_binary=True`, stored base64 with `body_base64`). The recorder drops
+  the response headers that only identify a request (`x-request-id`, `x-amz-cf-id`,
+  `x-transaction-id` and the others `REQUEST_ID_HEADERS` names), which change with every
+  recording and trip the secret scan (ADR-0019, amendment 2026-11-18).
   The scrub redacts credentials by the rule `ResultMeta` applies (§4): a parameter named
   `key` is data unless a `QueryKeyAuth` sends the key under that name (ADR-0019).
 - Live tests are marked `@pytest.mark.live`, skipped unless `XIPPIOS_LIVE_TESTS=1`,
