@@ -148,12 +148,13 @@ class TransportError(XippiosError):
 
 
 class InvalidRequestError(XippiosError):
-    """The request as given cannot be served (ADR-0007, as amended 2026-10-24).
+    """The request as given cannot be served (ADR-0007, as amended 2026-10-24 and 2026-11-18).
 
-    A bad argument or a documented refusal, detected before the call or by upstream's own
-    refusal of the query, which the source maps in ``ClientConfig.classify``. Either way
-    the caller has to change the request. Source packages subclass it for their
-    documented refusals. Adapters answer with text (MCP) or HTTP 422.
+    A bad argument or a documented refusal, detected before the call, by upstream's own
+    refusal of the query, which the source maps in ``ClientConfig.classify``, or from a
+    successful answer the task cannot serve as asked. Each way the caller has to change
+    the request. Source packages subclass it for their documented refusals. Adapters
+    answer with text (MCP) or HTTP 422.
     """
 
 

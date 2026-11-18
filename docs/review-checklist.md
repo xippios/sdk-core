@@ -27,10 +27,19 @@ nothing in the repository it reviews.
 3. **Errors**: mapped through the taxonomy (conventions §5) and the `classify` hook
    (§6); each shape `classify` maps is documented in `docs/upstream/` or recorded in a
    fixture that a test passes to it (ADR-0008, amendment 2026-11-18, point a).
-4. **Fixtures**: recorded, never hand-written; scrubbed; free of key patterns and of
-   production tenant names; the fixture files this PR adds or changes under 256 KiB, a
-   file it only moves, its content unchanged, being neither, and a truncated one marked
-   `truncated: true` (ADR-0019; binds from the source's 0.3.0 adoption).
+4. **Fixtures** (conventions §10): recorded, never hand-written; scrubbed; free of key
+   patterns and of production tenant names; the fixture files this PR adds or changes
+   under 256 KiB, a file it only moves, its content unchanged, being neither, and a
+   truncated one marked `truncated: true` (ADR-0019; binds from the source's 0.3.0
+   adoption); a download fixture whose body is its parser tests' sample marked
+   `sample: true` with the whole file's size and sha256 (ADR-0020, amendment 2026-11-18,
+   point a; binds from the source's adoption of core 0.4.0); a sample a script wrote from
+   a file over the cap in the file's own form, its row saying what it keeps (ADR-0020,
+   amendment 2026-11-18, point d); a body a test serves where it was not recorded one of
+   §10's kinds, saying where it comes from, and its test asserting what the source does
+   with it (ADR-0003, amendment 2026-11-18, point d); a recorded fixture that no test
+   replays after the change, and no test or document cites, deleted and named in the
+   description (ADR-0018, amendment 2026-11-18, point q).
 5. **Checks green**: the PR's `ci` check passes; a reviewer who runs the checks runs
    `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest
    && uv run pre-commit run --all-files`.
@@ -72,8 +81,10 @@ nothing in the repository it reviews.
     ADR amendment, and the conventions version bumps once per PR.
 16. **Wrapper and fixture names** (conventions §2, §10): a new endpoint wrapper's module
     and function carry the upstream operation name by §2's rule, and its fixtures live
-    under `tests/fixtures/<wrapper>/`; the verbatim operation id is in the first line of
-    the wrapper function's docstring and in the `endpoint=` it passes.
+    under `tests/fixtures/<wrapper>/`, under `<service>_<wrapper>/` where two wrappers
+    carry its name, or under the tasks that record its every exchange, where none is its
+    own (ADR-0003, amendment 2026-11-18, point e); the verbatim operation id is in the
+    first line of the wrapper function's docstring and in the `endpoint=` it passes.
 
 ## Report
 

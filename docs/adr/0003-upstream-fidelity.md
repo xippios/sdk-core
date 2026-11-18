@@ -148,4 +148,64 @@ whose operation needs the source's credentials is requested with them, as sdk-fa
 four are with the account's bearer token after one login; only the samples' requests send
 a credential, and neither a credential nor a token is written.
 
-Conventions §3 and the review checklist's item 2 state the three points from 1.28 on.
+(d) **The test bodies that are not recorded where they are served** (the amendment of
+2026-10-28; step 16; https://github.com/xippios/sdk-core/issues/64, found by sdk-eurostat,
+with sdk-usda-esr, https://github.com/xippios/sdk-core/issues/121). Conventions §10 has
+unit tests replay recorded fixtures, never hand-written ones, and the sources test answers
+that upstream documents and will not give on request, and serve recordings where they were
+not recorded, each test saying so in its docstring, `NOT RECORDED`. Five kinds of body
+serve so, each as the sources use it, and the test says where its body comes from where it
+builds it. A body the snapshot documents is read verbatim from `docs/upstream/` at test
+time, so it is neither recorded nor written by hand: sdk-eurostat's asynchronous `warning`
+and single-object `error` from its user guide, after four datasets in the documented band
+answered synchronously. A body composed from what the snapshot documents, a row of a
+documented table or a documented error, takes the shape upstream was recorded answering:
+sdk-eurostat's faults 100, 140 and 150 from the fault table in its recorded `error` array,
+api.data.gov's documented `NOT_FOUND` in sdk-usda-psd, sdk-usda-esr and sdk-usda-gats. A
+recorded answer or sample is served at another URL, with `mount_fixture(url=)` or in
+memory, for a state upstream answers alike there, within one operation, as sdk-usda-esr
+serves its recorded empty answer at other market years, or behind one gateway, as
+sdk-usda-gats serves the api.data.gov 429 that sdk-usda-psd recorded; or anywhere for a
+test that asserts only what was sent, the answer unchecked, as sdk-eurostat serves its
+main base's STATINFO sample at the Comext base's codelist path. It never stands for a
+state another operation was never seen in: the review of an sdk-usda-esr change refused an
+exports answer's `[]` served as an empty release list. A recorded answer or sample changed
+in memory, at another status, with a header replaced or removed, or with a field, a cell
+or a byte changed, shows a form upstream was not seen to send: sdk-eurostat's recorded
+asynchronous `error` array served at HTTP 200, sdk-usda-psd's empty 404 with its content
+type upper-cased, sdk-faostat's and sdk-eurostat's samples cut or changed to show a
+parser's refusal. A body of no shape upstream sends shows that the source leaves it to
+core, as sdk-usda-esr's 400 in another shape does. The test asserts what the source does
+with such a body, never that upstream sends it. Once upstream is recorded giving a
+documented answer, the recording replaces the documented body, as sdk-eurostat's SDMX
+envelope and SOAP fault did on the Comext base; a documented shape never seen keeps its
+test where the recorded answer takes another, as sdk-eurostat's `warning` stays beside the
+Statistics API's asynchronous answer recorded as an `error` array at HTTP 413.
+`mount_fixture`'s docstring says how far `url=` moves a recording.
+
+(e) **The fixture directory where a wrapper's name repeats or none applies** (the
+amendment of 2026-10-28; step 16; https://github.com/xippios/sdk-core/issues/147, found by
+the family session, with sdk-comtrade, https://github.com/xippios/sdk-core/issues/173 and
+https://github.com/xippios/sdk-core/issues/174). The amendment of 2026-10-28 names a
+wrapper's fixture directory after it, and conventions §10 a fixture recorded through a
+task after the task. Three cases took no directory. A wrapper whose every exchange is
+recorded through a task has none of its own, as sdk-google-mail records `messages_get`
+through `get_message` and `search_messages`; the review checklist's item 16 excepts it.
+Where two wrappers of a package carry one name, as two service modules of conventions §2
+can, each one's directory is `<service>_<wrapper>`, `<service>` its module's name, and the
+pull request that adds the second wrapper moves the first one's fixtures, content
+unchanged: sdk-eurostat's asynchronous API would give a second `get_data` beside
+`api/statistics.py`'s. An exchange of an auth flow, a login or a token refresh, goes
+through neither a wrapper nor a task; it lives under the name a wrapper of its operation
+carries by §2, as sdk-faostat's login lives under its wrapper's, `auth_login`, and one
+sent to another host than the base URL's under that host's first label and its path, as
+sdk-google-mail's refresh at `https://oauth2.googleapis.com/token` lives under
+`oauth2_token`. Two path names that repeat across services, sdk-comtrade's `public/v1`
+twins of its `data/v1` operations, would collide in §2's modules of one operation each
+before they reach a directory; §2 does not name that wrapper, and this point leaves it to
+§2, under https://github.com/xippios/sdk-core/issues/287.
+
+Conventions §3 and the review checklist's item 2 state points (a) to (c) from 1.28 on;
+conventions §10, the review checklist's item 4, the definition of done's Tests block, the
+README and `mount_fixture`'s docstring point (d); and conventions §10 and the review
+checklist's item 16 point (e).

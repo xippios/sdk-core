@@ -261,5 +261,30 @@ its packaged list lacks does: `list_param_values('state_alpha') lists the known 
 (over MCP, the tool usda_nass_list_param_values).` A task of `BULK_TASKS` has no tool
 (ADR-0019, decision 4), and an error names it alone.
 
-Conventions §4 states points (a) to (e), §5 points (f) and (h), and §8 point (i), from
-1.28 on.
+(j) **Where the packaged-list check applies** (the amendment of 2026-10-27, point 3; step
+16; https://github.com/xippios/sdk-core/issues/110, found by sdk-comtrade, with
+sdk-usda-nass, sdk-faostat and sdk-usda-esr). Conventions §5 refuses a code the packaged
+list lacks where upstream answers an unknown code with an empty result, and the sources
+met five cases beyond that premise and settled each in its own way; they read as those
+sources apply them. `UnknownCode` also refuses a code whose answer from upstream was never
+recorded, its `reason` saying so, as sdk-comtrade refuses a `customs_code` or `mot_code`
+its packaged lists lack; a value list that upstream refuses itself keeps that refusal,
+mapped in `classify`, or a check of the source's own that raises `InvalidRequestError`, as
+sdk-comtrade keeps for `cl_code` and `flow_code`, which upstream answers with HTTP 400
+(`count_cl_code_be5.json`, `count_flow_code_unknown.json`). In free-form filters the value
+of a key that names a packaged parameter is checked, and a key with an operator
+(`<column>__<OPERATOR>`) is checked as a key only, as sdk-usda-nass's `validate_filters`
+does. A code sent under a coding system the packaged list does not hold goes unchecked,
+and the task's docstring says so, as sdk-faostat's `get_data` checks area codes only when
+`area_cs` is `None` or `FAO`, and item codes likewise, since its tables list FAO's codes.
+A code the packaged list holds and upstream's live answer lacks is no unknown code but one
+upstream dropped: `NotFoundError`, naming the code and the operation, as sdk-usda-esr
+refuses a commodity that ESR's release list (`ESRData_GetDataReleaseInfo`) lacks. A value
+is compared with the list as upstream compares it, case ignored only where upstream
+ignores it, and it is sent, and recorded in `meta.request`, as the caller gave it, so a
+value upstream serves is never refused and the request records what was sent:
+sdk-usda-nass compares its values without case, since Quick Stats counts `state_alpha=va`
+as `VA`, and sends the caller's spelling.
+
+Conventions §4 states points (a) to (e), §5 points (f), (h) and (j), and §8 point (i),
+from 1.28 on.

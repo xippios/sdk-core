@@ -25,8 +25,10 @@ code, test or fixture, so the Code and Tests blocks have nothing to judge in it.
 - [ ] each new task function has a fixture-backed unit test (`tests/fixtures/...` recorded, not hand-written)
 - [ ] each new task function has a `@pytest.mark.live` smoke test
 - [ ] fixtures contain no credentials: grep `tests/fixtures/` for key patterns and for the values of fields the source keeps out of its projections (ADR-0017) before committing
-- [ ] the fixture files this PR adds or changes stay under 256 KiB, a file it only moves, its content unchanged, being neither; a truncated one is marked `truncated: true` with the full count or byte size and sha256 (ADR-0019; binds from the source's 0.3.0 adoption)
-- [ ] a file-distributed source: each file kind has a sample under `tests/fixtures/files/<file_kind>/` with its provenance line and one live parser test (ADR-0020)
+- [ ] the fixture files this PR adds or changes stay under 256 KiB, a file it only moves, its content unchanged, being neither; a truncated one is marked `truncated: true` with the full count or byte size and sha256 (ADR-0019; binds from the source's 0.3.0 adoption), and a download fixture whose body is its parser tests' sample is marked `sample: true` with the full file's byte size and sha256 (ADR-0020, amendment 2026-11-18, point a; binds from the source's adoption of core 0.4.0)
+- [ ] a file-distributed source: each file kind has a sample under `tests/fixtures/files/<file_kind>/` with its provenance line and one live parser test (ADR-0020); a sample of a file over the cap that cannot be cut by bytes is written by a script from one download in the file's own form, and its row says what it keeps (conventions §10; ADR-0020, amendment 2026-11-18, point d)
+- [ ] a body a test serves where it was not recorded is one of the kinds of conventions §10 and says where it comes from (ADR-0003, amendment 2026-11-18, point d)
+- [ ] a recorded fixture that no test replays after the change, and that no test or document cites, is deleted, and the description names it (conventions §10; ADR-0018, amendment 2026-11-18, point q)
 
 ## Docs
 - [ ] docstrings written for agents: one-line summary, `Args:` with valid-value examples

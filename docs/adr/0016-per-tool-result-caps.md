@@ -1,6 +1,6 @@
 # ADR-0016: Per-tool result caps
 
-Status: Accepted · Date: 2026-10-24
+Status: Accepted · Date: 2026-10-24 · Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240
 
 ## Context
 
@@ -172,4 +172,24 @@ blame, and the note gives the counts and the cap's own note alone, again with no
 offset. A source names the tool that reads one long row in its cap's note, as
 sdk-google-mail's `get_thread` names `google_mail_get_message`.
 
-Conventions §8 states both from 1.28 on.
+(c) **One document or table read whole** (decision 4 and the amendment of 2026-10-30;
+https://github.com/xippios/sdk-core/issues/91, found by sdk-cashctrl, with sdk-usda-wasde,
+https://github.com/xippios/sdk-core/issues/144). Decision 4 raises the byte bound for a
+reference list an agent needs whole, and the amendment of 2026-10-30 for one upstream page
+that must return whole; conventions §8 said that every other tool keeps the default. A
+third case is a tool whose result is one upstream document or table that an agent reads
+whole: a report or a statement, as sdk-cashctrl's `get_report_data` returns one of
+CashCtrl's reports, a balance sheet about 17 KB and 650 bytes a row, which takes 131,072
+bytes, and a table's page or a matrix, as sdk-usda-wasde's `get_table` returns a WASDE
+page and `get_balance_sheet` one commodity's matrix, which take 400 and 300 rows, each
+131,072 bytes, so that the October 2026 release's largest page, 364 values and 129,899
+bytes, reaches an agent whole (Johannes, 2026-10-28, at sdk-usda-wasde's PR 5). Such a
+tool takes a cap of its own with the rows and bytes the source judges it needs, as a
+reference tool does, and its note says how to read a part of it: sdk-cashctrl's names a
+narrower period or a smaller report of `get_report_tree`, sdk-usda-wasde's
+`get_balance_sheet` for one commodity or `list_regions` for one region's rows. A document
+or table past its bound is cut with the note as every result is, by its rows where it is a
+model that holds one list of rows (point a). The caps of both sources conform as they
+stand.
+
+Conventions §8 and the README state the three from 1.28 on.
