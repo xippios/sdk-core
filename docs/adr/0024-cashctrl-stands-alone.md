@@ -164,3 +164,29 @@ string and an empty value are refused, with nothing written. sdk-faostat wrote i
 login fixture outside `record_sync` for this reason, and sdk-google-mail reads the
 tokens from the answer before it names them; secret scrubbing stays core's (ADR-0023,
 decision 3 (b)). Decision 4 stands: a rewrite by key stays the source's step.
+
+(d) **The lock, the serve command, the write checks and the strip return** (decision 6;
+step 4, the other four pieces of https://github.com/xippios/sdk-core/issues/166; decided by
+Johannes on 2026-10-29, D108 and D109 (5), ADR-0025, D-d). Decision 6 is reversed for the
+rest of the kit, which sdk-cashctrl carries since 0.3.0 and sdk-google-mail copied from it,
+two consumers (ADR-0023, decision 2): the binding lock wrapper, `TenantLock` with
+`bind_tasks` and `tenant_instructions` in `xippios.core.tenants`, one name for
+sdk-cashctrl's `OrgLock` and sdk-google-mail's `AccountLock` (ADR-0014, amendment
+2026-11-18, (d)); the serve command, `xippios.core.mcp.serve_tenants`;
+`assert_write_tools`, async now, back in `xippios.core.testing` with sdk-cashctrl's check
+that `confirm` is the last parameter (queue row 26 f); and the demo-only strip,
+`keep_reserved_tenants(tenants)` in `xippios.core.testing`. Of decision 1,
+`assert_write_tools` returns as the helper of a source's own test: the family check tests
+no write server still, and a source tests its write server with it, which fails the test
+unless the server is a write server whose tools are exactly the write tasks, each taking
+`confirm: bool = False` as its last parameter, and none of them a tool of the read server
+or a route of the router. A multi-tenant source's `tests/conftest.py` calls
+`keep_reserved_tenants(TENANTS)` when pytest imports it. Where the copies differ, core
+takes sdk-google-mail's: `tenant_instructions(..., bound=...)`, the bound server's own
+text, which sdk-cashctrl's `instructions` lacked, and the strip by the registry's scheme,
+the list variable and every other tenant's field variables, which keeps the rest of a
+shared prefix, the Google client's variables, where sdk-cashctrl's removed every variable
+under its prefix but demo's pair. The two serve commands checked a bound tenant each in its
+own way, sdk-cashctrl its subdomain through `Tenants.field` and sdk-google-mail that its
+refresh token is set, so `serve_tenants` takes that check from the source as `check`. The
+rest of this ADR stands, the recorder's extras (decisions 3 and 4) among it.
