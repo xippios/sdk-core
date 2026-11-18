@@ -565,10 +565,14 @@ tenants and variables, never a value (ADR-0005).
   before the tool runs, by a middleware `register_tasks` installs once per server:
   `error: InvalidRequestError: <argument>: <message>`, the first error with the count
   when there are several, never pydantic's rendered error (its URL, input type or input
-  value) (ADR-0014, amendment 2026-10-27). An error answer also sets `isError` on its
-  tool result, binding from a source's adoption of the core release that carries the
-  code (core 0.4.0 as planned, https://github.com/xippios/sdk-core/issues/168; ADR-0026,
-  decision 6); until then a client tells an error answer by the text.
+  value) (ADR-0014, amendment 2026-10-27). So is an argument the tool does not declare,
+  named with the ones it declares (`error: InvalidRequestError: yaer: Not an argument of
+  this tool; it takes series_id, year`), and a constraint that an `Annotated` parameter
+  declares holds in the tool's schema and in the check (ADR-0014, amendment 2026-11-18).
+  An error answer also sets `isError` on its tool result, which core 0.4.0 carries and
+  which binds a source from its adoption of that release
+  (https://github.com/xippios/sdk-core/issues/168; ADR-0026, decision 6 and its amendment
+  of 2026-11-18, (b)); until then a client tells an error answer by the text.
 - An entry point, `xippios-<source>-mcp` or, for a source with a write server,
   `xippios-<source>-mcp-read` and `xippios-<source>-mcp-write`, runs stdio by default;
   `--http` for streamable HTTP.
@@ -581,9 +585,13 @@ FastAPI router generated from task functions via `xippios.core.http.router_from_
 one tag per source; responses are the `Result[T]` envelope; errors as RFC 9457
 problem details. A task whose parameters are all scalars is a `GET` with query
 parameters; a task with any non-scalar parameter (a mapping, a list, a model) is a
-`POST` whose JSON body is an object keyed by parameter name (ADR-0007). Mounted by the
-consumer, never served standalone from the package. A task named in `BULK_TASKS` gets no
-route: `router_from_tasks` skips it, and no route returns a file path (ADR-0019).
+`POST` whose JSON body is an object keyed by parameter name (ADR-0007). An argument that
+a route's typed parameter refuses is answered before the task runs as problem details,
+status 422 with the title `InvalidRequestError` and the detail `<argument>: <message>` of
+§8, never with the input, and a parameter's `Annotated` metadata holds in the route as in
+the tool (ADR-0007, amendment 2026-11-18). Mounted by the consumer, never served
+standalone from the package. A task named in `BULK_TASKS` gets no route:
+`router_from_tasks` skips it, and no route returns a file path (ADR-0019).
 
 ## 10. Testing
 

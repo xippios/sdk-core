@@ -458,7 +458,11 @@ rows keeps its other fields whole past 64 KB and has its rows cut the same way; 
 result past it is the note and a preview of its first 64 KB. Errors come
 back as `error: <Class>: <message>`, arguments the tool's schema refuses too
 (`error: InvalidRequestError: year: Input should be a valid integer, ...`), before the
-tool runs and never with pydantic's rendered error (its URL, input type or input value).
+tool runs and never with pydantic's rendered error (its URL, input type or input value),
+and so does an argument the tool does not declare (`error: InvalidRequestError: yaer:
+Not an argument of this tool; it takes series_id, year`). An error answer sets `isError`
+on the tool's result beside its text. A constraint that an `Annotated` parameter declares,
+`Annotated[int, Field(ge=1)]` say, reaches the input schema and the check.
 `--http` serves streamable HTTP instead of stdio.
 A reference tool whose whole list an agent needs gets a cap of its own, keyed by the
 task function's name, with the rows and bytes the source judges it needs:
@@ -526,7 +530,10 @@ router = router_from_tasks("example", [tasks.get_series])  # GET /example/get_se
 Mount it on your FastAPI app. A task whose parameters are all scalars is a `GET` with
 query parameters; a task with a mapping, list or model parameter is a `POST` whose JSON
 body is keyed by parameter name. Responses are the `Result[T]` envelope; errors are
-RFC 9457 problem details (`application/problem+json`), `InvalidRequestError` as 422.
+RFC 9457 problem details (`application/problem+json`), `InvalidRequestError` as 422. An
+argument a typed parameter refuses is one too, answered before the task runs with the
+detail `level: Input should be 'STATE' or 'COUNTY'` and never with the input; a parameter
+keeps its `Annotated` constraints, as in the tool.
 
 ## Testing a source package
 
@@ -611,7 +618,8 @@ xippios_placeholder_key_envs = ["EXAMPLE_API_KEY"]
 `mcp_call(server, "example_get_series", {...})` calls a tool through an in-process MCP
 client, so the server's middleware, the argument check included, runs as for a real client;
 it returns the decoded JSON and fails the test on `error:` text. `mcp_call_text` returns
-the text, to assert a refusal.
+the text, an error answer's flagged `isError` included, to assert a refusal; an unknown tool
+or a task that crashed fails both.
 
 A recording names the values that must never be written:
 

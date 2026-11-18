@@ -1,7 +1,8 @@
 # ADR-0014: Multi-tenant sources
 
 Status: Accepted · Date: 2026-10-23 · Superseded in part by ADR-0024 (2026-10-27),
-decisions 1 to 4, 6 and 7 returning to core in 0.4.0 under ADR-0025 (2026-10-29)
+decisions 1 to 4, 6 and 7 returning to core in 0.4.0 under ADR-0025 (2026-10-29) ·
+Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240
 
 ## Context
 
@@ -199,3 +200,28 @@ the packages the host xippios-mcp serves, decision 9's "a gateway in front" is t
 with its per-endpoint bearer, the default, and, for claude.ai, the OAuth authorization
 server in front of it: the deployment that protects a write server beyond loopback. Core
 still adds no authentication to MCP servers.
+
+## Amendment 2026-11-18
+
+Core 0.4.0, the package of https://github.com/xippios/sdk-core/issues/240, whose steps each
+add their points here.
+
+(a) **An argument the tool does not declare** (the amendment of 2026-10-27; step 2,
+https://github.com/xippios/sdk-core/issues/84, found by sdk-cashctrl). The argument check
+refuses an argument that the tool's argument model does not declare, which the model
+dropped, so that the tool ran with its default: `error: InvalidRequestError: <argument>:
+Not an argument of this tool; it takes <the declared arguments>`, or `it takes no
+arguments`, before the tool runs and whatever the value, a null included. The undeclared
+arguments come first, in the call's order, then what the schema refuses, and the answer
+names the first with the count of all, as the amendment of 2026-10-27 counts. A lock that
+binds a tenant leaves the tenant's argument out of every tool, so a call that still names a
+tenant is refused, where under core 0.3.0 it ran for the bound tenant; the binding lock
+wrapper returns to core with this check (the amendment of 2026-10-29; ADR-0025, D-d).
+
+(b) **An `Annotated` parameter** (the amendment of 2026-10-27; step 2,
+https://github.com/xippios/sdk-core/issues/68). The argument model is built from the task's
+hints with their `Annotated` metadata, so a `Field` constraint, a description or a
+validator that a parameter declares reaches the tool's input schema, and the check refuses
+what it refuses in the same form. The model dropped the metadata until now, and an
+`AfterValidator` on a parameter never ran. The HTTP router keeps it too (ADR-0007,
+amendment 2026-11-18, (a)).

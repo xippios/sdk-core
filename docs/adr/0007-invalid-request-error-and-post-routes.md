@@ -1,6 +1,6 @@
 # ADR-0007: InvalidRequestError, and POST routes for non-scalar task parameters
 
-Status: Accepted · Date: 2026-10-22
+Status: Accepted · Date: 2026-10-22 · Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240
 
 ## Context
 
@@ -52,3 +52,25 @@ considered and not added: no caller would handle it differently. Source packages
 subclass for their documented refusals, and the adapters still answer with text (MCP)
 and 422 (HTTP). Raised by sdk-comtrade; Johannes decided on 2026-10-23, wording over a
 subclass; conventions §5 states the wording from 1.13 on.
+
+## Amendment 2026-11-18
+
+Core 0.4.0, the package of https://github.com/xippios/sdk-core/issues/240, whose steps each
+add their points here.
+
+(a) **A refused argument as problem details** (the decision's first point and the
+amendment of 2026-10-24; step 2, https://github.com/xippios/sdk-core/issues/66, found by
+sdk-eurostat). FastAPI refuses an argument that a route's typed parameter refuses, a value
+outside an enum, a missing one or a body that is no JSON object, before the endpoint runs,
+and its own handler answered a `detail` list that echoes the input. `router_from_tasks`
+gives its routes a class that answers it as an `InvalidRequestError`, the caller's mistake
+this record maps to 422: status 422, `application/problem+json`, title
+`InvalidRequestError`, detail `<argument>: <message>` with the count when there are
+several, as the MCP adapter words it (ADR-0014, amendment 2026-10-27), `source` the
+router's slug, and no input value, input type or pydantic URL. The argument is named
+without the part of the request it came in, and `body` names the body as a whole. A route
+keeps the `Annotated` metadata of a parameter, so its constraints hold in the route as in
+the tool (ADR-0014, amendment 2026-11-18, (b)). A query parameter or a body key that the
+task does not declare stays ignored: the refusal of ADR-0014's amendment of 2026-11-18, (a),
+answers an agent that misspells an argument of a tool, and an HTTP client or a proxy may
+add a parameter of its own.
