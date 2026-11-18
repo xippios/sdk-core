@@ -238,7 +238,7 @@ def _refused_arguments(
     several, e.g. ``year: Input should be a valid integer (the first of 2 errors)``. Each
     error is read for its ``loc``, the argument's path joined with dots, and its ``msg``
     alone, as pydantic's error details carry them; its input value, input type and URL are
-    the caller's data and never read (ADR-0036, decision 11; ADR-0007, amendment
+    the caller's data and never read (ADR-0036, decision 12; ADR-0007, amendment
     2026-11-18). Both adapters answer with it, the MCP adapter as text and the HTTP router
     as problem details.
 

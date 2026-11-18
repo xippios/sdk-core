@@ -5,7 +5,7 @@ sdk-cashctrl's ``tests/test_org_lock.py`` and sdk-google-mail's
 ``tests/test_account_lock.py``, the parts that test the lock itself, on a fictitious source
 whose variables no shell sets. A call goes through ``mcp_call_text``, an in-process client,
 so the argument check runs as it does for a real client: on a bound server it refuses the
-tenant's argument, which no tool declares (ADR-0036, decision 11).
+tenant's argument, which no tool declares (ADR-0036, decision 12).
 """
 
 import asyncio

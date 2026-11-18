@@ -749,10 +749,10 @@ with sdk-template 0.4.0, which renders it (ADR-0026, amendment 2026-11-18, point
   before the tool runs, by a middleware `register_tasks` installs once per server:
   `error: InvalidRequestError: <argument>: <message>`, the first error with the count
   when there are several, never pydantic's rendered error (its URL, input type or input
-  value) (ADR-0036, decision 11). So is an argument the tool does not declare,
+  value) (ADR-0036, decision 12). So is an argument the tool does not declare,
   named with the ones it declares (`error: InvalidRequestError: yaer: Not an argument of
   this tool; it takes series_id, year`), and a constraint that an `Annotated` parameter
-  declares holds in the tool's schema and in the check (ADR-0036, decision 11).
+  declares holds in the tool's schema and in the check (ADR-0036, decision 12).
   An error answer also sets `isError` on its tool result, which core 0.4.0 carries and
   which binds a source from its adoption of that release
   (https://github.com/xippios/sdk-core/issues/168; ADR-0026, decision 6, and amendment

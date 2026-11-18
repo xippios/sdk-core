@@ -11,10 +11,10 @@ tenant, a server that can serve one tenant alone and a write server that cannot 
 unprotected. This record states ADR-0014 with its supersession in part by ADR-0024 of
 2026-10-27, its amendments of 2026-10-27, 2026-10-29 (by ADR-0025 and by ADR-0026) and
 2026-11-18 as they stand, and changes no decision; their history stays in ADR-0014. Its
-decisions 1 to 4, 6 and 7 left core with sdk-cashctrl in 0.3.0 and hold in core again from
-0.4.0 (ADR-0025, D-d), decision 7 as the binding wrapper. ADR-0014's decision 11, that no
-task, tool or helper in core works across tenants, left core with that code, and no amendment
-says whether it holds again with the code's return; this record states no rule for it.
+decisions 1 to 4, 6, 7 and 11 left core with the kit in 0.3.0, when ADR-0024 moved the code
+to sdk-cashctrl. ADR-0025, D-d named the pieces that return in 0.4.0, which bring decisions 1
+to 4, 6 and 7 back, decision 7 as the binding wrapper, and the human's answer of 2026-11-18
+(https://github.com/xippios/sdk-core/issues/298) returns decision 11 with them.
 
 ## Decision
 
@@ -58,7 +58,7 @@ says whether it holds again with the code's return; this record states no rule f
    `xippios.core`, out of the module `xippios.core.tenants`. A bound task keeps its
    `__name__` and awaits the task with `param=value`; its signature, annotations and
    docstring lose `param`, so no tool of a bound server declares the tenant's argument and
-   the argument check refuses a call that names it (decision 11). The lock is no
+   the argument check refuses a call that names it (decision 12). The lock is no
    middleware, takes no `tenant_lock=` parameter and refuses no defaulted tenant parameter.
    The tenant list of a bound server lists the bound tenant alone, and its instructions end
    "This server is bound to <param> <value>; every tool acts on that <noun> and takes no
@@ -97,7 +97,11 @@ says whether it holds again with the code's return; this record states no rule f
     included, so a test can assert a refusal, and fails a call that the SDK answers with an
     error of another kind, an unknown tool or a task that crashed, which it tells by its text
     (ADR-0026, amendment 2026-11-18, point b); an unknown tool fails both.
-11. **The argument check.** `register_tasks` installs a middleware, once per server, that
+11. **Nothing spans tenants.** No task, tool or helper in core works across tenants, and the
+    list returns names only. Isolation is by configuration: a deployment reaches exactly the
+    tenants its environment declares. It holds in core again with the kit
+    (https://github.com/xippios/sdk-core/issues/298).
+12. **The argument check.** `register_tasks` installs a middleware, once per server, that
     validates a call's arguments before the tool runs, with the argument model the `mcp` SDK
     builds for the tool (`func_metadata`) from the task's hints with their `Annotated`
     metadata, so a `Field` constraint, a description or a validator that a parameter
@@ -126,4 +130,4 @@ says whether it holds again with the code's return; this record states no rule f
 
 Conventions §1, §4, §7 and §8, the README and the docstrings of `xippios.core.tenants`,
 `xippios.core.mcp`, `main`, `serve_tenants`, `register_tasks` and `InvalidRequestError`
-state its decisions from 1.28 on.
+state its decisions from 1.28 on, decision 11 the docstring of `xippios.core.tenants` alone.
