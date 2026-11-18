@@ -10,6 +10,7 @@ from typing import Annotated, Any, Literal
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import AfterValidator, Field
 
 from xippios.core import sync
 from xippios.core.errors import InvalidRequestError, NotFoundError, RateLimitError
@@ -110,8 +111,83 @@ def test_defaults_and_plain_functions() -> None:
     assert client.get("/example/list_things").json() == ["a", "b"]
 
 
+def refusal(detail: str) -> dict[str, Any]:
+    """The problem details of an argument a route refuses before the task runs."""
+    return {
+        "type": "urn:xippios:error:InvalidRequestError",
+        "title": "InvalidRequestError",
+        "status": 422,
+        "detail": detail,
+        "source": "example",
+    }
+
+
 def test_missing_required_parameter_is_422() -> None:
-    assert make_client().get("/example/get_series").status_code == 422
+    response = make_client().get("/example/get_series")
+    assert response.status_code == 422
+    assert response.headers["content-type"] == PROBLEM_MEDIA_TYPE
+    assert response.json() == refusal("series_id: Field required")
+
+
+def get_level(level: "Level", year: int = 2024) -> dict[str, Any]:
+    """Get one level of a year.
+
+    Args:
+        level: Which level, e.g. ``"STATE"``.
+        year: Marketing year, e.g. ``2024``.
+    """
+    return {"level": level.value, "year": year}
+
+
+@pytest.mark.parametrize(
+    ("params", "detail"),
+    [
+        ({"level": "STAET"}, "level: Input should be 'STATE' or 'COUNTY'"),
+        ({"level": "STATE", "year": "soon"},
+         "year: Input should be a valid integer, unable to parse string as an integer"),
+        ({"level": "STAET", "year": "soon"},
+         "level: Input should be 'STATE' or 'COUNTY' (the first of 2 errors)"),
+    ],
+)  # fmt: skip
+def test_an_argument_a_typed_parameter_refuses_is_answered_as_problem_details(
+    params: dict[str, str], detail: str
+) -> None:
+    # https://github.com/xippios/sdk-core/issues/66: FastAPI's own 422 echoed the input.
+    app = FastAPI()
+    app.include_router(router_from_tasks("example", [get_level]))
+    response = TestClient(app).get("/example/get_level", params=params)
+    assert response.status_code == 422
+    assert response.headers["content-type"] == PROBLEM_MEDIA_TYPE
+    assert response.json() == refusal(detail)
+    assert not {"STAET", "soon", "pydantic"} & set(response.text.replace('"', " ").split())
+    assert "input" not in response.json()
+
+
+@pytest.mark.parametrize(
+    ("request_kwargs", "detail"),
+    [
+        ({"json": {}}, "filters: Field required"),
+        ({"json": {"filters": {}, "limit": "many"}},
+         "limit: Input should be a valid integer, unable to parse string as an integer"),
+        ({"json": {"filters": {"year": [2012]}}},
+         "filters.year.str: Input should be a valid string (the first of 2 errors)"),
+        ({"json": ["filters"]},
+         "body: Input should be a valid dictionary or object to extract fields from"),
+        ({}, "body: Field required"),
+        ({"content": b'{"filters": ', "headers": {"content-type": "application/json"}},
+         "body: JSON decode error"),
+    ],
+)  # fmt: skip
+def test_a_body_the_route_refuses_is_answered_as_problem_details(
+    request_kwargs: dict[str, Any], detail: str
+) -> None:
+    app = FastAPI()
+    app.include_router(router_from_tasks("example", [count]))
+    response = TestClient(app).post("/example/count", **request_kwargs)
+    assert response.status_code == 422
+    assert response.headers["content-type"] == PROBLEM_MEDIA_TYPE
+    assert response.json() == refusal(detail)
+    assert not {"many", "2012", "[2012]"} & set(response.text.replace('"', " ").split())
 
 
 def test_errors_are_problem_details() -> None:
@@ -289,3 +365,52 @@ def test_http_responses_carry_the_upstream_total() -> None:
     assert client.get("/example/list_series").json()["meta"]["total"] == 5
     total = app.openapi()["components"]["schemas"]["ResultMeta"]["properties"]["total"]
     assert total["anyOf"] == [{"type": "integer"}, {"type": "null"}]
+
+
+def shout(value: str) -> str:
+    return value.upper()
+
+
+async def get_ranked_async(
+    top: Annotated[int, Field(ge=1, description="How many, from 1.")] = 10,
+    name: Annotated[str, AfterValidator(shout)] = "corn",
+) -> dict[str, Any]:
+    """Rank one series.
+
+    Args:
+        top: How many to rank, from 1, e.g. ``10``.
+        name: Which series, e.g. ``"corn"``.
+    """
+    return {"top": top, "name": name}
+
+
+async def count_ranked_async(
+    filters: Mapping[str, str], top: Annotated[int, Field(ge=1)] = 10
+) -> dict[str, Any]:
+    """Count the ranked records that match filters.
+
+    Args:
+        filters: Column filters, e.g. ``{"commodity_desc": "CORN"}``.
+        top: How many to rank, from 1, e.g. ``10``.
+    """
+    return {"filters": dict(filters), "top": top}
+
+
+def test_an_annotated_parameter_keeps_its_metadata_in_the_route() -> None:
+    # https://github.com/xippios/sdk-core/issues/68: get_type_hints dropped the metadata.
+    app = FastAPI()
+    app.include_router(
+        router_from_tasks("example", [sync(get_ranked_async), sync(count_ranked_async)])
+    )
+    client = TestClient(app)
+    operation = app.openapi()["paths"]["/example/get_ranked"]["get"]
+    params = {p["name"]: p for p in operation["parameters"]}
+    assert params["top"]["schema"]["minimum"] == 1
+    refused = client.get("/example/get_ranked", params={"top": 0})
+    assert refused.status_code == 422
+    assert refused.json() == refusal("top: Input should be greater than or equal to 1")
+    served = client.get("/example/get_ranked", params={"name": "wheat"})
+    assert served.json() == {"top": 10, "name": "WHEAT"}, "the validator ran"
+    body = client.post("/example/count_ranked", json={"filters": {"a": "b"}, "top": 0})
+    assert body.json() == refusal("top: Input should be greater than or equal to 1")
+    assert client.post("/example/count_ranked", json={"filters": {}}).json()["top"] == 10

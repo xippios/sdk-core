@@ -10,7 +10,9 @@ from typing import Annotated, Any
 import httpx
 import httpx2
 import pytest
-from pydantic import BaseModel, field_validator
+from mcp.client import Client
+from mcp.types import CallToolResult, TextContent
+from pydantic import AfterValidator, BaseModel, Field, field_validator
 
 from xippios.core import sync
 from xippios.core.errors import InvalidRequestError, NotFoundError
@@ -345,7 +347,38 @@ async def test_a_read_server_built_loopback_only_is_held_to_loopback() -> None:
 async def test_taxonomy_errors_become_text_not_errors() -> None:
     server = build_server("example", [get_series])
     text = await mcp_call_text(server, "example_get_series", {"series_id": "missing"})
-    assert text == "error: NotFoundError: no series missing"  # mcp_call_text: not is_error
+    assert text == "error: NotFoundError: no series missing"
+
+
+async def call_tool(server: Any, name: str, arguments: dict[str, Any]) -> CallToolResult:
+    async with Client(server) as client:
+        return await client.call_tool(name, arguments)
+
+
+def text_of(result: CallToolResult) -> str:
+    assert len(result.content) == 1, result.content
+    content = result.content[0]
+    assert isinstance(content, TextContent), content
+    return content.text
+
+
+@pytest.mark.anyio
+async def test_an_error_answer_sets_is_error_beside_its_text() -> None:
+    # https://github.com/xippios/sdk-core/issues/168; ADR-0026, decision 6: a client tells
+    # an error answer from data by the flag, and the text stays conventions §8's.
+    server = build_server("example", [get_series, get_top])
+    raised = await call_tool(server, "example_get_series", {"series_id": "missing"})
+    assert (raised.is_error, text_of(raised)) == (True, "error: NotFoundError: no series missing")
+    refused = await call_tool(server, "example_get_top", {"field": "volume"})
+    assert refused.is_error is True
+    assert text_of(refused) == (
+        "error: InvalidRequestError: field: Input should be 'quantity' or 'value'"
+    )
+    undeclared = await call_tool(server, "example_get_top", {"field": "value", "top": 3})
+    assert undeclared.is_error is True
+    served = await call_tool(server, "example_get_series", {"series_id": "CORN", "year": 2001})
+    assert served.is_error is False
+    assert text_of(served).startswith('{"data"')
 
 
 class Measure(StrEnum):
@@ -386,10 +419,99 @@ async def test_arguments_the_schema_refuses_are_answered_in_the_family_form(
     register_tasks(server, "example", [plain])  # the middleware is installed once
     names = [getattr(middleware, "__name__", "") for middleware in server.middleware]
     assert names.count("check_arguments") == 1
-    text = await mcp_call_text(server, "example_get_top", arguments)  # not is_error
+    text = await mcp_call_text(server, "example_get_top", arguments)
     assert text == f"error: InvalidRequestError: {expected}"
     assert not {"volume", "soon", "pydantic", "input_value"} & set(text.replace(",", " ").split())
     assert await mcp_call(server, "example_get_top", {"field": "value"}) == {"field": "value"}
+
+
+def count_series_factory(ran: list[str]) -> Callable[..., dict[str, Any]]:
+    def count_series(series_id: str, year: int = 2024) -> dict[str, Any]:
+        """Count the rows of one series.
+
+        Args:
+            series_id: Upstream identifier, e.g. ``"CORN"``.
+            year: Marketing year, e.g. ``2024``.
+        """
+        ran.append(series_id)
+        return {"series_id": series_id, "year": year}
+
+    return count_series
+
+
+TAKES = "Not an argument of this tool; it takes series_id, year"
+
+
+@pytest.mark.parametrize(
+    ("arguments", "expected"),
+    [
+        ({"series_id": "CORN", "yaer": 2024}, f"yaer: {TAKES}"),
+        ({"series_id": "CORN", "org": None}, f"org: {TAKES}"),  # a null is an argument too
+        ({"series_id": "CORN", "org": "demo", "yaer": 2024},
+         f"org: {TAKES} (the first of 2 errors)"),  # in the call's order
+        ({"yaer": 2024}, f"yaer: {TAKES} (the first of 2 errors)"),  # series_id missing too
+        ({"year": "soon", "yaer": 2024, "series_id": "CORN"},
+         f"yaer: {TAKES} (the first of 2 errors)"),  # ahead of what the schema refuses
+    ],
+)  # fmt: skip
+@pytest.mark.anyio
+async def test_an_argument_the_tool_does_not_declare_is_refused_before_it_runs(
+    arguments: dict[str, Any], expected: str
+) -> None:
+    # https://github.com/xippios/sdk-core/issues/84: the SDK's argument model dropped it,
+    # and the tool ran with its default.
+    ran: list[str] = []
+    server = build_server("example", [count_series_factory(ran)])
+    text = await mcp_call_text(server, "example_count_series", arguments)
+    assert text == f"error: InvalidRequestError: {expected}"
+    assert not {"2024", "demo", "None", "soon"} & set(text.replace(",", " ").split())
+    assert ran == [], "the tool does not run"
+    served = await mcp_call(server, "example_count_series", {"series_id": "CORN"})
+    assert served == {"series_id": "CORN", "year": 2024}
+
+
+@pytest.mark.anyio
+async def test_a_tool_without_arguments_refuses_every_argument() -> None:
+    server = build_server("example", [example_list_things])
+    text = await mcp_call_text(server, "example_list_things", {"search": "a"})
+    assert text == (
+        "error: InvalidRequestError: search: Not an argument of this tool; it takes no arguments"
+    )
+    assert await mcp_call(server, "example_list_things", {}) == {"data": ["a", "b"]}
+
+
+def shout(value: str) -> str:
+    return value.upper()
+
+
+async def get_ranked_async(
+    top: Annotated[int, Field(ge=1, description="How many, from 1.")] = 10,
+    name: Annotated[str, AfterValidator(shout)] = "corn",
+) -> dict[str, Any]:
+    """Rank one series.
+
+    Args:
+        top: How many to rank, from 1, e.g. ``10``.
+        name: Which series, e.g. ``"corn"``.
+    """
+    return {"top": top, "name": name}
+
+
+get_ranked = sync(get_ranked_async)
+
+
+@pytest.mark.anyio
+async def test_an_annotated_parameter_keeps_its_metadata_in_the_tool() -> None:
+    # https://github.com/xippios/sdk-core/issues/68: get_type_hints dropped the metadata,
+    # so the schema lacked the bound and the validator never ran.
+    server = build_server("example", [get_ranked])
+    tool = {t.name: t for t in await server.list_tools()}["example_get_ranked"]
+    top = tool.input_schema["properties"]["top"]
+    assert (top["minimum"], top["description"]) == (1, "How many, from 1.")
+    text = await mcp_call_text(server, "example_get_ranked", {"top": 0})
+    assert text == "error: InvalidRequestError: top: Input should be greater than or equal to 1"
+    served = await mcp_call(server, "example_get_ranked", {"name": "wheat"})
+    assert served == {"top": 10, "name": "WHEAT"}, "the validator ran"
 
 
 class Query(BaseModel):
