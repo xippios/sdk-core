@@ -6,8 +6,8 @@ contents are cached per process; callers get fresh objects on every call.
 A packaged list, the records of one upstream operation as the refresh script fetched
 them, is a ``PackagedList``: it loads the file, builds the ``ResultMeta`` of an answer
 from it (ADR-0022), parses its records and writes the file. ``matches`` is the ``search``
-filter of the ``list_*`` tasks, ``closest`` finds the known codes near a value that
-``UnknownCode`` refuses.
+filter of the ``list_*`` tasks; ``closest``, by text, and ``nearest``, by number, find the
+known codes near a value that ``UnknownCode`` refuses.
 
 ``render_enums`` writes a source's generated ``enums.py``, ``StrEnum`` for a value list and
 ``IntEnum`` for a list of integer ids and names in one module (conventions §3, ADR-0008):
@@ -45,6 +45,7 @@ __all__ = [
     "load_json",
     "load_table",
     "matches",
+    "nearest",
     "render_enums",
 ]
 
@@ -274,30 +275,80 @@ def matches(search: str | None, *fields: object) -> bool:
     return any(needle in str(field).casefold() for field in fields if field is not None)
 
 
-def closest(value: str, codes: Mapping[str, str], *, n: int = 3) -> list[tuple[str, str]]:
+def closest(
+    value: str, codes: Mapping[str, str], *, n: int = 3, cutoff: float = 0.6
+) -> list[tuple[str, str]]:
     """Up to ``n`` known codes close to ``value``: by code first, then by upstream name.
 
     Two ``difflib.get_close_matches`` passes: ``value`` upper-cased against the codes,
     then ``value`` lower-cased against the lower-cased names, each code named once, best
     match first. An agent that passes ``"us"`` for ``"US"`` or ``"wheat"`` for
-    ``"0410000"`` is led to the code. For ``UnknownCode``'s ``closest``.
+    ``"0410000"`` is led to the code. For ``UnknownCode``'s ``closest``; ``nearest``
+    matches integer codes by number instead.
 
     Args:
         value: The value given, e.g. ``"wheat"``.
-        codes: Upstream's code to its name, e.g. ``{"0410000": "Wheat"}``.
+        codes: Upstream's code to its name, e.g. ``{"0410000": "Wheat"}``, or each value
+            to itself for a list of bare values, e.g. ``{"VA": "VA"}``.
         n: The most pairs returned.
+        cutoff: The least similarity a match needs in either pass, from 0 to 1, as
+            ``difflib`` scores it: 0.6, ``difflib``'s own, by default; 0.5 lets a code of
+            two characters with one of them wrong match, ``"VS"`` naming ``"VA"``.
 
     Returns:
         ``(code, name)`` pairs, e.g. ``[("0410000", "Wheat")]``; empty when none is close.
+
+    Raises:
+        ValueError: ``n`` is less than 1, or ``cutoff`` is outside 0 to 1, as ``difflib``
+            refuses them.
     """
-    found = difflib.get_close_matches(value.upper(), list(codes), n=n)
+    found = difflib.get_close_matches(value.upper(), list(codes), n=n, cutoff=cutoff)
     by_name = {name.lower(): code for code, name in codes.items()}
     found += [
         by_name[name]
-        for name in difflib.get_close_matches(value.lower(), list(by_name), n=n)
+        for name in difflib.get_close_matches(value.lower(), list(by_name), n=n, cutoff=cutoff)
         if by_name[name] not in found
     ]
     return [(code, codes[code]) for code in found[:n]]
+
+
+def nearest[K: (int, str)](
+    value: int, codes: Mapping[K, str], *, n: int = 3
+) -> list[tuple[K, str]]:
+    """Up to ``n`` known integer codes nearest to ``value`` by number, nearest first.
+
+    The strategy sdk-usda-esr and sdk-usda-gats carried for their integer codes, where a
+    code close in number is likelier the one meant than a code close in spelling: ``999``
+    among ``902``, ``1001`` and ``104`` names ``1001``, then ``902``, then ``104``. Of two
+    codes equally near, the lower comes first. A code keyed by its text, as sdk-usda-gats
+    keys its customs districts (``"10"``), is compared as the integer it writes and
+    returned as given. For ``UnknownCode``'s ``closest``, as ``closest`` is for codes
+    matched by their text and names.
+
+    Args:
+        value: The integer given, e.g. ``999``.
+        codes: Upstream's integer code to its name, keyed by the integer, e.g.
+            ``{1001: "Flaxseed"}``, or by its text, e.g. ``{"1001": "Flaxseed"}``.
+        n: The most pairs returned.
+
+    Returns:
+        ``(code, name)`` pairs with the codes as ``codes`` keys them, e.g.
+        ``[(1001, "Flaxseed"), (902, "Soybean Oil")]``; empty when ``codes`` is.
+
+    Raises:
+        ValueError: ``n`` is less than 1, or a code keyed by its text is no integer.
+    """
+    if n < 1:
+        raise ValueError(f"n must be > 0: {n!r}")
+    distances: list[tuple[int, int, K]] = []
+    for code in codes:
+        try:
+            number = code if isinstance(code, int) else int(code)
+        except ValueError:
+            raise ValueError(f"the code {code!r} of codes is not an integer") from None
+        distances.append((abs(number - value), number, code))
+    distances.sort(key=lambda distance: distance[:2])
+    return [(code, codes[code]) for _, _, code in distances[:n]]
 
 
 def enum_member_name(value: str) -> str:
@@ -385,8 +436,19 @@ def _fit(line: str, *codes: str) -> str:
     return f"{line}  # noqa: {', '.join(exempt)}" if exempt else line
 
 
+_HUMP = re.compile(r"(?<=[a-z])(?=[A-Z])")
+"""Where a camelCase key starts a word: before an upper-case letter after a lower-case one."""
+
+
 def _class_name(key: str) -> str:
-    return "".join(part.capitalize() for part in re.split(r"[^A-Za-z0-9]+", key) if part)
+    """The default class name: each word of ``key`` capitalized, a camelCase hump kept.
+
+    ``attributeId`` → ``AttributeId``, ``state_alpha`` and ``STATE_ALPHA`` →
+    ``StateAlpha``: a key splits at each run of characters that are no ASCII letters or
+    digits and before each hump, and every word is capitalized.
+    """
+    parts = re.split(r"[^A-Za-z0-9]+", key)
+    return "".join(word.capitalize() for part in parts for word in _HUMP.split(part) if word)
 
 
 def _unknown_keys(argument: str, given: Mapping[str, object], lists: Mapping[str, object]) -> None:
@@ -658,9 +720,9 @@ def render_enums(
         fetched: When the lists were fetched, as text: one date for the module
             (``"2026-10-27"``), or one per key (``{"state_alpha": "2026-10-27",
             "attributeId": "2026-10-23"}``) for lists fetched on different days.
-        class_names: Class name per key; default ``StateAlpha`` for ``state_alpha`` and
-            ``Attributeid`` for ``attributeId``, so a camelCase key wants one
-            (``{"attributeId": "AttributeId"}``).
+        class_names: Class name per key, e.g. ``{"progress_stages": "ProgressStage"}``;
+            by default each word of the key capitalized, a camelCase hump kept:
+            ``StateAlpha`` for ``state_alpha`` and ``AttributeId`` for ``attributeId``.
         member_names: Member names set by hand, per key and value (an id for an
             ``IntEnum``), for a value whose derived name collides or that has none (an
             empty or a non-Latin label), e.g. ``{"short_desc": {"CORN, GRAIN": "CORN"}}``

@@ -38,13 +38,15 @@ def parse_decimal(text: str) -> Decimal | None:
     """A published figure as a number, or ``None`` when it is a code rather than a value.
 
     Thousands separators are removed (``"510,000"`` → ``510000``); anything that is not
-    a number, such as a suppression code like ``"(D)"`` or an empty string, gives
-    ``None``. Within-source hygiene only: the text is never reinterpreted.
+    a finite number, such as a suppression code like ``"(D)"``, an empty string,
+    ``"NaN"`` or ``"Infinity"``, gives ``None``. Within-source hygiene only: the text is
+    never reinterpreted.
     """
     try:
-        return Decimal(text.replace(",", "").strip())
+        number = Decimal(text.replace(",", "").strip())
     except InvalidOperation:
         return None
+    return number if number.is_finite() else None
 
 
 def _as_json_number(value: Any, rendered: Any) -> Any:
