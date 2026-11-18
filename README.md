@@ -32,7 +32,8 @@ It gives a source package the things that should be identical across the family:
   process for that key.
 - **Tenants** (`xippios.core.tenants`) for a source whose upstream serves each tenant from
   a host or under a key of its own: `Tenants` declares them in the environment, one
-  client each, and `list_task` gives the tool that names them.
+  client each, `list_task` gives the tool that names them, and `TenantLock` binds a
+  server to one of them, which `xippios.core.mcp.serve_tenants` starts from `--org`.
 - **Error taxonomy**: `ConfigError`, `AuthError`, `RateLimitError`, `NotFoundError`,
   `ValidationError`, `UpstreamError`, `TransportError` and `InvalidRequestError` (the
   request as given cannot be served: a bad argument, or a refusal the source documents,
@@ -420,8 +421,62 @@ source than the registry's, for a registry that several sources share.
 
 Every other task takes the tenant's name and sets `ResultMeta(tenant=name, ...)`; its
 messages and results name tenants and variables, never a value, and core's error messages
-leave the host out, since it names the tenant. A server bound to one tenant, and the
-checks of its write server, are still the source's own (ADR-0024).
+leave the host out, since it names the tenant.
+
+A server bound to one tenant serves that tenant alone, and none of its tools takes the
+tenant's name. `bind_tasks(tasks, lock)` binds them to a `TenantLock`, and
+`tenant_instructions` ends the server's instructions with a sentence that names the
+tenant; `serve_tenants` builds the bound server from `--org` and runs it through `main`
+(ADR-0014, ADR-0024):
+
+```python
+# xippios/example/mcp.py
+from mcp.server.mcpserver import MCPServer
+from xippios.core import TenantLock, bind_tasks, tenant_instructions
+from xippios.core.mcp import build_server, serve_tenants, tool_functions
+from xippios.example import tasks
+from xippios.example._client import TENANTS
+
+INSTRUCTIONS = "Example via xippios. Every tool but example_list_tenants takes org."
+BOUND = "Example via xippios."  # the bound server's text: no tool takes org
+
+
+def build(lock: TenantLock | None = None) -> MCPServer:
+    return build_server(
+        "example",
+        bind_tasks(tool_functions(tasks), lock),
+        instructions=tenant_instructions(INSTRUCTIONS, lock, bound=BOUND),
+    )
+
+
+server = build()  # every declared tenant
+
+
+def run() -> None:  # xippios-example-mcp --org acme serves acme alone
+    serve_tenants(
+        server,
+        build,
+        TENANTS,
+        param="org",
+        noun="organisation",
+        check=lambda org: TENANTS.field(org, "SUBDOMAIN"),
+    )
+```
+
+A bound tool keeps its name, and its docstring and signature lose `org`, so a call that
+still names a tenant is refused like any argument the tool does not declare; the tenant
+list lists the bound tenant alone. The bound server's instructions end "This server is
+bound to org acme; every tool acts on that organisation and takes no org." `--org acme`
+stops the process with exit status 2 before anything is served when `acme` is not
+declared or `check` raises, a missing subdomain here; without `--org` the server serves
+every declared tenant. `main` holds the bound server to loopback as it holds the unbound
+one. The HTTP router takes no lock: a deployment that needs one declares only that
+tenant.
+
+A source's `tests/conftest.py` calls `keep_reserved_tenants(TENANTS)` when pytest
+imports it, so its tests see the reserved tenant, `demo`, and no other: it removes the
+list variable and every other tenant's variables, by the registry's scheme, and keeps
+the rest of the prefix (`xippios.core.testing`).
 
 ## Reference data and generated enums
 
@@ -659,7 +714,10 @@ and `http.py` serve exactly `tasks.__all__` minus `BULK_TASKS`; every task, read
 write, is synchronous, returns `Result[T]` and has an agent docstring; the README's status
 table lists exactly the read and the write tasks; `.copier-answers.yml` names a template
 tag; `pyproject.toml` bounds `xippios-core` with `~=`. A write server is its source's to
-test. A source whose adapters drop a task, or whose README table is stale, fails CI
+test, with `await assert_write_tools(write_server, write_tasks, source="example",
+read_server=read_server, router=router)`: a write server, its tools exactly the write
+tasks, each taking `confirm: bool = False` last, and none of them on the read server or
+the router. A source whose adapters drop a task, or whose README table is stale, fails CI
 before a reviewer looks. The package under test is the one `tasks.py` under
 `src/xippios/`, or the ini option `xippios_package`.
 
@@ -818,10 +876,10 @@ fragment until the release assembles it.
 | `xippios.core.models` | `UpstreamModel` with `dump_upstream`, `Result`, `ResultMeta` with `published_at_naive`, `ResultCap`, `parse` | alpha |
 | `xippios.core.reference` | packaged CSV/JSON loaders, `PackagedList`, `matches`, `closest`, generated `StrEnum`/`IntEnum` modules | alpha |
 | `xippios.core.pagination` | `paginate_offset` (a page-numbered endpoint maps the offset to its page), `collect` | alpha |
-| `xippios.core.tenants` | `Tenants`, a multi-tenant source's tenants declared in the environment with one client each, and `list_task`, the tool that names them | alpha |
-| `xippios.core.mcp` | tool registration with the argument check and the write server's `confirm` rule, `tool_functions`, result caps, error text, CLI with option hooks and the loopback rule for write and `loopback_only` servers, quiet request log | alpha |
+| `xippios.core.tenants` | `Tenants`, a multi-tenant source's tenants declared in the environment with one client each, `list_task`, the tool that names them, and `TenantLock` with `bind_tasks` and `tenant_instructions`, a server bound to one of them | alpha |
+| `xippios.core.mcp` | tool registration with the argument check and the write server's `confirm` rule, `tool_functions`, result caps, error text, CLI with option hooks and the loopback rule for write and `loopback_only` servers, `serve_tenants`, quiet request log | alpha |
 | `xippios.core.http` | router factory, problem details | alpha |
-| `xippios.core.testing` | live gate, offline run, record (sent once, read up to `max_read_bytes`, with `max_bytes=`, `array_key=` and `keep=`), the fixture writer and the `sample` mark, replay with `sent_urls`, `sent_query` and `sent_bodies`, scrub of named secrets and of values read from the answer with a plain verify, `mcp_call`, family check | alpha |
+| `xippios.core.testing` | live gate, offline run, record (sent once, read up to `max_read_bytes`, with `max_bytes=`, `array_key=` and `keep=`), the fixture writer and the `sample` mark, replay with `sent_urls`, `sent_query` and `sent_bodies`, scrub of named secrets and of values read from the answer with a plain verify, `mcp_call`, `assert_write_tools`, `keep_reserved_tenants`, family check | alpha |
 
 Alpha: while core is 0.x, a new minor version may change the public surface, with no
 backward compatibility across minors; patch releases stay compatible. A source depends

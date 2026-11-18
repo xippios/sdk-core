@@ -27,26 +27,47 @@ A source whose variables carry a prefix other than its slug names it apart,
 ``Tenants("google-mail", var_prefix="GOOGLE", ...)`` for ``GOOGLE_<NAME>_REFRESH_TOKEN``,
 and its errors still name the source.
 
+A server bound to one tenant takes a ``TenantLock``: ``bind_tasks`` hands ``build_server``
+the tasks with the tenant's argument bound, so no tool takes it, and
+``tenant_instructions`` ends the server's instructions with a sentence naming the tenant::
+
+    def build(lock: TenantLock | None = None) -> MCPServer:
+        return build_server(
+            "example",
+            bind_tasks(tool_functions(tasks), lock),
+            instructions=tenant_instructions(INSTRUCTIONS, lock, bound=BOUND_INSTRUCTIONS),
+        )
+
+
+    server = build()  # every declared tenant; build(TenantLock("org", "acme")) for acme
+
+``xippios.core.mcp.serve_tenants`` builds the bound server from ``--org acme`` and runs it.
+
 Isolation is by configuration: a deployment reaches exactly the tenants its environment
 declares. Nothing here spans tenants or returns a value; messages name tenants and
 variables, never what a variable holds (ADR-0005). The module left core in 0.3.0 for
 sdk-cashctrl alone and came back in 0.4.0 from its copy and sdk-google-mail's (ADR-0024,
-amendment 2026-11-18, (b)).
+amendment 2026-11-18, (b) and (d)).
 """
 
 import asyncio
+import functools
 import hashlib
+import inspect
 import os
 import re
 import threading
-from collections.abc import Callable, Mapping, Sequence
+import typing
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass
+from typing import Any
 
-from xippios.core._loop import sync
+from xippios.core._loop import as_async, sync
 from xippios.core.client import AsyncClient
 from xippios.core.errors import ConfigError, InvalidRequestError
 from xippios.core.models import Result, ResultMeta
 
-__all__ = ["Tenants", "list_task"]
+__all__ = ["TenantLock", "Tenants", "bind_tasks", "list_task", "tenant_instructions"]
 
 _NAME = re.compile(r"[a-z0-9_]+")
 _LISTS_TENANTS = "__xippios_lists_tenants__"
@@ -392,7 +413,7 @@ def list_task(
     call and returns names only (ADR-0005), with ``meta.endpoint`` set to ``name`` and no
     ``meta.tenant``. Register it with the source's other tasks, on the read server: a
     write server exposes write tools only (conventions §8). The task carries a mark by
-    which a lock that binds a server to one tenant lists that tenant alone.
+    which ``bind_tasks`` lists the tenant a ``TenantLock`` binds alone.
 
     Args:
         tenants: The source's registry.
@@ -420,3 +441,174 @@ def list_task(
     task.__doc__ = _LIST_DOC if doc is None else doc
     setattr(task, _LISTS_TENANTS, True)
     return task
+
+
+@dataclass(frozen=True, slots=True)
+class TenantLock:
+    """Bind a server to one tenant: every tool acts on it and none takes ``param``.
+
+    The lock of a server that a source's ``--org`` or ``--account`` binds, sdk-cashctrl's
+    ``OrgLock`` and sdk-google-mail's ``AccountLock`` until core 0.4.0 (ADR-0014, amendment
+    2026-11-18, (d)). ``bind_tasks`` binds a server's tasks to it, ``tenant_instructions``
+    names it in the server's instructions, and ``xippios.core.mcp.serve_tenants`` builds it
+    from the command line.
+
+    Attributes:
+        param: The task parameter that names the tenant, e.g. ``"org"``.
+        value: The tenant the server serves, e.g. ``"demo"``, which the serve command checks
+            at startup; a lock on an undeclared name lists no tenant.
+        noun: The word for one tenant in the sentence of the instructions, e.g.
+            ``"organisation"``; ``None``, the default, uses ``param``, e.g. ``"account"``.
+
+    Raises:
+        ValueError: ``param`` is not a parameter name, ``value`` is empty, or ``noun`` is
+            given but blank.
+    """
+
+    param: str
+    value: str
+    noun: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.param.isidentifier():
+            raise ValueError("param must be a parameter name such as 'org'")
+        if not self.value:
+            raise ValueError("value must name the tenant the server serves")
+        if self.noun is not None and not self.noun.strip():
+            raise ValueError("noun must be a word such as 'organisation', or None for param")
+
+
+def _sentence(lock: TenantLock) -> str:
+    """The sentence a bound server's instructions end with."""
+    noun = lock.param if lock.noun is None else lock.noun
+    return (
+        f"This server is bound to {lock.param} {lock.value}; every tool acts on that {noun} "
+        f"and takes no {lock.param}."
+    )
+
+
+def tenant_instructions(
+    text: str | None, lock: TenantLock | None, *, bound: str | None = None
+) -> str | None:
+    """A server's instructions: ``text`` unbound; bound, ``bound`` and the lock's sentence.
+
+    The sentence names the tenant, "This server is bound to org acme; every tool acts on
+    that organisation and takes no org.", the noun the lock's. A source whose ``text``
+    tells an agent that every tool takes the tenant's argument passes ``bound``, its text
+    without that clause, for the bound server, as sdk-google-mail does; without it the
+    bound server's instructions are ``text`` and the sentence, as sdk-cashctrl's are.
+
+    Args:
+        text: The unbound server's instructions, e.g. ``"Every tool takes org."``.
+        lock: The tenant the server is bound to, or ``None``.
+        bound: The bound server's own text, which must not say that a tool takes the
+            tenant's argument; ``None`` uses ``text``, and an empty one leaves the
+            sentence alone.
+    """
+    if lock is None:
+        return text
+    return " ".join(filter(None, [text if bound is None else bound, _sentence(lock)]))
+
+
+def _only_the_locked_tenant(lock: TenantLock, result: Any) -> Any:
+    """A tenant list narrowed to the tenant ``lock`` binds; anything else unchanged."""
+    if not isinstance(result, Result) or not isinstance(result.data, list):
+        return result
+    return result.model_copy(update={"data": [name for name in result.data if name == lock.value]})
+
+
+def _without_arg(doc: str, param: str) -> str:
+    """``doc`` without ``param``'s entry under ``Args:``, and without an ``Args:`` left empty.
+
+    ``doc`` is cleaned as ``inspect.getdoc`` cleans it. The entry is its first line,
+    ``    <param>: ...``, and every line after it indented deeper, its continuation.
+    """
+    entry = re.compile(rf"\s+{re.escape(param)}:")
+    kept: list[str] = []
+    in_args = False
+    skipping: int | None = None
+    for line in doc.splitlines():
+        indent = len(line) - len(line.lstrip())
+        if skipping is not None and line.strip() and indent > skipping:
+            continue
+        skipping = None
+        if line.strip() == "Args:":
+            in_args = True
+        elif line.strip() and indent == 0:
+            in_args = False
+        if in_args and entry.match(line):
+            skipping = indent
+            continue
+        kept.append(line)
+    lines: list[str] = []
+    for index, line in enumerate(kept):
+        following = kept[index + 1] if index + 1 < len(kept) else ""
+        if line == "Args:" and not following.startswith(" "):
+            continue  # the parameter was its only entry
+        lines.append(line)
+    return "\n".join(lines).rstrip()
+
+
+def _bind(fn: Callable[..., Any], lock: TenantLock) -> Callable[..., Any]:
+    """``fn`` as the tool of a server bound to ``lock.value``; see ``bind_tasks``."""
+    if getattr(fn, _LISTS_TENANTS, False) is True:
+
+        @functools.wraps(fn)
+        def only_the_locked_tenant() -> Any:
+            return _only_the_locked_tenant(lock, fn())
+
+        return only_the_locked_tenant
+    signature = inspect.signature(fn)
+    if lock.param not in signature.parameters:
+        return fn
+    hints = typing.get_type_hints(fn)
+    parameters = [
+        p.replace(annotation=hints.get(p.name, p.annotation))
+        for p in signature.parameters.values()
+        if p.name != lock.param
+    ]
+    returns = hints.get("return", signature.return_annotation)
+    target = as_async(fn)  # the async twin of a sync facade, or fn in a worker thread
+    bound_to = {lock.param: lock.value}
+
+    async def bound(**kwargs: Any) -> Any:
+        return await target(**bound_to, **kwargs)
+
+    bound.__name__ = fn.__name__
+    bound.__qualname__ = fn.__qualname__
+    bound.__module__ = fn.__module__
+    bound.__doc__ = _without_arg(inspect.getdoc(fn) or "", lock.param)
+    bound.__signature__ = signature.replace(  # type: ignore[attr-defined]
+        parameters=parameters, return_annotation=returns
+    )
+    bound.__annotations__ = {p.name: p.annotation for p in parameters} | {"return": returns}
+    return bound
+
+
+def bind_tasks(
+    tasks: Iterable[Callable[..., Any]], lock: TenantLock | None
+) -> list[Callable[..., Any]]:
+    """``tasks`` as the tools of a server bound to ``lock``, or as they are without one.
+
+    A task that takes ``lock.param`` becomes an async function of its other parameters
+    that awaits the task with ``param=value``, its async twin for a ``sync`` facade and a
+    worker thread for a plain function, as the MCP adapter awaits a task. It keeps the
+    task's ``__name__`` and ``__module__``, so tool names, ``MCP_CAPS`` keys and
+    ``BULK_TASKS`` stay as they are; its docstring loses the parameter's entry under
+    ``Args:``, and its signature and annotations lose the parameter, so no tool's input
+    schema declares it and the argument check refuses a call that names it (conventions
+    §8). The tenant list of ``list_task`` lists the bound tenant alone, still with
+    ``meta.tenant`` ``None``. Any other task is returned as it is. The HTTP router takes
+    no lock: a deployment that needs one declares only that tenant.
+
+    Args:
+        tasks: A server's tasks, e.g. ``tool_functions(tasks)``.
+        lock: The tenant the server is bound to, e.g. ``TenantLock("org", "acme")``, or
+            ``None`` for a server of every declared tenant.
+
+    Returns:
+        A list of the tools to be, in the order of ``tasks``.
+    """
+    if lock is None:
+        return list(tasks)
+    return [_bind(fn, lock) for fn in tasks]
