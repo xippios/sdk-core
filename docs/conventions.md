@@ -639,6 +639,13 @@ the rest of the prefix stays (ADR-0024, amendment 2026-11-18, (d)). The registry
 strip and §8's lock and serve command bind such a source from its adoption of core 0.4.0,
 which deletes its copies (ADR-0025, amendment 2026-11-18, (b) and (d)).
 
+A source's `_client.py` declares the variables it needs as `EnvVar` entries,
+`xippios.core.EnvVar(name_or_pattern, *, secret, required)`: a variable's name, or a pattern
+with a placeholder such as `<NAME>` for one variable per tenant (`CASHCTRL_<NAME>_API_KEY`),
+with whether it is a secret and whether it is required, which each entry states. An `EnvVar`
+names a variable and never reads one. The rule binds a source from its adoption of core 0.4.0
+with sdk-template 0.4.0, which renders it (ADR-0026, amendment 2026-11-18, point c).
+
 ## 8. MCP conventions
 
 - Register task functions, not endpoint wrappers. Tool name `<source>_<verb>_<noun>`.
@@ -718,7 +725,9 @@ which deletes its copies (ADR-0025, amendment 2026-11-18, (b) and (d)).
   sdk-google-mail's `--account`, which binds a server to one tenant: the entry point runs
   `serve_tenants(server, build, TENANTS, param=..., check=...)` from `xippios.core.mcp`,
   and `build(lock)` passes the tasks through `bind_tasks(tasks, lock)` and the
-  instructions through `tenant_instructions(text, lock, bound=...)`. No tool of a bound
+  instructions through `tenant_instructions(text, lock, bound=...)` and returns its tool
+  set, from which `serve_tenants` builds the bound server, named as `server` is (ADR-0026,
+  amendment 2026-11-18, point d). No tool of a bound
   server takes the tenant's argument, so a call that names it is refused as an argument
   the tool does not declare; the tenant list lists the bound tenant alone; and the
   instructions end with a sentence that names the tenant, after `bound`, the bound
@@ -750,6 +759,17 @@ which deletes its copies (ADR-0025, amendment 2026-11-18, (b) and (d)).
   `--http` for streamable HTTP.
   A source's own options reach core's `main` through `add_options` and `apply_options`,
   parsed once with core's; an error applying them stops the process with exit status 2.
+  A source's `mcp.py` defines `build(**options)`, its options keyword arguments with
+  defaults, a multi-tenant source's `lock: TenantLock | None = None`, which returns its
+  `ToolSet` (`xippios.core.mcp`): its tasks as its lock binds them, `caps`, `instructions`,
+  `version`, `read_only`, `loopback_only` and the two hooks. Its module-level `server` is
+  `build_server(build())`, and its entry point passes the tool set's hooks to `main`.
+  `build` takes no `transport_security`, which a host passes to `streamable_http_app`. The
+  rule binds a source from its adoption of core 0.4.0 with sdk-template 0.4.0 (ADR-0026,
+  amendment 2026-11-18, point c). A host builds one server from the tool sets of several
+  packages with `register_tasks(server, tool_set)`, each tool with its own package's caps,
+  and applies a package's hooks as its entry point does without options, with
+  `tool_set.option_defaults()` (ADR-0026, amendment 2026-11-18, point d).
 
 ## 9. HTTP adapter conventions
 

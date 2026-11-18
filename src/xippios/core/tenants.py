@@ -27,19 +27,20 @@ A source whose variables carry a prefix other than its slug names it apart,
 ``Tenants("google-mail", var_prefix="GOOGLE", ...)`` for ``GOOGLE_<NAME>_REFRESH_TOKEN``,
 and its errors still name the source.
 
-A server bound to one tenant takes a ``TenantLock``: ``bind_tasks`` hands ``build_server``
-the tasks with the tenant's argument bound, so no tool takes it, and
-``tenant_instructions`` ends the server's instructions with a sentence naming the tenant::
+A server bound to one tenant takes a ``TenantLock``: ``bind_tasks`` gives the source's
+tool set (``xippios.core.mcp.ToolSet``) the tasks with the tenant's argument bound, so no
+tool takes it, and ``tenant_instructions`` ends the server's instructions with a sentence
+naming the tenant::
 
-    def build(lock: TenantLock | None = None) -> MCPServer:
-        return build_server(
+    def build(lock: TenantLock | None = None) -> ToolSet:
+        return ToolSet(
             "example",
             bind_tasks(tool_functions(tasks), lock),
             instructions=tenant_instructions(INSTRUCTIONS, lock, bound=BOUND_INSTRUCTIONS),
         )
 
 
-    server = build()  # every declared tenant; build(TenantLock("org", "acme")) for acme
+    server = build_server(build())  # every declared tenant; build(TenantLock("org", "acme"))
 
 ``xippios.core.mcp.serve_tenants`` builds the bound server from ``--org acme`` and runs it.
 

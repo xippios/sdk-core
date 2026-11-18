@@ -17,7 +17,14 @@ from xippios.core import (
     bind_tasks,
     tenant_instructions,
 )
-from xippios.core.mcp import LOOPBACK_HOSTS, build_parser, build_server, main, serve_tenants
+from xippios.core.mcp import (
+    LOOPBACK_HOSTS,
+    ToolSet,
+    build_parser,
+    build_server,
+    main,
+    serve_tenants,
+)
 from xippios.core.testing import mcp_call_text
 
 REQUEST_LOGGERS = ("httpx", "httpcore", "httpx2", "httpcore2")
@@ -650,3 +657,82 @@ def test_serve_tenants_keeps_request_urls_out_of_the_log(
         logging.getLogger(name).setLevel(logging.NOTSET)
     serve_tenants(server, build, TENANTS, param="org", argv=["--org", "demo"])
     assert [logging.getLogger(name).level for name in REQUEST_LOGGERS] == [logging.WARNING] * 4
+
+
+class ToolSetBuilds:
+    """A source's ``build(lock)`` that returns its tool set, as the package contract has it."""
+
+    def __init__(self, *, read_only: bool = True, loopback_only: bool = False) -> None:
+        self.locks: list[TenantLock | None] = []
+        self.read_only = read_only
+        self.loopback_only = loopback_only
+
+    def __call__(self, lock: TenantLock | None = None) -> ToolSet:
+        async def echo_org(org: str, confirm: bool = False) -> dict[str, str]:
+            """Return the organisation the tool was called for.
+
+            Args:
+                org: A declared organisation, e.g. ``demo``.
+                confirm: Ignored, e.g. ``true``.
+            """
+            return {"org": org}
+
+        self.locks.append(lock)
+        return ToolSet(
+            "fictive-src",
+            bind_tasks([echo_org], lock),
+            instructions=tenant_instructions(TEXT, lock),
+            version="0.4.0",
+            read_only=self.read_only,
+            loopback_only=self.loopback_only,
+        )
+
+
+@pytest.mark.anyio
+@pytest.mark.usefixtures("fictive_demo")
+async def test_serve_tenants_builds_the_bound_server_from_the_tool_set_build_returns(
+    served: list[tuple[MCPServer, str, dict[str, Any]]],
+) -> None:
+    # Finding 2 of https://github.com/xippios/sdk-core/pull/288: a multi-tenant source's
+    # build(lock) returns its tool set, and its entry point stays serve_tenants(server,
+    # build, TENANTS, ...), as sdk-cashctrl and sdk-google-mail write it.
+    build = ToolSetBuilds()
+    unbound = build_server(build(), name="xippios-fictive-src-write")
+    serve_tenants(unbound, build, TENANTS, param="org", noun="organisation", argv=["--org=demo"])
+    assert build.locks == [None, LOCK]
+    ((server, transport, _),) = served
+    assert server is not unbound, "the bound server is built anew"
+    assert (server.name, server.version, transport) == (
+        "xippios-fictive-src-write",
+        "0.4.0",
+        "stdio",
+    )
+    assert server.instructions == f"{TEXT} {SENTENCE}"
+    tool = {t.name: t for t in await server.list_tools()}["fictive_src_echo_org"]
+    assert "org" not in tool.input_schema["properties"]
+    assert json.loads(await mcp_call_text(server, "fictive_src_echo_org", {})) == {"org": "demo"}
+
+
+@pytest.mark.parametrize(
+    ("build", "kind"),
+    [
+        (ToolSetBuilds(read_only=False), "a write server"),
+        (ToolSetBuilds(loopback_only=True), "a read server held to loopback"),
+    ],
+    ids=["write", "loopback-only"],
+)
+@pytest.mark.usefixtures("fictive_demo")
+def test_a_server_bound_from_a_tool_set_stays_held_to_loopback(
+    served: list[tuple[MCPServer, str, dict[str, Any]]],
+    capsys: pytest.CaptureFixture[str],
+    build: ToolSetBuilds,
+    kind: str,
+) -> None:
+    remote = ["--org", "demo", "--http", "--host", "0.0.0.0"]
+    with pytest.raises(SystemExit) as info:
+        serve_tenants(build_server(build()), build, TENANTS, param="org", argv=remote)
+    assert info.value.code == 2
+    assert f"xippios-fictive-src is {kind} and carries no authentication" in (
+        capsys.readouterr().err
+    )
+    assert served == []

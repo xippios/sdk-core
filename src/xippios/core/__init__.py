@@ -26,6 +26,7 @@ from xippios.core.client import (
     RetryPolicy,
     Timeouts,
 )
+from xippios.core.contract import EnvVar
 from xippios.core.errors import (
     BODY_LIMIT,
     AuthError,
@@ -72,6 +73,7 @@ __all__ = [
     "ClientConfig",
     "ConfigError",
     "Downloaded",
+    "EnvVar",
     "HeaderKeyAuth",
     "InvalidRequestError",
     "MemoryCache",
