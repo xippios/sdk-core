@@ -302,3 +302,21 @@ response built without the marks, by hand or in a test, counts as before. The ro
 option, a path that the source names as outside the quota, is not taken: no source sends a
 keyed request that its quota does not count. The api.data.gov gateway's `classify` reads no
 answer marked `"other"` either (ADR-0009, amendment 2026-11-18, point a).
+
+(f) **A recording sends once** (decisions 1 and 3 and point (a); step 11;
+https://github.com/xippios/sdk-core/issues/148, found by sdk-cashctrl and sdk-usda-esr;
+the plan's decision that a recording never retries,
+https://github.com/xippios/coordinate-sdk/blob/main/plans/sdk-core/0.4.0.md). `record`
+and `record_sync` send one request through the client they are given, its
+`before_request` run once and its limiter and `observe` as for any request, and record
+the answer whatever its status: never retried, whatever the client's `RetryPolicy` says,
+and never answered from the cache nor stored in it. Core 0.3.0 removed their `retry=`
+and left a recording that must not retry to a client built for it, on
+`RetryPolicy(max_attempts=1)`, which sdk-template's `record-fixture` command told every
+source with a quota to build; a recording now needs none. Point (a)'s "every GET still
+reads the cache" no longer holds for a recording, since an answer the cache holds is no
+live exchange. `classify` is not asked, since nothing is retried or raised, and a
+failure in transit is the `TransportError` it is for `request`. A recorder that sends
+through `client.request` to rewrite a fixture before the write (sdk-cashctrl,
+sdk-google-mail, sdk-x, sdk-usda-wasde) keeps its one-attempt client, since `record`
+writes the file itself and ADR-0024, decision 4, gives it no hook.
