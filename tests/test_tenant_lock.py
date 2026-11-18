@@ -15,10 +15,14 @@ import json
 import os
 import threading
 import typing
+from typing import Annotated
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from mcp.client import Client
 from mcp.server.mcpserver import MCPServer
+from pydantic import AfterValidator, Field
 
 from xippios.core import (
     Result,
@@ -30,6 +34,7 @@ from xippios.core import (
     sync,
     tenant_instructions,
 )
+from xippios.core.http import router_from_tasks
 from xippios.core.mcp import build_server, is_write_server
 from xippios.core.testing import mcp_call, mcp_call_text
 
@@ -203,6 +208,65 @@ async def test_a_bound_plain_function_runs_in_a_worker_thread() -> None:
     org, query, limit, thread = await bound(query="x", limit=3)
     assert (org, query, limit) == (DEMO, "x", "3")
     assert int(thread) != threading.get_ident(), "as core's as_async runs it"
+
+
+def list_rows(
+    org: str,
+    limit: Annotated[int, Field(ge=1, le=100, description="Rows per page, 1 to 100.")] = 10,
+    name: Annotated[str, AfterValidator(str.upper)] = "all",
+) -> dict[str, object]:
+    """List rows.
+
+    Args:
+        org: A declared organisation, e.g. ``demo``.
+        limit: Rows per page, e.g. ``10``.
+        name: Which rows, e.g. ``"wheat"``.
+    """
+    return {"org": org, "limit": limit, "name": name}
+
+
+def test_a_bound_task_keeps_the_annotated_metadata_of_its_other_parameters() -> None:
+    (bound,) = bind_tasks([list_rows], LOCK)
+    hints = typing.get_type_hints(list_rows, include_extras=True)
+    assert typing.get_type_hints(bound, include_extras=True) == {
+        "limit": hints["limit"],
+        "name": hints["name"],
+        "return": hints["return"],
+    }
+
+
+@pytest.mark.anyio
+async def test_a_bound_tool_keeps_an_annotated_constraint_in_its_schema_and_its_check() -> None:
+    """Conventions §8: the constraint holds in the schema and the check, bound or not."""
+    server = build_server(SOURCE, bind_tasks([list_rows], LOCK))
+    (tool,) = await server.list_tools()
+    limit = tool.input_schema["properties"]["limit"]
+    assert (limit["minimum"], limit["maximum"], limit["description"]) == (
+        1,
+        100,
+        "Rows per page, 1 to 100.",
+    )
+    refused = await mcp_call_text(server, "fictive_src_list_rows", {"limit": 500})
+    assert refused == (
+        "error: InvalidRequestError: limit: Input should be less than or equal to 100"
+    )
+    served = await mcp_call(server, "fictive_src_list_rows", {"limit": 5, "name": "wheat"})
+    assert served == {"org": DEMO, "limit": 5, "name": "WHEAT"}, "the validator ran"
+
+
+def test_a_bound_route_keeps_an_annotated_constraint_in_its_schema_and_its_check() -> None:
+    app = FastAPI()
+    app.include_router(router_from_tasks(SOURCE, bind_tasks([list_rows], LOCK)))
+    client = TestClient(app)
+    operation = app.openapi()["paths"]["/fictive-src/list_rows"]["get"]
+    params = {param["name"]: param for param in operation["parameters"]}
+    assert set(params) == {"limit", "name"}, "no org"
+    assert (params["limit"]["schema"]["minimum"], params["limit"]["schema"]["maximum"]) == (1, 100)
+    refused = client.get("/fictive-src/list_rows", params={"limit": 500})
+    assert refused.status_code == 422
+    assert refused.json()["detail"] == "limit: Input should be less than or equal to 100"
+    served = client.get("/fictive-src/list_rows", params={"limit": 5, "name": "wheat"})
+    assert served.json() == {"org": DEMO, "limit": 5, "name": "WHEAT"}, "the validator ran"
 
 
 # Calls on a bound server -------------------------------------------------------------
