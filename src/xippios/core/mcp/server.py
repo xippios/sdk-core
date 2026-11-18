@@ -17,6 +17,10 @@ server whose tasks were registered with ``read_only=False`` is a write server
 held to loopback (``is_loopback_only``), which ``main`` serves on a loopback ``--host``
 only unless told otherwise.
 
+``build_server`` builds a server from one ``ToolSet``, the package contract's, and
+``register_tasks`` registers a tool set on a server a host builds from several
+(ADR-0026, amendment 2026-11-18, (d)).
+
 Building a server also quiets the request log of httpx and httpx2
 (``quiet_request_logging``).
 """
@@ -28,7 +32,7 @@ import typing
 import weakref
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, overload
 
 import pydantic
 from mcp.server.context import CallNext, HandlerResult, ServerMiddleware, ServerRequestContext
@@ -41,6 +45,7 @@ from xippios.core._tasks import is_bulk_task, tool_functions
 from xippios.core.errors import XippiosError, _refused_arguments
 from xippios.core.mcp.errors import _error_answer
 from xippios.core.mcp.results import cap_result
+from xippios.core.mcp.toolset import ToolSet
 from xippios.core.models import ResultCap
 
 __all__ = [
@@ -267,6 +272,22 @@ def _as_tool(
     return tool
 
 
+def _alone(refusal: str, given: Mapping[str, bool]) -> None:
+    """Refuse the arguments ``given`` marks as passed beside a tool set, naming each.
+
+    Raises:
+        TypeError: ``refusal``, then ``; drop`` and the names, in ``given``'s order.
+    """
+    passed = [name for name, is_passed in given.items() if is_passed]
+    if passed:
+        raise TypeError(f"{refusal}; drop {', '.join(passed)}")
+
+
+@overload
+def register_tasks(server: MCPServer, source: ToolSet, /) -> list[str]: ...
+
+
+@overload
 def register_tasks(
     server: MCPServer,
     source: str,
@@ -276,8 +297,26 @@ def register_tasks(
     caps: Mapping[str, ResultCap] | None = None,
     read_only: bool = True,
     loopback_only: bool = False,
+) -> list[str]: ...
+
+
+def register_tasks(
+    server: MCPServer,
+    source: str | ToolSet,
+    tasks: Iterable[Callable[..., Any]] | None = None,
+    *,
+    cap: ResultCap | None = None,
+    caps: Mapping[str, ResultCap] | None = None,
+    read_only: bool = True,
+    loopback_only: bool = False,
 ) -> list[str]:
     """Add each task function to ``server`` as a tool and return the tool names.
+
+    ``register_tasks(server, tool_set)`` registers a ``ToolSet`` with its source, tasks,
+    caps, ``read_only`` and ``loopback_only``, so a host builds one server from the tool
+    sets of several packages, each tool with its own package's caps, and a held tool set
+    holds the server. A tool set comes alone: ``tasks`` or a keyword given with a value
+    other than its default is refused with ``TypeError`` before anything is registered.
 
     Arguments a tool's schema refuses are answered as ``error: InvalidRequestError:
     <argument>: <message>`` before the tool runs, by a middleware installed once per
@@ -312,9 +351,10 @@ def register_tasks(
 
     Args:
         server: The server to register on.
-        source: Source slug, e.g. ``"usda-nass"``; prefixes every tool name.
+        source: Source slug, e.g. ``"usda-nass"``; prefixes every tool name. Or a
+            ``ToolSet``, which carries every other argument.
         tasks: Task functions (sync facades, async functions, or plain functions); one
-            named in its module's ``BULK_TASKS`` is skipped.
+            named in its module's ``BULK_TASKS`` is skipped. Required with a slug.
         cap: Result cap of every tool without an entry in ``caps``; defaults to 200 rows
             or 64 KB.
         caps: A tool's own result cap, replacing ``cap`` for it, keyed by the task
@@ -336,7 +376,33 @@ def register_tasks(
             Or a key of ``caps`` is not the ``__name__`` of one of ``tasks`` that becomes a
             tool, a task in ``BULK_TASKS`` included; the message names it. Nothing is
             registered, installed or marked then.
+        TypeError: A slug without ``tasks``, or a tool set with ``tasks`` or another
+            argument; the message names each. Nothing is registered, installed or marked.
     """
+    if isinstance(source, ToolSet):
+        _alone(
+            "register_tasks takes a tool set alone, which carries what it registers",
+            {
+                "tasks": tasks is not None,
+                "cap": cap is not None,
+                "caps": caps is not None,
+                "read_only": not read_only,
+                "loopback_only": loopback_only,
+            },
+        )
+        return register_tasks(
+            server,
+            source.source,
+            source.tasks,
+            caps=source.caps,
+            read_only=source.read_only,
+            loopback_only=source.loopback_only,
+        )
+    if tasks is None:
+        raise TypeError(
+            "register_tasks takes the tasks beside a source slug, e.g. register_tasks(server, "
+            "'usda-nass', tool_functions(tasks)), or a tool set alone"
+        )
     cap = cap or ResultCap()
     caps = caps or {}
     tasks = [fn for fn in tasks if not is_bulk_task(fn)]
@@ -379,6 +445,11 @@ def register_tasks(
     return names
 
 
+@overload
+def build_server(source: ToolSet, /, *, name: str | None = None) -> MCPServer: ...
+
+
+@overload
 def build_server(
     source: str,
     tasks: Iterable[Callable[..., Any]],
@@ -390,8 +461,29 @@ def build_server(
     caps: Mapping[str, ResultCap] | None = None,
     read_only: bool = True,
     loopback_only: bool = False,
+) -> MCPServer: ...
+
+
+def build_server(
+    source: str | ToolSet,
+    tasks: Iterable[Callable[..., Any]] | None = None,
+    *,
+    name: str | None = None,
+    version: str = "",
+    instructions: str | None = None,
+    cap: ResultCap | None = None,
+    caps: Mapping[str, ResultCap] | None = None,
+    read_only: bool = True,
+    loopback_only: bool = False,
 ) -> MCPServer:
     """Create an ``MCPServer`` named ``xippios-<source>`` with the tasks registered.
+
+    ``build_server(tool_set)`` builds the server of a package's ``ToolSet``, what its
+    ``build(**options)`` returns: named ``xippios-<source>`` unless ``name`` names it, with
+    the tool set's version and instructions, and its tasks registered as
+    ``register_tasks(server, tool_set)`` registers them. Beside a tool set ``name`` alone
+    is taken: ``tasks`` or another keyword given with a value other than its default is
+    refused with ``TypeError``, before the server is built.
 
     The ``mcp`` SDK configures root logging at ``INFO`` while the server is constructed
     (unless it was configured before); the httpx, httpcore, httpx2 and httpcore2 loggers
@@ -399,11 +491,11 @@ def build_server(
     tenant host, stay out of the log. See ``quiet_request_logging``.
 
     Args:
-        source: Source slug.
+        source: Source slug, or a ``ToolSet``, which carries every argument but ``name``.
         tasks: Task functions to expose, e.g. ``tool_functions(tasks)``, which is
             ``tasks.__all__`` minus ``BULK_TASKS``; a task in its module's
             ``BULK_TASKS`` is skipped here too (ADR-0019), no tool returns a file path to
-            an agent.
+            an agent. Required with a slug.
         name: Server name; defaults to ``xippios-<source>``.
         version: Source package version, shown to clients.
         instructions: Server-level guidance for agents, e.g. which tool to call first.
@@ -422,7 +514,35 @@ def build_server(
         ValueError: ``read_only`` is ``False`` and a task does not take
             ``confirm: bool = False``; or a key of ``caps`` names no task that becomes a
             tool, a bulk task included.
+        TypeError: A slug without ``tasks``, or a tool set with ``tasks`` or a keyword
+            but ``name``; the message names each.
     """
+    if isinstance(source, ToolSet):
+        _alone(
+            "build_server takes name alone beside a tool set, which carries the rest",
+            {
+                "tasks": tasks is not None,
+                "version": version != "",
+                "instructions": instructions is not None,
+                "cap": cap is not None,
+                "caps": caps is not None,
+                "read_only": not read_only,
+                "loopback_only": loopback_only,
+            },
+        )
+        built = MCPServer(
+            name or f"xippios-{source.source}",
+            version=source.version,
+            instructions=source.instructions,
+        )
+        quiet_request_logging()
+        register_tasks(built, source)
+        return built
+    if tasks is None:
+        raise TypeError(
+            "build_server takes the tasks beside a source slug, e.g. build_server('usda-nass', "
+            "tool_functions(tasks)), or a tool set alone"
+        )
     server = MCPServer(name or f"xippios-{source}", version=version, instructions=instructions)
     quiet_request_logging()
     register_tasks(

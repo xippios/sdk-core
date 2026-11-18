@@ -19,6 +19,13 @@ run, and a ``XippiosError`` it raises stops the process with exit status 2 (ADR-
 A multi-tenant source runs ``serve_tenants`` instead, whose ``--org acme`` serves the
 server bound to one tenant (``xippios.core.TenantLock``).
 
+The package contract's tool set, ``ToolSet``, is what a source's ``build(**options)``
+returns: its tasks as its lock binds them, its caps, instructions and version, its option
+hooks, and whether it writes and is held to loopback. ``build_server(tool_set)`` builds
+the source's server from it, and a host builds one server from several with
+``register_tasks(server, tool_set)`` and applies each one's hooks with
+``option_defaults()`` (ADR-0026, amendment 2026-11-18, (c) and (d)).
+
 ``ResultCap`` is defined in ``xippios.core.models`` and exported from ``xippios.core``
 too, so a source's ``tasks.py`` declares its caps without this extra; it is re-exported
 here for the sources that import it from this package. A host that builds its servers
@@ -47,11 +54,13 @@ from xippios.core.mcp.server import (
     tool_functions,
     tool_name,
 )
+from xippios.core.mcp.toolset import ToolSet
 from xippios.core.models import ResultCap
 
 __all__ = [
     "LOOPBACK_HOSTS",
     "ResultCap",
+    "ToolSet",
     "build_parser",
     "build_server",
     "cap_result",
