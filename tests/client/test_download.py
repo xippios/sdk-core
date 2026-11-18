@@ -1,4 +1,9 @@
+import gzip
 import inspect
+import io
+import os
+import stat
+import zipfile
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from pathlib import Path
@@ -20,6 +25,7 @@ from xippios.core.client import (
 )
 from xippios.core.errors import (
     AuthError,
+    InvalidRequestError,
     NotFoundError,
     TransportError,
     UpstreamError,
@@ -186,19 +192,56 @@ async def test_the_hooks_see_a_success_s_headers_only(
 
 
 @pytest.mark.anyio
-async def test_a_redirect_or_a_directory_is_refused(
-    respx_mock: respx.MockRouter, tmp_path: Path
-) -> None:
+async def test_a_redirect_is_refused(respx_mock: respx.MockRouter, tmp_path: Path) -> None:
     route = respx_mock.get(f"{BASE}/moved.csv").respond(302, headers={"Location": "/new.csv"})
     client = make_client()
     with pytest.raises(UpstreamError, match=r"^302 from GET /moved.csv: a download writes a 2xx"):
         await client.download("/moved.csv", tmp_path / "moved.csv")
-    with pytest.raises(ValueError, match="dest is a directory"):
-        await client.download("/moved.csv", tmp_path)
-    with pytest.raises(ValueError, match="dest's directory does not exist"):
-        await client.download("/moved.csv", tmp_path / "missing" / "moved.csv")
     assert route.call_count == 1
     assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("dest", "message"),
+    [
+        (".", "dest is a directory; name the file to write"),
+        ("missing/qs.crops.txt", "dest's directory does not exist; create it first"),
+    ],
+    ids=["a-directory", "in-a-missing-directory"],
+)
+async def test_a_bad_dest_is_an_invalid_request_and_nothing_is_sent(
+    respx_mock: respx.MockRouter, tmp_path: Path, dest: str, message: str
+) -> None:
+    """https://github.com/xippios/sdk-core/issues/152: a bad argument is the taxonomy's
+    ``InvalidRequestError`` (conventions §5), no longer a ``ValueError``."""
+    route = respx_mock.get(f"{BASE}/qs.crops.txt").respond(200, content=b"x")
+    hooked: list[str] = []
+    client = make_client(before_request=lambda request: hooked.append(request.url.path))
+    with pytest.raises(InvalidRequestError) as info:
+        await client.download("/qs.crops.txt", tmp_path / dest)
+    assert str(info.value) == message
+    assert info.value.source == "example"
+    assert not route.called
+    assert hooked == []  # refused before the hook, the limiter and the wire
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.anyio
+@pytest.mark.skipif(os.name != "posix", reason="POSIX file modes")
+async def test_the_file_is_written_with_mode_0600(
+    respx_mock: respx.MockRouter, tmp_path: Path
+) -> None:
+    """The temporary file's mode, which the rename keeps, also over a file of another mode
+    (https://github.com/xippios/sdk-core/issues/152)."""
+    respx_mock.get(f"{BASE}/qs.crops.txt").respond(200, content=b"x")
+    dest = tmp_path / "qs.crops.txt"
+    client = make_client()
+    await client.download("/qs.crops.txt", dest)
+    assert stat.S_IMODE(dest.stat().st_mode) == 0o600
+    dest.chmod(0o644)
+    await client.download("/qs.crops.txt", dest)
+    assert stat.S_IMODE(dest.stat().st_mode) == 0o600
 
 
 @pytest.mark.anyio
@@ -259,3 +302,65 @@ def test_decode_csv_reads_a_file_row_by_row(tmp_path: Path) -> None:
     with pytest.raises(ValidationError, match=r"^usda-nass: wide.csv is not CSV the csv") as info:
         list(decode_csv(str(tmp_path / "wide.csv"), source="usda-nass"))  # a str path too
     assert info.value.source == "usda-nass"
+
+
+def test_decode_csv_reads_an_open_text_stream_row_by_row(tmp_path: Path) -> None:
+    """https://github.com/xippios/sdk-core/issues/89: a gzip member, read as it is taken."""
+    path = tmp_path / "qs.crops.txt.gz"
+    rows = "".join(f"CORN\t{year}\n" for year in range(100_000))
+    with gzip.open(path, "wt", encoding="utf-8", newline="") as packed:
+        packed.write("﻿Commodity\tYear\n" + rows)
+    with gzip.open(path) as raw, io.TextIOWrapper(raw, encoding="utf-8", newline="") as text:
+        read = decode_csv(text, delimiter="\t", source="usda-nass")
+        assert inspect.isgenerator(read)
+        assert next(read) == {"Commodity": "CORN", "Year": "0"}  # the byte order mark stripped
+        assert raw.tell() < len(rows) // 2  # row by row: most of the member is still unread
+        assert sum(1 for _ in read) == 99_999
+        assert not text.closed  # the caller's to close, as it opened it
+
+
+def test_decode_csv_names_the_stream_and_the_decoder_s_reason(tmp_path: Path) -> None:
+    path = tmp_path / "apro_mk_cola.csv.gz"
+    with gzip.open(path, "wb") as packed:
+        packed.write(b"geo,OBS_VALUE\nAT,1\nC\xf4te,2\n")
+    with gzip.open(path, "rt", encoding="utf-8-sig", newline="") as text:
+        read = decode_csv(text, source="eurostat")
+        with pytest.raises(ValidationError) as info:
+            list(read)
+    assert (
+        str(info.value)
+        == "eurostat: apro_mk_cola.csv.gz is not UTF-8 text: invalid continuation byte"
+    )
+    assert info.value.source == "eurostat"
+    assert b"C\xf4te" in info.value.raw  # type: ignore[operator]
+    assert (info.value.__cause__, info.value.__suppress_context__) == (None, True)
+    archive = tmp_path / "QCL.zip"
+    with zipfile.ZipFile(archive, "w") as zipped:
+        zipped.writestr("QCL_E_All_Data_(Normalized).csv", "a,b\n1\n")
+    with (
+        zipfile.ZipFile(archive) as zipped,
+        zipped.open("QCL_E_All_Data_(Normalized).csv") as raw,
+        io.TextIOWrapper(raw, encoding="utf-8-sig", newline="") as text,
+    ):
+        assert list(decode_csv(text)) == [{"a": "1", "b": None}]  # short, as DictReader does
+    latin = io.TextIOWrapper(io.BytesIO(b"a\n\x81\n"), encoding="cp1252", newline="")
+    with pytest.raises(ValidationError) as unnamed:
+        list(decode_csv(latin))
+    assert str(unnamed.value) == "stream is not cp1252 text: character maps to <undefined>"
+    wide = io.StringIO("a\n" + "x" * 200_000 + "\n", newline="")
+    with pytest.raises(ValidationError, match=r"^stream is not CSV the csv module reads: field"):
+        list(decode_csv(wide))
+
+
+def test_decode_csv_refuses_a_binary_stream(tmp_path: Path) -> None:
+    path = tmp_path / "qs.crops.txt.gz"
+    with gzip.open(path, "wt", encoding="utf-8") as packed:
+        packed.write("a\n1\n")
+    with gzip.open(path) as raw:
+        with pytest.raises(TypeError) as info:
+            next(decode_csv(raw))  # type: ignore[arg-type]
+        assert raw.tell() == 0  # refused before a byte was read
+    assert str(info.value) == (
+        "decode_csv reads text, and GzipFile is a binary stream: wrap it in "
+        "io.TextIOWrapper(stream, encoding='utf-8-sig', newline='')"
+    )
