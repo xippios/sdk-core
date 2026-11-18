@@ -7,7 +7,8 @@ write server (conventions §8, ADR-0026); the usage line names the one that runs
 A source adds its own options through two hooks instead of parsing the command line a
 second time: ``add_options`` puts them on core's parser, so ``--help`` lists every
 option and a typo fails as usual, and ``apply_options`` turns the parsed options into
-the server to run (ADR-0014, decision 8).
+the server to run (ADR-0014, decision 8). ``serve_tenants`` is those hooks for a
+multi-tenant source: ``--org acme`` serves the server bound to one tenant.
 """
 
 import argparse
@@ -17,8 +18,9 @@ from mcp.server.mcpserver import MCPServer
 
 from xippios.core.errors import XippiosError
 from xippios.core.mcp.server import is_loopback_only, is_write_server, quiet_request_logging
+from xippios.core.tenants import TenantLock, Tenants
 
-__all__ = ["LOOPBACK_HOSTS", "build_parser", "main"]
+__all__ = ["LOOPBACK_HOSTS", "build_parser", "main", "serve_tenants"]
 
 # Exactly the mcp SDK's own list (mcp 2.3.0, mcp/server/lowlevel/server.py and
 # mcp/server/mcpserver/server.py): for these hosts, without transport_security, the SDK
@@ -137,3 +139,70 @@ def main(
         server.run(transport="streamable-http", host=args.host, port=args.port)
     else:
         server.run(transport="stdio")
+
+
+def serve_tenants(
+    server: MCPServer,
+    build: Callable[[TenantLock | None], MCPServer],
+    tenants: Tenants,
+    *,
+    param: str,
+    noun: str | None = None,
+    check: Callable[[str], object] | None = None,
+    argv: Sequence[str] | None = None,
+) -> None:
+    """Run a multi-tenant source's server, or the one ``--<param>`` binds, through ``main``.
+
+    The serve command of sdk-cashctrl's ``--org`` and sdk-google-mail's ``--account``
+    (ADR-0014, amendment 2026-11-18, (d)). It puts ``--<param>`` on core's parser, ``_``
+    written ``-``, so ``--help`` lists it beside core's options. Given ``--org acme``, it
+    checks the tenant as a call would, declared (``tenants.require``) and then by
+    ``check``, and runs ``build(TenantLock(param, "acme", noun=noun))``, built anew: every
+    tool acts on ``acme`` and takes no ``org``. An undeclared name, or an error ``check``
+    raises, stops the process with exit status 2 and the message, before the bound server
+    is built or anything is served. Without the option it runs ``server`` as built, for
+    every tenant the environment declares. ``main`` then applies its loopback rule to the
+    server it runs, bound or not, and quiets the request log.
+
+    A source's entry point is one line::
+
+        def run() -> None:
+            serve_tenants(server, build, TENANTS, param="org", noun="organisation")
+
+    Args:
+        server: The source's server for every declared tenant, ``build(None)``.
+        build: Builds the source's server, bound to the lock it is given or, given
+            ``None``, unbound; with ``bind_tasks`` and ``tenant_instructions``.
+        tenants: The source's registry, e.g. ``TENANTS``; its messages name its tenants
+            and variables, never its source or a value.
+        param: The task parameter that names the tenant, e.g. ``"org"`` for ``--org``.
+        noun: The word for one tenant, e.g. ``"organisation"``, in the option's help and
+            the lock's sentence; ``None`` uses ``param``.
+        check: Called with the declared tenant's name before the bound server is built,
+            e.g. ``lambda name: TENANTS.field(name, "SUBDOMAIN")``, which reads the value
+            as the tenant's client would; a ``XippiosError`` it raises, naming a variable
+            and never its value, stops the process. ``None`` checks nothing more.
+        argv: Arguments without the program name; defaults to ``sys.argv[1:]``.
+
+    Raises:
+        ValueError: ``param`` is not a parameter name, before anything is parsed.
+    """
+    if not param.isidentifier():
+        raise ValueError("param must be a parameter name such as 'org'")
+    word = param if noun is None else noun
+    example = f", e.g. {tenants.reserved[0]}" if tenants.reserved else ""
+    help_text = f"serve only this {word}{example}; every tool acts on it and takes no {param}"
+
+    def add_tenant(parser: argparse.ArgumentParser) -> None:
+        parser.add_argument(f"--{param.replace('_', '-')}", dest=param, help=help_text)
+
+    def bound(namespace: argparse.Namespace, unbound: MCPServer) -> MCPServer:
+        name = getattr(namespace, param)
+        if name is None:
+            return unbound
+        tenants.require(name)
+        if check is not None:
+            check(name)
+        return build(TenantLock(param, name, noun=noun))
+
+    main(server, argv, add_options=add_tenant, apply_options=bound)

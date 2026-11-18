@@ -9,8 +9,9 @@ source's own recorder step writes a fixture it rewrote (``write_fixture``,
 ``fixture_text``; ADR-0024); fixture replay through ``respx``, with what was sent and
 recorded as plain values (``sent_urls``, ``sent_query``, ``sent_bodies``,
 ``recorded_query``, ``response_from_fixture``);
-checks for adapters (``mcp_call``, ``mcp_call_text``) and for times read around a call
-(``assert_time_between``); and the family conformance check,
+helpers for adapters (``mcp_call``, ``mcp_call_text``, ``assert_write_tools`` for a write
+server), for times read around a call (``assert_time_between``) and for a multi-tenant
+source's environment (``keep_reserved_tenants``); and the family conformance check,
 ``xippios.core.testing.family``, which a source collects by importing it into
 ``tests/test_family.py`` and which is not imported here.
 Enable the plugin in a repo's ``tests/conftest.py``::
@@ -33,8 +34,14 @@ except ImportError as exc:  # pragma: no cover - exercised only without the extr
         "xippios.core.testing needs the 'testing' extra: uv add 'xippios-core[testing]'"
     ) from exc
 
-from xippios.core.testing.adapters import assert_projection, mcp_call, mcp_call_text
+from xippios.core.testing.adapters import (
+    assert_projection,
+    assert_write_tools,
+    mcp_call,
+    mcp_call_text,
+)
 from xippios.core.testing.clock import CLOCK_SLACK, assert_time_between
+from xippios.core.testing.environment import keep_reserved_tenants
 from xippios.core.testing.fixtures import (
     Fixture,
     FixtureResponse,
@@ -59,9 +66,11 @@ __all__ = [
     "Scrub",
     "assert_projection",
     "assert_time_between",
+    "assert_write_tools",
     "fixture_from_response",
     "fixture_path",
     "fixture_text",
+    "keep_reserved_tenants",
     "load_fixture",
     "mcp_call",
     "mcp_call_text",

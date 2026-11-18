@@ -16,6 +16,8 @@ it is given, each name its function's ``__name__``.
 A source's own command-line options reach ``main`` through two hooks, parsed once with
 core's: ``add_options`` puts them on the parser, ``apply_options`` returns the server to
 run, and a ``XippiosError`` it raises stops the process with exit status 2 (ADR-0014).
+A multi-tenant source runs ``serve_tenants`` instead, whose ``--org acme`` serves the
+server bound to one tenant (``xippios.core.TenantLock``).
 
 ``ResultCap`` is defined in ``xippios.core.models`` and exported from ``xippios.core``
 too, so a source's ``tasks.py`` declares its caps without this extra; it is re-exported
@@ -33,7 +35,7 @@ try:
 except ImportError as exc:  # pragma: no cover - exercised only without the extra
     raise ImportError("xippios.core.mcp needs the 'mcp' extra: uv add 'xippios-core[mcp]'") from exc
 
-from xippios.core.mcp.cli import LOOPBACK_HOSTS, build_parser, main
+from xippios.core.mcp.cli import LOOPBACK_HOSTS, build_parser, main, serve_tenants
 from xippios.core.mcp.errors import error_to_text
 from xippios.core.mcp.results import cap_result
 from xippios.core.mcp.server import (
@@ -59,6 +61,7 @@ __all__ = [
     "main",
     "quiet_request_logging",
     "register_tasks",
+    "serve_tenants",
     "tool_functions",
     "tool_name",
 ]

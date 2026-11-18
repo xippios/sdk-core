@@ -240,3 +240,26 @@ closed, no longer dropped (queue row 24 b). Decision 6: `list_task(tenants, *, n
 doc=None, source=None)`, whose `source` names `meta.source` where the registry's slug is
 not the source's, for a registry that several sources share. Decisions 2 and 4 hold as
 written.
+
+(d) **Decision 7 holds in core again, as the binding wrapper** (the amendment of
+2026-10-29; step 4, https://github.com/xippios/sdk-core/issues/166; ADR-0024, amendment
+2026-11-18, (d)). The lock returns as the wrapper that sdk-cashctrl built in place of the
+middleware and sdk-google-mail copied, not as the middleware: `TenantLock(param, value,
+noun=None)`, `bind_tasks(tasks, lock)` and `tenant_instructions(text, lock, *, bound=None)`
+come from `xippios.core`, out of the module `xippios.core.tenants`. A bound task keeps its
+`__name__` and awaits the task with `param=value`; its signature, annotations and docstring
+lose `param`, so no tool of a bound server declares the tenant's argument and the argument
+check refuses a call that names it ((a)). No `tenant_lock=` parameter, no refusal of a
+defaulted tenant parameter and no middleware return. The tenant list of a bound server
+lists the bound tenant alone, and its instructions end "This server is bound to <param>
+<value>; every tool acts on that <noun> and takes no <param>.", the noun the lock's or else
+`param`, after `bound`, the bound server's own text, where the source gives one, since its
+unbound text may say that every tool takes the argument. Decision 8's locked server is
+core's as well: `xippios.core.mcp.serve_tenants(server, build, tenants, *, param,
+noun=None, check=None)` puts `--<param>` on `main`'s parser through the hooks, checks the
+named tenant with `tenants.require` and then with the source's `check`, and runs
+`build(TenantLock(param, name, noun=noun))`; an undeclared tenant or an error of the check
+stops the process with exit status 2 before the bound server is built. A multi-tenant
+source's servers are bound so: its entry point runs `serve_tenants`, and its `build(lock)`
+passes its tasks through `bind_tasks` and its instructions through `tenant_instructions`.
+The HTTP router still takes no lock.

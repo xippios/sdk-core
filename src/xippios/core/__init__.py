@@ -50,7 +50,7 @@ from xippios.core.models import (
 )
 from xippios.core.pagination import collect, paginate_offset
 from xippios.core.reference import PackagedList, closest, load_json, load_table, matches
-from xippios.core.tenants import Tenants, list_task
+from xippios.core.tenants import TenantLock, Tenants, bind_tasks, list_task, tenant_instructions
 
 __all__ = [
     "BODY_LIMIT",
@@ -75,6 +75,7 @@ __all__ = [
     "ResultCap",
     "ResultMeta",
     "RetryPolicy",
+    "TenantLock",
     "Tenants",
     "Timeouts",
     "TransportError",
@@ -84,6 +85,7 @@ __all__ = [
     "ValidationError",
     "XippiosError",
     "__version__",
+    "bind_tasks",
     "closest",
     "collect",
     "error_from_response",
@@ -97,4 +99,5 @@ __all__ = [
     "parse_retry_after",
     "request_description",
     "sync",
+    "tenant_instructions",
 ]

@@ -588,9 +588,16 @@ paths to `xippios.core.data_gov.NoDataForYear`, a `NotFoundError` that says the 
 no data (ADR-0009, amendment 2026-11-18, points a and b).
 
 A multi-tenant source, whose upstream serves each tenant from a host or under a key of
-its own (CashCtrl's organisations), carries its tenant registry itself and names the
-tenant of every result in `ResultMeta.tenant` (§4; ADR-0024); its messages and results name
-tenants and variables, never a value (ADR-0005).
+its own (CashCtrl's organisations, Gmail's accounts), declares its tenants with core's
+`Tenants`, one client each, and names the tenant of every result in `ResultMeta.tenant`
+(§4; ADR-0014, decisions 1 to 5, and its amendment of 2026-11-18, (c)); its messages and
+results name tenants and variables, never a value (ADR-0005). Its `tests/conftest.py`
+calls `keep_reserved_tenants(TENANTS)` from `xippios.core.testing` when pytest imports it,
+so that no fixture and no test sees a tenant but the reserved one, `demo`: the list
+variable and every other tenant's variables are removed, by the registry's scheme, and
+the rest of the prefix stays (ADR-0024, amendment 2026-11-18, (d)). The registry, the
+strip and §8's lock and serve command bind such a source from its adoption of core 0.4.0,
+which deletes its copies (ADR-0025, amendment 2026-11-18, (b) and (d)).
 
 ## 8. MCP conventions
 
@@ -612,7 +619,10 @@ tenants and variables, never a value (ADR-0005).
   no deployment may serve without authentication, sdk-google-mail's mailboxes, is built
   with `build_server(..., loopback_only=True)` and held the same way; `is_loopback_only`
   tells a host either kind (ADR-0025, D-a and its amendment of 2026-11-18). A write server exposes write tools only; reference tools
-  stay on the read server.
+  stay on the read server. A source tests its write server with
+  `xippios.core.testing.assert_write_tools`: a write server, its tools exactly the write
+  tasks, each taking `confirm: bool = False` as its last parameter, and none of them a
+  tool of the read server or a route of the router (ADR-0024, amendment 2026-11-18, (d)).
 - Server names (ADR-0026): a source with a write server names its servers
   `xippios-<source>-mcp-read` and `xippios-<source>-mcp-write`, with no alias for the
   old name; a read-only source keeps `xippios-<source>-mcp`. `server.name` stays the
@@ -657,6 +667,20 @@ tenants and variables, never a value (ADR-0005).
   the file.
 - Reference lookups are tools too: `<source>_list_<thing>` (commodities, countries,
   attributes). Agents need them to form valid calls.
+- A multi-tenant source's tenants are such a tool, `list_task(TENANTS, name=...)`
+  (`cashctrl_list_organisations`, `google_mail_list_accounts`), on the read server
+  (ADR-0014, decision 6). Its servers take `--<param>`, sdk-cashctrl's `--org` and
+  sdk-google-mail's `--account`, which binds a server to one tenant: the entry point runs
+  `serve_tenants(server, build, TENANTS, param=..., check=...)` from `xippios.core.mcp`,
+  and `build(lock)` passes the tasks through `bind_tasks(tasks, lock)` and the
+  instructions through `tenant_instructions(text, lock, bound=...)`. No tool of a bound
+  server takes the tenant's argument, so a call that names it is refused as an argument
+  the tool does not declare; the tenant list lists the bound tenant alone; and the
+  instructions end with a sentence that names the tenant, after `bound`, the bound
+  server's own text, where the source gives one. An undeclared tenant, or an error of the
+  source's startup `check`, stops the process with exit status 2 before the bound server
+  is built. The HTTP router takes no lock (ADR-0014, decision 7 and its amendment of
+  2026-11-18, (d)).
 - Errors return as text starting with `error: <ErrorClass>: <message>`; never raise
   through the MCP boundary. Arguments a tool's schema refuses are answered the same way,
   before the tool runs, by a middleware `register_tasks` installs once per server:
