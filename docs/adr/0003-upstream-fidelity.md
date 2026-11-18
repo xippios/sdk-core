@@ -203,7 +203,9 @@ sdk-google-mail's refresh at `https://oauth2.googleapis.com/token` lives under
 `oauth2_token`. Two path names that repeat across services, sdk-comtrade's `public/v1`
 twins of its `data/v1` operations, would collide in §2's modules of one operation each
 before they reach a directory; §2 does not name that wrapper, and this point leaves it to
-§2.
+§2, under https://github.com/xippios/sdk-core/issues/287.
 
-Conventions §3 and the review checklist's item 2 state points (a) to (c) from 1.28 on,
-conventions §10 and the review checklist's items 4 and 16 points (d) and (e).
+Conventions §3 and the review checklist's item 2 state points (a) to (c) from 1.28 on;
+conventions §10, the review checklist's item 4, the definition of done's Tests block, the
+README and `mount_fixture`'s docstring point (d); and conventions §10 and the review
+checklist's item 16 point (e).

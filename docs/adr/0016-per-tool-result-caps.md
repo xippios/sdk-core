@@ -192,4 +192,4 @@ or table past its bound is cut with the note as every result is, by its rows whe
 model that holds one list of rows (point a). The caps of both sources conform as they
 stand.
 
-Conventions §8 states the three from 1.28 on.
+Conventions §8 and the README state the three from 1.28 on.

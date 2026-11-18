@@ -140,5 +140,6 @@ document cut by whole elements as the file has them, its leading bytes, the elem
 and the root's closing tag, as sdk-usda-wasde cuts the `<srNN>` pages of its XML. The
 sample's provenance row keeps the whole file's release, URL, bytes and sha256 and adds a
 column that says what the sample keeps, which each source names its own way,
-sdk-usda-wasde's `Kept` and sdk-faostat's `What`. Neither source changes. Conventions §10
-and the definition of done state it from 1.28 on.
+sdk-usda-wasde's `Kept` and sdk-faostat's `What`. Neither source changes. Conventions §10,
+the review checklist's item 4 and the definition of done's Tests block state it from 1.28
+on.

@@ -96,4 +96,5 @@ text stays one an agent reads whole, the reason conventions §8 bounds a tool's 
 refusal that names every value of a parameter whose values the package fixes, a packaged
 list or an enumeration, keeps its form: no source's such refusal was found to grow past
 what an agent reads, and bounding it would change what sdk-comtrade's and sdk-x's users
-read, which no decision settles. Conventions §5 states the point from 1.28 on.
+read, which no decision settles. Conventions §5 states the point from 1.28 on, and the
+README and `InvalidRequestError`'s docstring its third point.
