@@ -134,3 +134,19 @@ and `fixture_text(fixture)`, which gives that text; both refuse a fixture that
 took a response before and was no export; `write_fixture(fixture_from_response(response,
 scrub=...), path)` does what it did. The rewrite stays the source's step, and core still
 adds no hook for it.
+
+(b) **`Tenants` and `list_task` return** (decision 6; step 3, the first two pieces of
+https://github.com/xippios/sdk-core/issues/166; decided by Johannes on 2026-10-29, D108
+and D109 (5), ADR-0025, D-d). Decision 6, "nothing replaces what leaves", is reversed for
+`Tenants` and `list_task`: sdk-cashctrl carries them since 0.3.0 and sdk-google-mail copied
+them from it, two consumers (ADR-0023, decision 2). Of decision 1, `xippios.core.tenants`
+returns, and both names are exported from `xippios.core`. The code is the copies', with the
+close that the consequences left to sdk-cashctrl (queue row 24 b): `client_for` closes the
+client that a changed variable replaces, on the running loop or, outside one, on core's
+background loop. Where the copies differ, core takes sdk-google-mail's: `list_task(...,
+source=None)` names the source of `meta.source`, the registry's slug by default. New in
+neither copy, `Tenants(source, *, var_prefix=None, ...)` takes the variables' prefix apart
+from the source slug, since sdk-google-mail's copy took the `GOOGLE_` prefix as its source
+and its errors named `google` (ADR-0014, amendment 2026-11-18, (c); ADR-0025, amendment
+2026-11-18, (b)). The lock wrapper, `assert_write_tools`, the conftest strip and the serve
+command stay the sources' until they return in turn.
