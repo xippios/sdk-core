@@ -30,6 +30,7 @@ from xippios.core.errors import (
     UpstreamError,
     XippiosError,
     parse_retry_after,
+    request_description,
 )
 from xippios.core.redaction import register_credential_name
 
@@ -240,17 +241,17 @@ class RenewingBearerAuth(httpx.Auth):
     exchange running on its event loop waits for it and sends the bearer it brought: two
     first requests exchange once, and two requests refused with one bearer renew it once.
 
-    The exchange runs inside httpx's auth flow, below the client's limiter, hooks, cache
-    and ``classify``: it is not paced or observed, and a refused or unreadable token answer
-    raises an error that ends the call. A transport failure of the exchange counts as one
-    of the request it precedes, so the client's retry policy sends that request again,
-    exchange included, where it would for the request alone (ADR-0011). The flow reads the
-    token answer and no other, so a download through it streams to its file (ADR-0019,
-    decision 1). httpx keeps the token answer, its body read, in the final response's
-    ``history`` for as long as that response lives: a caller that keeps a response of
-    ``request`` or ``get`` keeps the bearer with it, while ``get_json``, ``get_answer`` and
-    the cache keep no response. The client sends its auth to the base URL's origin only
-    (ADR-0015, amendment 2026-11-18, point d).
+    The exchange runs inside httpx's auth flow, below the client's limiter, hooks, cache and
+    ``classify``: it is not paced or observed, and a token answer that ``token_refused`` or
+    ``read_token`` refuses raises an error that ends the call. A transport failure of the
+    exchange counts as one of the request it precedes, so the client's retry policy sends
+    that request again, exchange included, where it would for the request alone (ADR-0011).
+    The flow reads the token answer and no other, so a download through it streams to its
+    file (ADR-0019, decision 1). httpx keeps the token answer, its body read, in the final
+    response's ``history`` for as long as that response lives: a caller that keeps a
+    response of ``request`` or ``get`` keeps the bearer with it, while ``get_json``,
+    ``get_answer`` and the cache keep no response. The client sends its auth to the base
+    URL's origin only (ADR-0015, amendment 2026-11-18, point d).
 
     The bearer is kept as a ``SecretStr``, and a credential is read when the token request
     is built and kept nowhere, unless it is given to the constructor. It runs on an async
@@ -362,18 +363,18 @@ class RenewingBearerAuth(httpx.Auth):
         """The error for a token answer of another status than HTTP 200, read in full.
 
         Raised by the flow, it ends the call. By default the error that core's status
-        mapping gives the status, its message the status, the method, the path and the
-        reason phrase, ``503 from POST /token: Service Unavailable``, and nothing of the
-        answer, which a token endpoint may write from the credentials it was sent:
-        ``AuthError`` for a 401 or 403, ``RateLimitError`` for a 429 with ``Retry-After``'s
-        wait, ``NotFoundError`` for a 404 and ``UpstreamError`` with no ``body`` for any
-        other 4xx or 5xx. Another status below 400 is an ``UpstreamError`` that says the
-        answer is not the documented 200. A source that knows its endpoint's error answers
-        reads them in its override, as it reads the 200 in ``read_token``.
+        mapping gives the status, its message the status, the request as
+        ``request_description`` names it and the reason phrase, or ``no reason phrase``,
+        ``503 from POST /token: Service Unavailable``, and nothing of the answer, which a
+        token endpoint may write from the credentials it was sent: ``AuthError`` for a 401
+        or 403, ``RateLimitError`` for a 429 with ``Retry-After``'s wait, ``NotFoundError``
+        for a 404 and ``UpstreamError`` with no ``body`` for any other 4xx or 5xx. Another
+        status below 400 is an ``UpstreamError`` that says the answer is not the documented
+        200. A source that knows its endpoint's error answers reads them in its override, as
+        it reads the 200 in ``read_token``.
         """
-        request = response.request
         status = response.status_code
-        where = f"{request.method} {request.url.path}"
+        where = request_description(response)
         if status < 400:
             return UpstreamError(
                 f"{where} answered HTTP {status}, not the documented 200; nothing of it is shown",
