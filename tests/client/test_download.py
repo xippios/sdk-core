@@ -3,10 +3,12 @@ import inspect
 import io
 import os
 import stat
+import tempfile
 import zipfile
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import IO
 
 import anyio
 import httpx
@@ -309,7 +311,7 @@ def test_decode_csv_reads_an_open_text_stream_row_by_row(tmp_path: Path) -> None
     path = tmp_path / "qs.crops.txt.gz"
     rows = "".join(f"CORN\t{year}\n" for year in range(100_000))
     with gzip.open(path, "wt", encoding="utf-8", newline="") as packed:
-        packed.write("﻿Commodity\tYear\n" + rows)
+        packed.write("\ufeffCommodity\tYear\n" + rows)
     with gzip.open(path) as raw, io.TextIOWrapper(raw, encoding="utf-8", newline="") as text:
         read = decode_csv(text, delimiter="\t", source="usda-nass")
         assert inspect.isgenerator(read)
@@ -364,3 +366,40 @@ def test_decode_csv_refuses_a_binary_stream(tmp_path: Path) -> None:
         "decode_csv reads text, and GzipFile is a binary stream: wrap it in "
         "io.TextIOWrapper(stream, encoding='utf-8-sig', newline='')"
     )
+
+
+def test_decode_csv_reads_a_text_stream_whatever_its_class() -> None:
+    """A text stream of ``tempfile``'s: ``SpooledTemporaryFile`` is an ``io.IOBase`` but no
+    ``io.TextIOBase``, and ``NamedTemporaryFile``'s wrapper no ``io`` class at all."""
+    with tempfile.SpooledTemporaryFile(mode="w+", newline="") as spooled:
+        spooled.write("a,b\n1,2\n")
+        spooled.seek(0)
+        assert list(decode_csv(spooled)) == [{"a": "1", "b": "2"}]
+    with tempfile.NamedTemporaryFile("w+", newline="") as named:
+        named.write("a,b\n1,2\n")
+        named.seek(0)
+        assert list(decode_csv(named)) == [{"a": "1", "b": "2"}]
+
+
+def test_decode_csv_refuses_a_binary_stream_by_what_it_reads() -> None:
+    """A binary stream of no binary ``io`` class is refused at its first line, read as
+    ``bytes``, with the text a binary ``io`` stream gets."""
+    with tempfile.SpooledTemporaryFile(mode="w+b") as spooled:
+        assert binary_refusal(spooled) == (
+            "decode_csv reads text, and SpooledTemporaryFile is a binary stream: wrap it in "
+            "io.TextIOWrapper(stream, encoding='utf-8-sig', newline='')"
+        )
+    with tempfile.NamedTemporaryFile("w+b") as named:
+        assert binary_refusal(named) == (
+            "decode_csv reads text, and _TemporaryFileWrapper is a binary stream: wrap it in "
+            "io.TextIOWrapper(stream, encoding='utf-8-sig', newline='')"
+        )
+
+
+def binary_refusal(binary: IO[bytes]) -> str:
+    """The ``TypeError`` text of ``decode_csv`` over ``binary``, which holds a small CSV."""
+    binary.write(b"a,b\n1,2\n")
+    binary.seek(0)
+    with pytest.raises(TypeError) as info:
+        next(decode_csv(binary))  # type: ignore[arg-type]
+    return str(info.value)
