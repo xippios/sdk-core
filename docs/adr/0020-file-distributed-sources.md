@@ -100,3 +100,24 @@ kind, a file that a bulk task downloads (ADR-0019, decision 4), may therefore re
 taken, in the file's order, closes it when it ends or is closed, and its docstring says
 so. Every other parser returns `list[Model]` as before. Conventions §2 states it from 1.28
 on.
+
+(c) **A file task's `meta.endpoint` names the file** (decision 5; step 15;
+https://github.com/xippios/sdk-core/issues/135, found by sdk-usda-wasde; decided by
+Johannes on 2026-11-17, https://github.com/xippios/sdk-core/issues/244). Decision 5 names
+the file kind (`wasde.xls`, `qs.crops`). The released sources that read ESMIS's files name
+the file itself: sdk-usda-esmis's `download_release_file` the name ESMIS catalogs
+(`wasde1026.txt`), and sdk-usda-wasde's file tasks and the lists it packages from a
+release's XML the same name (`wasde1026.xml`, a revision's `wasde0626v2.xml`). A task that
+reads a file sets `meta.endpoint` to the file's name as upstream names it, which may
+change with each release and carry a revision's suffix, and a list packaged from a
+released file names that file the same way as its `endpoint` (ADR-0022, decision 1). A
+narrative read from a PDF that prints a date but no month label keeps the ESMIS release
+id as `vintage`, which decision 5 allows, as sdk-usda-wasde's `read_report_text` does. A
+download of an operation's answer is no file upstream names and keeps the operation's
+name, as sdk-eurostat's SDMX `dataQuery`, streamed to a file, does. Two cases are open: a
+file whose name upstream builds from the dataset's name, as FAOSTAT's
+`<Name>_E_All_Data_(Normalized).csv`, which sdk-faostat's `download_dataset` names
+`All_Data_(Normalized).csv`, under https://github.com/xippios/sdk-core/issues/280, and a
+file read from an origin or mirror that the publisher runs, under
+https://github.com/xippios/sdk-core/issues/276. Neither sdk-usda-esmis nor sdk-usda-wasde
+changes. Conventions §4 states it from 1.28 on.

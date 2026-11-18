@@ -15,7 +15,7 @@ script runs again.
 - [ADR-0009](adr/0009-one-key-per-issuer-for-shared-gateways.md): One key variable per issuer when one key serves several sources · Accepted · 2026-10-23 · amended 2026-11-18
 - [ADR-0010](adr/0010-rate-limit-policy.md): Rate-limit policy — a fast pace, quotas spent, the 429 interpreted · Accepted · 2026-10-23 · amended 2026-11-18
 - [ADR-0011](adr/0011-retries-and-non-idempotent-methods.md): Retries — a 429 for every method, a 5xx and a transport failure for idempotent ones · Accepted · 2026-10-23
-- [ADR-0012](adr/0012-upstream-totals-in-the-result-envelope.md): Upstream totals in the result envelope · Accepted · 2026-10-23
+- [ADR-0012](adr/0012-upstream-totals-in-the-result-envelope.md): Upstream totals in the result envelope · Accepted · 2026-10-23 · amended 2026-11-18
 - [ADR-0013](adr/0013-offline-tests-guaranteed-by-the-plugin.md): Offline tests guaranteed by the plugin · Accepted · 2026-10-23 · amended 2026-11-18
 - [ADR-0014](adr/0014-multi-tenant-sources.md): Multi-tenant sources · Accepted · 2026-10-23 · amended 2026-11-18
 - [ADR-0015](adr/0015-client-request-hooks-and-quota-policy.md): Client request hooks and a quota policy · Accepted · 2026-10-24 · amended 2026-11-18
@@ -25,7 +25,7 @@ script runs again.
 - [ADR-0019](adr/0019-bulk-downloads-and-non-json-payloads.md): Bulk downloads and non-JSON payloads in core · Accepted · 2026-10-26 · amended 2026-11-18
 - [ADR-0020](adr/0020-file-distributed-sources.md): File-distributed sources · Accepted · 2026-10-26 · amended 2026-11-18
 - [ADR-0021](adr/0021-dependencies-between-source-packages.md): Dependencies between source packages · Accepted · 2026-10-26
-- [ADR-0022](adr/0022-packaged-answers-and-release-times.md): Packaged answers and release times in `ResultMeta` · Accepted · 2026-10-26
+- [ADR-0022](adr/0022-packaged-answers-and-release-times.md): Packaged answers and release times in `ResultMeta` · Accepted · 2026-10-26 · amended 2026-11-18
 - [ADR-0023](adr/0023-core-scope-two-consumers.md): Core scope — code enters `xippios-core` with two consumers · Accepted · 2026-10-26
 - [ADR-0024](adr/0024-cashctrl-stands-alone.md): cashctrl stands alone — tenants, the tenant lock and the recorder extras leave core · Accepted · 2026-10-27 · amended 2026-11-18
 - [ADR-0025](adr/0025-google-mail.md): Google Mail — loopback, the renewing bearer, scopes, the kit's return and the decoded view · Accepted · 2026-10-29 · amended 2026-11-18
