@@ -123,7 +123,7 @@ SOURCE: dict[str, str] = {
     "tests/test_family.py": "from xippios.core.testing.family import *  # noqa: F403\n",
 }
 
-FAMILY_TESTS = 10
+FAMILY_TESTS = 11
 
 
 def run_family(
@@ -382,3 +382,266 @@ def test_the_status_tables_are_read_under_the_status_heading_only() -> None:
     assert _status_table_tasks(template) == []
     assert _status_table_tasks("## Status\n\n| a | b |\n| - | - |\n| `x` | `y` |\n") is None
     assert _status_table_tasks("# Title\n") is None
+
+
+# One tenant per call (conventions §7; https://github.com/xippios/sdk-core/issues/299) -----
+
+TENANT_CLIENT = """from xippios.core import Tenants
+
+SOURCE = "example"
+TENANTS = Tenants(SOURCE, list_var="EXAMPLE_ORGS", fields=("API_KEY",), reserved=("demo",))
+"""
+
+TENANT_TASKS = '''
+from xippios.core import Result, ResultMeta, list_task, sync
+from xippios.example._client import TENANTS
+
+
+async def get_series_async(org: str, series_id: str, year: int = 2024) -> Result[list[int]]:
+    """Fetch one series of an organisation for a year.
+
+    Args:
+        org: A declared organisation, e.g. ``demo``.
+        series_id: Upstream identifier, e.g. ``"CORN"``.
+        year: Four-digit year, e.g. ``2024``.
+    """
+    meta = ResultMeta(source="example", endpoint="series", tenant=org)
+    return Result[list[int]](data=[year], meta=meta)
+
+
+async def list_regions_async() -> Result[list[str]]:
+    """List the regions a series can be asked for, the same for every organisation."""
+    return Result[list[str]](data=[], meta=ResultMeta(source="example", endpoint="regions"))
+
+
+get_series = sync(get_series_async)
+list_regions = sync(list_regions_async)
+list_organisations = list_task(TENANTS, name="list_organisations")
+
+NO_TENANT_TASKS = frozenset({"list_regions"})
+__all__ = ["get_series", "list_organisations", "list_regions"]
+'''
+
+TENANT_WRITE_TASKS = '''
+from xippios.core import Result, ResultMeta, sync
+
+
+async def create_series_async(org: str, name: str, confirm: bool = False) -> Result[str]:
+    """Create a series, or preview it unless confirmed.
+
+    Args:
+        org: A declared organisation, e.g. ``demo``.
+        name: The series name, e.g. ``"corn"``.
+        confirm: ``True`` writes; ``False`` previews.
+    """
+    meta = ResultMeta(source="example", endpoint="create", tenant=org)
+    return Result[str](data=name, meta=meta)
+
+
+async def rename_series_async(name: str, confirm: bool = False) -> Result[str]:
+    """Rename a series, or preview it unless confirmed.
+
+    Args:
+        name: The series name, e.g. ``"corn"``.
+        confirm: ``True`` writes; ``False`` previews.
+    """
+    return Result[str](data=name, meta=ResultMeta(source="example", endpoint="rename"))
+
+
+create_series = sync(create_series_async)
+rename_series = sync(rename_series_async)
+
+__all__ = ["create_series", "rename_series"]
+'''
+
+TENANT_README = """# xippios-example
+
+## Status
+
+| Upstream operation | Task function | MCP tool | Status |
+| --- | --- | --- | --- |
+| `series` | `get_series(org, series_id, year=2024)` | `example_get_series` | alpha |
+| none | `list_organisations()` | `example_list_organisations` | alpha |
+| `regions` | `list_regions()` | `example_list_regions` | alpha |
+| `create`, `rename` | `create_series`, `rename_series` | write server | alpha |
+"""
+
+TENANT_SOURCE: dict[str, str | None] = {
+    "src/xippios/example/_client.py": TENANT_CLIENT,
+    "src/xippios/example/tasks.py": TENANT_TASKS,
+    "README.md": TENANT_README,
+}
+
+
+def test_a_multi_tenant_source_passes_with_its_tenant_list_and_a_declared_task(
+    pytester: pytest.Pytester,
+) -> None:
+    """Every task takes ``org`` but the tenant list and ``list_regions``, which is declared."""
+    write = TENANT_WRITE_TASKS.replace(
+        '__all__ = ["create_series", "rename_series"]',
+        'NO_TENANT_TASKS = frozenset({"rename_series"})\n'
+        '__all__ = ["create_series", "rename_series"]',
+    )
+    result = run_family(pytester, {**TENANT_SOURCE, "src/xippios/example/tasks_write.py": write})
+    result.assert_outcomes(passed=FAMILY_TESTS)
+
+
+def test_a_task_of_a_multi_tenant_source_that_takes_no_tenant_fails_naming_it(
+    pytester: pytest.Pytester,
+) -> None:
+    """The source opts into nothing: a ``Tenants`` registry makes it multi-tenant."""
+    undeclared = TENANT_TASKS.replace('NO_TENANT_TASKS = frozenset({"list_regions"})\n', "")
+    changes = {
+        **TENANT_SOURCE,
+        "src/xippios/example/tasks.py": undeclared,
+        "src/xippios/example/tasks_write.py": TENANT_WRITE_TASKS,
+    }
+    result = run_family(pytester, changes)
+    result.assert_outcomes(passed=FAMILY_TESTS - 1, failed=1)
+    result.stdout.fnmatch_lines(
+        [
+            "*every task of a multi-tenant source takes exactly one tenant, required, its "
+            "parameter read as org*NO_TENANT_TASKS*",
+            "*- tasks.list_regions takes no org*",
+            "*- tasks_write.rename_series takes no org*",
+        ]
+    )
+    # A registry its tasks module holds, imported or its own, makes it multi-tenant too.
+    own = undeclared.replace(
+        "from xippios.example._client import TENANTS\n",
+        "from xippios.core import Tenants\n\n"
+        'TENANTS = Tenants("example", list_var="EXAMPLE_ORGS", fields=("API_KEY",))\n',
+    )
+    moved = {
+        "src/xippios/example/_client.py": SOURCE["src/xippios/example/_client.py"],
+        "src/xippios/example/tasks.py": own,
+    }
+    result = run_family(pytester, {**changes, **moved})
+    result.assert_outcomes(passed=FAMILY_TESTS - 1, failed=1)
+    result.stdout.fnmatch_lines(["*- tasks.list_regions takes no org*"])
+
+
+TENANT_FORMS = '''
+from typing import Annotated
+
+from pydantic import Field
+
+from xippios.core import Result, ResultMeta, list_task, sync
+from xippios.core.tenants import Tenants
+
+META = ResultMeta(source="example", endpoint="e")
+TENANTS = Tenants("example", list_var="EXAMPLE_ORGS", fields=("API_KEY",))
+ORG = Annotated[str, Field(description="A declared organisation, e.g. demo.")]
+
+
+def get_one(org: ORG, limit: int = 10) -> Result[int]:
+    """Get one."""
+    return Result[int](data=limit, meta=META)
+
+
+def get_two(limit: int, org: str) -> Result[int]:
+    """Get two."""
+    return Result[int](data=limit, meta=META)
+
+
+def get_defaulted(org: str = "demo") -> Result[int]:
+    """Get with a default."""
+    return Result[int](data=0, meta=META)
+
+
+def get_several(org: list[str]) -> Result[int]:
+    """Get for several."""
+    return Result[int](data=0, meta=META)
+
+
+def get_maybe(org: str | None) -> Result[int]:
+    """Get for one or none."""
+    return Result[int](data=0, meta=META)
+
+
+def get_each(*org: str) -> Result[int]:
+    """Get for each."""
+    return Result[int](data=0, meta=META)
+
+
+def get_unresolved(org: "Missing") -> Result[int]:
+    """Get with an annotation that does not resolve."""
+    return Result[int](data=0, meta=META)
+
+
+async def list_regions_async() -> Result[list[str]]:
+    """List regions."""
+    return Result[list[str]](data=[], meta=META)
+
+
+list_regions = sync(list_regions_async)
+list_orgs = list_task(TENANTS, name="list_orgs")
+NO_TENANT_TASKS = frozenset({"list_regions"})
+'''
+
+
+@pytest.fixture
+def tenant_forms(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
+    """A tasks module of every form a tenant's parameter takes; its ``__all__`` set per test."""
+    module = ModuleType("xippios.example_forms.tasks")
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+    exec(TENANT_FORMS, module.__dict__)  # its functions' __module__ is the module
+    return module
+
+
+def _tenant_family(tasks: ModuleType, names: list[str], *, multi_tenant: bool = True) -> None:
+    tasks.__all__ = names  # type: ignore[attr-defined]
+    package = ModuleType("xippios.example_forms")
+    package.__file__ = "/nowhere/__init__.py"
+    source = FamilySource(
+        root=Path("/nowhere"),
+        import_path="xippios.example_forms",
+        package=package,
+        source="example",
+        tasks=tasks,
+        tasks_write=None,
+        tenants=tasks.TENANTS if multi_tenant else None,
+    )
+    family.test_family_tasks_take_one_tenant(source)
+
+
+def test_the_tenant_list_a_declared_task_and_an_annotated_tenant_pass(
+    tenant_forms: ModuleType,
+) -> None:
+    # get_one and get_two take org and limit alike: org fits the rule, so org is the tenant's.
+    _tenant_family(tenant_forms, ["get_one", "get_two", "list_regions", "list_orgs"])
+
+
+@pytest.mark.parametrize(
+    ("task", "problem"),
+    [
+        (
+            "get_defaulted",
+            "tasks.get_defaulted gives org the default 'demo'; the tenant is required",
+        ),
+        ("get_several", "tasks.get_several takes org as list[str], not one tenant's name, a str"),
+        ("get_maybe", "tasks.get_maybe takes org as str | None, not one tenant's name, a str"),
+        ("get_each", "tasks.get_each takes *org, several tenants"),
+        ("get_unresolved", "tasks.get_unresolved has annotations that do not resolve"),
+    ],
+)
+def test_a_tenant_parameter_with_a_default_or_of_several_tenants_fails(
+    tenant_forms: ModuleType, task: str, problem: str
+) -> None:
+    with pytest.raises(pytest.fail.Exception) as failed:
+        _tenant_family(tenant_forms, ["get_one", "list_regions", task])
+    assert str(failed.value).splitlines()[1:] == [f"- {problem}"]
+
+
+def test_a_declared_name_outside_all_fails_and_one_tenant_checks_nothing(
+    tenant_forms: ModuleType,
+) -> None:
+    declared = frozenset({"list_regions", "list_old_regions"})
+    tenant_forms.NO_TENANT_TASKS = declared  # type: ignore[attr-defined]
+    with pytest.raises(pytest.fail.Exception) as failed:
+        _tenant_family(tenant_forms, ["get_one", "list_regions"])
+    assert str(failed.value).splitlines()[1:] == [
+        "- NO_TENANT_TASKS of xippios.example_forms.tasks names ['list_old_regions'], not in its "
+        "__all__"
+    ]
+    _tenant_family(tenant_forms, ["get_one", "get_each", "list_regions"], multi_tenant=False)

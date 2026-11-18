@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import sys
+from collections.abc import Callable
 from typing import Any
 
 import pytest
@@ -395,28 +396,58 @@ def served(monkeypatch: pytest.MonkeyPatch) -> list[tuple[MCPServer, str, dict[s
     return calls
 
 
-class Builds:
-    """A source's ``build(lock)``: one tool that echoes its organisation, and the lists."""
+async def echo_org(org: str, confirm: bool = False) -> dict[str, str]:
+    """Return the organisation the tool was called for.
 
-    def __init__(self, *, read_only: bool = True, loopback_only: bool = False) -> None:
+    Args:
+        org: A declared organisation, e.g. ``demo``.
+        confirm: Ignored, e.g. ``true``.
+    """
+    return {"org": org}
+
+
+async def echo_account(account: str) -> dict[str, str]:
+    """Return the account the tool was called for.
+
+    Args:
+        account: A declared account, e.g. ``demo``.
+    """
+    return {"account": account}
+
+
+async def echo_org_name(org_name: str) -> dict[str, str]:
+    """Return the organisation the tool was called for.
+
+    Args:
+        org_name: A declared organisation, e.g. ``demo``.
+    """
+    return {"org_name": org_name}
+
+
+class Builds:
+    """A source's ``build(lock)``: one tool that echoes its tenant, ``echo_org`` by default.
+
+    The tool takes the tenant's parameter that the lock binds, since ``bind_tasks`` refuses
+    a task that takes none (https://github.com/xippios/sdk-core/issues/299).
+    """
+
+    def __init__(
+        self,
+        *,
+        read_only: bool = True,
+        loopback_only: bool = False,
+        task: Callable[..., Any] = echo_org,
+    ) -> None:
         self.locks: list[TenantLock | None] = []
         self.read_only = read_only
         self.loopback_only = loopback_only
+        self.task = task
 
     def __call__(self, lock: TenantLock | None = None) -> MCPServer:
-        async def echo_org(org: str, confirm: bool = False) -> dict[str, str]:
-            """Return the organisation the tool was called for.
-
-            Args:
-                org: A declared organisation, e.g. ``demo``.
-                confirm: Ignored, e.g. ``true``.
-            """
-            return {"org": org}
-
         self.locks.append(lock)
         return build_server(
             "fictive-src",
-            bind_tasks([echo_org], lock),
+            bind_tasks([self.task], lock),
             instructions=tenant_instructions(TEXT, lock),
             read_only=self.read_only,
             loopback_only=self.loopback_only,
@@ -550,7 +581,7 @@ def test_a_registry_under_a_shared_prefix_binds_either_way(
     the registry's name: https://github.com/xippios/sdk-core/issues/279.
     """
     monkeypatch.setenv("FICTIVE_DEMO_REFRESH_TOKEN", "placeholder")
-    build = Builds()
+    build = Builds(task=echo_account)
     serve_tenants(build(), build, registry, param="account", argv=["--account", "demo"])
     assert build.locks == [None, TenantLock("account", "demo")]
     with pytest.raises(SystemExit):
@@ -592,7 +623,7 @@ def test_without_a_reserved_tenant_the_help_gives_no_example(
 def test_an_underscored_parameter_is_a_hyphenated_option(
     served: list[tuple[MCPServer, str, dict[str, Any]]],
 ) -> None:
-    build = Builds()
+    build = Builds(task=echo_org_name)
     serve_tenants(build(), build, TENANTS, param="org_name", argv=["--org-name", "demo"])
     assert build.locks == [None, TenantLock("org_name", "demo")]
 
@@ -669,15 +700,6 @@ class ToolSetBuilds:
         self.loopback_only = loopback_only
 
     def __call__(self, lock: TenantLock | None = None) -> ToolSet:
-        async def echo_org(org: str, confirm: bool = False) -> dict[str, str]:
-            """Return the organisation the tool was called for.
-
-            Args:
-                org: A declared organisation, e.g. ``demo``.
-                confirm: Ignored, e.g. ``true``.
-            """
-            return {"org": org}
-
         self.locks.append(lock)
         return ToolSet(
             "fictive-src",
