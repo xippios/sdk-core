@@ -561,7 +561,8 @@ def _bind(fn: Callable[..., Any], lock: TenantLock) -> Callable[..., Any]:
     signature = inspect.signature(fn)
     if lock.param not in signature.parameters:
         return fn
-    hints = typing.get_type_hints(fn)
+    # Annotated metadata kept: a bound tool's schema and check hold its constraints too.
+    hints = typing.get_type_hints(fn, include_extras=True)
     parameters = [
         p.replace(annotation=hints.get(p.name, p.annotation))
         for p in signature.parameters.values()
@@ -597,7 +598,9 @@ def bind_tasks(
     ``BULK_TASKS`` stay as they are; its docstring loses the parameter's entry under
     ``Args:``, and its signature and annotations lose the parameter, so no tool's input
     schema declares it and the argument check refuses a call that names it (conventions
-    §8). The tenant list of ``list_task`` lists the bound tenant alone, still with
+    §8). The other parameters keep their ``Annotated`` metadata, so a constraint, a
+    description or a validator holds in the bound tool's schema and check, and in a
+    route's. The tenant list of ``list_task`` lists the bound tenant alone, still with
     ``meta.tenant`` ``None``. Any other task is returned as it is. The HTTP router takes
     no lock: a deployment that needs one declares only that tenant.
 
