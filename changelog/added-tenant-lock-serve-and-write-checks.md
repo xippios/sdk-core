@@ -20,7 +20,7 @@
     text and `TENANTS.require` before the build.
     `src/xippios/cashctrl/_client.py` (sdk-cashctrl) — `check_org(org)`, which calls
     `TENANTS.field(org, "SUBDOMAIN")`, added after `TENANTS` (line 105) and to `__all__`
-    (line 48) — `serve_tenants` runs the source's own startup check, so a missing or
+    (line 49) — `serve_tenants` runs the source's own startup check, so a missing or
     malformed subdomain still stops a bound server at startup, with the same message.
     `src/xippios/cashctrl/mcp.py` (sdk-cashctrl) — the imports of `serve` from `_cli` and of
     `OrgLock`, `bind_tasks` and `instructions` from `_org_lock` (lines 13 and 15) → `from
@@ -29,9 +29,9 @@
     then `OrgLock` (line 27) → `TenantLock`, `instructions(INSTRUCTIONS, lock)` (line 33) →
     `tenant_instructions(INSTRUCTIONS, lock)` with no `bound=`, `serve(server, build)` and
     its comment (lines 43 to 46) → `serve_tenants(server, build, TENANTS, param="org",
-    noun="organisation", check=check_org)`, and the docstring's `_cli`, `_org_lock` (line
-    6) → core's `serve_tenants` — the server, its options and its instructions are what
-    they were, `INSTRUCTIONS` and then the lock's sentence when bound.
+    noun="organisation", check=check_org)`, and the docstring's `_cli`, `_org_lock` (line 6)
+    → core's `serve_tenants` — the server, its options and its instructions are what they
+    were, `INSTRUCTIONS` and then the lock's sentence when bound.
     `src/xippios/cashctrl/mcp_write.py` (sdk-cashctrl) — as in `mcp.py`: the imports (lines
     11 and 14 to 16), `OrgLock` (line 27), `instructions` (line 34), `serve` (line 45) and
     the docstring's `_cli` (line 5) — as there.
@@ -80,9 +80,13 @@
     parameter's, and `instructions(base, lock, bound=...)` is `tenant_instructions(base,
     lock, bound=...)`, the form core takes where the two copies differ.
     `src/xippios/google/mail/_cli.py` (sdk-google-mail) — deleted, its refresh token check
-    (lines 96 to 102) moved to `_client.py` — core's `serve_tenants` is this copy,
-    `--account` with `ACCOUNT_HELP`'s text and `TENANTS.require` before the build, and the
-    loopback check is core's `main`'s since `loopback_only`.
+    (lines 96 to 102) moved to `_client.py`, and `REMOTE_REFUSAL` goes with it, so the read
+    server's refusal of `--http` on a remote `--host` is core's `main`'s,
+    `xippios-google-mail is a read server held to loopback and carries no authentication`,
+    followed by the loopback hosts and `--allow-remote`, and comes after the account check,
+    where the copy refused the host first with its own text — core's `serve_tenants` is this
+    copy, `--account` with `ACCOUNT_HELP`'s text and `TENANTS.require` before the build, and
+    `main` judges loopback on the server `apply_options` returns.
     `src/xippios/google/mail/_client.py` (sdk-google-mail) — `check_account(account)`, which
     raises `_cli.py`'s `ConfigError` (lines 96 to 102) when `TENANTS.var(account,
     "REFRESH_TOKEN")` is unset or blank, with `CONSENT_COMMAND` imported from `_auth` (line

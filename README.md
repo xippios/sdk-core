@@ -463,15 +463,15 @@ def run() -> None:  # xippios-example-mcp --org acme serves acme alone
     )
 ```
 
-A bound tool keeps its name, and its docstring and signature lose `org`, so a call that
-still names a tenant is refused like any argument the tool does not declare; the tenant
-list lists the bound tenant alone. The bound server's instructions end "This server is
-bound to org acme; every tool acts on that organisation and takes no org." `--org acme`
-stops the process with exit status 2 before anything is served when `acme` is not
-declared or `check` raises, a missing subdomain here; without `--org` the server serves
-every declared tenant. `main` holds the bound server to loopback as it holds the unbound
-one. The HTTP router takes no lock: a deployment that needs one declares only that
-tenant.
+A bound tool keeps its name and its other parameters' `Annotated` constraints, and its
+docstring and signature lose `org`, so a call that still names a tenant is refused like
+any argument the tool does not declare; the tenant list lists the bound tenant alone.
+The bound server's instructions end "This server is bound to org acme; every tool acts on
+that organisation and takes no org." `--org acme` stops the process with exit status 2
+before anything is served when `acme` is not declared or `check` raises, a missing
+subdomain here; without `--org` the server serves every declared tenant. `main` holds the
+bound server to loopback as it holds the unbound one. The HTTP router takes no lock: a
+deployment that needs one declares only that tenant.
 
 A source's `tests/conftest.py` calls `keep_reserved_tenants(TENANTS)` when pytest
 imports it, so its tests see the reserved tenant, `demo`, and no other: it removes the
