@@ -228,7 +228,7 @@ sdk-google-mail's `list_task` took for the same reason stays in core, the regist
 default, for the account registry that the Google sources will share as
 `xippios.core.google` (D-d).
 
-(c) **The lock, the serve command, the write checks and the strip in core** (D-d (c) to
+(d) **The lock, the serve command, the write checks and the strip in core** (D-d (c) to
 (f); step 4, https://github.com/xippios/sdk-core/issues/166). D-d's last four pieces come
 from core (ADR-0024, amendment 2026-11-18, (d); ADR-0014, amendment 2026-11-18, (d)), so
 sdk-google-mail's `_account_lock.py` and `_cli.py`, the copy of `assert_write_tools` in its

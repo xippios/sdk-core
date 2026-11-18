@@ -597,7 +597,7 @@ so that no fixture and no test sees a tenant but the reserved one, `demo`: the l
 variable and every other tenant's variables are removed, by the registry's scheme, and
 the rest of the prefix stays (ADR-0024, amendment 2026-11-18, (d)). The registry, the
 strip and §8's lock and serve command bind such a source from its adoption of core 0.4.0,
-which deletes its copies (ADR-0025, amendment 2026-11-18, (b) and (c)).
+which deletes its copies (ADR-0025, amendment 2026-11-18, (b) and (d)).
 
 ## 8. MCP conventions
 
