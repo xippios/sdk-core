@@ -44,11 +44,23 @@ naming the tenant::
 
 ``xippios.core.mcp.serve_tenants`` builds the bound server from ``--org acme`` and runs it.
 
+One tenant per call (conventions §7; ADR-0036, decisions 11 and 13): no task, tool or
+helper in core works across tenants, and the tenant list returns names only. A source's
+own tasks follow the same line, each taking exactly one tenant, required, with nothing
+shared between tenants. ``bind_tasks`` refuses a task that takes no tenant, unless it is
+the tenant list or its module names it in ``NO_TENANT_TASKS``, beside ``BULK_TASKS``::
+
+    NO_TENANT_TASKS = frozenset({"list_currencies"})  # in tasks.py: the same for every tenant
+
+and the family check of ``xippios.core.testing`` holds every task of a source whose
+``_client`` holds a ``Tenants`` to it. A signature shows neither what a task reaches nor
+what it shares, so a task that takes one tenant and opens another's client passes both
+(https://github.com/xippios/sdk-core/issues/302).
+
 Isolation is by configuration: a deployment reaches exactly the tenants its environment
-declares. Nothing here spans tenants or returns a value; messages name tenants and
-variables, never what a variable holds (ADR-0030). The module left core in 0.3.0 for
-sdk-cashctrl alone and came back in 0.4.0 from its copy and sdk-google-mail's (ADR-0042,
-decision 1).
+declares. Nothing here returns a value; messages name tenants and variables, never what a
+variable holds (ADR-0030). The module left core in 0.3.0 for sdk-cashctrl alone and came
+back in 0.4.0 from its copy and sdk-google-mail's (ADR-0042, decision 1).
 """
 
 import asyncio
@@ -64,6 +76,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from xippios.core._loop import as_async, sync
+from xippios.core._tasks import touches_no_tenant
 from xippios.core.client import AsyncClient
 from xippios.core.errors import ConfigError, InvalidRequestError
 from xippios.core.models import Result, ResultMeta
@@ -79,6 +92,11 @@ _UPPER = re.compile(r"[A-Z0-9_]+")
 
 def _is_set(variable: str) -> bool:
     return bool(os.environ.get(variable, "").strip())
+
+
+def _lists_tenants(fn: Callable[..., Any]) -> bool:
+    """Whether ``fn`` is a tenant list of ``list_task``, or a wrapper that keeps its mark."""
+    return getattr(fn, _LISTS_TENANTS, False) is True
 
 
 class Tenants:
@@ -552,7 +570,7 @@ def _without_arg(doc: str, param: str) -> str:
 
 def _bind(fn: Callable[..., Any], lock: TenantLock) -> Callable[..., Any]:
     """``fn`` as the tool of a server bound to ``lock.value``; see ``bind_tasks``."""
-    if getattr(fn, _LISTS_TENANTS, False) is True:
+    if _lists_tenants(fn):
 
         @functools.wraps(fn)
         def only_the_locked_tenant() -> Any:
@@ -561,7 +579,7 @@ def _bind(fn: Callable[..., Any], lock: TenantLock) -> Callable[..., Any]:
         return only_the_locked_tenant
     signature = inspect.signature(fn)
     if lock.param not in signature.parameters:
-        return fn
+        return fn  # declared in NO_TENANT_TASKS: bind_tasks refused every other such task
     # Annotated metadata kept: a bound tool's schema and check hold its constraints too.
     hints = typing.get_type_hints(fn, include_extras=True)
     parameters = [
@@ -602,17 +620,41 @@ def bind_tasks(
     §8). The other parameters keep their ``Annotated`` metadata, so a constraint, a
     description or a validator holds in the bound tool's schema and check, and in a
     route's. The tenant list of ``list_task`` lists the bound tenant alone, still with
-    ``meta.tenant`` ``None``. Any other task is returned as it is. The HTTP router takes
-    no lock: a deployment that needs one declares only that tenant.
+    ``meta.tenant`` ``None``. A task its module names in ``NO_TENANT_TASKS``, beside
+    ``BULK_TASKS``, touches no tenant and is returned as it is; any other task that takes
+    no ``lock.param`` is refused, since the bound server would serve it unbound
+    (conventions §7; ADR-0036, decision 13). The HTTP router takes no lock: a deployment
+    that needs one declares only that tenant.
 
     Args:
         tasks: A server's tasks, e.g. ``tool_functions(tasks)``.
         lock: The tenant the server is bound to, e.g. ``TenantLock("org", "acme")``, or
-            ``None`` for a server of every declared tenant.
+            ``None`` for a server of every declared tenant, whose tasks come back as they
+            are.
 
     Returns:
         A list of the tools to be, in the order of ``tasks``.
+
+    Raises:
+        ValueError: A task takes no ``lock.param`` and is neither the tenant list nor
+            named in its module's ``NO_TENANT_TASKS``; the message names every such task
+            and the parameter, and nothing is bound.
     """
     if lock is None:
         return list(tasks)
-    return [_bind(fn, lock) for fn in tasks]
+    given = list(tasks)
+    unbound = [
+        getattr(fn, "__name__", repr(fn))
+        for fn in given
+        if not _lists_tenants(fn)
+        and lock.param not in inspect.signature(fn).parameters
+        and not touches_no_tenant(fn)
+    ]
+    if unbound:
+        verb = "takes" if len(unbound) == 1 else "take"
+        raise ValueError(
+            f"{', '.join(unbound)} {verb} no {lock.param}, the tenant's parameter that the lock "
+            f"binds; a task that touches a tenant takes it, and one that touches none is named "
+            f"in NO_TENANT_TASKS of its tasks module (conventions §7)"
+        )
+    return [_bind(fn, lock) for fn in given]

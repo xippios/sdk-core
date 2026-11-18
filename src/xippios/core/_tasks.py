@@ -1,8 +1,10 @@
-"""What core reads from a source's ``tasks.py``: its tool functions and its bulk tasks.
+"""What core reads from a source's ``tasks.py``: its tool functions and its declarations.
 
 The adapters ask ``is_bulk_task`` before they register a task (``register_tasks``,
-``router_from_tasks``). ``tool_functions`` is public through ``xippios.core.mcp``;
-``is_bulk_task`` is not public API.
+``router_from_tasks``), a task named in ``BULK_TASKS``, and ``bind_tasks`` asks
+``touches_no_tenant`` of a task that takes no tenant, one named in ``NO_TENANT_TASKS``.
+``tool_functions`` is public through ``xippios.core.mcp``; ``is_bulk_task`` and
+``touches_no_tenant`` are not public API.
 """
 
 import sys
@@ -10,7 +12,7 @@ from collections.abc import Callable
 from types import ModuleType
 from typing import Any
 
-__all__ = ["is_bulk_task", "tool_functions"]
+__all__ = ["is_bulk_task", "tool_functions", "touches_no_tenant"]
 
 _MISSING = object()
 
@@ -76,12 +78,30 @@ def is_bulk_task(fn: Callable[..., Any]) -> bool:
     module: such a wrapper wraps ``tool_functions(tasks)``, which has left the bulk tasks
     out already.
     """
+    return _declared(fn, "BULK_TASKS")
+
+
+def touches_no_tenant(fn: Callable[..., Any]) -> bool:
+    """True when ``fn``, or a function it wraps, is named in its module's ``NO_TENANT_TASKS``.
+
+    A multi-tenant source declares so a task that touches no tenant, a frozenset of task
+    names beside ``BULK_TASKS`` in its ``tasks.py`` or ``tasks_write.py``: ``bind_tasks``
+    serves such a task as it is on a bound server, where it refuses any other task that
+    takes no tenant, and the family check excepts it from the tenant's parameter
+    (conventions §7; ADR-0036, decision 13). It is read as ``is_bulk_task`` reads
+    ``BULK_TASKS``, layer by layer.
+    """
+    return _declared(fn, "NO_TENANT_TASKS")
+
+
+def _declared(fn: Callable[..., Any], declaration: str) -> bool:
+    """Whether a layer of ``fn`` is named in its module's ``declaration``; see ``is_bulk_task``."""
     seen: set[int] = set()
     layer: Any = fn
     while layer is not None and id(layer) not in seen:
         seen.add(id(layer))
         module = sys.modules.get(getattr(layer, "__module__", None) or "")
-        if getattr(layer, "__name__", None) in getattr(module, "BULK_TASKS", ()):
+        if getattr(layer, "__name__", None) in getattr(module, declaration, ()):
             return True
         layer = getattr(layer, "__wrapped__", None)
     return False
