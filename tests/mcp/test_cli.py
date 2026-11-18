@@ -543,10 +543,11 @@ def test_a_registry_under_a_shared_prefix_binds_either_way(
     capsys: pytest.CaptureFixture[str],
     registry: Tenants,
 ) -> None:
-    """Both of sdk-google-mail's forms (https://github.com/xippios/sdk-core/issues/279).
+    """sdk-google-mail's registry, its prefix apart, binds as the copy's did.
 
     The command's text names the registry's tenants and variables, never its source, so
-    a registry whose slug is its prefix and one that names the prefix apart print the same.
+    a registry whose slug is its prefix and one that names the prefix apart print the same;
+    the registry's name: https://github.com/xippios/sdk-core/issues/279.
     """
     monkeypatch.setenv("FICTIVE_DEMO_REFRESH_TOKEN", "placeholder")
     build = Builds()

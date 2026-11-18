@@ -22,7 +22,8 @@ def test_an_env_var_names_a_variable_with_whether_it_is_secret_and_required() ->
 
 def test_a_pattern_names_one_variable_per_tenant() -> None:
     # Conventions §1's scheme: sdk-cashctrl's CASHCTRL_<NAME>_API_KEY, sdk-google-mail's
-    # GOOGLE_<NAME>_REFRESH_TOKEN; either prefix of https://github.com/xippios/sdk-core/issues/279.
+    # GOOGLE_<NAME>_REFRESH_TOKEN, a prefix apart from its slug, as
+    # https://github.com/xippios/sdk-core/issues/279 has it.
     for pattern in ("FICTIVE_<NAME>_API_KEY", "GOOGLE_<NAME>_REFRESH_TOKEN", "<SOURCE>_API_KEY"):
         assert EnvVar(pattern, secret=True, required=True).name_or_pattern == pattern
 
