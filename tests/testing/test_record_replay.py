@@ -236,6 +236,37 @@ async def test_a_recording_runs_before_request_once_and_observe_sees_its_answer(
 
 
 @pytest.mark.anyio
+async def test_a_recording_keeps_the_client_s_key_to_its_origin_and_marks_its_request(
+    respx_mock: respx.MockRouter, tmp_path: Path
+) -> None:
+    # https://github.com/xippios/sdk-core/issues/163: the client's auth reaches the base
+    # URL's origin only, and the hooks read where a request's credentials go.
+    files = respx_mock.get("https://files.example.test/bulk/x.csv").respond(200, text="a,b\n")
+    api = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
+    before: list[tuple[str, str]] = []
+    observed: list[tuple[str, str]] = []
+
+    def marks(request: httpx.Request) -> tuple[str, str]:
+        return request.extensions["xippios_auth"], request.extensions["xippios_origin"]
+
+    config = ClientConfig(
+        source="example",
+        version="1",
+        base_url=BASE,
+        before_request=lambda request: before.append(marks(request)),
+        observe=lambda response: observed.append(marks(response.request)),
+    )
+    client = AsyncClient(config, auth=HeaderKeyAuth("X-Api-Key", "EXAMPLE_API_KEY"))
+    await record(client, "https://files.example.test/bulk/x.csv", tmp_path / "file.json")
+    await record(client, "/v1/x", tmp_path / "x.json")
+    await record(client, "/v1/x", tmp_path / "keyless.json", auth=None)
+    assert "x-api-key" not in files.calls.last.request.headers
+    assert [("x-api-key" in call.request.headers) for call in api.calls] == [True, False]
+    expected = [("client", "other"), ("client", "base"), ("none", "base")]
+    assert before == observed == expected
+
+
+@pytest.mark.anyio
 async def test_a_body_past_max_read_bytes_raises_and_writes_nothing(
     respx_mock: respx.MockRouter, config: ClientConfig, tmp_path: Path
 ) -> None:
