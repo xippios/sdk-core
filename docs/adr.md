@@ -19,9 +19,9 @@ script runs again.
 - [ADR-0013](adr/0013-offline-tests-guaranteed-by-the-plugin.md): Offline tests guaranteed by the plugin · Accepted · 2026-10-23 · amended 2026-11-18
 - [ADR-0014](adr/0014-multi-tenant-sources.md): Multi-tenant sources · Accepted · 2026-10-23 · amended 2026-11-18
 - [ADR-0015](adr/0015-client-request-hooks-and-quota-policy.md): Client request hooks and a quota policy · Accepted · 2026-10-24 · amended 2026-11-18
-- [ADR-0016](adr/0016-per-tool-result-caps.md): Per-tool result caps · Accepted · 2026-10-24
+- [ADR-0016](adr/0016-per-tool-result-caps.md): Per-tool result caps · Accepted · 2026-10-24 · amended 2026-11-18
 - [ADR-0017](adr/0017-sensitive-upstream-fields.md): Sensitive upstream fields — personal identifiers stay out of task projections · Accepted · 2026-10-25
-- [ADR-0018](adr/0018-core-versioning-and-source-adoption.md): Core versioning and source adoption · Accepted · 2026-10-25
+- [ADR-0018](adr/0018-core-versioning-and-source-adoption.md): Core versioning and source adoption · Accepted · 2026-10-25 · amended 2026-11-18
 - [ADR-0019](adr/0019-bulk-downloads-and-non-json-payloads.md): Bulk downloads and non-JSON payloads in core · Accepted · 2026-10-26 · amended 2026-11-18
 - [ADR-0020](adr/0020-file-distributed-sources.md): File-distributed sources · Accepted · 2026-10-26 · amended 2026-11-18
 - [ADR-0021](adr/0021-dependencies-between-source-packages.md): Dependencies between source packages · Accepted · 2026-10-26

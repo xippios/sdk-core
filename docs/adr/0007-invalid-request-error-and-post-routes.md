@@ -74,3 +74,26 @@ the tool (ADR-0014, amendment 2026-11-18, (b)). A query parameter or a body key 
 task does not declare stays ignored: the refusal of ADR-0014's amendment of 2026-11-18, (a),
 answers an agent that misspells an argument of a tool, and an HTTP client or a proxy may
 add a parameter of its own.
+
+(b) **The third point, and a refusal's text** (the amendment of 2026-10-24; step 16;
+https://github.com/xippios/sdk-core/issues/69, found by sdk-eurostat, with sdk-usda-gats).
+The amendment of 2026-10-24 names two points at which the error is detected, before the
+call and in `classify`. sdk-eurostat's `get_series` refuses at a third: its one request
+succeeds, and an answer in which a dimension other than time holds more than one code
+spans several series, which the task cannot return as one, so it raises
+`InvalidRequestError` after the request, naming each such dimension for the caller to pin.
+The error is raised before the call, in `classify`, or from a successful answer that the
+task cannot serve as asked; the caller has to change the request at each. A refusal of a
+code names what the caller can send in its place: `UnknownCode` the closest known codes
+(ADR-0022), and sdk-usda-gats's refusal of a discontinued partner, a leaf that is no other
+code's parent, for a month after its last, names the leaf's parent where it has one, which
+it accepts for every month, and the codes listed under the same name, or `list_countries`
+where no other code carries its name. A refusal that lists the codes an upstream answer
+holds, whose number the package does not fix, lists at most 20 of each list and then how
+many more, `and 180 more`: sdk-eurostat's datasets have dimensions of hundreds of codes
+(`ef_m_farmleg`), and `get_series` lists the first 20 of each dimension it names, so the
+text stays one an agent reads whole, the reason conventions §8 bounds a tool's result. A
+refusal that names every value of a parameter whose values the package fixes, a packaged
+list or an enumeration, keeps its form: no source's such refusal was found to grow past
+what an agent reads, and bounding it would change what sdk-comtrade's and sdk-x's users
+read, which no decision settles. Conventions §5 states the point from 1.28 on.

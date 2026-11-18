@@ -73,11 +73,15 @@ def mount_fixture(
         match_params: Names of recorded query parameters whose recorded values a request
             must carry too, e.g. ``["countOnly"]`` where two calls share one path.
             ``None`` matches method, host and path only.
-        url: Serve the recorded answer at this URL instead of the recorded one, e.g. an
-            empty 404 recorded for one market year standing in for another year inside a
-            range; the method stays the fixture's, and ``match_params`` then names query
-            parameters of this URL. The answer is moved, never written by hand. ``None``
-            serves it where it was recorded.
+        url: Serve the recorded answer at this URL instead of the recorded one, for a
+            state upstream answers alike there, within the fixture's operation or behind
+            one gateway, e.g. an empty 404 recorded for one market year standing in for
+            another year inside a range, or anywhere for a test that asserts only what
+            was sent; never as one operation's answer for a state another operation was
+            never seen in (conventions §10). The test says that the answer is not
+            recorded there. The method stays the fixture's, and ``match_params`` then
+            names query parameters of this URL. The answer is moved, never written by
+            hand. ``None`` serves it where it was recorded.
 
     Raises:
         ValueError: A name in ``match_params`` is not a query parameter of the URL served

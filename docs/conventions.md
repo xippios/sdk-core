@@ -436,8 +436,8 @@ XippiosError
 ├── UpstreamError        other 4xx/5xx (carries status, body)
 ├── TransportError       network, timeout
 └── InvalidRequestError  the request as given cannot be served: a bad argument or a
-    │                    documented refusal, detected before the call or by upstream's
-    │                    own refusal of the query (ADR-0007)
+    │                    documented refusal, detected before the call, by upstream's
+    │                    own refusal of the query or from its answer (ADR-0007)
     └── UnknownCode      a code the packaged list lacks, refused before the call
                          (ADR-0022)
 ```
@@ -454,8 +454,12 @@ packaged list is out of date if upstream added the code since, naming no command
 package's maintainers (ADR-0022, amendment 2026-11-18, point f). Upstream's own refusal of
 the query as given is mapped to `InvalidRequestError`, or a subclass, in `classify` (§6):
 usda-nass's HTTP 413 over the record limit, comtrade's HTTP 400, cashctrl's
-`RequestRejected`. Agents and HTTP 422 treat both alike: the caller has to change the
-request. Adapters convert these to structured text (MCP) or problem+json (HTTP;
+`RequestRejected`. A refusal the package makes from a successful answer that the task
+cannot serve as asked is raised after the request (sdk-eurostat's `get_series`, whose
+answer spans more than one series), so `InvalidRequestError` is raised at three points:
+before the call, in `classify`, and from the answer (ADR-0007, amendment 2026-11-18,
+point b). Agents and HTTP 422 treat the three alike: the caller has to change the
+request. Adapters convert errors to structured text (MCP) or problem+json (HTTP;
 `InvalidRequestError` is 422); they never leak tracebacks. An error message names the
 request's method and path, never its host or query string: the host can name a tenant,
 the query can carry a key (ADR-0005). `xippios.core.errors.request_description(response)`
@@ -464,6 +468,30 @@ source's `classify` words the errors it maps with it, not with a copy of its own
 message written before any answer exists, such as a quota policy's refusal of a request
 it does not send, names the request's method and path from the request itself (ADR-0005,
 amendment 2026-11-18).
+
+A refusal of a code names what the caller can send in its place: the closest known codes
+(`UnknownCode`), or the refused code's parent and the codes listed under its name, as
+sdk-usda-gats's refusal of a discontinued partner names them. A refusal that lists the
+codes an upstream answer holds, whose number the package does not fix, lists at most 20
+of each list and then how many more (`and 180 more`), so that an agent reads it whole
+(sdk-eurostat's `get_series`, over dimensions of hundreds of codes) (ADR-0007, amendment
+2026-11-18, point b).
+
+Where the packaged-list check applies (ADR-0022, amendment 2026-11-18, point j):
+`UnknownCode` also refuses a code whose answer from upstream was never recorded, its
+`reason` saying so (sdk-comtrade's `customs_code` and `mot_code`), and a value list that
+upstream refuses itself keeps that refusal, mapped in `classify`, or a check of the
+source's own that raises `InvalidRequestError` (sdk-comtrade's `cl_code` and `flow_code`,
+which upstream answers with HTTP 400). In free-form filters the value of a key that names
+a packaged parameter is checked, and a key with an operator is checked as a key only
+(sdk-usda-nass's `validate_filters`). A code sent under a coding system the packaged list
+does not hold goes unchecked, and the task's docstring says so (sdk-faostat's area and
+item codes under another system than FAO's). A code the packaged list holds and upstream's
+live answer lacks is `NotFoundError`, naming the code and the operation (sdk-usda-esr's
+commodity that ESR's release list lacks). A value is compared with the list as upstream
+compares it, case ignored only where upstream ignores it, and it is sent, and recorded in
+`meta.request`, as the caller gave it (sdk-usda-nass's values, which Quick Stats compares
+without case).
 
 ## 6. HTTP client (`xippios.core.client`)
 
@@ -649,7 +677,7 @@ which deletes its copies (ADR-0025, amendment 2026-11-18, (b) and (d)).
   holds one list of rows, and no other field a list, returns whole within the byte bound
   and past it is cut by those rows, its other fields whole; any other result past the
   byte bound is the note and a preview of its first bytes (ADR-0016, amendment
-  2026-11-18, (a)). A reference tool whose whole list an agent needs gets a cap of its
+  2026-11-18, point a). A reference tool whose whole list an agent needs gets a cap of its
   own, keyed by the task function's name, with the rows and bytes the source judges it
   needs (`register_tasks(..., caps={"list_partners": ResultCap(max_rows=400,
   max_bytes=100_000)})`). So does a tool whose result is one upstream page that must
@@ -657,14 +685,19 @@ which deletes its copies (ADR-0025, amendment 2026-11-18, (b) and (d)).
   page or a bounded lookup, which a cut at the default would turn into a preview or cut
   by its rows, its cursor then past the rows the cut left out: a byte bound of its own,
   the row bound unchanged (sdk-x's post tools and `lookup_users`; ADR-0016, amendment
-  2026-10-30). A byte bound above the default is a deliberate choice for that tool, and
-  every other tool keeps the default (ADR-0016).
+  2026-10-30). So does a tool whose result is one upstream document or table that an
+  agent reads whole, a report or a statement (sdk-cashctrl's `get_report_data`, 131,072
+  bytes) or a table's page or a matrix (sdk-usda-wasde's `get_table`, 400 rows, and
+  `get_balance_sheet`, 300 rows, each 131,072 bytes): the rows and bytes the source judges
+  it needs, and a note that says how to read a part of it (ADR-0016, amendment
+  2026-11-18, point c). A byte bound above the default is a deliberate choice for that
+  tool, and every other tool keeps the default (ADR-0016).
   The note never promises a filter the tool lacks: the default says "narrow the query to
   see the rest", and a tool with filters names them in its cap's `note`. A cut list whose
   `meta.request` records an integer `start`, an offset-paged task's, ends its note with
   `; resume with start=<start + shown>` (ADR-0016, amendment 2026-10-27). A cut that
   shows no row, since the first row alone passes the byte bound, says so, naming the row
-  at that `start`, and names no resume offset (ADR-0016, amendment 2026-11-18, (b)).
+  at that `start`, and names no resume offset (ADR-0016, amendment 2026-11-18, point b).
   Since a cap's note names a task's filters, a source keeps its caps with its tasks, as
   `MCP_CAPS: Mapping[str, ResultCap]` in `tasks.py` next to `__all__`, and its `mcp.py`
   passes them through as `caps=getattr(tasks, "MCP_CAPS", None)`.
@@ -741,7 +774,52 @@ standalone from the package. A task named in `BULK_TASKS` gets no route:
   chooses; an upstream code inside it is written as upstream writes it
   (`CH_2026_8.json`). A fixture recorded through a task rather than a wrapper, such as a
   download's metadata or a helper's answer, lives under the task's name; file samples
-  keep `tests/fixtures/files/<file_kind>/` as before (ADR-0020).
+  keep `tests/fixtures/files/<file_kind>/` as before (ADR-0020). Three further cases
+  name their directory as follows (ADR-0003, amendment 2026-11-18, point e). A wrapper
+  whose every exchange is recorded through a task has no directory of its own
+  (sdk-google-mail's `messages_get`, recorded through `get_message` and
+  `search_messages`). Where two wrappers of a package carry one name, as the wrappers of
+  two service modules can (§2), each one's directory is `<service>_<wrapper>`,
+  `<service>` its module's name, and the PR that adds the second wrapper moves the first
+  one's fixtures. An exchange of an auth flow, a login or a token refresh, which goes
+  through neither a wrapper nor a task, lives under the name a wrapper of its operation
+  carries by §2 (sdk-faostat's login under `auth_login`, its wrapper's), and one sent to
+  another host than the base URL's under that host's first label and its path
+  (sdk-google-mail's refresh at `https://oauth2.googleapis.com/token` under
+  `oauth2_token`).
+- A test may serve or read a body that was not recorded where and as the test uses it,
+  of five kinds, and says where the body comes from where it builds it, as the sources'
+  `NOT RECORDED` docstrings do (ADR-0003, amendment 2026-11-18, point d):
+  - a body that `docs/upstream/` documents and upstream will not produce on request,
+    read verbatim from the snapshot at test time (sdk-eurostat's asynchronous
+    `warning`);
+  - a body composed from what the snapshot documents, a row of a documented table or a
+    documented error, in the shape upstream was recorded answering (sdk-eurostat's
+    fault-table rows; api.data.gov's `NOT_FOUND` in sdk-usda-psd, sdk-usda-esr and
+    sdk-usda-gats);
+  - a recorded answer or sample served at another URL, with `url=` or in memory, for a
+    state upstream answers alike there, within one operation or behind one gateway
+    (sdk-usda-esr's empty answer at other market years, sdk-usda-gats's api.data.gov 429
+    as sdk-usda-psd recorded it), or anywhere for a test that asserts only what was sent
+    (sdk-eurostat's codelist query on the Comext base); never one operation's answer
+    for a state another operation was never seen in
+    (https://github.com/xippios/sdk-core/issues/121);
+  - a recorded answer or sample changed in memory, served at another status, with a
+    header replaced or removed, or with a field, a cell or a byte changed, for a form
+    upstream was not seen to send (sdk-eurostat's asynchronous `error` array at HTTP 200,
+    sdk-usda-psd's empty 404 with its content type upper-cased, sdk-faostat's samples
+    changed to show a parser's refusal);
+  - a body of no shape upstream sends, to show that the source leaves it to core
+    (sdk-usda-esr's 400 in another shape).
+
+  The test asserts what the source does with such a body, never that upstream sends it.
+  Once upstream is recorded giving a documented answer, the recording replaces the test's
+  documented body; a documented shape never seen keeps its test where the recorded answer
+  takes another shape (sdk-eurostat's `warning`, beside its recorded `error` array).
+- A PR deletes a recorded fixture that no test replays after its change and names it in
+  its description; a fixture that a test or a document still cites stays
+  (sdk-usda-nass's `get_param_values/statisticcat_desc.json`, replayed by nothing once
+  the list was packaged; ADR-0018, amendment 2026-11-18, point q).
 - A fixture file a PR adds or changes stays under 256 KiB (ADR-0019). A file the PR only
   moves, its content unchanged, is neither, so a fixture over the cap recorded before the
   rule bound moves with its directory (§2) and stays until a PR re-records it. A download
@@ -774,7 +852,16 @@ standalone from the package. A task named in `BULK_TASKS` gets no route:
   sheet names, never values. The recorded exchange of a download may carry that sample
   as its body, so that the download replays the file the parser tests read; it is then
   marked `sample: true` with the full file's `original_bytes` and sha256, never
-  `truncated`, which stays the recorder's cut (ADR-0020, amendment 2026-11-18).
+  `truncated`, which stays the recorder's cut (ADR-0020, amendment 2026-11-18, point a).
+  Where the file a test needs is over the cap and its format cannot be cut by bytes, a
+  script writes the sample from one download, never by hand: a workbook rewritten with
+  the sheets and cells the tests need, which the script reads back and compares with the
+  original cell for cell (sdk-usda-wasde's XLS, copied into a workbook written with
+  xlwt), an archive rebuilt around one member cut to its header and first rows as
+  printed (sdk-faostat's RL ZIP), or an XML document cut by whole elements as the file
+  has them (sdk-usda-wasde's `<srNN>` pages). The sample's row adds a column that says
+  what it keeps (sdk-usda-wasde's `Kept`, sdk-faostat's `What`) (ADR-0020, amendment
+  2026-11-18, point d).
 - Replay matches a fixture on method, host and path, and on the recorded query
   parameters a test names (`match_params`); a parameter whose recorded value holds
   `REDACTED` cannot be matched and is refused by name. A parameter's absence cannot be
@@ -854,11 +941,14 @@ standalone from the package. A task named in `BULK_TASKS` gets no route:
   - Placeholder key, in every test not marked `live`: every `EnvKeyAuth` sends
     `PLACEHOLDER_KEY`, pinned on the class, and the variables named in the ini option
     `xippios_placeholder_key_envs` hold it; the fixture `placeholder_api_key` returns
-    it, `None` in a live test. A source names its key variable there and carries no
-    placeholder fixture of its own. Every credential that a `RenewingBearerAuth` reads
-    through `credential` is the placeholder too, one given to the constructor included,
-    and a variable unset or empty is still its `ConfigError`, so a source names each
-    variable of its token request there (ADR-0013, amendment 2026-11-18, point c).
+    it, `None` in a live test. A source names there every variable that holds a
+    credential of its own, its key's or several (sdk-google-mail's refresh token, client
+    id and secret, sdk-faostat's user name and password; ADR-0013, decision 3), and
+    carries no placeholder fixture of its own. Every credential that a
+    `RenewingBearerAuth` reads through `credential` is the placeholder too, one given to
+    the constructor included, and a variable unset or empty is still its `ConfigError`,
+    so a source names each variable of its token request there (ADR-0013, amendment
+    2026-11-18, point c).
   - Logger levels: the `httpx`, `httpcore`, `httpx2` and `httpcore2` logger levels are
     restored after every test, live ones included (ADR-0013, amendment 2026-11-18). They are saved per test, after fixtures of wider scope
     are set up, so one of those that changes a level leaves it behind.

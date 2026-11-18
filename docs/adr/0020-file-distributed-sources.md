@@ -121,3 +121,24 @@ file whose name upstream builds from the dataset's name, as FAOSTAT's
 file read from an origin or mirror that the publisher runs, under
 https://github.com/xippios/sdk-core/issues/276. Neither sdk-usda-esmis nor sdk-usda-wasde
 changes. Conventions §4 states it from 1.28 on.
+
+(d) **A written sample of a file over the cap** (decision 6; step 16;
+https://github.com/xippios/sdk-core/issues/100, found by sdk-usda-wasde, with
+sdk-faostat). Decision 6 asks for a small real file, or one truncated as ADR-0019,
+decision 5 allows. Every WASDE XLS is 350 to 374 KB, a binary workbook cannot be cut by
+bytes, and sdk-faostat needed a table of the production shape that only a ZIP of 2.9 MB
+holds, so neither route served. Where the file a test needs is over the 256 KiB cap and
+its format cannot be cut by bytes, a script writes the sample from one download of the
+file, never by hand, keeping what the tests read in the file's own form: a workbook
+rewritten with the sheets and cells the tests need, every cell that holds a value at its
+row and column with its type and value, which the script reads back and compares with the
+original cell for cell, as sdk-usda-wasde's `scripts/cut_sample.py` copies the XLS's
+`WASDE Text` and `Page 8` sheets into a workbook written with xlwt (Johannes, 2026-10-28,
+G5); an archive rebuilt around one member cut to its header and first rows as printed, as
+sdk-faostat's recording script wrote RL's normalized table into a new ZIP; or an XML
+document cut by whole elements as the file has them, its leading bytes, the elements kept
+and the root's closing tag, as sdk-usda-wasde cuts the `<srNN>` pages of its XML. The
+sample's provenance row keeps the whole file's release, URL, bytes and sha256 and adds a
+column that says what the sample keeps, which each source names its own way,
+sdk-usda-wasde's `Kept` and sdk-faostat's `What`. Neither source changes. Conventions §10
+and the definition of done state it from 1.28 on.

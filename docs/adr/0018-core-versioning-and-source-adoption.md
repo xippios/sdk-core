@@ -1,6 +1,6 @@
 # ADR-0018: Core versioning and source adoption
 
-Status: Accepted · Date: 2026-10-25
+Status: Accepted · Date: 2026-10-25 · Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240
 
 ## Context
 
@@ -237,3 +237,25 @@ from PyPI.
 Conventions 1.26 states (j) to (n) in §12, §13 and §15 and drops (p)'s clause from its
 header, and 1.27 states (o) in §12 and §13; the definition of done and the review checklist
 follow.
+
+## Amendment 2026-11-18
+
+Core 0.4.0, the package of https://github.com/xippios/sdk-core/issues/240, whose steps
+each add their points here, lettered on from the amendments before it.
+
+(q) **A feature pull request deletes the fixture it makes dead** (amendment (d); step 16;
+https://github.com/xippios/sdk-core/issues/118, found by sdk-usda-nass). Amendment (d)
+lets an adoption PR delete the fixtures, mounts and tests that the adoption itself makes
+dead, and no rule said the same of any other pull request. A feature PR makes a fixture
+dead too: sdk-usda-nass packaged `statisticcat_desc`, the tests that replayed
+`tests/fixtures/get_param_values/statisticcat_desc.json` moved to a fixture of
+`commodity_desc`, and the old one was replayed by nothing, so the change deleted it
+(https://github.com/xippios/sdk-usda-nass/pull/26). A pull request deletes a recorded
+fixture that no test replays after its change and names it in its description, so no
+fixture outlives every test that read it; a fixture that a test or a document still cites
+stays, as a fixture that a source's `CLAUDE.md` or a docstring names as the evidence of an
+upstream answer does. An adoption PR keeps the limit of amendment (d): it deletes what the
+adoption makes dead and nothing else.
+
+Conventions §10, the definition of done's Tests block and the review checklist's item 4
+state (q) from 1.28 on.

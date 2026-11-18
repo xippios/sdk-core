@@ -39,7 +39,8 @@ It gives a source package the things that should be identical across the family:
 - **Error taxonomy**: `ConfigError`, `AuthError`, `RateLimitError`, `NotFoundError`,
   `ValidationError`, `UpstreamError`, `TransportError` and `InvalidRequestError` (the
   request as given cannot be served: a bad argument, or a refusal the source documents,
-  detected before the call or mapped from upstream's own refusal), all under
+  detected before the call, mapped from upstream's own refusal or made from an answer the
+  task cannot serve as asked), all under
   `XippiosError`; `UnknownCode`, an `InvalidRequestError`, refuses a code a packaged
   list lacks and names the closest known ones.
 - **Result envelope**: every task function returns `Result[T]` with `ResultMeta`
@@ -837,8 +838,10 @@ xippios_placeholder_key_envs = ["EXAMPLE_API_KEY"]
   gives each body the route received, oldest first, a JSON body decoded and a form as a
   mapping of its fields, credentials `REDACTED` by the same rule, `None` for a request
   without one, so a test asserts `sent_bodies(route)[-1] == {"name": "Corn", "n": "2"}`.
-  `url=` serves a recorded answer at another URL, such as an empty 404 recorded for one
-  year standing in for another. Annotate the fixture as `ReplayFixture`.
+  `url=` serves a recorded answer at another URL, for a state upstream answers alike
+  there, such as an empty 404 recorded for one year standing in for another, or for a
+  test that asserts only what was sent, never for a state another operation was never
+  seen in (conventions §10). Annotate the fixture as `ReplayFixture`.
 - `response_from_fixture(load_fixture(path))` is a recorded answer as an
   `httpx.Response`, its request attached, for calling a source's `classify` directly.
 - `assert_time_between(result.meta.retrieved_at, before, after)` brackets a time with
