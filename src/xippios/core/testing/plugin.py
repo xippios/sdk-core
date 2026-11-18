@@ -351,8 +351,10 @@ def fixtures_dir(request: pytest.FixtureRequest) -> Path:
 
 @pytest.fixture
 def replay_fixture(respx_mock: respx.MockRouter, fixtures_dir: Path) -> ReplayFixture:
-    """Mount ``tests/fixtures/<endpoint>/<case>.json`` and return the route.
+    """Mount ``tests/fixtures/<wrapper>/<case>.json`` and return the route.
 
+    The directory is the wrapper function's, or the task's for an exchange recorded
+    through a task (conventions §10), passed as ``endpoint``, the parameter's name.
     Called as ``replay_fixture(endpoint, case, match_params=None, url=None)``, the last
     two by keyword: ``match_params`` names recorded query parameters a request must carry
     too, e.g. ``["countOnly"]``, and ``url`` serves the recorded answer at another URL,

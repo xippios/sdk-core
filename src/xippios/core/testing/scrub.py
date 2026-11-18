@@ -7,15 +7,17 @@ registered, such as USDA NASS's ``key``), the userinfo and the credential header
 ``token`` name the source declared data with ``register_data_name``, X's ``next_token``
 say, is written as sent, and replay can match it.
 ``scrub_params``, ``scrub_url`` and ``scrub_headers`` are that module's, importable from
-here as well. A ``Scrub`` adds what only the source knows: the secret values themselves.
-What a source rewrites beyond them, a tenant's host or a field by key, it rewrites in its
-own recorder step on the ``Fixture`` before the write (ADR-0024).
+here as well. A ``Scrub`` adds what only the source knows: the secret values themselves,
+named before the request or read from its answer, such as a login's tokens. What a
+source rewrites beyond them, a tenant's host or a field by key, it rewrites in its own
+recorder step on the ``Fixture`` before the write (ADR-0024).
 """
 
 import base64
 import re
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
+from typing import Any
 
 import httpx
 
@@ -47,11 +49,24 @@ class Scrub:
             and the bodies, the longest value first, in the letter case given; an
             encoded form (percent-encoded, behind a JSON escape) is not looked for. An
             empty value is refused with ``ValueError``. Left out of the ``repr``.
+        response_secrets: A function that reads the values that must never be written
+            from the answer, for a value known only once upstream sends it, such as a
+            login's or a refresh's tokens, which name no credential (``AccessToken``),
+            e.g. ``lambda response: [response.json()["AccessToken"]]``. It is called
+            once per recording with the whole response, an error answer included, before
+            any cut, and each value it returns is scrubbed and verified as ``secrets``
+            are (ADR-0024, amendment 2026-11-18 (c)). An answer that carries none gives
+            ``[]``. ``None`` reads nothing.
         allow_binary: Store a body that is not UTF-8 text base64 and flagged instead of
             raising ``ValueError``. Nothing in it is scrubbed.
+
+    Raises:
+        TypeError: ``secrets`` is one string, or ``response_secrets`` cannot be called.
+        ValueError: ``secrets`` holds an empty value.
     """
 
     secrets: Sequence[str] = field(default=(), repr=False)
+    response_secrets: Callable[[httpx.Response], Iterable[str]] | None = None
     allow_binary: bool = False
 
     def __post_init__(self) -> None:
@@ -61,16 +76,49 @@ class Scrub:
         if any(not value for value in secrets):
             raise ValueError("secrets must not contain an empty string")
         object.__setattr__(self, "secrets", secrets)
+        if self.response_secrets is not None and not callable(self.response_secrets):
+            raise TypeError(
+                "response_secrets is a function of the response that returns the values, "
+                "e.g. lambda response: [response.json()['token']]"
+            )
+
+
+def _read_secrets(scrub: Scrub, response: httpx.Response) -> tuple[str, ...]:
+    """``scrub.secrets`` and the values ``scrub.response_secrets`` reads from ``response``.
+
+    Raises:
+        TypeError: The function returned one string, or a value that is no string.
+        ValueError: It returned an empty value. No message names a value.
+    """
+    named = tuple(scrub.secrets)  # a tuple already: __post_init__ made it one
+    if scrub.response_secrets is None:
+        return named
+    read: Any = scrub.response_secrets(response)  # checked below, whatever it returned
+    if isinstance(read, str):
+        raise TypeError(
+            "response_secrets returns a sequence of values, e.g. [token], not one string"
+        )
+    values: tuple[str, ...] = tuple(read)
+    if any(not isinstance(value, str) for value in values):
+        raise TypeError("response_secrets returns text values; one it returned is no string")
+    if any(not value for value in values):
+        raise ValueError("response_secrets returned an empty value, which cannot be scrubbed")
+    return named + values
 
 
 class _Scrubber:
-    """A ``Scrub`` applied to one exchange: the secret values as patterns, longest first."""
+    """A ``Scrub`` applied to one exchange: the secret values as patterns, longest first.
 
-    def __init__(self, scrub: Scrub) -> None:
+    The values are the ``Scrub``'s own and those its ``response_secrets`` reads from
+    ``response``.
+    """
+
+    def __init__(self, scrub: Scrub, response: httpx.Response) -> None:
         self._scrub = scrub
-        longest_first = sorted(scrub.secrets, key=len, reverse=True)
+        secrets = _read_secrets(scrub, response)
+        longest_first = sorted(secrets, key=len, reverse=True)
         self._secrets = [re.compile(re.escape(value)) for value in longest_first]
-        self._reach = max((len(value) for value in scrub.secrets), default=0)
+        self._reach = max((len(value) for value in secrets), default=0)
 
     def spared_end(self, text: str, end: int) -> int:
         """``end`` moved back to the start of a secret value it would split.

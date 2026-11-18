@@ -30,6 +30,7 @@ __all__ = [
     "error_from_response",
     "parse_retry_after",
     "raise_for_status",
+    "request_description",
 ]
 
 BODY_LIMIT = 16_384
@@ -281,10 +282,19 @@ def _body_text(response: httpx.Response) -> str:
         return ""
 
 
-def _where(response: httpx.Response) -> str:
-    # Method and path only: the host may name a tenant (ADR-0005), the query may carry a key.
-    url = response.request.url
-    return f"{response.request.method} {url.path}"
+def request_description(response: httpx.Response) -> str:
+    """The request ``response`` answers, as error messages name it: its method and path.
+
+    ``GET /v1/x`` for an answer to ``https://host.test/v1/x?year=2024``: never the host,
+    which can name a tenant, nor the query, which can carry a key (conventions §5,
+    ADR-0005). ``error_from_response`` words its messages with it, and so does a source's
+    ``classify`` for the errors it maps (ADR-0005, amendment 2026-11-18 (a)).
+
+    Args:
+        response: A response with its request, e.g. the one ``classify`` is given.
+    """
+    request = response.request
+    return f"{request.method} {request.url.path}"
 
 
 def error_from_response(
@@ -304,7 +314,7 @@ def error_from_response(
         return None
     body = _body_text(response)
     snippet = " ".join(body[:_SNIPPET].split())
-    message = f"{status} from {_where(response)}: {snippet or response.reason_phrase}"
+    message = f"{status} from {request_description(response)}: {snippet or response.reason_phrase}"
     if status in (401, 403):
         return AuthError(message, status=status, source=source)
     if status == 429:
