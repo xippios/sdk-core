@@ -232,3 +232,41 @@ dataset of 145 MB answered at once, costs neither its download nor the memory to
 32 MiB is four times the largest body a source records whole, sdk-usda-gats's 7.6 MB
 `get_commodities/all`, so no recording of the family's passes it; a source that means to
 read more and cut it raises the bound.
+
+(f) **`decode_csv` reads an open text stream** (decision 2; step 9;
+https://github.com/xippios/sdk-core/issues/89, found by sdk-eurostat and sdk-faostat;
+ADR-0023, decision 2). Decision 2 left gzip and zip to the source's stdlib calls, and the
+amendment of 2026-10-27 had `decode_csv` take a path or a response, so a gzip file or a
+ZIP member reached it only as a decompressed copy on disk: sdk-eurostat's
+`parse/sdmx_csv.py` and sdk-faostat's `parse/bulk_csv.py` each read theirs through
+`csv.DictReader` themselves, with `decode_csv`'s dialect and error wording copied.
+`decode_csv` now also takes an open text stream, such as
+`io.TextIOWrapper(gzip.open(path), encoding="utf-8-sig", newline="")` or a ZIP member
+wrapped alike: read row by row from where it stands, a leading byte order mark stripped as
+a path's is, and left open for the caller that opened it to close. Its error names the
+stream's file name without the directories (the path `gzip.open` was given, a ZIP
+member's name), or `stream` for a stream without one, and the stream's encoding where it
+is not UTF-8; a binary stream is refused with `TypeError` at the first row, naming
+`io.TextIOWrapper`. Opening the archive stays the source's, since which member to read is
+the source's to know (sdk-faostat chooses the normalized table by its name). sdk-usda-nass,
+whose bulk files are gzipped, has the need and no copy yet.
+
+(g) **A bad `dest` is an `InvalidRequestError`, and the file's mode is `0600`** (decision
+1; step 9; https://github.com/xippios/sdk-core/issues/152, found by sdk-cashctrl, with
+sdk-usda-esmis and sdk-eurostat). The amendment of 2026-10-27 refused a `dest` that is a
+directory, or whose directory does not exist, with `ValueError`, outside the taxonomy of
+conventions §5, so sdk-eurostat, sdk-faostat, sdk-usda-esmis and sdk-cashctrl each check
+`dest` first to raise `InvalidRequestError` with core's two texts. `download` now raises
+`InvalidRequestError` itself, in the client's source's name, with the same two texts,
+`dest is a directory; name the file to write` and `dest's directory does not exist; create
+it first`, still before anything is sent, `before_request` included (ADR-0007: a bad
+argument is the caller's to change); the texts stay, since the tests of sdk-cashctrl,
+sdk-eurostat and sdk-usda-esmis pin them. The file is written through `tempfile.mkstemp`,
+whose mode, `0600`, the rename keeps, also over a file of another mode: `download`'s and
+`Downloaded`'s documents state it, as the plan of
+https://github.com/xippios/sdk-core/issues/240 decides. Applying the umask, the row's
+other option, is not taken, since a file fetched with a key is its owner's until the
+caller shares it. A source that refuses a bad `dest` before a request that comes ahead of
+the download, sdk-faostat's catalogue, sdk-usda-esmis's release lookup and sdk-cashctrl's
+report tree, keeps its check, so that a bad `dest` costs no request; sdk-cashctrl also
+downloads into a temporary file of its own, which core's check never sees.

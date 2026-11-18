@@ -14,9 +14,10 @@ It gives a source package the things that should be identical across the family:
   and OPTIONS unless `RetryPolicy.retry_non_idempotent` is set, because upstream makes a
   repeated write safe, or because the source only reads through POST.
   `ClientConfig.cache_filter` narrows the cache to chosen requests. A body goes as JSON
-  (`json=`) or form-encoded (`data=`). Two hooks, `before_request` and `observe`, see
-  each call and each response; `QuotaPolicy` uses them to wait out or refuse a request
-  into a spent quota.
+  (`json=`) or form-encoded (`data=`), and `post_json` and `delete_json` decode a write's
+  answer as `get_json` decodes a read's, `None` for one with no body. Two hooks,
+  `before_request` and `observe`, see each call and each response; `QuotaPolicy` uses
+  them to wait out or refuse a request into a spent quota.
   `auth=None` sends one call without the client's key. `get_answer` returns the payload,
   parsed into the type it names, with its `retrieved_at`, a cache hit's stored time, and
   it alone stores an answer in the cache, once the answer decoded. A file is streamed
@@ -296,10 +297,20 @@ with a `retry_after` beyond `backoff_max` is raised after one attempt instead of
 retried into a spent quota; an `UpstreamError` for a 5xx leaves the retries as they are;
 any other error it returns, an `AuthError` say, ends them.
 
-`auth=` on `request`, `get`, `get_json`, `get_answer` and `record` overrides the
-client's credentials for one call: `None` sends none, for a keyless endpoint on the same
-host, and another `httpx.Auth` replaces them. `None` and the default share the cache; a
-call with an `httpx.Auth` of its own bypasses it, neither looked up nor stored.
+`auth=` on `request`, `get`, `get_json`, `post_json`, `delete_json`, `get_answer` and
+`record` overrides the client's credentials for one call: `None` sends none, for a keyless
+endpoint on the same host, and another `httpx.Auth` replaces them. `None` and the default
+share the cache; a call with an `httpx.Auth` of its own bypasses it, neither looked up nor
+stored.
+
+A write wrapper sends through `post_json` or `delete_json`, which apply `classify`, the
+hooks and the retry rule for a write as `request` does, never touch the cache, and decode
+the answer, `None` for one with no body:
+
+```python
+draft = await client.post_json("/drafts", json={"message": {"raw": raw}})  # decoded JSON
+await client.delete_json(f"/drafts/{draft['id']}")  # None: the answer is a 204
+```
 
 The client's own credentials go to the base URL's origin only, its scheme, host and port:
 a request to an absolute URL on another origin is sent without them, and a call that must
@@ -346,10 +357,27 @@ for row in decode_csv(Path("qs.crops.txt"), delimiter="\t"):  # row by row, neve
 `Content-Disposition`, the `ETag`, the `Last-Modified` text and when the file was
 complete. `decode_text(response)` reads a text answer in the charset of its
 `Content-Type` (UTF-8 by default, a byte order mark stripped), and `decode_csv` takes a
-downloaded file or a response. A gzip or zip file is opened with the stdlib; core ships
-no XML, spreadsheet or PDF parser. `register_tasks` and `router_from_tasks` skip a task
-its `tasks.py` names in `BULK_TASKS`, so no tool or route returns a file path. A body
-over `ClientConfig.cache_max_bytes` (8 MiB by default) is returned and not cached.
+downloaded file, a response or an open text stream. A gzip or zip file is opened with the
+stdlib, and its member read through `decode_csv` row by row:
+
+```python
+import gzip
+import io
+
+with (
+    gzip.open("qs.crops.txt.gz") as raw,
+    io.TextIOWrapper(raw, encoding="utf-8-sig", newline="") as text,
+):
+    for row in decode_csv(text, delimiter="\t"):  # left open: the with closes it
+        print(row["COMMODITY_DESC"])
+```
+
+Core ships no XML, spreadsheet or PDF parser. A `dest` that is a directory, or whose
+directory does not exist, is refused with `InvalidRequestError` before anything is sent,
+and the file is written with mode `0600`, its owner's alone. `register_tasks` and
+`router_from_tasks` skip a task its `tasks.py` names in `BULK_TASKS`, so no tool or route
+returns a file path. A body over `ClientConfig.cache_max_bytes` (8 MiB by default) is
+returned and not cached.
 
 ## Multi-tenant sources
 
