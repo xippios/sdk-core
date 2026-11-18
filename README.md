@@ -36,6 +36,9 @@ It gives a source package the things that should be identical across the family:
   a host or under a key of its own: `Tenants` declares them in the environment, one
   client each, `list_task` gives the tool that names them, and `TenantLock` binds a
   server to one of them, which `xippios.core.mcp.serve_tenants` starts from `--org`.
+- **The package contract** by which a host serves a source (ADR-0026, decision 8): `EnvVar`,
+  a variable the package needs, and `xippios.core.mcp.ToolSet`, what its `build(**options)`
+  returns, from which `build_server` builds its server and a host one server from several.
 - **Error taxonomy**: `ConfigError`, `AuthError`, `RateLimitError`, `NotFoundError`,
   `ValidationError`, `UpstreamError`, `TransportError` and `InvalidRequestError` (the
   request as given cannot be served: a bad argument, or a refusal the source documents,
@@ -762,6 +765,67 @@ Client configuration, for Claude Desktop or any MCP client:
 }
 ```
 
+## The package contract
+
+A host such as xippios-mcp serves a source through its package contract (ADR-0026,
+decision 8): the variables the package needs and the tool set its `build(**options)`
+returns. A source's `_client.py` declares its variables, by name or, for one per tenant,
+by a pattern such as `EXAMPLE_<NAME>_API_KEY`, each with whether it is a secret and whether
+it is required, both stated since neither has a default. An `EnvVar` names a variable and
+never reads one, and it needs no `mcp` extra:
+
+```python
+from xippios.core import EnvVar
+
+ENV_VARS = (EnvVar("EXAMPLE_API_KEY", secret=True, required=True),)
+```
+
+Its `mcp.py` builds its `ToolSet`, its tasks as its lock binds them, its caps, instructions
+and version, its option hooks, and whether it writes (`read_only=False`) and is held to
+loopback (`loopback_only=True`), and its server from it:
+
+```python
+# xippios/example/mcp.py
+from xippios.core.mcp import ToolSet, build_server, main, tool_functions
+from xippios.example import tasks
+
+
+def build() -> ToolSet:
+    return ToolSet(
+        "example",
+        tool_functions(tasks),
+        caps=tasks.MCP_CAPS,
+        instructions="Example via xippios. Call example_list_areas first.",
+        version="1.2.0",
+        add_options=tasks.mcp_add_options,  # main's hooks, a --split-years say
+        apply_options=tasks.mcp_apply_options,
+    )
+
+
+TOOLS = build()
+server = build_server(TOOLS)  # xippios-example, with the tool set's version and instructions
+
+
+def run() -> None:
+    main(server, add_options=TOOLS.add_options, apply_options=TOOLS.apply_options)
+```
+
+Beside a tool set `build_server` takes `name` alone, and a multi-tenant source's
+`build(lock=None)` passes its tasks through `bind_tasks` and its instructions through
+`tenant_instructions`. A host builds one server from the tool sets of several packages,
+each tool with its own package's caps, a write tool set making it a write server and a
+held one holding it to loopback, and applies each package's hooks as its entry point does
+when it runs without options:
+
+```python
+server = MCPServer("xippios-group")
+quiet_request_logging()
+for tools in (example_mcp.build(), other_mcp.build()):
+    register_tasks(server, tools)
+    if tools.apply_options is not None:
+        tools.apply_options(tools.option_defaults(), server)  # --split-years at its default
+```
+
 ## HTTP routes in two lines
 
 ```python
@@ -963,7 +1027,8 @@ fragment until the release assembles it.
 | `xippios.core.reference` | packaged CSV/JSON loaders, `PackagedList`, `matches`, `closest`, `nearest`, generated `StrEnum`/`IntEnum` modules | alpha |
 | `xippios.core.pagination` | `paginate_offset` (a page-numbered endpoint maps the offset to its page), `collect` | alpha |
 | `xippios.core.tenants` | `Tenants`, a multi-tenant source's tenants declared in the environment with one client each, `list_task`, the tool that names them, and `TenantLock` with `bind_tasks` and `tenant_instructions`, a server bound to one of them | alpha |
-| `xippios.core.mcp` | tool registration with the argument check and the write server's `confirm` rule, `tool_functions`, result caps, error text, CLI with option hooks and the loopback rule for write and `loopback_only` servers, `serve_tenants`, quiet request log | alpha |
+| `xippios.core.contract` | `EnvVar`, a variable of the package contract | alpha |
+| `xippios.core.mcp` | tool registration with the argument check and the write server's `confirm` rule, `tool_functions`, result caps, error text, CLI with option hooks and the loopback rule for write and `loopback_only` servers, `serve_tenants`, quiet request log, `ToolSet`, the package contract's tool set, built by `build_server` and registered by `register_tasks` | alpha |
 | `xippios.core.http` | router factory, problem details | alpha |
 | `xippios.core.testing` | live gate, offline run, record (sent once, read up to `max_read_bytes`, with `max_bytes=`, `array_key=` and `keep=`), the fixture writer and the `sample` mark, replay with `sent_urls`, `sent_query` and `sent_bodies`, scrub of named secrets and of values read from the answer with a plain verify, `mcp_call`, `assert_write_tools`, `keep_reserved_tenants`, family check | alpha |
 
