@@ -193,8 +193,10 @@ class ResultMeta(BaseModel):
             (ADR-0022, rule 3); a ``None`` inside a nested mapping is kept as given. The
             value of every key that names a credential, at any depth, is ``REDACTED``
             by the one rule of ``xippios.core.redaction`` (ADR-0005; ``key`` only where
-            a ``QueryKeyAuth`` sends it, ADR-0019); record the variable name, never the
-            value.
+            a ``QueryKeyAuth`` sends it, ADR-0019; a ``token`` name a source declares
+            data, ``next_token`` say, kept as sent), and so is each credential in the
+            query of a link, a signed file link's signature say, as ``scrub_url``
+            writes it; record the variable name, never the value.
         total: Upstream's count of the records matching the request, when the source
             reports one; ``None`` when it does not or the count is unknown. Set only from
             what upstream reports, never computed from ``len(data)`` (ADR-0012).

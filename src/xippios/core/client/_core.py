@@ -64,6 +64,40 @@ _HTTPX_DEFAULT: Final[object] = httpx.USE_CLIENT_DEFAULT
 """httpx's own spelling of the default, outside the annotation: treated as ``_CLIENT_AUTH``."""
 
 
+def _origin(url: httpx.URL) -> tuple[str, str, int | None]:
+    """Scheme, host and port: httpx writes the first two in lower case, a default port ``None``."""
+    return url.scheme, url.host, url.port
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class _Reach:
+    """Where one call's credentials go: what its requests carry, and their marks.
+
+    ``auth`` is what the call asked for, ``"client"`` (the default), ``"none"``
+    (``auth=None``) or ``"own"`` (an ``httpx.Auth`` of its own); ``sent`` what httpx is
+    given for a request to ``url``: the client's auth reaches the base URL's origin only
+    (https://github.com/xippios/sdk-core/issues/163).
+    """
+
+    auth: str
+    sent: Any
+    base: tuple[str, str, int | None]
+
+    def for_url(self, url: httpx.URL) -> tuple[Any, str]:
+        """The auth httpx sends with a request to ``url``, and its origin mark."""
+        if _origin(url) == self.base:
+            return self.sent, "base"
+        return (None if self.auth == "client" else self.sent), "other"
+
+    def mark(self, request: httpx.Request) -> Any:
+        """Mark ``request`` for the hooks, and return the auth httpx sends with it."""
+        sent, origin = self.for_url(request.url)
+        request.extensions["xippios_auth"] = self.auth
+        request.extensions["xippios_origin"] = origin
+        return sent
+
+
 class AsyncClient:
     """Async HTTP client for one upstream (conventions §6).
 
@@ -71,7 +105,17 @@ class AsyncClient:
     ``httpx`` connection pool per event loop, while the rate limiter, built from
     ``config.rate_limit``, and the cache are shared across all of them. A call to a
     keyless endpoint on the same host passes ``auth=None`` to this client rather than
-    going through a second one (ADR-0015).
+    going through a second one (ADR-0015). The client's ``auth`` goes to the base URL's
+    origin only, its scheme, host and port: a request to any other origin, a file link on
+    another host say, is sent without it unless the call passes an ``httpx.Auth`` of its
+    own.
+
+    Every request it builds tells the hooks where its credentials go, in two extensions:
+    ``xippios_auth`` is ``"client"`` for the default, ``"none"`` for ``auth=None`` and
+    ``"own"`` for an ``httpx.Auth`` of the call's own; ``xippios_origin`` is ``"base"`` for
+    the base URL's origin and ``"other"`` for any other. ``QuotaPolicy`` skips a request
+    marked ``"none"`` or ``"other"``, and the api.data.gov gateway's ``classify`` reads no
+    answer marked ``"other"``.
 
     Args:
         config: Base URL, timeouts, retry policy, rate limit, cache and headers.
@@ -90,6 +134,7 @@ class AsyncClient:
     ) -> None:
         self.config = config
         self._auth = auth
+        self._base = _origin(httpx.URL(config.base_url))
         self._transport = transport
         self._sleep = sleep
         self._bucket = None if config.rate_limit is None else TokenBucket(config.rate_limit)
@@ -117,6 +162,14 @@ class AsyncClient:
                 )
                 self._pools[loop] = pool
             return pool
+
+    def _reach(self, auth: "httpx.Auth | _ClientAuth | None") -> _Reach:
+        """Where a call with ``auth`` sends credentials (``_Reach``)."""
+        if isinstance(auth, _ClientAuth) or auth is _HTTPX_DEFAULT:
+            return _Reach("client", httpx.USE_CLIENT_DEFAULT, self._base)
+        if auth is None:
+            return _Reach("none", None, self._base)
+        return _Reach("own", auth, self._base)
 
     def _cache_key(self, method: str, url: httpx.URL) -> str | None:
         if method != "GET" or self.config.cache is None:
@@ -170,11 +223,12 @@ class AsyncClient:
                 callers that record fixtures or inspect error bodies; ``classify``
                 still decides whether a 429 or 5xx is retried.
             auth: Credentials for this request only, every retry included: left at its
-                default it sends the client's ``auth``, ``None`` sends none, for a keyless
-                endpoint on the same host, and an ``httpx.Auth`` replaces the client's.
-                The default and ``None`` share the cache; a call with an ``httpx.Auth`` of
-                its own bypasses it, neither looked up nor stored, since another identity
-                may get another answer.
+                default it sends the client's ``auth`` to the base URL's origin and none
+                to another, ``None`` sends none, for a keyless endpoint on the same host,
+                and an ``httpx.Auth`` replaces the client's, to any origin. The default
+                and ``None`` share the cache; a call with an ``httpx.Auth`` of its own
+                bypasses it, neither looked up nor stored, since another identity may get
+                another answer.
 
         Raises:
             ValueError: Both ``json`` and ``data`` were given; a request has one body.
@@ -215,11 +269,8 @@ class AsyncClient:
         probe = pool.build_request(method, path, params=params)
         # A call with credentials of its own may get another answer: no cache for it. Any
         # explicit auth counts, also a form httpx accepts beyond the annotation (a tuple).
-        own_auth = (
-            auth is not None and not isinstance(auth, _ClientAuth) and auth is not _HTTPX_DEFAULT
-        )
-        sent_auth = httpx.USE_CLIENT_DEFAULT if isinstance(auth, _ClientAuth) else auth
-        key = None if own_auth else self._cache_key_for(probe)
+        reach = self._reach(auth)
+        key = None if reach.auth == "own" else self._cache_key_for(probe)
         if key is not None and self.config.cache is not None:
             cached = self.config.cache.get(key)
             if cached is not None:
@@ -230,6 +281,7 @@ class AsyncClient:
             built = pool.build_request(
                 method, path, params=params, json=json, data=data, headers=headers
             )
+            reach.mark(built)
             outcome = before_request(built)
             if inspect.isawaitable(outcome):
                 await outcome
@@ -241,7 +293,7 @@ class AsyncClient:
             request = pool.build_request(
                 method, path, params=params, json=json, data=data, headers=headers
             )
-            response = await pool.send(request, auth=sent_auth)
+            response = await pool.send(request, auth=reach.mark(request))
             if observe is not None:
                 observe(response)
             return response
@@ -421,9 +473,9 @@ class AsyncClient:
             dest: The file to write, e.g. ``tmp_path / "qs.crops.txt.gz"``, in a directory
                 that exists.
             auth: Credentials for this download, every retry included, as for
-                ``request``: the client's by default, ``None`` for none, an
-                ``httpx.Auth`` to replace them. The default sends the client's key to an
-                absolute URL on another host too; pass ``None`` for a file link there.
+                ``request``: the client's by default, to the base URL's origin only, so a
+                file link on another host goes without them; ``None`` for none; an
+                ``httpx.Auth`` to replace them, sent to whatever origin ``url`` names.
 
         Returns:
             The ``Downloaded`` file: path, size, content type, file name, ``ETag``,
@@ -442,7 +494,7 @@ class AsyncClient:
         if not target.parent.is_dir():
             raise ValueError("dest's directory does not exist; create it first")
         pool = self._pool()
-        sent_auth = httpx.USE_CLIENT_DEFAULT if isinstance(auth, _ClientAuth) else auth
+        reach = self._reach(auth)
         handle, name = tempfile.mkstemp(
             dir=target.parent, prefix=f".{target.name}.", suffix=".part"
         )
@@ -451,7 +503,9 @@ class AsyncClient:
         try:
             before_request = self.config.before_request
             if before_request is not None:
-                outcome = before_request(pool.build_request("GET", url))
+                built = pool.build_request("GET", url)
+                reach.mark(built)
+                outcome = before_request(built)
                 if inspect.isawaitable(outcome):
                     await outcome
             observe = self.config.observe
@@ -467,7 +521,7 @@ class AsyncClient:
                 if self._bucket is not None:
                     await self._bucket.acquire(self._sleep)
                 request = pool.build_request("GET", url)
-                streamed = await pool.send(request, auth=sent_auth, stream=True)
+                streamed = await pool.send(request, auth=reach.mark(request), stream=True)
                 try:
                     response = streamed if streamed.is_success else await head_of(streamed)
                     if observe is not None:

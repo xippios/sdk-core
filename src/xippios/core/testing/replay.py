@@ -69,8 +69,9 @@ def mount_fixture(
         ValueError: A name in ``match_params`` is not a query parameter of the URL served
             (the recorded one, or ``url``), names a credential by the rule of
             ``xippios.core.redaction`` (``api_key``; ``key`` where a ``QueryKeyAuth``
-            sends it), or its value holds ``REDACTED`` (whole, or a scrubbed secret
-            inside it); the message names the parameter.
+            sends it; not a ``token`` name the source declared data), or its value holds
+            ``REDACTED`` (whole, or a scrubbed secret inside it, or a data name recorded
+            before its declaration); the message names the parameter.
         TypeError: ``match_params`` is one string instead of a collection of names.
     """
     served = httpx.URL(fixture.request.url if url is None else url)

@@ -11,8 +11,10 @@ otherwise refuses without sending::
     client = AsyncClient(policy.install(config), auth=auth)
 
 The snapshot belongs to the policy: clients that draw on one quota, one key say, share
-one policy. A cache hit never waits and never updates the snapshot. The sources behind
-api.data.gov share one policy per process through ``xippios.core.data_gov``.
+one policy. A cache hit never waits and never updates the snapshot. Nor does a request
+outside the quota: one sent with ``auth=None``, or to an origin other than the client's
+base URL's, which the client marks (``xippios_auth``, ``xippios_origin``). The sources
+behind api.data.gov share one policy per process through ``xippios.core.data_gov``.
 """
 
 import asyncio
@@ -54,6 +56,27 @@ def _reset_every_policy() -> None:
     """Forget every live policy's snapshot; the testing plugin calls it around each test."""
     for policy in _every_policy():
         policy.reset()
+
+
+def _outside(request: httpx.Request) -> bool:
+    """True for a request outside the quota, as the client marks it.
+
+    Sent with ``auth=None`` (``xippios_auth: "none"``), or to an origin other than the
+    base URL's (``xippios_origin: "other"``), where the client's auth never goes: neither
+    spends the key's quota (https://github.com/xippios/sdk-core/issues/163). A request
+    built without the marks counts.
+    """
+    extensions = request.extensions
+    return extensions.get("xippios_auth") == "none" or extensions.get("xippios_origin") == "other"
+
+
+def _outside_answer(response: httpx.Response) -> bool:
+    """True for the answer to a request outside the quota; a response with no request counts."""
+    try:
+        request = response.request
+    except RuntimeError:  # httpx raises it for a response built without a request
+        return False
+    return _outside(request)
 
 
 def _utc_now() -> datetime:
@@ -130,6 +153,12 @@ class QuotaPolicy:
     ``RateLimitError`` with ``retry_after`` and sends nothing, so a sync call or an MCP
     tool never blocks for an hour. A request the cache answers never reaches it.
     ``pause_cap`` is the one bound of that wait, wherever the policy is installed.
+
+    A request outside the quota is neither held back nor read: one sent with
+    ``auth=None``, a keyless endpoint of the same upstream, and one to an origin other than
+    the client's base URL's, a file link on another host, which the client's auth never
+    reaches either. Its answer leaves the snapshot alone, and the client's limiter still
+    paces it.
 
     A 429 marks the quota spent by itself, until its ``Retry-After`` or, without one,
     for ``window``. A source whose upstream answers a spent limit otherwise, UN
@@ -228,13 +257,14 @@ class QuotaPolicy:
 
         A response with neither quota header leaves the snapshot alone, unless it is a
         429 or ``spent`` returns a number for it, either of which marks the quota spent.
-        A cache hit is ignored: its headers are as old as the entry (ADR-0010). The
-        ``ClientConfig.observe`` hook.
+        A cache hit is ignored: its headers are as old as the entry (ADR-0010), and so is
+        the answer to a request outside the quota, sent with ``auth=None`` or to another
+        origin, as the client marks it. The ``ClientConfig.observe`` hook.
 
         Args:
             response: A response from the wire, any status.
         """
-        if response.extensions.get("xippios_cache") == "hit":
+        if response.extensions.get("xippios_cache") == "hit" or _outside_answer(response):
             return
         limit = _header_count(response, self.limit_header)
         remaining = _header_count(response, self.remaining_header)
@@ -261,7 +291,9 @@ class QuotaPolicy:
 
         The ``ClientConfig.before_request`` hook ``install`` sets, called once per
         request, after the cache lookup. Does nothing while the snapshot shows requests
-        left or the quota is expected back already. Its wait and its refusal are the
+        left or the quota is expected back already, nor for a request outside the quota,
+        sent with ``auth=None`` or to another origin, as the client marks it. Its wait
+        and its refusal are the
         pause step, which the testing plugin turns off in offline tests; a subclass's
         override that waits or refuses on its own is not turned off (ADR-0015).
 
@@ -274,6 +306,8 @@ class QuotaPolicy:
                 now; ``retry_after`` is the wait, and the message says that nothing was
                 sent and when the quota is expected back.
         """
+        if _outside(request):
+            return
         await self._pause(request)
 
     def install(self, config: ClientConfig) -> ClientConfig:
