@@ -98,7 +98,13 @@ Every source package has three layers, top to bottom, and nothing skips a layer.
 2. **Task-shaped functions** — `xippios/<pkg>/tasks.py`. The functions a person
    or an agent actually wants: `get_balance_sheet(commodity, marketing_year)`. They
    compose endpoint wrappers, handle pagination and reference lookups, and return
-   `Result[T]`. This is the public API and the only layer adapters may call.
+   `Result[T]`. This is the public API and the only layer adapters may call. A task may
+   compose another task of its own `tasks.py`, so that the request, its refusals before
+   sending and the meta live once, in the task it composes (sdk-eurostat's slices and
+   sdk-faostat's `get_series` compose `get_data`); it awaits that task's `_async`
+   function, since the sync facade refuses a call from inside core's loop, and builds its
+   meta as §4 says; a task of another package is composed only as §12 allows (ADR-0001,
+   amendment 2026-11-18, point a; ADR-0021).
 3. **Adapters** — `xippios/<pkg>/mcp.py` and `xippios/<pkg>/http.py`.
    Thin: register task functions, apply result caps, map errors. Target ≤ 60 lines
    each. If logic appears here, it belongs in `tasks.py`.
@@ -106,12 +112,25 @@ Every source package has three layers, top to bottom, and nothing skips a layer.
 Supporting modules: `models.py` (pydantic models), `reference/` (packaged data files
 plus a loader), `_client.py` (the configured `xippios.core.client` instance).
 
+Task code may send, beside its base URL, to a second base URL on the host of the first,
+from which upstream serves part of its data, and to an origin or mirror that the publisher
+runs itself where its canonical host refuses automated requests, never to a mirror that
+anyone else runs (ADR-0010, amendment 2026-11-18, point a;
+https://github.com/xippios/sdk-core/issues/239).
+A source that depends on another sends nothing to a host that its dependency sends to,
+and reaches that host through the dependency's tasks alone (ADR-0021, §12). §6 gives
+each case its client and its pace.
+
 A file-distributed source, whose upstream publishes files rather than answering with
 records, keeps the three layers (ADR-0020). Its layer 1 has two parts: `api/` wraps the
 HTTP endpoints it has (a catalog), and the download goes through core's `download` (§6)
 or through the retrieval package the source depends on (§12, ADR-0021); `parse/` holds
 one module per file kind, `parse/<file_kind>.py`, with one function,
-`parse_<file_kind>(path) -> list[Model]`. A parser's library (a spreadsheet reader,
+`parse_<file_kind>(path) -> list[Model]`. A parser of a bulk file kind, a file that a
+bulk task downloads, may return `Iterator[Model]` instead, a generator that reads the file
+as the records are taken, closes it when it ends or is closed, and says so in its
+docstring (sdk-eurostat's `parse_sdmx_csv`, sdk-faostat's `parse_bulk_csv`; ADR-0020,
+amendment 2026-11-18, point b). A parser's library (a spreadsheet reader,
 `pypdf`) is the source's dependency, never core's. A PDF is read for its narrative text
 only, never for numbers: a figure a task returns comes from the XLS, XML, CSV or TXT the
 release carries, or is not returned (ADR-0020). A bulk task, which returns
@@ -139,6 +158,31 @@ skip it (§8, §9; ADR-0019).
   described in one OpenAPI document) snapshots its own part and records the full
   document's byte size and sha256 in `FETCHED.md`, so a refresh can tell the part from
   the whole (ADR-0003, amendment 2026-10-26).
+- What a source observed of upstream that no page of the documentation states goes in one
+  hand-written file, `docs/upstream/OBSERVED.md`, the only file under `docs/upstream/`
+  written by hand: the capture script neither writes nor checks it, and `FETCHED.md`
+  lists it in a row of its own that says so (ADR-0003, amendment 2026-11-18, point a).
+  Each note names its evidence. A way the live API departs from its documentation, such
+  as a type, a field, an answer's shape or a refusal, names the probe that showed it: its
+  date, its operation and its sample, a request or the fixture that holds the answer. A
+  file layout that no upstream page documents names the release files it was written
+  from, with their ids or URLs, bytes and sha256. A parameter or a default traceable to a
+  note there is traceable to `docs/upstream/`. A source that keeps such notes elsewhere,
+  in its README or its capture script, moves them into the file with its next refresh.
+- A page that the documentation links and the snapshot deliberately does not request,
+  such as a feed, a third-party specification (cited, not snapshotted), an API answer or
+  a page that is not API documentation, has a row with its reason in a table of
+  `FETCHED.md` headed `Not fetched`. A page that an anonymous client cannot read is
+  requested once, without credentials: the capture follows no redirect to another host
+  and imitates no browser, the page's row records the status and the host it redirects
+  to, and the public pages that state the same facts are the snapshot's statement of the
+  subject (ADR-0003, amendment 2026-11-18, point b).
+- A small answer of the API, kept verbatim under `docs/upstream/samples/`, documents the
+  answer's shape and is not a test fixture: its row in `FETCHED.md`'s file table gives
+  the URL it was requested from and says that it is a sample. A sample whose operation
+  needs the source's credentials is requested with them; only the samples' requests send
+  a credential, and neither a credential nor a token is written (ADR-0003, amendment
+  2026-11-18, point c).
 - Within-source hygiene is required: dates → `datetime.date`/`datetime`, numbers →
   `int`/`Decimal`/`float` as appropriate, upstream enums → `StrEnum`, pagination
   resolved, errors typed. An upstream enum of integer ids becomes an `IntEnum` instead,
@@ -234,8 +278,10 @@ datasets is no release time either (ADR-0022, reading of 2026-10-29).
 A task that answers from packaged reference data (§3) fills `meta` by ADR-0022:
 `retrieved_at` is the time the packaged list was fetched from upstream (the file's
 `fetched` value, as a cache hit uses the entry's stored time); `endpoint` names the
-upstream operation the list came from (operationId or path), never "reference" or a
-file path; `vintage` is an upstream release identifier, or `None` when upstream has
+upstream operation the list came from (operationId or path, or the full URL for a list
+fetched from a second base URL, since the path alone names the first base's operation;
+ADR-0010, amendment 2026-11-18, point a), never "reference" or a file path; `vintage` is
+an upstream release identifier, or `None` when upstream has
 none, since a fetch date is not a vintage; `total` is `None` unless upstream reports a
 count (ADR-0012). `PackagedList` builds this meta, so no source writes it by hand:
 `PackagedList.load(package, name)` reads the file (§3), `.meta(source, request=...,
@@ -282,7 +328,12 @@ in upstream data stay out of it by §3's rule for projections (ADR-0017). A bare
 not on the list: it is a credential in a process where a `QueryKeyAuth` sends the key
 under that name (USDA NASS), which registers it when built, and data elsewhere, as
 Eurostat's SDMX series `key` is (ADR-0019, amendment 2026-10-27). A task that wants the
-credential's provenance records the variable name, never the value.
+credential's provenance records the variable name, never the value. A task that composes
+another (§2) and extends the composed answer's `request` builds a new `ResultMeta`
+through the constructor, `ResultMeta(**answer.meta.model_dump(exclude={"request"}),
+request={**answer.meta.request, "since": since})`, never with `model_copy`, which runs no
+validator, so the drop of a top-level `None` and the redaction reach what it adds
+(ADR-0001, amendment 2026-11-18, point a).
 
 `tenant` is the name of the tenant a multi-tenant source served the data for (§7),
 never a credential, a host or another of the tenant's values; `None` for a
@@ -341,8 +392,11 @@ the query can carry a key (ADR-0005).
   transport failure for idempotent methods only (GET, HEAD, OPTIONS), unless the source
   sets `RetryPolicy.retry_non_idempotent` because upstream makes a repeated write safe,
   or because the source only reads through POST (ADR-0011); never another 4xx.
-- A source maps its documented error shapes once, in `ClientConfig.classify`, which
-  sees every response before the default status mapping (ADR-0008); endpoint
+- A source maps its error shapes once, in `ClientConfig.classify`, which sees every
+  response before the default status mapping (ADR-0008): the shapes upstream documents
+  and, where upstream documents none for an answer, the shapes the source recorded, each
+  backed by a fixture of that answer that a test passes to `classify` through
+  `response_from_fixture` (ADR-0008, amendment 2026-11-18, point a). Its endpoint
   wrappers then use `get_json` and never inspect status codes themselves. A wrapper
   whose answer may come from the cache calls `get_answer()`: its `Answer(payload,
   retrieved_at)` carries a hit's stored time, from `xippios_cache_stored_at`, or else
@@ -367,6 +421,18 @@ the query can carry a key (ADR-0005).
   when the wait is within the policy's `pause_cap` (30 s by default), and otherwise
   raises `RateLimitError` with `retry_after` without sending; a pause handed back to the
   caller is stated in the error text.
+- One limiter paces each host a source sends to, and core builds one per client
+  (ADR-0010, amendment 2026-11-18, point a). A second base URL on the host of the first
+  (Eurostat's `https://ec.europa.eu/eurostat/api/comext/dissemination` beside
+  `https://ec.europa.eu/eurostat/api/dissemination`) is requested through the source's
+  one client by its absolute URL, which httpx takes over the base URL: one limiter, one
+  cache and one `classify`, whose path checks name both bases. A request to an origin or
+  mirror that the publisher runs itself (§2) takes the canonical host's pace, one limiter
+  for both hosts where the source sends to both; its `meta.endpoint` names the URL sent,
+  and `docs/upstream/` names both hosts (sdk-usda-wasde's USDA CDN origin for
+  `www.usda.gov`). A dependent's own client sends nothing to its dependency's host, which
+  the dependency's limiter alone paces, since a second limiter there would allow up to
+  twice the pace each package meant.
 - Two hooks on `ClientConfig` see what passes through the client (ADR-0015):
   `before_request`, called once per call after the cache lookup and before the rate
   limiter, may wait or raise a taxonomy error, and then nothing is sent; `observe` sees

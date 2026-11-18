@@ -1,6 +1,6 @@
 # ADR-0008: Hardening core from the first source package
 
-Status: Accepted · Date: 2026-10-22
+Status: Accepted · Date: 2026-10-22 · Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240
 
 ## Context
 
@@ -106,3 +106,23 @@ comments), and the module is committed as formatted. Its consumers are every sou
 template's refresh script makes the one call (ADR-0023, decision 1), and every source
 re-renders at its 0.3.0 adoption through it (ADR-0023, decision 5). Conventions §3, §8 and
 §15 item 6 state it from 1.20 on.
+
+## Amendment 2026-11-18
+
+Core 0.4.0, the package of https://github.com/xippios/sdk-core/issues/240, whose steps
+each add their points here.
+
+(a) **Recorded shapes where upstream documents none** (the error classifier; step 14;
+https://github.com/xippios/sdk-core/issues/61, found by sdk-usda-esmis). The decision has
+a source state its documented error shapes in `classify`, and its consequences make
+`classify` the one place a reviewer checks against `docs/upstream/`. ESMIS's OpenAPI
+document describes a 200 for each operation and a `ServerError` that no operation
+references, while the catalog answers an unknown id with a 404 `{"message": ""}`, an
+unknown identifier with an empty 200, and a path segment that carries `%2F` with its web
+server's own HTML 404; sdk-usda-esmis maps them from its recordings. `classify` therefore
+maps the shapes upstream documents and, where upstream documents none for an answer, the
+shapes the source recorded, each backed by a fixture of that answer under
+`tests/fixtures/` and a test that passes it to `classify` through
+`response_from_fixture`, as sdk-usda-esmis's tests do. The reviewer checks a documented
+shape against `docs/upstream/` and a recorded one against its fixture. Conventions §6 and
+the review checklist's item 3 state it from 1.28 on.

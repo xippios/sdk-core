@@ -1,6 +1,6 @@
 # ADR-0010: Rate-limit policy — a fast pace, quotas spent, the 429 interpreted
 
-Status: Accepted · Date: 2026-10-23
+Status: Accepted · Date: 2026-10-23 · Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240
 
 ## Context
 
@@ -109,3 +109,44 @@ reset header gives `retry_after`, the window its fallback. `QuotaPolicy` tracks 
 window per client (ADR-0015) and is not used for per-endpoint windows, so decision 4's
 refusal before a spent window waits for a policy keyed per endpoint (queue row 318);
 until then a spent window costs one 429, which X does not bill.
+
+## Amendment 2026-11-18
+
+Core 0.4.0, the package of https://github.com/xippios/sdk-core/issues/240, whose steps
+each add their points here.
+
+(a) **One host, one limiter: a second base URL, a mirror and a dependency's host**
+(decision 1; step 14; https://github.com/xippios/sdk-core/issues/113, found by
+sdk-eurostat and sdk-usda-wasde; https://github.com/xippios/sdk-core/issues/239).
+Decision 1 sets a source's pace as if the source sent to one host. Three cases send
+elsewhere, and core builds one limiter per client, so a second client beside the first
+paces apart. Each case keeps decision 1 whole by pacing every host with one limiter.
+
+1. **A second base URL on the same host.** Eurostat serves its `DS-` datasets from
+   `https://ec.europa.eu/eurostat/api/comext/dissemination` beside
+   `https://ec.europa.eu/eurostat/api/dissemination`, with the same services and answer
+   shapes. Such a base is requested through the source's one client, by the absolute URL,
+   which httpx takes over the base URL: one limiter, one cache and one `classify`, whose
+   path checks name both bases, as Johannes decided for sdk-eurostat on 2026-10-28. A
+   packaged list fetched from the second base names its operation by its full URL, since
+   the path alone names the first base's operation: a reading of ADR-0022, decision 1's
+   "operationId or path", decided by Johannes on 2026-10-28 in the review of
+   sdk-eurostat's codelists.
+2. **A mirror the publisher runs.** Task code may send to an origin or mirror that the
+   publisher runs itself where its canonical host refuses automated requests, as
+   sdk-usda-wasde's snapshot reads USDA's CDN origin, `usda.azureedge.us`, for pages that
+   `www.usda.gov` refuses, and as the history task of its 0.2.0
+   (https://github.com/xippios/sdk-usda-wasde/issues/8) is to read the archive of past
+   releases there (https://github.com/xippios/sdk-core/issues/239, decided by Johannes on
+   2026-11-17). `meta.endpoint` names the URL sent, the canonical
+   host's pace applies, one limiter for both hosts where the source sends to both, and the
+   source's `docs/upstream/` names both hosts. A mirror that anyone else runs is never
+   sent to, since the provenance of ADR-0003 would then rest on the bytes alone.
+3. **A host that a dependency paces.** A dependent sends nothing to a host that its
+   dependency sends to: it reaches that host through the dependency's tasks, as ADR-0021,
+   decision 1 has it consume them, and the dependency's limiter alone paces the host. A
+   client of the dependent's own would add a second limiter, up to twice the pace each
+   package meant. sdk-usda-wasde reaches ESMIS only through xippios-usda-esmis's tasks,
+   and its own client sends nothing.
+
+Conventions §2, §4 and §6 state the three cases from 1.28 on.

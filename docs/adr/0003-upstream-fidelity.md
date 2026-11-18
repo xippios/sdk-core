@@ -1,6 +1,6 @@
 # ADR-0003: Upstream fidelity — no cross-source normalization in SDK packages
 
-Status: Accepted · Date: 2026-10-20
+Status: Accepted · Date: 2026-10-20 · Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240
 
 ## Context
 
@@ -99,3 +99,53 @@ four wrappers named by WADL method ids, `getData`, `getTocXml`, `codeListQuery` 
 `dataQuery`. Johannes decided it on 2026-10-28.
 
 Conventions §2 and §10 state it from 1.22 on.
+
+## Amendment 2026-11-18
+
+Core 0.4.0, the package of https://github.com/xippios/sdk-core/issues/240, whose steps
+each add their points here.
+
+(a) **What upstream does but never documents** (step 14;
+https://github.com/xippios/sdk-core/issues/55, found by sdk-usda-esmis, with sdk-faostat
+and sdk-usda-wasde). The snapshot is fetched, never edited by hand, and a review traces
+every parameter and default to it, so what a source observed of upstream that no page
+states had no home, and three sources chose three: sdk-usda-esmis a section of its README,
+sdk-faostat a list in its capture script that it prints into `FETCHED.md`, sdk-usda-wasde
+a hand-written `docs/upstream/layout.md`. It goes in one hand-written file,
+`docs/upstream/OBSERVED.md`, named after sdk-faostat's list and written in capitals as
+`FETCHED.md` is, since both are the source's own notes about the snapshot rather than a
+page of it. It is the one file under `docs/upstream/` written by hand: the capture script
+neither writes nor checks it, and `FETCHED.md` lists it in a row of its own that says so,
+as sdk-usda-wasde's row for `layout.md` does. Each note names its evidence. A way the
+live API departs from its documentation, a type, a field, an answer's shape or a refusal,
+names the probe that showed it: its date, its operation and its sample, a request or the
+fixture that holds the answer. A file layout that no upstream page documents, the
+file-format notes of ADR-0020, decision 2 where upstream wrote none, names the files it
+was written from, with their release ids or URLs, bytes and sha256. A parameter or a
+default traceable to a note there is traceable to `docs/upstream/`. A source moves what
+it keeps elsewhere into the file with its next refresh of `docs/upstream/`, since a
+refresh is the PR that changes the snapshot and `FETCHED.md` (amendment 2026-10-26).
+
+(b) **The pages a snapshot leaves out** (step 14;
+https://github.com/xippios/sdk-core/issues/103, found by sdk-eurostat). `FETCHED.md`
+recorded only what was fetched, so a reader could not tell a page left out on purpose from
+one missed. A page that the documentation links and the snapshot deliberately does not
+request, such as a feed, a third-party specification (cited, not snapshotted), an API
+answer or a page that is not API documentation, has a row with its reason in a table of
+`FETCHED.md` headed `Not fetched`, as sdk-eurostat's has since its first snapshot. A page
+that an anonymous client cannot read is requested once, without credentials. The capture
+follows no redirect to another host and imitates no browser, the page's row in that table
+records the status and the host it redirects to, and the public pages that state the same
+facts are the snapshot's statement of the subject, as sdk-eurostat's two pages behind EU
+Login are recorded.
+
+(c) **Answer samples** (step 14; https://github.com/xippios/sdk-core/issues/103, found by
+sdk-eurostat, with sdk-faostat). A small answer of the API, kept verbatim under
+`docs/upstream/samples/`, documents the answer's shape and is not a test fixture: its row
+in `FETCHED.md`'s file table gives the URL it was requested from and says that it is a
+sample, as each of the four samples of sdk-eurostat and of sdk-faostat does. A sample
+whose operation needs the source's credentials is requested with them, as sdk-faostat's
+four are with the account's bearer token after one login; only the samples' requests send
+a credential, and neither a credential nor a token is written.
+
+Conventions §3 and the review checklist's item 2 state the three points from 1.28 on.
