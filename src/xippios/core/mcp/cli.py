@@ -152,7 +152,6 @@ def serve_tenants(
     build: Callable[[TenantLock | None], ToolSet | MCPServer],
     tenants: Tenants,
     *,
-    param: str,
     noun: str | None = None,
     check: Callable[[str], object] | None = None,
     argv: Sequence[str] | None = None,
@@ -160,11 +159,12 @@ def serve_tenants(
     """Run a multi-tenant source's server, or the one ``--<param>`` binds, through ``main``.
 
     The serve command of sdk-cashctrl's ``--org`` and sdk-google-mail's ``--account``
-    (ADR-0036, decision 8). It puts ``--<param>`` on core's parser, ``_``
-    written ``-``, so ``--help`` lists it beside core's options. Given ``--org acme``, it
-    checks the tenant as a call would, declared (``tenants.require``) and then by
-    ``check``, and runs the server of ``build(TenantLock(param, "acme", noun=noun))``, built
-    anew: every tool acts on ``acme`` and takes no ``org``. A ``build`` that returns its
+    (ADR-0036, decision 8). It puts ``--<param>`` on core's parser, ``param`` the one the
+    registry declares (``tenants.param``) and ``_`` written ``-``, so ``--help`` lists it
+    beside core's options. Given ``--org acme``, it checks the tenant as a call would,
+    declared (``tenants.require``) and then by ``check``, and runs the server of
+    ``build(TenantLock(tenants, "acme", noun=noun))``, built anew: every tool acts on
+    ``acme`` and takes no ``org``. A ``build`` that returns its
     ``ToolSet``, as a source's ``build(**options)`` does under the package contract, has
     the bound server built from it with ``build_server``, named as ``server`` is (ADR-0026,
     amendment 2026-11-18, point d); one that returns a server has that server run. An
@@ -178,29 +178,25 @@ def serve_tenants(
     being ``build_server(build())``::
 
         def run() -> None:
-            serve_tenants(server, build, TENANTS, param="org", noun="organisation")
+            serve_tenants(server, build, TENANTS, noun="organisation")
 
     Args:
         server: The source's server for every declared tenant, ``build_server(build())``.
         build: Builds the source's tool set, bound to the lock it is given or, given
             ``None``, unbound, with ``bind_tasks`` and ``tenant_instructions``; or the
             source's server so bound.
-        tenants: The source's registry, e.g. ``TENANTS``; its messages name its tenants
-            and variables, never its source or a value.
-        param: The task parameter that names the tenant, e.g. ``"org"`` for ``--org``.
+        tenants: The source's registry, e.g. ``TENANTS``, whose ``param`` names the option,
+            ``"org"`` for ``--org``; its messages name its tenants and variables, never its
+            source or a value.
         noun: The word for one tenant, e.g. ``"organisation"``, in the option's help and
-            the lock's sentence; ``None`` uses ``param``.
+            the lock's sentence; ``None`` uses the registry's ``param``.
         check: Called with the declared tenant's name before the bound server is built,
             e.g. ``lambda name: TENANTS.field(name, "SUBDOMAIN")``, which reads the value
             as the tenant's client would; a ``XippiosError`` it raises, naming a variable
             and never its value, stops the process. ``None`` checks nothing more.
         argv: Arguments without the program name; defaults to ``sys.argv[1:]``.
-
-    Raises:
-        ValueError: ``param`` is not a parameter name, before anything is parsed.
     """
-    if not param.isidentifier():
-        raise ValueError("param must be a parameter name such as 'org'")
+    param = tenants.param
     word = param if noun is None else noun
     example = f", e.g. {tenants.reserved[0]}" if tenants.reserved else ""
     help_text = f"serve only this {word}{example}; every tool acts on it and takes no {param}"
@@ -215,7 +211,7 @@ def serve_tenants(
         tenants.require(name)
         if check is not None:
             check(name)
-        built = build(TenantLock(param, name, noun=noun))
+        built = build(TenantLock(tenants, name, noun=noun))
         if isinstance(built, ToolSet):
             return build_server(built, name=unbound.name)
         return built

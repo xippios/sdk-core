@@ -43,15 +43,12 @@ than one fails every test here, naming the option. The repository's files (``REA
   ``~=X.Y.Z``, all alike (conventions §12, ADR-0039);
 - every task, read and write, of a multi-tenant source, one whose ``_client``, ``tasks``
   or ``tasks_write`` module holds a ``Tenants`` registry, takes exactly one tenant: the
-  tenant's parameter, with no default, annotated ``str`` or ``Annotated[str, ...]``,
-  neither ``*`` nor ``**``; the tenant list of ``list_task`` and the tasks its module
-  names in ``NO_TENANT_TASKS`` are excepted, and ``NO_TENANT_TASKS`` names tasks of that
-  module's ``__all__`` alone (conventions §7; ADR-0036, decision 13). The tenant's
-  parameter is read from the tasks, the tenant list and the declared ones left out: the
-  name most of them take; of names taken equally often, the one that more of them take as
-  the rule asks, then the one that more of them take first (``org`` for sdk-cashctrl,
-  ``account`` for sdk-google-mail). A source with no ``Tenants`` registry passes. The
-  check reads signatures: what a task reaches inside is the review's
+  parameter the registry declares, ``Tenants(..., param="org")``, with no default,
+  annotated ``str`` or ``Annotated[str, ...]``, neither ``*`` nor ``**``; the tenant list
+  of ``list_task`` and the tasks its module names in ``NO_TENANT_TASKS`` are excepted,
+  and ``NO_TENANT_TASKS`` names tasks of that module's ``__all__`` alone (conventions §7;
+  ADR-0036, decision 13). A source with no ``Tenants`` registry passes. The check reads
+  signatures: what a task reaches inside is the review's
   (https://github.com/xippios/sdk-core/issues/302).
 
 A write server is its source's to test: the family check reads ``tasks_write`` for the
@@ -69,7 +66,6 @@ under its new path (ADR-0040). The cap binds a source from its 0.3.0 adoption
 (conventions, header of 1.14), so the step warns in template v0.2.1 and fails from v0.3.0.
 """
 
-import collections
 import importlib
 import importlib.util
 import inspect
@@ -369,10 +365,8 @@ def test_family_tasks_carry_agent_docstrings(family_source: FamilySource) -> Non
     _fail(problems, "task docstrings are written for agents:")
 
 
-def _one_tenant_problem(fn: Callable[..., Any], param: str | None) -> str | None:
+def _one_tenant_problem(fn: Callable[..., Any], param: str) -> str | None:
     """Why ``fn`` does not take exactly one tenant as ``param``, or ``None`` when it does."""
-    if param is None:
-        return "takes no tenant"
     parameter = inspect.signature(fn).parameters.get(param)
     if parameter is None:
         return f"takes no {param}"
@@ -398,30 +392,15 @@ def _one_tenant_problem(fn: Callable[..., Any], param: str | None) -> str | None
     return None
 
 
-def _tenant_param(tasks: dict[str, Callable[..., Any]]) -> str | None:
-    """The tenant's parameter as the tasks take it; see the module docstring."""
-    taken: collections.Counter[str] = collections.Counter()
-    fitting: collections.Counter[str] = collections.Counter()
-    first: collections.Counter[str] = collections.Counter()
-    for fn in tasks.values():
-        for position, name in enumerate(inspect.signature(fn).parameters):
-            taken[name] += 1
-            fitting[name] += _one_tenant_problem(fn, name) is None
-            first[name] += position == 0
-    if not taken:
-        return None
-    return min(taken, key=lambda name: (-taken[name], -fitting[name], -first[name], name))
-
-
 def test_family_tasks_take_one_tenant(family_source: FamilySource) -> None:
     """Every task of a multi-tenant source takes exactly one tenant, required (conventions §7).
 
     A source whose ``_client``, ``tasks`` or ``tasks_write`` module holds a ``Tenants``
     registry is multi-tenant, with no opt-in: every task of ``tasks.__all__`` and
-    ``tasks_write.__all__`` takes the tenant's parameter once, with no default, of a type
-    that names one tenant, a ``str``, except the tenant list and the tasks its module names
-    in ``NO_TENANT_TASKS``, which touch no tenant (ADR-0036, decision 13; the module
-    docstring says how the parameter is read).
+    ``tasks_write.__all__`` takes the parameter the registry declares, ``tenants.param``,
+    once, with no default, of a type that names one tenant, a ``str``, except the tenant
+    list and the tasks its module names in ``NO_TENANT_TASKS``, which touch no tenant
+    (ADR-0036, decision 13).
     """
     if family_source.tenants is None:
         return
@@ -434,22 +413,18 @@ def test_family_tasks_take_one_tenant(family_source: FamilySource) -> None:
             problems.append(
                 f"NO_TENANT_TASKS of {module.__name__} names {unknown}, not in its __all__"
             )
-    judged = {
-        name: fn
-        for name, fn in _every_task(family_source).items()
-        if not _lists_tenants(fn) and not touches_no_tenant(fn)
-    }
-    param = _tenant_param(judged)
-    for name, fn in judged.items():
+    param = family_source.tenants.param
+    for name, fn in _every_task(family_source).items():
+        if _lists_tenants(fn) or touches_no_tenant(fn):
+            continue
         problem = _one_tenant_problem(fn, param)
         if problem is not None:
             problems.append(f"{name} {problem}")
-    read_as = f", its parameter read as {param}, the one most of them take" if param else ""
     _fail(
         problems,
-        "every task of a multi-tenant source takes exactly one tenant, required"
-        f"{read_as}; the tenant list and the tasks named in NO_TENANT_TASKS of their module "
-        "are excepted (conventions §7):",
+        f"every task of a multi-tenant source takes exactly one tenant, {param}, the parameter "
+        "its Tenants registry declares, required; the tenant list and the tasks named in "
+        "NO_TENANT_TASKS of their module are excepted (conventions §7):",
     )
 
 

@@ -8,6 +8,7 @@ environment, the contract of conventions §7, and every task takes the tenant's 
     tenants = Tenants(
         "example",
         list_var="EXAMPLE_TENANTS",  # EXAMPLE_TENANTS=acme,acme_test
+        param="org",  # every task takes org, the tenant's name
         fields=("SUBDOMAIN", "API_KEY"),  # EXAMPLE_ACME_SUBDOMAIN, EXAMPLE_ACME_API_KEY
         reserved=("demo",),  # declared by EXAMPLE_DEMO_SUBDOMAIN and _API_KEY alone
         validate={"SUBDOMAIN": check_subdomain},
@@ -40,7 +41,7 @@ naming the tenant::
         )
 
 
-    server = build_server(build())  # every declared tenant; build(TenantLock("org", "acme"))
+    server = build_server(build())  # every declared tenant; build(TenantLock(tenants, "acme"))
 
 ``xippios.core.mcp.serve_tenants`` builds the bound server from ``--org acme`` and runs it.
 
@@ -53,9 +54,11 @@ the tenant list or its module names it in ``NO_TENANT_TASKS``, beside ``BULK_TAS
     NO_TENANT_TASKS = frozenset({"list_currencies"})  # in tasks.py: the same for every tenant
 
 and the family check of ``xippios.core.testing`` holds every task of a source whose
-``_client``, ``tasks`` or ``tasks_write`` module holds a ``Tenants`` to it. A signature
-shows neither what a task reaches nor what it shares, so a task that takes one tenant and
-opens another's client passes both (https://github.com/xippios/sdk-core/issues/302).
+``_client``, ``tasks`` or ``tasks_write`` module holds a ``Tenants`` to it, the tenant's
+parameter the one the registry declares, ``param``, which the serve command's option and
+every ``TenantLock`` take too. A signature shows neither what a task reaches nor what it
+shares, so a task that takes one tenant and opens another's client passes both
+(https://github.com/xippios/sdk-core/issues/302).
 
 Isolation is by configuration: a deployment reaches exactly the tenants its environment
 declares. Nothing here returns a tenant's value: results and messages name tenants and
@@ -120,6 +123,10 @@ class Tenants:
             the default, derives it from ``source``, upper-cased with ``-`` made ``_``:
             ``"CASHCTRL"``.
         list_var: The variable listing the tenant names, e.g. ``"CASHCTRL_ORGS"``.
+        param: The task parameter that names the tenant, e.g. ``"org"``: the one
+            declaration of it, which the family check holds every task to, the serve
+            command's ``--org`` names and every ``TenantLock`` on this registry binds
+            (ADR-0036, decision 13).
         fields: The per-tenant variables' suffixes, upper-case as they appear in the
             variable name, e.g. ``("SUBDOMAIN", "API_KEY")``.
         reserved: Tenant names declared by their own field variables alone and never
@@ -138,13 +145,15 @@ class Tenants:
         source: The source slug.
         var_prefix: The variable prefix, given or derived from ``source``.
         list_var: The variable listing the tenant names.
+        param: The task parameter that names the tenant.
         fields: The field suffixes, as a tuple.
         reserved: The reserved tenant names, as a tuple.
 
     Raises:
         TypeError: ``fields`` or ``reserved`` is one string rather than a sequence.
         ValueError: An empty ``source`` or ``list_var``; a ``var_prefix`` that is not
-            upper-case letters, digits and underscores; no field, a field that is not
+            upper-case letters, digits and underscores; a ``param`` that is not a
+            parameter name; no field, a field that is not
             upper-case letters, digits and underscores, or a field given twice; a
             reserved name that is not a valid tenant name or is given twice; a
             ``validate`` or ``hints`` entry for a field not in ``fields``; a ``hints``
@@ -157,6 +166,7 @@ class Tenants:
         *,
         var_prefix: str | None = None,
         list_var: str,
+        param: str,
         fields: Sequence[str],
         reserved: Sequence[str] = (),
         validate: Mapping[str, Callable[[str], str]] | None = None,
@@ -170,6 +180,8 @@ class Tenants:
             )
         if not list_var:
             raise ValueError("list_var must not be empty")
+        if not param.isidentifier():
+            raise ValueError(f"param {param!r} is not a parameter name such as 'org'")
         for label, values in (("fields", fields), ("reserved", reserved)):
             if isinstance(values, str):
                 raise TypeError(f"{label} is a sequence of names, e.g. [name], not one string")
@@ -206,6 +218,7 @@ class Tenants:
         self.source = source
         self.var_prefix = source.upper().replace("-", "_") if var_prefix is None else var_prefix
         self.list_var = list_var
+        self.param = param
         self.fields = fields
         self.reserved = reserved
         self._validate = checks
@@ -217,7 +230,8 @@ class Tenants:
     def __repr__(self) -> str:
         return (
             f"Tenants({self.source!r}, var_prefix={self.var_prefix!r}, "
-            f"list_var={self.list_var!r}, fields={self.fields!r}, reserved={self.reserved!r})"
+            f"list_var={self.list_var!r}, param={self.param!r}, fields={self.fields!r}, "
+            f"reserved={self.reserved!r})"
         )
 
     def var(self, name: str, field: str) -> str:
@@ -471,31 +485,40 @@ class TenantLock:
     ``OrgLock`` and sdk-google-mail's ``AccountLock`` until core 0.4.0 (ADR-0036,
     decision 7). ``bind_tasks`` binds a server's tasks to it, ``tenant_instructions``
     names it in the server's instructions, and ``xippios.core.mcp.serve_tenants`` builds it
-    from the command line.
+    from the command line. The parameter it binds is the one its registry declares,
+    ``tenants.param``, so no lock binds another (ADR-0036, decision 13).
 
     Attributes:
-        param: The task parameter that names the tenant, e.g. ``"org"``.
+        tenants: The source's registry, e.g. ``TENANTS``.
         value: The tenant the server serves, e.g. ``"demo"``, which the serve command checks
             at startup; a lock on an undeclared name lists no tenant.
         noun: The word for one tenant in the sentence of the instructions, e.g.
             ``"organisation"``; ``None``, the default, uses ``param``, e.g. ``"account"``.
 
     Raises:
-        ValueError: ``param`` is not a parameter name, ``value`` is empty, or ``noun`` is
-            given but blank.
+        TypeError: ``tenants`` is not a ``Tenants`` registry, a parameter's name say.
+        ValueError: ``value`` is empty, or ``noun`` is given but blank.
     """
 
-    param: str
+    tenants: Tenants
     value: str
     noun: str | None = None
 
     def __post_init__(self) -> None:
-        if not self.param.isidentifier():
-            raise ValueError("param must be a parameter name such as 'org'")
+        if not isinstance(self.tenants, Tenants):
+            raise TypeError(
+                "a lock takes the source's Tenants registry, whose param is the parameter it "
+                "binds, e.g. TenantLock(TENANTS, 'acme')"
+            )
         if not self.value:
             raise ValueError("value must name the tenant the server serves")
         if self.noun is not None and not self.noun.strip():
             raise ValueError("noun must be a word such as 'organisation', or None for param")
+
+    @property
+    def param(self) -> str:
+        """The task parameter that names the tenant, the registry's, e.g. ``"org"``."""
+        return self.tenants.param
 
 
 def _sentence(lock: TenantLock) -> str:
@@ -629,7 +652,7 @@ def bind_tasks(
 
     Args:
         tasks: A server's tasks, e.g. ``tool_functions(tasks)``.
-        lock: The tenant the server is bound to, e.g. ``TenantLock("org", "acme")``, or
+        lock: The tenant the server is bound to, e.g. ``TenantLock(TENANTS, "acme")``, or
             ``None`` for a server of every declared tenant, whose tasks come back as they
             are.
 
