@@ -455,7 +455,7 @@ def test_match_params_refuses_a_credential_or_absent_name(
 
 
 def test_match_params_on_a_key_that_is_data(respx_mock: respx.MockRouter) -> None:
-    # Eurostat's SDMX series key, keyless (ADR-0019, decision 6); NASS's QueryKeyAuth("key")
+    # Eurostat's SDMX series key, keyless (ADR-0040, decision 6); NASS's QueryKeyAuth("key")
     # makes it a credential, and a value recorded as REDACTED cannot be matched.
     series = _recorded(f"{BASE}/data/prc_hicp_manr?key=M.DE.CP00", [1])
     route = mount_fixture(respx_mock, series, match_params=["key"])

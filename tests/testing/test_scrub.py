@@ -7,7 +7,7 @@ from xippios.core.testing import Scrub, scrub
 
 
 def test_the_scrub_reads_the_one_rule() -> None:
-    # The substring rule the recorder kept is gone (ADR-0019, decision 6).
+    # The substring rule the recorder kept is gone (ADR-0040, decision 6).
     assert scrub.scrub_params is redaction.scrub_params
     assert scrub.scrub_url is redaction.scrub_url
     assert scrub.scrub_headers is redaction.scrub_headers

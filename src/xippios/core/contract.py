@@ -1,7 +1,7 @@
 """The variables of the package contract, which a source declares without the ``mcp`` extra.
 
-The package contract is how a host serves a source (ADR-0026, decision 8, and its
-amendment of 2026-11-18, (c)): the variables the package needs, here, and the tool set
+The package contract is how a host serves a source (ADR-0026, decision 8, and
+amendment 2026-11-18, point c): the variables the package needs, here, and the tool set
 its ``build(**options)`` returns, ``xippios.core.mcp.ToolSet``. A source's ``_client.py``
 declares its variables, so ``EnvVar`` imports without the ``mcp`` extra::
 

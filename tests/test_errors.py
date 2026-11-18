@@ -271,7 +271,7 @@ REFRESH = "If upstream added it since, the packaged list is out of date."
 
 
 def test_unknown_code_names_the_closest_codes_and_a_list_out_of_date() -> None:
-    # The copies of sdk-usda-psd, sdk-usda-esr and sdk-usda-gats, one message (ADR-0022).
+    # The copies of sdk-usda-psd, sdk-usda-esr and sdk-usda-gats, one message (ADR-0041).
     closest = [("0410000", "Wheat"), ("0440000", "Corn")]
     error = UnknownCode(
         "commodity_code",

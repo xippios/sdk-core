@@ -163,7 +163,7 @@ class UnknownCode(InvalidRequestError):
 
     For an upstream that answers an unknown code with an empty result, the same answer as
     a query without data: the source checks the value against its ``PackagedList`` first
-    and refuses one the list lacks, naming the closest known codes (ADR-0022). A source
+    and refuses one the list lacks, naming the closest known codes (ADR-0041). A source
     finds them with ``xippios.core.closest``, with ``xippios.core.nearest`` for integer
     codes, or with a strategy of its own (ISO codes first) and passes the result. The
     message names the value, the parameter, the list with its fetch date, the closest codes
@@ -238,7 +238,7 @@ def _refused_arguments(
     several, e.g. ``year: Input should be a valid integer (the first of 2 errors)``. Each
     error is read for its ``loc``, the argument's path joined with dots, and its ``msg``
     alone, as pydantic's error details carry them; its input value, input type and URL are
-    the caller's data and never read (ADR-0014, amendment 2026-10-27; ADR-0007, amendment
+    the caller's data and never read (ADR-0036, decision 12; ADR-0007, amendment
     2026-11-18). Both adapters answer with it, the MCP adapter as text and the HTTP router
     as problem details.
 
@@ -292,8 +292,8 @@ def request_description(response: httpx.Response) -> str:
 
     ``GET /v1/x`` for an answer to ``https://host.test/v1/x?year=2024``: never the host,
     which can name a tenant, nor the query, which can carry a key (conventions §5,
-    ADR-0005). ``error_from_response`` words its messages with it, and so does a source's
-    ``classify`` for the errors it maps (ADR-0005, amendment 2026-11-18 (a)).
+    ADR-0030). ``error_from_response`` words its messages with it, and so does a source's
+    ``classify`` for the errors it maps (ADR-0030, decision 4).
 
     Args:
         response: A response with its request, e.g. the one ``classify`` is given.
@@ -341,7 +341,7 @@ def error_from_exception(exc: httpx.RequestError, *, source: str | None = None) 
     """Wrap an ``httpx`` request failure (timeout, connection, protocol) as TransportError.
 
     The request's host is replaced by ``<host>`` wherever the failure's text quotes it, as
-    a TLS hostname mismatch does: the host may name a tenant (ADR-0005).
+    a TLS hostname mismatch does: the host may name a tenant (ADR-0030).
     """
     text = str(exc)
     for host in _hosts(exc):

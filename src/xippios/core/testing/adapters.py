@@ -12,7 +12,7 @@ __all__ = ["assert_projection", "assert_write_tools", "mcp_call", "mcp_call_text
 
 
 def assert_projection(projected: BaseModel, source: BaseModel, **overrides: Any) -> None:
-    """Check that ``projected`` is a faithful projection of ``source`` (ADR-0008).
+    """Check that ``projected`` is a faithful projection of ``source`` (ADR-0031).
 
     Every field of ``projected`` must exist on ``source`` and carry the same value,
     except the fields named in ``overrides``, which must carry the given values.

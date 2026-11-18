@@ -1,6 +1,6 @@
 """pytest plugin: the ``live`` gate, the offline guarantees and fixture replay (conventions §10).
 
-ADR-0013 decides each guarantee and lists its edges; ``pytest_plugins =
+ADR-0035 decides each guarantee and lists its edges; ``pytest_plugins =
 ["xippios.core.testing.plugin"]`` in ``tests/conftest.py`` enables it.
 """
 
@@ -48,7 +48,7 @@ def live_enabled() -> bool:
 
 
 def _refused(method: str, path: str) -> RuntimeError:
-    # Method and path only: the host can name a tenant, the query can carry a key (ADR-0005).
+    # Method and path only: the host can name a tenant, the query can carry a key (ADR-0030).
     return RuntimeError(
         f"network access in an offline test: {method} {path}; replay a recorded fixture "
         "through respx, or mark the test 'network'"
@@ -58,7 +58,7 @@ def _refused(method: str, path: str) -> RuntimeError:
 class _NetworkGuard:
     """httpcore's connection pools, patched once to refuse the network for the session.
 
-    ADR-0013, decision 1, as amended 2026-10-27: the two pool methods, nothing of httpx's.
+    ADR-0035, decision 1: the two pool methods, nothing of httpx's.
     """
 
     def __init__(self) -> None:
@@ -211,7 +211,7 @@ def pytest_terminal_summary(
     """After a live run, one line per quota policy: what the live tests left of the quota.
 
     Times, counts and the policy's source only, never a key, a host or a query
-    (ADR-0013, amended 2026-10-27).
+    (ADR-0035, decision 7).
     """
     for source, left in config.stash.get(_QUOTA_LEFT, {}).values():
         terminalreporter.write_line(f"quota after the live run: {source}: {left}")
@@ -245,7 +245,7 @@ async def _acquire_without_waiting(
 def _skip_rate_limit_waits(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
     """A client's rate limiter neither waits nor takes a token in a test not marked ``live``.
 
-    ADR-0013, decision 2; a test marked ``rate_limited`` keeps the limiter.
+    ADR-0035, decision 2; a test marked ``rate_limited`` keeps the limiter.
     """
     if _marked(request, "live") or _marked(request, "rate_limited"):
         return
@@ -262,7 +262,7 @@ def _skip_quota_pauses(
 ) -> Iterator[None]:
     """No quota policy pauses, refuses or stays spent in a test not marked ``live``.
 
-    ADR-0013, decision 4 (ADR-0015); a test marked ``rate_limited`` keeps the pause.
+    ADR-0035, decision 4 (ADR-0037); a test marked ``rate_limited`` keeps the pause.
     """
     if _marked(request, "live"):
         yield
@@ -278,7 +278,7 @@ def _skip_quota_pauses(
 def _clear_response_caches(request: pytest.FixtureRequest) -> Iterator[None]:
     """Every ``MemoryCache`` starts and ends a test not marked ``live`` empty.
 
-    ADR-0013, amended 2026-10-27; a ``CacheBackend`` of the source's own is not cleared.
+    ADR-0035, decision 6; a ``CacheBackend`` of the source's own is not cleared.
     """
     if _marked(request, "live"):
         yield
@@ -305,8 +305,8 @@ def placeholder_api_key(
 ) -> str | None:
     """Every test but a live one sends ``PLACEHOLDER_KEY``, whatever the shell holds.
 
-    ADR-0013, decision 3: the variables ``xippios_placeholder_key_envs`` names hold it and
-    ``EnvKeyAuth.key`` returns it. ADR-0013, amendment 2026-11-18, point (c):
+    ADR-0035, decision 3: the variables ``xippios_placeholder_key_envs`` names hold it,
+    ``EnvKeyAuth.key`` returns it, and
     ``RenewingBearerAuth.credential`` returns it for every credential a token request
     reads, one given to the constructor included, and still raises ``ConfigError`` for a
     variable unset or empty. A module overrides this fixture to resolve both itself.
@@ -331,7 +331,7 @@ def _restore_request_logger_levels() -> Iterator[None]:
     The four that ``quiet_request_logging`` sets: ``httpx``, ``httpcore``, ``httpx2`` and
     ``httpcore2``.
 
-    ADR-0013, the paragraph after decision 4: live tests included.
+    ADR-0035, decision 5: live tests included.
     """
     saved = {name: logging.getLogger(name).level for name in _REQUEST_LOGGERS}
     yield

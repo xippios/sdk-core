@@ -52,7 +52,7 @@ Params = Mapping[str, Any] | None
 
 @final
 class _ClientAuth:
-    """The type of the default of ``auth=``: the client's own credentials (ADR-0015).
+    """The type of the default of ``auth=``: the client's own credentials (ADR-0037).
 
     Core's own sentinel, so no annotation needs httpx's private ``UseClientDefault``;
     ``request`` maps it to ``httpx.USE_CLIENT_DEFAULT`` where the request is sent.
@@ -109,7 +109,7 @@ class AsyncClient:
     ``httpx`` connection pool per event loop, while the rate limiter, built from
     ``config.rate_limit``, and the cache are shared across all of them. A call to a
     keyless endpoint on the same host passes ``auth=None`` to this client rather than
-    going through a second one (ADR-0015). The client's ``auth`` goes to the base URL's
+    going through a second one (ADR-0037). The client's ``auth`` goes to the base URL's
     origin only, its scheme, host and port: a request to any other origin, a file link on
     another host say, is sent without it unless the call passes an ``httpx.Auth`` of its
     own.
@@ -208,7 +208,7 @@ class AsyncClient:
         ``ClientConfig.observe`` sees every response from the wire, retried attempts
         included. The source's ``classify`` hook, if any, is asked before a 429 or 5xx
         is retried (its ``RateLimitError`` sets the wait, an error other than an
-        ``UpstreamError`` for a 5xx stops the retries, ADR-0015) and sees the final
+        ``UpstreamError`` for a 5xx stops the retries, ADR-0037) and sees the final
         response first; otherwise a 4xx/5xx that survives the retry policy is raised as
         the matching error from the taxonomy; a transport failure as ``TransportError``.
         Nothing is stored in the cache here: ``get_answer`` stores an answer once it has
@@ -355,15 +355,14 @@ class AsyncClient:
         """The recorder's request: sent once, its answer returned whatever its status.
 
         ``xippios.core.testing.record`` sends through it, so a recording is one live
-        exchange (ADR-0015, amendment 2026-11-18 (f)): never retried, whatever
+        exchange (ADR-0037, decision 6): never retried, whatever
         ``config.retry`` says, and never answered from the cache nor stored in it.
         ``before_request`` runs once and the limiter paces the request, as for
         ``request``, and ``observe`` sees the answer; ``classify`` is not asked, since
         nothing is retried or raised. The client's auth reaches the base URL's origin
         only, and the request carries the marks ``xippios_auth`` and ``xippios_origin``,
-        as every request the client builds does (point (d) there). The body is read up
-        to ``max_read_bytes`` as decoded, and no further (ADR-0019, amendment 2026-11-18
-        (e)).
+        as every request the client builds does (ADR-0037, decision 4). The body is read up
+        to ``max_read_bytes`` as decoded, and no further (ADR-0040, decision 5).
 
         Args:
             method: HTTP method.
@@ -562,12 +561,12 @@ class AsyncClient:
 
         ``get_json``'s call and decoding, the parse into ``parse`` when it is given, and
         the ``retrieved_at`` a task puts into its ``ResultMeta``: on a cache hit the time
-        the entry was stored, read from ``xippios_cache_stored_at`` (ADR-0015, decision
+        the entry was stored, read from ``xippios_cache_stored_at`` (ADR-0037, decision
         5), else the time the answer arrived, read before the decode and the parse. A 200
         from the wire is stored in the cache, where the cache takes it, only once its
         body decoded and its payload parsed, at the time its ``retrieved_at`` carries:
         one reading of the clock for both, and a body that fails is requested again on
-        the next call (ADR-0015, amendment 2026-11-18). ``auth`` as for ``request``.
+        the next call (ADR-0037, decision 5). ``auth`` as for ``request``.
 
         Args:
             path: Path joined onto the base URL, e.g. ``"/api/gats/regions"``.
@@ -609,7 +608,7 @@ class AsyncClient:
         *,
         auth: httpx.Auth | _ClientAuth | None = _CLIENT_AUTH,
     ) -> Downloaded:
-        """Stream a file to ``dest`` with a GET, never holding its body in memory (ADR-0019).
+        """Stream a file to ``dest`` with a GET, never holding its body in memory (ADR-0040).
 
         The body is written chunk by chunk to a temporary file in ``dest``'s directory
         and renamed to ``dest`` once complete, replacing a file there; on any failure the
@@ -859,7 +858,7 @@ def _response_from(response: httpx.Response, path: str | None) -> str:
 def decode_text(
     response: httpx.Response, *, source: str | None = None, path: str | None = None
 ) -> str:
-    """``response``'s body as text, in the charset its ``Content-Type`` names (ADR-0019).
+    """``response``'s body as text, in the charset its ``Content-Type`` names (ADR-0040).
 
     UTF-8 when the header names none; a leading byte order mark is stripped. For a CSV,
     TXT or XML answer read through ``get``; a file streamed to disk is read with
@@ -902,7 +901,7 @@ def decode_csv(
 
     The stdlib's ``csv.DictReader`` reads the first row as the header and each further
     row as a mapping from header to text; nothing is converted, renamed or stripped
-    (ADR-0003). A row shorter than the header maps the missing columns to ``None``, and
+    (ADR-0028). A row shorter than the header maps the missing columns to ``None``, and
     a longer one keeps the extra values as a list under ``None``, as ``DictReader``
     does. A generator: a file of hundreds of MB is read row by row, never whole, and a
     path is closed when the generator ends or is closed; ``list(decode_csv(path))``

@@ -7,7 +7,7 @@ write server (conventions §8, ADR-0026); the usage line names the one that runs
 A source adds its own options through two hooks instead of parsing the command line a
 second time: ``add_options`` puts them on core's parser, so ``--help`` lists every
 option and a typo fails as usual, and ``apply_options`` turns the parsed options into
-the server to run (ADR-0014, decision 8). ``serve_tenants`` is those hooks for a
+the server to run (ADR-0036, decision 8). ``serve_tenants`` is those hooks for a
 multi-tenant source: ``--org acme`` serves the server bound to one tenant.
 """
 
@@ -160,14 +160,14 @@ def serve_tenants(
     """Run a multi-tenant source's server, or the one ``--<param>`` binds, through ``main``.
 
     The serve command of sdk-cashctrl's ``--org`` and sdk-google-mail's ``--account``
-    (ADR-0014, amendment 2026-11-18, (d)). It puts ``--<param>`` on core's parser, ``_``
+    (ADR-0036, decision 8). It puts ``--<param>`` on core's parser, ``_``
     written ``-``, so ``--help`` lists it beside core's options. Given ``--org acme``, it
     checks the tenant as a call would, declared (``tenants.require``) and then by
     ``check``, and runs the server of ``build(TenantLock(param, "acme", noun=noun))``, built
     anew: every tool acts on ``acme`` and takes no ``org``. A ``build`` that returns its
     ``ToolSet``, as a source's ``build(**options)`` does under the package contract, has
     the bound server built from it with ``build_server``, named as ``server`` is (ADR-0026,
-    amendment 2026-11-18, (d)); one that returns a server has that server run. An
+    amendment 2026-11-18, point d); one that returns a server has that server run. An
     undeclared name, or an error ``check`` raises, stops the process with exit status 2
     and the message, before the bound server is built or anything is served. Without the
     option it runs ``server`` as built, for every tenant the environment declares.

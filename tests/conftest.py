@@ -10,7 +10,7 @@ pytest_plugins = ["pytester", "xippios.core.testing.plugin"]
 def _no_registered_credential_names(monkeypatch: pytest.MonkeyPatch) -> None:
     """Each test starts with no name a ``QueryKeyAuth`` registered.
 
-    The registry is the process's (ADR-0019, decision 6): a ``QueryKeyAuth("key", ...)``
+    The registry is the process's (ADR-0040, decision 6): a ``QueryKeyAuth("key", ...)``
     built by one test would make ``key`` a credential in every test after it.
     """
     monkeypatch.setattr(redaction, "_registered", frozenset())

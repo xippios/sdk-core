@@ -1,6 +1,6 @@
 # ADR-0003: Upstream fidelity — no cross-source normalization in SDK packages
 
-Status: Accepted · Date: 2026-10-20 · Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240
+Status: Superseded by ADR-0028 · Date: 2026-10-20 · Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240
 
 ## Context
 

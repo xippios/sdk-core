@@ -1,9 +1,9 @@
 """Tenants and list_task: declaration in the environment, lookup, one client per tenant.
 
-The tests of the two copies that return to core (ADR-0024, amendment 2026-11-18, (b)):
+The tests of the two copies that return to core (ADR-0042, decision 1):
 sdk-cashctrl's ``tests/test_tenants.py``, core's own tests at ``cb8ecdf`` with the close of
 a replaced client (queue row 24 b), and sdk-google-mail's ``list_task(..., source=)``; and
-the variable prefix apart from the source slug (ADR-0014, amendment 2026-11-18, (c)). All on
+the variable prefix apart from the source slug (ADR-0036, decision 1). All on
 fictitious sources whose variables no shell sets.
 """
 

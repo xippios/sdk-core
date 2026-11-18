@@ -188,7 +188,7 @@ async def test_a_mocked_async_request_is_answered(respx_mock):
 
 @pytest.mark.anyio
 async def test_an_unmocked_download_is_refused(tmp_path):
-    # ADR-0019: download goes through the client's pool, which the guard covers.
+    # ADR-0040: download goes through the client's pool, which the guard covers.
     refused = "^network access in an offline test: GET /v1/files/qs.csv; "
     with pytest.raises(RuntimeError, match=refused):
         await AsyncClient(TENANT).download("/v1/files/qs.csv?key=SECRET", tmp_path / "qs.csv")

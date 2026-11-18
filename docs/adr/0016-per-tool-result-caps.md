@@ -1,6 +1,6 @@
 # ADR-0016: Per-tool result caps
 
-Status: Accepted · Date: 2026-10-24 · Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240
+Status: Superseded by ADR-0038 · Date: 2026-10-24 · Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240
 
 ## Context
 

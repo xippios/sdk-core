@@ -554,7 +554,7 @@ async def test_cache_filter_limits_caching_to_chosen_requests(
 async def test_a_body_over_cache_max_bytes_passes_through_unstored(
     respx_mock: respx.MockRouter,
 ) -> None:
-    # ADR-0019, decision 3: a tens-of-MB dataset is not kept in memory by the cache.
+    # ADR-0040, decision 3: a tens-of-MB dataset is not kept in memory by the cache.
     big = respx_mock.get(f"{BASE}/v1/big").respond(200, content=b'"' + b"x" * 9 + b'"')
     small = respx_mock.get(f"{BASE}/v1/small").respond(200, content=b'"' + b"x" * 8 + b'"')
     cache = MemoryCache()
@@ -648,7 +648,7 @@ async def test_classify_sees_every_response_first(respx_mock: respx.MockRouter) 
     assert raw.status_code == 200
 
 
-# -- classify shapes retries (ADR-0015) ---------------------------------------------------
+# -- classify shapes retries (ADR-0037) ---------------------------------------------------
 
 
 class CountingClassify:
@@ -799,7 +799,7 @@ async def test_a_raw_request_stops_retrying_and_returns_the_response(
     assert classify.calls == [429]
 
 
-# -- auth per request (ADR-0015) ----------------------------------------------------------
+# -- auth per request (ADR-0037) ----------------------------------------------------------
 
 KEY_ENV = "EXAMPLE_API_KEY"  # pragma: allowlist secret (a variable name)
 
@@ -941,8 +941,8 @@ async def test_an_auth_of_the_call_s_own_goes_to_any_origin(
 async def test_every_request_tells_the_hooks_its_auth_and_its_origin(
     respx_mock: respx.MockRouter, config: ClientConfig, sleeper: Sleeper
 ) -> None:
-    # The quota policy and the gateway's classify read the two marks (ADR-0015, amendment
-    # 2026-11-18, point d); every retried attempt carries them too.
+    #  The quota policy and the gateway's classify read the two marks (ADR-0037,
+    # decision 4); every retried attempt carries them too.
     respx_mock.get(f"{BASE}/v1/x").mock(
         side_effect=[httpx.Response(503), httpx.Response(200, json={})]
     )

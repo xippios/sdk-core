@@ -221,7 +221,7 @@ def test_bulk_tasks_stay_off_the_adapters_and_in_the_table(pytester: pytest.Pyte
     changes: dict[str, str | None] = {"src/xippios/example/tasks.py": bulk, "README.md": table}
     result = run_family(pytester, changes)
     result.assert_outcomes(passed=FAMILY_TESTS)
-    # register_tasks and router_from_tasks skip it themselves (ADR-0019, decision 4).
+    # register_tasks and router_from_tasks skip it themselves (ADR-0040, decision 4).
     every = "[getattr(tasks, n) for n in tasks.__all__]"
     adapters = {
         path: SOURCE[path].replace(SERVED, every)
@@ -332,7 +332,7 @@ __all__ = ["create_series"]
 def test_write_tasks_are_checked_and_listed_and_the_write_server_is_not(
     pytester: pytest.Pytester,
 ) -> None:
-    # The write server is its source's to test (ADR-0024); none is written here.
+    # The write server is its source's to test (ADR-0042); none is written here.
     write: dict[str, str | None] = {"src/xippios/example/tasks_write.py": WRITE_TASKS}
     table = README.replace(
         "| `regions` |",

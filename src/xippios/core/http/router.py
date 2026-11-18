@@ -8,7 +8,7 @@ description, and errors come back as problem details, never as tracebacks: a tas
 ``XippiosError``, and an argument a typed parameter refuses before the task runs, which
 the route answers as ``InvalidRequestError``, status 422, with no input value
 (ADR-0007, amendment 2026-11-18). A parameter keeps its ``Annotated`` metadata. A task
-its ``tasks.py`` names in ``BULK_TASKS`` gets no route (ADR-0019).
+its ``tasks.py`` names in ``BULK_TASKS`` gets no route (ADR-0040).
 """
 
 import functools
@@ -175,7 +175,7 @@ def router_from_tasks(
     parameter makes the route a ``POST`` with a JSON body keyed by parameter name. A
     task the module that defines it names in ``BULK_TASKS`` gets no route: a bulk task
     returns a file, or a list read from one, and is Python-only; no route returns a file
-    path (conventions §9, ADR-0019). So an adapter may pass every name of
+    path (conventions §9, ADR-0040). So an adapter may pass every name of
     ``tasks.__all__``.
 
     An argument a typed parameter refuses, a value outside an enum, a missing one or a

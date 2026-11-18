@@ -4,7 +4,7 @@ The behaviours are the ones sdk-usda-psd proved in its own client (``Quota``,
 ``observe_quota``, ``quota_pause``, ``QuotaAwareClient``; its tests/test_client.py),
 on a fictitious upstream. Headers and statuses follow api.data.gov's documented answers.
 A test that exercises the pause or the refusal is marked ``rate_limited``: otherwise the
-plugin turns both off (ADR-0013).
+plugin turns both off (ADR-0035).
 """
 
 import dataclasses
@@ -324,7 +324,7 @@ def test_spent_returning_nan_is_a_programming_error() -> None:
 @pytest.mark.anyio
 @pytest.mark.rate_limited
 async def test_after_a_documented_refusal_the_next_request_is_not_sent() -> None:
-    # ADR-0010 decision 4 for a source whose spent limit is not a 429 (sdk-comtrade).
+    # ADR-0033, decision 4 for a source whose spent limit is not a 429 (sdk-comtrade).
     events: list[str] = []
     policy = QuotaPolicy(spent=comtrade_spent, window=86_400.0, clock=Clock(), source="example")
     upstream = Upstream(events, quota_403("20:00:00"))
@@ -373,7 +373,7 @@ def test_install_sets_the_policy_s_own_hooks_on_a_copy() -> None:
 @pytest.mark.anyio
 @pytest.mark.rate_limited
 async def test_the_pause_is_bounded_by_pause_cap_alone() -> None:
-    # ADR-0010 decision 4, amended 2026-10-27: the policy's cap, not the config's backoff.
+    # ADR-0033, decision 4: the policy's cap, not the config's backoff.
     assert QuotaPolicy().pause_cap == RetryPolicy().backoff_max == 30.0
     events: list[str] = []
     clock = Clock()

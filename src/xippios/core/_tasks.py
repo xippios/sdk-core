@@ -19,7 +19,7 @@ def tool_functions(tasks: ModuleType) -> list[Callable[..., Any]]:
     """The functions of ``tasks.__all__`` that become tools and routes, in its order.
 
     A task the module names in ``BULK_TASKS`` is left out: it returns a file, or a list
-    read from one, and is Python-only (ADR-0019, decision 4). ``BULK_TASKS`` is read from
+    read from one, and is Python-only (ADR-0040, decision 4). ``BULK_TASKS`` is read from
     ``tasks`` itself, so a function whose ``__module__`` names another module, a tenant
     lock's wrapper say, is judged by the module it is listed in. So a source's ``mcp.py``
     passes ``tool_functions(tasks)`` to ``build_server``, and a host checks a tool list
@@ -66,7 +66,7 @@ def is_bulk_task(fn: Callable[..., Any]) -> bool:
     """True when ``fn``, or a function it wraps, is named in its module's ``BULK_TASKS``.
 
     A bulk task returns a file or a list read from one and is Python-only:
-    ``register_tasks`` and ``router_from_tasks`` skip it (ADR-0019, decision 4). The
+    ``register_tasks`` and ``router_from_tasks`` skip it (ADR-0040, decision 4). The
     module of each layer is ``sys.modules[layer.__module__]``, the source's ``tasks.py``
     for the task itself; a sync facade made by ``sync`` keeps its async twin's module
     and its name minus ``_async``, the name ``tasks.__all__`` and ``BULK_TASKS`` use. The

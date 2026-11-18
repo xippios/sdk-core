@@ -53,7 +53,7 @@ def test_validation() -> None:
     with pytest.raises(ValueError, match="cache_max_bytes must be at least 1"):
         ClientConfig(source="s", version="1", base_url="https://h.test", cache_max_bytes=0)
     default = ClientConfig(source="s", version="1", base_url="https://h.test")
-    assert default.cache_max_bytes == 8 * 1024 * 1024  # 8 MiB (ADR-0019, decision 3)
+    assert default.cache_max_bytes == 8 * 1024 * 1024  # 8 MiB (ADR-0040, decision 3)
 
 
 def test_rate_limit_defaults() -> None:

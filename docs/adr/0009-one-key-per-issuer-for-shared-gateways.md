@@ -1,6 +1,6 @@
 # ADR-0009: One key variable per issuer when one key serves several sources
 
-Status: Accepted · Date: 2026-10-23 · Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240
+Status: Superseded by ADR-0032 · Date: 2026-10-23 · Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240
 
 ## Context
 

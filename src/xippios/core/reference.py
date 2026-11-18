@@ -5,12 +5,12 @@ contents are cached per process; callers get fresh objects on every call.
 
 A packaged list, the records of one upstream operation as the refresh script fetched
 them, is a ``PackagedList``: it loads the file, builds the ``ResultMeta`` of an answer
-from it (ADR-0022), parses its records and writes the file. ``matches`` is the ``search``
+from it (ADR-0041), parses its records and writes the file. ``matches`` is the ``search``
 filter of the ``list_*`` tasks; ``closest``, by text, and ``nearest``, by number, find the
 known codes near a value that ``UnknownCode`` refuses.
 
 ``render_enums`` writes a source's generated ``enums.py``, ``StrEnum`` for a value list and
-``IntEnum`` for a list of integer ids and names in one module (conventions §3, ADR-0008):
+``IntEnum`` for a list of integer ids and names in one module (conventions §3, ADR-0031):
 plain, ASCII-only Python that the refresh script formats with ``ruff format`` and
 ``ruff check --fix`` before it is committed.
 """
@@ -114,7 +114,7 @@ class PackagedList(BaseModel):
     upstream parameter keep it as ``param`` in files of their own names. A list of
     values is records of one field named by the upstream parameter,
     ``[{"state_alpha": "AK"}, ...]``; a table is records of its columns. Any other key
-    is refused (ADR-0022, amendment 2026-10-27). Instances are frozen.
+    is refused (ADR-0041, decision 5). Instances are frozen.
 
     Attributes:
         param: The list, as upstream names it, e.g. ``"commodities"`` or
@@ -122,7 +122,7 @@ class PackagedList(BaseModel):
         endpoint: The upstream operation the list was fetched from, an operationId or a
             URL path, e.g. ``"PSDData_GetCommodities"`` or
             ``"files/v1/app/reference/Reporters.json"``; never ``"reference"`` or a
-            file of the package (ADR-0022, rule 1).
+            file of the package (ADR-0041, decision 1).
         fetched: When the refresh script fetched the list, timezone-aware UTC; ``write``
             writes it to the second (``"2026-10-27T09:15:00Z"``). A bare date, as
             refresh scripts wrote it before template v0.3.0 (``"2026-10-23"``), reads as
@@ -202,7 +202,7 @@ class PackagedList(BaseModel):
         published_at: datetime | None = None,
         published_at_naive: bool = False,
     ) -> ResultMeta:
-        """The ``ResultMeta`` of an answer from this list (ADR-0022, rule 1).
+        """The ``ResultMeta`` of an answer from this list (ADR-0041, decision 1).
 
         ``endpoint`` is the list's upstream operation and ``retrieved_at`` its
         ``fetched``, as a cache hit's is the time its entry was stored; ``total`` stays
@@ -709,7 +709,7 @@ def render_enums(
     class's docstring is one line, ``Values of ``<key>`` (fetched <date>).``, which an MCP
     tool's input schema shows an agent (conventions §8).
 
-    The output is plain and ASCII-only (ADR-0008): a value is written as ``ascii()``
+    The output is plain and ASCII-only (ADR-0031): a value is written as ``ascii()``
     writes it, so a quote, a backslash, a control character and every character outside
     ASCII is escaped (``"Côte"`` as ``'C\xf4te'``) and the value is the same at runtime;
     one member per line; ``__all__`` one name per line in the order of ``lists``; the

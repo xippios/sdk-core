@@ -85,7 +85,7 @@ class UpstreamModel(BaseModel):
     Instances are frozen. Fields upstream adds later are ignored rather than rejected,
     and fields can be populated by name as well as by alias, so upstream ``camelCase``
     maps onto ``snake_case`` attributes without breaking construction in tests.
-    ``Decimal`` fields serialise as JSON numbers in both adapters (ADR-0008); Python
+    ``Decimal`` fields serialise as JSON numbers in both adapters (ADR-0031); Python
     keeps the ``Decimal``. ``dump_upstream`` gives the record back under upstream's
     names, for a packaged reference file.
     """
@@ -103,7 +103,7 @@ class UpstreamModel(BaseModel):
         """Build this model from another model's same-named fields.
 
         A projection keeps a subset of the source's columns under their upstream names
-        (ADR-0008). ``overrides`` are for parsing only, e.g. ``value=parse_decimal(...)``;
+        (ADR-0031). ``overrides`` are for parsing only, e.g. ``value=parse_decimal(...)``;
         every other field is copied from ``source`` unchanged.
 
         Args:
@@ -178,30 +178,30 @@ class ResultMeta(BaseModel):
     Attributes:
         source: Source slug, e.g. ``"usda-nass"``.
         endpoint: Upstream operation name, e.g. ``"api_GET"``; for a packaged answer the
-            operation the list came from (ADR-0022), as ``PackagedList.meta`` sets it.
+            operation the list came from (ADR-0041), as ``PackagedList.meta`` sets it.
         retrieved_at: When we fetched the data; timezone-aware UTC, defaults to now. A
             cache hit's is the time its entry was stored (``AsyncClient.get_answer``), a
-            packaged answer's the time the list was fetched (ADR-0022, rule 1).
+            packaged answer's the time the list was fetched (ADR-0041, decision 1).
         published_at: Upstream publication or release time when known, timezone-aware;
             naive only with ``published_at_naive`` set.
         published_at_naive: ``True`` when upstream printed ``published_at`` without a
             zone (FAS: ``2026-10-06T08:00:00``): the value is stored as given, no zone
-            attached, upstream's text and not comparable across sources (ADR-0022,
-            rule 2). Set only with a naive ``published_at``.
+            attached, upstream's text and not comparable across sources (ADR-0041,
+            decision 2). Set only with a naive ``published_at``.
         vintage: Upstream release identifier when the source has one, as upstream names
-            it; never a fetch date (ADR-0022, rule 1).
+            it; never a fetch date (ADR-0041, decision 1).
         request: The parameters sent, for reproducibility. A top-level parameter whose
             value is ``None``, one the caller left out, is dropped at construction
-            (ADR-0022, rule 3); a ``None`` inside a nested mapping is kept as given. The
+            (ADR-0041, decision 3); a ``None`` inside a nested mapping is kept as given. The
             value of every key that names a credential, at any depth, is ``REDACTED``
-            by the one rule of ``xippios.core.redaction`` (ADR-0005; ``key`` only where
-            a ``QueryKeyAuth`` sends it, ADR-0019; a ``token`` name a source declares
+            by the one rule of ``xippios.core.redaction`` (ADR-0030; ``key`` only where
+            a ``QueryKeyAuth`` sends it, ADR-0040; a ``token`` name a source declares
             data, ``next_token`` say, kept as sent), and so is each credential in the
             query of a link, a signed file link's signature say, as ``scrub_url``
             writes it; record the variable name, never the value.
         total: Upstream's count of the records matching the request, when the source
             reports one; ``None`` when it does not or the count is unknown. Set only from
-            what upstream reports, never computed from ``len(data)`` (ADR-0012).
+            what upstream reports, never computed from ``len(data)`` (ADR-0034).
         tenant: The tenant the data came from, by name, e.g. ``"acme"``; never a
             credential, nor a host or another value of the tenant's (conventions §7).
             ``None`` for a single-tenant source and for the list of tenant names.
@@ -273,7 +273,7 @@ class ResultCap:
 
     The defaults are the family's: 200 rows or 64 KB. A reference tool whose whole list
     an agent needs gets a cap of its own, through ``caps=`` of ``register_tasks`` or
-    ``build_server`` (ADR-0016), with the rows and bytes the source judges it needs; a
+    ``build_server`` (ADR-0038), with the rows and bytes the source judges it needs; a
     byte bound above the default is a deliberate choice for that tool. It lives here, not
     in ``xippios.core.mcp``, so a source's ``tasks.py`` can declare its ``MCP_CAPS``
     without the ``mcp`` extra; ``xippios.core.mcp.cap_result`` applies it.
