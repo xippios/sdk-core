@@ -532,9 +532,11 @@ route: `router_from_tasks` skips it, and no route returns a file path (ADR-0019)
 - A fixture file a PR adds or changes stays under 256 KiB (ADR-0019). A file the PR only
   moves, its content unchanged, is neither, so a fixture over the cap recorded before the
   rule bound moves with its directory (§2) and stays until a PR re-records it. A download
-  fixture holds a small real answer (a short date range, one commodity) or the first N
-  rows or bytes of the file: the recorder truncates on request (`max_bytes=`), marks the
-  fixture `truncated: true` and keeps `original_bytes` and the sha256 of the full file.
+  fixture holds a small real answer (a short date range, one commodity), the sample of
+  the file that its parser tests read, marked `sample: true` as the next bullet says, or
+  the first N rows or bytes of the file: the recorder truncates on request
+  (`max_bytes=`), marks the fixture `truncated: true` and keeps `original_bytes` and the
+  sha256 of the full file.
   An XML, ZIP, gzip, XLS or XLSX fixture is a small real sample (a short query, one
   member of the archive, a few rows), never a byte-truncated file, since a cut-off binary
   or compressed file cannot be parsed and a cut-off XML document is not well-formed; byte
