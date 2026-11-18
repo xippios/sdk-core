@@ -266,10 +266,11 @@ def test_every_taxonomy_class_is_covered() -> None:
 
 
 FETCHED = datetime(2026, 10, 23, 9, 15, tzinfo=UTC)
-REFRESH = "If upstream added it since, the packaged list needs a refresh (/refresh-reference-data)."
+REFRESH = "If upstream added it since, the packaged list is out of date."
+"""The tail every refusal ends with: no maintainer's command, which an agent cannot run."""
 
 
-def test_unknown_code_names_the_closest_codes_and_the_refresh() -> None:
+def test_unknown_code_names_the_closest_codes_and_a_list_out_of_date() -> None:
     # The copies of sdk-usda-psd, sdk-usda-esr and sdk-usda-gats, one message (ADR-0022).
     closest = [("0410000", "Wheat"), ("0440000", "Corn")]
     error = UnknownCode(
@@ -310,3 +311,20 @@ def test_unknown_code_takes_a_hint_over_the_closest_and_a_reason() -> None:
         "'ZZ' is not a partner_code in the packaged countries list (fetched 2026-10-23). " + REFRESH
     )
     assert bare.closest == ()
+
+
+def test_unknown_code_names_a_bare_code_once_and_no_command_of_a_maintainer() -> None:
+    # A list of bare values, sdk-usda-nass's state_alpha: each value is its own name
+    # (https://github.com/xippios/sdk-core/issues/111).
+    closest = [("VA", "VA"), ("VT", "Vermont")]
+    error = UnknownCode(
+        "state_alpha", "VS", list_name="state_alpha", fetched=FETCHED, closest=closest
+    )
+    assert str(error) == (
+        "'VS' is not a state_alpha in the packaged state_alpha list (fetched 2026-10-23). "
+        "Did you mean VA, VT (Vermont)? " + REFRESH
+    )
+    assert "/refresh-reference-data" not in str(error)
+    assert error.closest == tuple(closest)
+    by_id = UnknownCode("attribute_id", 98, list_name="ids", fetched=FETCHED, closest=[(99, "99")])
+    assert "Did you mean 99? " in str(by_id)
