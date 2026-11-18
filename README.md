@@ -25,8 +25,10 @@ It gives a source package the things that should be identical across the family:
   text and CSV next to `decode_json`; the cache stores no body over `cache_max_bytes`
   (8 MiB).
 - **Auth helpers** that read the key from the environment on the first request:
-  query parameter, header, bearer token or basic auth. A source's documented error
-  shapes go into `ClientConfig.classify`, consulted on every response.
+  query parameter, header, bearer token or basic auth; and `RenewingBearerAuth`, the base
+  for an upstream that exchanges a login or a refresh token for a short-lived bearer. A
+  source's documented error shapes go into `ClientConfig.classify`, consulted on every
+  response.
 - **The api.data.gov gateway** (`xippios.core.data_gov`) for every source behind it:
   the key from `DATA_GOV_API_KEY`, the gateway's error answers, and one quota policy per
   process for that key.
@@ -318,6 +320,62 @@ a request to an absolute URL on another origin is sent without them, and a call 
 send credentials there passes an `httpx.Auth` of its own. Every request the client builds
 says where they go, for the hooks, in its extensions: `xippios_auth` is `"client"`,
 `"none"` or `"own"`, and `xippios_origin` is `"base"` or `"other"`.
+
+## A login or a refresh token: the renewing bearer
+
+An upstream that issues a short-lived bearer for a long-lived credential, a login or an
+OAuth refresh token, gets a subclass of `RenewingBearerAuth`. The source writes the token
+request and reads its answer; core sends it, keeps the bearer and renews it:
+
+```python
+import httpx
+from pydantic import SecretStr
+
+from xippios.core import AsyncClient, BearerToken, ClientConfig, RenewingBearerAuth
+
+
+class LoginAuth(RenewingBearerAuth):
+    """The account's login, EXAMPLE_USERNAME and EXAMPLE_PASSWORD, for a bearer."""
+
+    def token_request(self, request: httpx.Request) -> httpx.Request:
+        form = {
+            "username": self.credential("EXAMPLE_USERNAME"),  # read now, kept nowhere
+            "password": self.credential("EXAMPLE_PASSWORD"),
+        }
+        return httpx.Request("POST", "https://api.example.org/auth/login", data=form)
+
+    def read_token(self, response: httpx.Response) -> BearerToken:
+        answer = response.json()  # {"access_token": "...", "expires_in": 3600}
+        return BearerToken(SecretStr(answer["access_token"]), answer["expires_in"])
+
+
+client = AsyncClient(
+    ClientConfig(source="example", version="0.1.0", base_url="https://api.example.org"),
+    auth=LoginAuth(source="example"),  # logs in on the first request, not at import
+)
+```
+
+The first request sends the token request ahead of it, with its `User-Agent`, and the
+bearer, kept as a `SecretStr`, goes out as `Authorization: Bearer` until `margin` seconds
+before its `expires_in` runs out (`RENEWAL_MARGIN`, 60 s, by default), when the next
+request exchanges again. An answer whose status is in `renew_on`, `{401}` by default,
+makes one more exchange and sends the request again, once; a source whose upstream
+refuses a bearer with a 403 too sets `renew_on = frozenset({401, 403})` on its class. A
+request that finds an exchange running on its event loop waits for it, so two first
+requests exchange once, and two requests refused with one bearer renew it once.
+
+A token answer other than HTTP 200 raises `token_refused(response)`: core's status
+mapping, unless the source maps its upstream's refusals first and names what to run
+again, the variables to check or the consent and its scope set. `read_token` raises
+`ValidationError` for an answer that is not the documented one, quoting nothing of it.
+`credential(name)` reads a credential from `credentials=`, given to the constructor, or
+else from the variable, and an unset one raises `ConfigError` with the text of
+`credential_help(name)`. The exchange runs inside httpx's auth flow, where it is not
+paced, observed, cached or retried, and its error ends the call. It reads the token answer
+and no other, so a `download` streams to its file, and the client sends its auth to the
+base URL's origin only. httpx keeps the token answer in the final response's `history`
+while that response lives; `get_json`, `get_answer` and the cache keep no response.
+sdk-faostat's login and sdk-google-mail's refresh are its two token requests (ADR-0025).
 
 ## Files: download and decode
 
@@ -740,7 +798,9 @@ xippios_placeholder_key_envs = ["EXAMPLE_API_KEY"]
   cache backend of the source's own is the source's to clear), and every `EnvKeyAuth`
   sends `PLACEHOLDER_KEY` while the variables named in `xippios_placeholder_key_envs`
   hold it (fixture `placeholder_api_key`), whatever the shell or an earlier live test
-  left behind. The `httpx`, `httpcore`, `httpx2` and `httpcore2` logger levels come back
+  left behind. Every credential that a `RenewingBearerAuth` reads is the placeholder too,
+  and a variable unset or empty is still its `ConfigError`, so the ini option names each
+  variable a token request reads. The `httpx`, `httpcore`, `httpx2` and `httpcore2` logger levels come back
   after every test.
   After a live run the summary prints each quota policy's last reading, `quota after the
   live run: usda-psd: 986 of 1000 requests left as of ...`. ADR-0013 states the edges of
@@ -869,7 +929,7 @@ fragment until the release assembles it.
 
 | Module | What | Status |
 | --- | --- | --- |
-| `xippios.core.client` | httpx client, retries, rate limit, cache with a byte bound, quota policy, request hooks, env-key auth, `get_answer`, `download`, `decode_text`, `decode_csv` | alpha |
+| `xippios.core.client` | httpx client, retries, rate limit, cache with a byte bound, quota policy, request hooks, env-key auth, the renewing bearer, `get_answer`, `download`, `decode_text`, `decode_csv` | alpha |
 | `xippios.core.errors` | taxonomy, `UnknownCode`, response classification, `request_description` | alpha |
 | `xippios.core.data_gov` | `Gateway`: the api.data.gov key, the gateway's `classify` of its own answers with `NoDataForYear` on a data path, one quota policy per process | alpha |
 | `xippios.core.redaction` | the one credential rule of the envelope, the recorder and replay, `register_data_name`, signed links | alpha |
