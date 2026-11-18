@@ -1,6 +1,6 @@
 # ADR-0004: Core internal layout, dependency direction and MCP SDK choice
 
-Status: Accepted · Date: 2026-10-20
+Status: Superseded by ADR-0029 · Date: 2026-10-20
 
 ## Context
 

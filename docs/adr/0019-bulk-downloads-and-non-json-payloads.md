@@ -1,6 +1,6 @@
 # ADR-0019: Bulk downloads and non-JSON payloads in core
 
-Status: Accepted · Date: 2026-10-26 · Decided by Johannes on 2026-10-26 (architect
+Status: Superseded by ADR-0040 · Date: 2026-10-26 · Decided by Johannes on 2026-10-26 (architect
 interview; the family review of 2026-10-25, C15; decision 5's two format rules from the
 briefings review of the same day) ·
 Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240

@@ -1,6 +1,6 @@
 # ADR-0010: Rate-limit policy — a fast pace, quotas spent, the 429 interpreted
 
-Status: Accepted · Date: 2026-10-23 · Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240
+Status: Superseded by ADR-0033 · Date: 2026-10-23 · Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240
 
 ## Context
 

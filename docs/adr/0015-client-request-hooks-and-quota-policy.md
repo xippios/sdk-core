@@ -1,6 +1,6 @@
 # ADR-0015: Client request hooks and a quota policy
 
-Status: Accepted · Date: 2026-10-24 · Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240
+Status: Superseded by ADR-0037 · Date: 2026-10-24 · Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240
 
 ## Context
 

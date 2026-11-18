@@ -1,6 +1,6 @@
 # ADR-0022: Packaged answers and release times in `ResultMeta`
 
-Status: Accepted · Date: 2026-10-26 · Decided by Johannes on 2026-10-26 (architect
+Status: Superseded by ADR-0041 · Date: 2026-10-26 · Decided by Johannes on 2026-10-26 (architect
 interview; the family review of 2026-10-25; the gats ruling of 2026-10-26) · Amended
 2026-11-18 by https://github.com/xippios/sdk-core/issues/240
 

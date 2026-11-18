@@ -1,6 +1,6 @@
 # ADR-0013: Offline tests guaranteed by the plugin
 
-Status: Accepted · Date: 2026-10-23 · Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240
+Status: Superseded by ADR-0035 · Date: 2026-10-23 · Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240
 
 ## Context
 

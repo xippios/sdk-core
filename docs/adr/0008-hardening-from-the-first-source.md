@@ -1,6 +1,6 @@
 # ADR-0008: Hardening core from the first source package
 
-Status: Accepted · Date: 2026-10-22 · Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240
+Status: Superseded by ADR-0031 · Date: 2026-10-22 · Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240
 
 ## Context
 

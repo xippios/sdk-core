@@ -1,6 +1,6 @@
 # ADR-0018: Core versioning and source adoption
 
-Status: Accepted · Date: 2026-10-25 · Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240
+Status: Superseded by ADR-0039 · Date: 2026-10-25 · Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240
 
 ## Context
 
