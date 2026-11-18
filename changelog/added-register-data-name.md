@@ -1,7 +1,7 @@
 - `register_data_name(name)` of `xippios.core.redaction` declares a parameter whose name
   holds the whole word `token` data, a paging cursor such as X's `next_token`, so that
-  `meta.request`, a recorded fixture and replay keep its value; every other name with a
-  whole-word `token` stays a credential. `token`, `access_token`, `refresh_token`,
+  `meta.request`, a recorded fixture and replay keep its value. Every other name with a
+  whole-word `token` stays a credential, and `token`, `access_token`, `refresh_token`,
   `id_token` and a name with another credential word are refused with `ValueError`.
   (ADR-0019, §4, §10, https://github.com/xippios/sdk-core/issues/184)
   - Hand-apply: `src/xippios/x/_client.py` (sdk-x) — `register_data_name("next_token")`
