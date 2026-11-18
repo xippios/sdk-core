@@ -10,13 +10,14 @@ bracketed with ``CLOCK_SLACK``.
 """
 
 import json
+import re
 from collections.abc import Callable
 
 import httpx
 import pytest
 
 from xippios.core.client import AsyncClient, ClientConfig
-from xippios.core.data_gov import API_KEY_ENV, WINDOW, Gateway
+from xippios.core.data_gov import API_KEY_ENV, WINDOW, Gateway, NoDataForYear
 from xippios.core.errors import AuthError, NotFoundError, RateLimitError
 from xippios.core.testing import CLOCK_SLACK
 
@@ -184,3 +185,96 @@ async def test_two_sources_draw_on_one_quota() -> None:
     assert 3151 - slack <= info.value.retry_after <= 3151 + slack
     assert HOST not in info.value.message
     assert "not-sent" not in info.value.message
+
+
+# -- FAS's empty 404 on a data path (https://github.com/xippios/sdk-core/issues/106) -------
+
+# sdk-usda-psd's and sdk-usda-esr's data paths, as their _client.py write them.
+PSD_DATA = re.compile(r"/api/psd/commodity/[^/]+/(?:country/[^/]+|world)/year/[^/]+")
+ESR_DATA = re.compile(
+    r"/api/esr/exports/commodityCode/[^/]+/(?:allCountries|countryCode/[^/]+)/marketYear/[^/]+"
+)
+YEAR_1900 = "/api/psd/commodity/0410000/country/US/year/1900"
+TEXT = {"content-type": "text/plain; charset=utf-8"}
+
+
+def test_an_empty_text_404_on_a_data_path_says_the_year_holds_no_data() -> None:
+    # Both sources recorded it for market year 1900 on every data form.
+    error = Gateway("usda-psd", data_path=PSD_DATA).classify(
+        answer(404, None, TEXT, path=YEAR_1900)
+    )
+    assert isinstance(error, NoDataForYear)
+    assert isinstance(error, NotFoundError), "in the taxonomy, conventions §5"
+    assert error.path == YEAR_1900
+    assert error.source == "usda-psd"
+    assert error.message == (
+        f"no data for {YEAR_1900} (HTTP 404 with an empty body): the year it names holds no "
+        "data upstream"
+    )
+    assert HOST not in error.message
+    path = "/api/esr/exports/commodityCode/104/allCountries/marketYear/1900"
+    esr = Gateway("usda-esr", data_path=ESR_DATA)
+    upper = {"Content-Type": "TEXT/PLAIN; charset=utf-8"}  # media types ignore case (RFC 9110)
+    assert isinstance(esr.classify(answer(404, None, upper, path=path)), NoDataForYear)
+
+
+@pytest.mark.parametrize(
+    ("headers", "path", "body"),
+    [
+        (TEXT, "/api/psd/commodity/0410000/dataReleaseDates", None),  # off a data path
+        ({"content-type": "application/json"}, YEAR_1900, None),  # not text
+        ({}, YEAR_1900, None),  # no content type
+        (TEXT, YEAR_1900, "no such year"),  # a body
+    ],
+)
+def test_any_other_404_is_left_to_the_source(
+    headers: dict[str, str], path: str, body: object
+) -> None:
+    gateway = Gateway("usda-psd", data_path=PSD_DATA)
+    assert gateway.classify(answer(404, body, headers, path=path)) is None
+
+
+def test_a_gateway_without_data_paths_maps_no_empty_404() -> None:
+    # sdk-usda-gats: its data paths answer [], never the empty 404.
+    assert Gateway("usda-gats").classify(answer(404, None, TEXT, path=YEAR_1900)) is None
+
+
+def test_no_data_for_year_takes_a_message_of_the_source_s_own() -> None:
+    # A task raises it again naming commodity, country and market year.
+    error = NoDataForYear(YEAR_1900, "PSD has no data for wheat, US, 1900", source="usda-psd")
+    assert (error.path, error.message, error.source) == (
+        YEAR_1900,
+        "PSD has no data for wheat, US, 1900",
+        "usda-psd",
+    )
+
+
+# -- the gateway's own answers alone (https://github.com/xippios/sdk-core/issues/163) -----
+
+
+@pytest.mark.parametrize(
+    ("status", "body"), [(429, OVER_RATE_LIMIT), (403, INVALID_KEY), (404, None)]
+)
+def test_an_answer_from_another_origin_is_not_the_gateway_s(status: int, body: object) -> None:
+    request = httpx.Request(
+        "GET", "https://files.example.test" + YEAR_1900, extensions={"xippios_origin": "other"}
+    )
+    content = b"" if body is None else json.dumps(body).encode()
+    response = httpx.Response(status, content=content, headers=TEXT, request=request)
+    assert Gateway("usda-psd", data_path=PSD_DATA).classify(response) is None
+
+
+@pytest.mark.anyio
+@pytest.mark.rate_limited
+async def test_a_429_from_another_host_spends_no_gateway_quota() -> None:
+    # A keyless bulk download through the source's one client (sdk-usda-psd's plan).
+    upstream = Upstream(429, OVER_RATE_LIMIT, RECORDED_429)
+    client = client_for(Gateway("usda-psd"), upstream)
+    with pytest.raises(RateLimitError) as info:
+        await client.get_json("https://files.example.test/psd_alldata.zip")
+    assert not info.value.message.startswith("api.data.gov"), "core's mapping, not the gateway's"
+    assert Gateway.policy.snapshot() is None
+    sent = len(upstream.sent)
+    with pytest.raises(RateLimitError):
+        await client.get_json("https://files.example.test/psd_alldata.zip")
+    assert len(upstream.sent) > sent, "sent again: no gateway quota holds it back"

@@ -105,6 +105,29 @@ async def test_download_streams_the_file_and_keeps_what_upstream_said(
 
 
 @pytest.mark.anyio
+async def test_a_download_from_another_host_carries_no_credential(
+    respx_mock: respx.MockRouter, tmp_path: Path
+) -> None:
+    # https://github.com/xippios/sdk-core/issues/163: a catalog's file link on another host
+    # got the client's key by default; it goes without it, and its request says so.
+    link = "https://files.example.test/bulk/psd.csv"
+    route = respx_mock.get(link).respond(200, text=CSV)
+    seen: list[object] = []
+    client = make_client(
+        auth=QueryKeyAuth("key", "EXAMPLE_API_KEY"),
+        before_request=lambda request: seen.append(request.extensions.get("xippios_origin")),
+        observe=lambda response: seen.append(response.request.extensions.get("xippios_auth")),
+    )
+    await client.download(link, tmp_path / "psd.csv")
+    assert sent_urls(route) == [link]
+    assert "authorization" not in route.calls.last.request.headers
+    assert seen == ["other", "client"]
+    assert (tmp_path / "psd.csv").read_text(encoding="utf-8") == CSV
+    await client.download(link, tmp_path / "again.csv", auth=httpx.BasicAuth("user", "pw"))
+    assert route.calls.last.request.headers["authorization"].startswith("Basic ")
+
+
+@pytest.mark.anyio
 async def test_a_retry_restarts_the_file_and_the_hooks_run_as_for_get(tmp_path: Path) -> None:
     # ADR-0011: a 5xx and a transport failure in the middle of the body are retried.
     bodies = [Chunks(3, fail_after=2), Chunks(2)]

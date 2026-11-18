@@ -16,7 +16,15 @@ import httpx
 import pytest
 import respx
 
-from xippios.core.client import AsyncClient, ClientConfig, MemoryCache, QuotaPolicy, RetryPolicy
+from xippios.core.client import (
+    AsyncClient,
+    ClientConfig,
+    HeaderKeyAuth,
+    MemoryCache,
+    QuotaPolicy,
+    RateLimit,
+    RetryPolicy,
+)
 from xippios.core.client.quota import QuotaSnapshot
 from xippios.core.errors import RateLimitError
 from xippios.core.mcp.errors import error_to_text
@@ -507,3 +515,62 @@ async def test_raw_answers_and_retried_attempts_update_the_snapshot() -> None:
     snapshot = policy.snapshot()
     assert snapshot is not None
     assert (snapshot.limit, snapshot.remaining) == (1000, 42)
+
+
+# -- requests outside the quota (https://github.com/xippios/sdk-core/issues/163) -----------
+
+
+@pytest.mark.anyio
+@pytest.mark.rate_limited
+async def test_a_keyless_call_into_a_spent_quota_is_sent_and_paced() -> None:
+    # sdk-comtrade's public operations spend no quota, yet a spent key quota held them back.
+    events: list[str] = []
+    clock = Clock()
+    policy = QuotaPolicy(clock=clock, sleep=Sleeper(events, clock), source="example")
+    upstream = Upstream(events, answer(headers=SPENT), answer(headers=QUOTA))
+    config = policy.install(
+        make_config(retry=RetryPolicy(max_attempts=1), rate_limit=RateLimit(per_minute=60, burst=1))
+    )
+    key = HeaderKeyAuth("X-Api-Key", "EXAMPLE_API_KEY")
+    client = AsyncClient(config, auth=key, transport=upstream, sleep=Sleeper(events))
+    await client.get("/v1/x")  # leaves nothing: spent for the window
+    assert await client.get_json("/v1/public", auth=None) == []
+    assert events == ["sent /v1/x", "sleep 1", "sent /v1/public"], "paced, never held back"
+    snapshot = policy.snapshot()
+    assert snapshot is not None
+    assert snapshot.remaining == 0, "the keyless answer's 999 is not the key's quota"
+    with pytest.raises(RateLimitError, match="nothing was sent for GET /v1/x"):
+        await client.get("/v1/x")
+    assert upstream.sent == 2
+
+
+@pytest.mark.anyio
+@pytest.mark.rate_limited
+async def test_a_call_to_another_origin_is_outside_the_quota() -> None:
+    # A file link on another host: the key never goes there, and neither does the quota.
+    events: list[str] = []
+    client, policy, _, _ = quota_client(
+        events, answer(headers=SPENT), answer(429, {"Retry-After": "60"})
+    )
+    await client.get("/v1/x")
+    spent = policy.snapshot()
+    response = await client.get("https://files.example.test/f.csv", raise_on_error=False)
+    assert response.status_code == 429
+    assert events == ["sent /v1/x", "sent /f.csv"]
+    assert policy.snapshot() is spent, "another host's 429 is not the quota's"
+
+
+def test_a_marked_request_is_neither_held_back_nor_read() -> None:
+    # The marks the client sets; a request or a response built without them counts.
+    policy = QuotaPolicy(clock=Clock())
+    keyless = httpx.Request("GET", f"{BASE}/v1/x", extensions={"xippios_auth": "none"})
+    elsewhere = httpx.Request(
+        "GET", "https://files.example.test/f", extensions={"xippios_origin": "other"}
+    )
+    for request in (keyless, elsewhere):
+        policy.observe(httpx.Response(429, request=request))
+        assert policy.snapshot() is None
+    policy.observe(httpx.Response(429))  # no request: as before, the policy's
+    snapshot = policy.snapshot()
+    assert snapshot is not None
+    assert snapshot.remaining == 0
