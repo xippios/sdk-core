@@ -79,10 +79,13 @@ https://github.com/xippios/sdk-core/issues/62, found by sdk-eurostat; ADR-0023, 
 2). `xippios.core.errors.request_description(response)`, which `xippios.core` exports
 beside `error_from_response`, gives the method and path that `error_from_response`'s
 messages name, `GET /v1/x` for an answer to `https://host.test/v1/x?year=2024`, and
-replaces core's private copy. sdk-eurostat and sdk-x each kept a copy as `_where`, and
-sdk-faostat, sdk-google-mail and sdk-usda-esmis wrote it inline in their `classify` and
-their auth errors, so the rule above is now one function that a source's own messages
-name the request with; their adoption of core 0.4.0 deletes the copies. A message that
-shows the path as sent, its percent-escapes kept, as sdk-usda-esmis's refusal of an
-encoded slash does, keeps its own. The decoders' subject, `response from <path>`, names
-a path their caller may give for a response built without a request, and stays.
+replaces core's private copy, and `download`'s refusal of a 1xx or 3xx names the request
+with it too. A quota policy's refusal of a request it does not send is written before any
+answer exists, and names the request's method and path from the request itself.
+sdk-eurostat and sdk-x each kept a copy as `_where`, and sdk-faostat, sdk-google-mail and
+sdk-usda-esmis wrote it inline in their `classify` and their auth errors, so the rule
+above is now one function that a source's own messages name the request with; their
+adoption of core 0.4.0 deletes the copies. A message that shows the path as sent, its
+percent-escapes kept, as sdk-usda-esmis's refusal of an encoded slash does, keeps its own.
+The decoders' subject, `response from <path>`, names a path their caller may give for a
+response built without a request, and stays.

@@ -456,8 +456,10 @@ request. Adapters convert these to structured text (MCP) or problem+json (HTTP;
 `InvalidRequestError` is 422); they never leak tracebacks. An error message names the
 request's method and path, never its host or query string: the host can name a tenant,
 the query can carry a key (ADR-0005). `xippios.core.errors.request_description(response)`
-gives that description, `GET /v1/series`: core's messages use it, and a source's
-`classify` words the errors it maps with it, not with a copy of its own (ADR-0005,
+gives that description, `GET /v1/series`: core's messages about an answer use it, and a
+source's `classify` words the errors it maps with it, not with a copy of its own. A
+message written before any answer exists, such as a quota policy's refusal of a request
+it does not send, names the request's method and path from the request itself (ADR-0005,
 amendment 2026-11-18).
 
 ## 6. HTTP client (`xippios.core.client`)

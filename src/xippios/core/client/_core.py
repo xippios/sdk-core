@@ -645,7 +645,7 @@ class AsyncClient:
             raise_for_status(response, source=self.source)
             if not response.is_success:
                 raise UpstreamError(
-                    f"{response.status_code} from GET {response.request.url.path}: a download "
+                    f"{response.status_code} from {request_description(response)}: a download "
                     "writes a 2xx answer only, and redirects are not followed",
                     status=response.status_code,
                     body=response.text[:BODY_LIMIT],
