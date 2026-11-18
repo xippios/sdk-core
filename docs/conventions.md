@@ -675,7 +675,7 @@ with sdk-template 0.4.0, which renders it (ADR-0026, amendment 2026-11-18, point
   `--allow-remote` is passed, with a gateway in front. A read server that reaches what
   no deployment may serve without authentication, sdk-google-mail's mailboxes, is built
   with `build_server(..., loopback_only=True)` and held the same way; `is_loopback_only`
-  tells a host either kind (ADR-0025, D-a and its amendment of 2026-11-18). A write server exposes write tools only; reference tools
+  tells a host either kind (ADR-0025, D-a, and amendment 2026-11-18, point a). A write server exposes write tools only; reference tools
   stay on the read server. A source tests its write server with
   `xippios.core.testing.assert_write_tools`: a write server, its tools exactly the write
   tasks, each taking `confirm: bool = False` as its last parameter, and none of them a

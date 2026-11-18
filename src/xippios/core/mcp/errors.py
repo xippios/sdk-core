@@ -20,7 +20,7 @@ def _error_answer(exc: XippiosError) -> CallToolResult:
 
     A client tells the answer from data by the flag and an agent reads the text, which
     stays conventions §8's (https://github.com/xippios/sdk-core/issues/168; ADR-0026,
-    decision 6 and its amendment of 2026-11-18).
+    decision 6, and amendment 2026-11-18, point b).
     """
     return CallToolResult(
         content=[TextContent(type="text", text=error_to_text(exc))], is_error=True

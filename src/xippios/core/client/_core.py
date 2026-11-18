@@ -361,7 +361,7 @@ class AsyncClient:
         ``request``, and ``observe`` sees the answer; ``classify`` is not asked, since
         nothing is retried or raised. The client's auth reaches the base URL's origin
         only, and the request carries the marks ``xippios_auth`` and ``xippios_origin``,
-        as every request the client builds does (point (d) there). The body is read up
+        as every request the client builds does (ADR-0037, decision 4). The body is read up
         to ``max_read_bytes`` as decoded, and no further (ADR-0040, decision 5).
 
         Args:

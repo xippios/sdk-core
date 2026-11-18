@@ -1,7 +1,7 @@
 """The tool set of the package contract: what a package's ``build(**options)`` returns.
 
-The package contract is how a host serves a source (ADR-0026, decision 8, and its
-amendment of 2026-11-18, (c) and (d)): the variables the package needs, as
+The package contract is how a host serves a source (ADR-0026, decision 8, and
+amendment 2026-11-18, points c and d): the variables the package needs, as
 ``xippios.core.EnvVar`` entries, and the tool set here. A source's ``mcp.py`` builds its
 tool set in ``build(**options)``, whose options are keyword arguments with defaults, and
 its server from it::
