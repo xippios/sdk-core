@@ -209,8 +209,10 @@ refuses the range where it cannot. Four cases met it without a reading:
 (e) **A date-only release identifier** (decision 2; step 15;
 https://github.com/xippios/sdk-core/issues/158, found by sdk-faostat, with
 sdk-usda-psd). A release identifier that is a day or a month, with no time, such as
-FAOSTAT's `date_update` (`2025-12-31`) or PSD's release month (`2026-10`), is neither a
-time nor a time printed without a zone. It stays in `vintage` as upstream prints it, and
+FAOSTAT's `date_update`, which sdk-faostat keeps as printed (`2025-12-31`), or PSD's
+release month, which sdk-usda-psd writes as `2026-10` from two fields of upstream's
+records (`calendarYear` and `month`, `releaseYear` and `releaseMonth`), is neither a time
+nor a time printed without a zone. It stays in `vintage` as upstream gives it, and
 `published_at` stays empty: decision 2's flag covers a time printed without a zone, not
 a day, and 00:00 of the day or the first of the month would date the release before it
 happened, a look-ahead in an as-of store. The plan of core 0.4.0 settled it as both

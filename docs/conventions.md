@@ -275,15 +275,15 @@ keeps the time as printed (ESMIS prints `+0000` for a release that its calendar 
 files' times put at noon Eastern; ADR-0022, amendment 2026-11-18, point a). `vintage`
 keeps the release identifier as upstream names it; where that identifier is the
 timestamp text, `vintage` holds the text and `published_at` its parsed value with the
-flag. A release identifier that is a day or a month, with no time (sdk-faostat's
-`date_update`, `2025-12-31`; sdk-usda-psd's release month, `2026-10`), stays in
-`vintage` as upstream prints it, and `published_at` stays empty: the flag covers a time
-printed without a zone, not a day, and 00:00 of the day or the first of the month would
-date the release before it happened (ADR-0022, amendment 2026-11-18, point e). A load
-time is never a vintage: a source whose only time is the time upstream loaded the data
-(sdk-usda-nass's `load_time`) leaves `vintage` and `published_at` empty, and a newest
-load time computed across datasets is no release time either (ADR-0022, reading of
-2026-10-29).
+flag. A release identifier that is a day or a month, with no time, stays in `vintage` as
+upstream gives it (sdk-faostat's `date_update` as printed, `2025-12-31`; sdk-usda-psd's
+release month, which it writes as `2026-10` from two fields of upstream's records), and
+`published_at` stays empty: the flag covers a time printed without a zone, not a day,
+and 00:00 of the day or the first of the month would date the release before it
+happened (ADR-0022, amendment 2026-11-18, point e). A load time is never a vintage: a
+source whose only time is the time upstream loaded the data (sdk-usda-nass's
+`load_time`) leaves `vintage` and `published_at` empty, and a newest load time computed
+across datasets is no release time either (ADR-0022, reading of 2026-10-29).
 
 A parameter that takes the `meta.vintage` of an earlier call to return only what changed
 since (sdk-usda-esr's and sdk-usda-psd's `since`) takes the text as `vintage` wrote it
@@ -352,20 +352,22 @@ https://github.com/xippios/sdk-core/issues/238):
 
 A task that reads a file (§2) sets `endpoint` to the file's name as upstream names it,
 which may change with each release and carry a revision's suffix (`wasde1026.xml` and
-`wasde0626v2.xml` as ESMIS catalogs them; sdk-faostat's `All_Data_(Normalized).csv`),
-`vintage` to the release identifier (an ESMIS release id, a report date as printed),
-`published_at` to the catalog's release time, and `request` to the file's URL or release
-id plus the filters applied in Python (ADR-0020; amendment 2026-11-18, point c;
-https://github.com/xippios/sdk-core/issues/244). A narrative read from a PDF that prints
-a date but no month label keeps the ESMIS release id as `vintage`. A file it downloads
-from another origin than the base URL's, a link a catalog names, goes without the
-client's credentials (§6): `endpoint` is named as above all the same, `request` holds the
-link as `ResultMeta` writes it, a signature in its query `REDACTED`, and the fixture of
-that download carries no key, neither the placeholder nor a credential header, so a leak
-check counts none in it (ADR-0015, amendment 2026-11-18, point d). A download of an
+`wasde0626v2.xml` as ESMIS catalogs them), `vintage` to the release identifier (an ESMIS
+release id, a report date as printed), `published_at` to the catalog's release time, and
+`request` to the file's URL or release id plus the filters applied in Python (ADR-0020;
+amendment 2026-11-18, point c; https://github.com/xippios/sdk-core/issues/244). A
+narrative read from a PDF that prints a date but no month label keeps the ESMIS release
+id as `vintage`. A file it downloads from another origin than the base URL's, a link a
+catalog names, goes without the client's credentials (§6): `endpoint` is named as above
+all the same, `request` holds the link as `ResultMeta` writes it, a signature in its
+query `REDACTED`, and the fixture of that download carries no key, neither the
+placeholder nor a credential header, so a leak check counts none in it (ADR-0015,
+amendment 2026-11-18, point d). A download of an
 operation's answer is no file upstream names and keeps the operation's name
-(sdk-eurostat's `dataQuery`). The case of a file read from an origin or mirror that the
-publisher runs (§6) is open under https://github.com/xippios/sdk-core/issues/276.
+(sdk-eurostat's `dataQuery`). Two cases are open: a file whose name upstream builds from
+the dataset's name (FAOSTAT's `<Name>_E_All_Data_(Normalized).csv`), under
+https://github.com/xippios/sdk-core/issues/280, and a file read from an origin or mirror
+that the publisher runs (§6), under https://github.com/xippios/sdk-core/issues/276.
 
 `request` records what was sent: a parameter the caller left `None` is omitted
 (ADR-0022, rule 3). `ResultMeta` drops a top-level `None` at construction, so a task
@@ -499,8 +501,9 @@ the query can carry a key (ADR-0005).
   one client by its absolute URL, which httpx takes over the base URL: one limiter, one
   cache and one `classify`, whose path checks name both bases. A request to an origin or
   mirror that the publisher runs itself (§2) takes the canonical host's pace, one limiter
-  for both hosts where the source sends to both; its `meta.endpoint` names the URL sent,
-  and `docs/upstream/` names both hosts (sdk-usda-wasde's USDA CDN origin for
+  for both hosts where the source sends to both; its `meta.endpoint` names the URL sent
+  (for a file, open under https://github.com/xippios/sdk-core/issues/276, §4), and
+  `docs/upstream/` names both hosts (sdk-usda-wasde's USDA CDN origin for
   `www.usda.gov`). A dependent's own client sends nothing to its dependency's host, which
   the dependency's limiter alone paces, since a second limiter there would allow up to
   twice the pace each package meant.
