@@ -280,8 +280,9 @@ wrappers, do not apply to it, nor do the definition of done's Code and Tests blo
 Docs lines on agent docstrings and `docs/upstream/`. The host adopts a core minor in an
 adoption PR without `copier update`, on §15's list read for a hand scaffold: item 1 raises
 the bound of `xippios-core` and of each of its extras, while its sources keep the `>=` floors
-of decision 9; items 3 and 4 delete its workarounds and drop the logic core now carries, its
-private copy of the loopback hosts that (a) replaces among them; items 7, 8 and 9 bind it as
+of decision 9; item 3 deletes its workarounds, its private copy of the loopback hosts that
+(a) replaces among them, and copies in what core removes for the host alone (ADR-0023,
+decision 5), and item 4 drops the logic core now carries; items 7, 8 and 9 bind it as
 they bind a source, item 9's fragment naming the core and conventions versions it adopts;
 items 2, 5 and 6 have nothing to bind in it; and the template changes that the new
 conventions version needs in the files it was scaffolded from are hand-applied and listed

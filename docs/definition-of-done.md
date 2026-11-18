@@ -44,9 +44,10 @@ that conventions §15 names for the host (ADR-0026, amendment 2026-11-18, point 
 The reviewer judges an adoption PR against this list and nothing else: no new endpoints,
 tasks or fixtures ride along, and it deletes only the fixtures, mounts and tests the
 adoption itself makes dead (ADR-0018, amendment 2026-10-26). The host's adoption PR
-meets the lines on the core floor, the workarounds, the duplicated logic, `mypy` over
-`scripts/`, the conventions version and the changelog fragment, as conventions §15 reads
-them for it, and runs no `copier update` (ADR-0026, amendment 2026-11-18, point e).
+meets the lines on the core floor, the workarounds, the code core removed for it alone,
+the duplicated logic, `mypy` over `scripts/`, the conventions version and the changelog
+fragment, as conventions §15 reads them for it, and runs no `copier update` (ADR-0026,
+amendment 2026-11-18, point e).
 - [ ] core floor raised: `xippios-core~=X.Y.0`, or `~=X.Y.Z` when patch Z shipped what the source adopts (§12), and its extras likewise; a source package the source depends on bound to its own minor the same way (ADR-0021); from PyPI, no git pin, `uv.lock` updated
 - [ ] `copier update` to the template release, conflicts resolved; not applicable on §15's routes (1), a core release without a template tag, and (3), a source frozen on a template tag, whose hand-applied template changes are listed file by file in the PR description
 - [ ] every local workaround a core change replaced is deleted, its tests with it, the core change named for each in the PR description

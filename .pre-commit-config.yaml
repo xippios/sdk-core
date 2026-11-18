@@ -1,9 +1,10 @@
 # Conventions §11: ruff, mypy --strict and detect-secrets. Nothing else.
 # .copier-answers.yml is excluded from secret detection: in a generated repository it can
 # name the key's environment variable (never a key value), which trips the keyword check.
-# The scan skips two lines the fixture recorder writes, high in entropy by nature: a body
-# stored base64, 100 characters or more as base64 writes them, and the whole body's
-# sha256. A text body, a header and every other line are still scanned.
+# The scan skips the line on which the fixture recorder writes the whole body's sha256, 64
+# hex digits under the key sha256, high in entropy by nature; every other line is scanned.
+# A body stored base64 is not skipped: its line holds no flag of its own, so no line rule
+# tells it from a text body of the same characters, which can be a token.
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.17.1
@@ -26,8 +27,6 @@ repos:
         args:
           - --baseline
           - .secrets.baseline
-          - --exclude-lines
-          - '^\s*"body": "(?:[A-Za-z0-9+/]{4}){25,}(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?",?$'
           - --exclude-lines
           - '^\s*"sha256": "[0-9a-f]{64}",?$'
         exclude: ^(uv\.lock|\.copier-answers\.yml)$
