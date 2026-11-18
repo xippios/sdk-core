@@ -1063,10 +1063,10 @@ minor, conventions §12).
   ran for the bound tenant.
   (ADR-0014, §8, https://github.com/xippios/sdk-core/issues/84)
   - Hand-apply: `tests/test_org_lock.py` (sdk-cashctrl) —
-    `test_a_call_that_still_passes_org_is_answered_for_the_bound_org` (line 175) → the
-    call is refused with
-    `error: InvalidRequestError: org: Not an argument of this tool; it takes note`
-    and the tool does not run, and
+    `test_a_call_that_still_passes_org_is_answered_for_the_bound_org` (line 175) goes with
+    the lock's tests that the note on the lock's return deletes, since core's
+    `tests/test_tenant_lock.py` holds the refusal,
+    `error: InvalidRequestError: org: Not an argument of this tool; it takes note`, and
     `test_the_bound_read_server_reaches_the_bound_organisation_only` (line 216) → calls
     `cashctrl_list_currencies` with `{}`, its `{"org": "xa"}` refused — core refuses an
     argument that no tool of a bound server declares.
@@ -1075,8 +1075,8 @@ minor, conventions §12).
     tool's arguments — as above.
     `tests/test_account_lock.py` (sdk-google-mail) —
     `test_a_call_that_still_passes_account_is_answered_for_the_bound_account` (line 185)
-    → refused with
-    `error: InvalidRequestError: account: Not an argument of this tool; it takes note`,
+    goes with the lock's tests that the note on the lock's return deletes, as in
+    sdk-cashctrl,
     and `test_the_bound_read_server_answers_for_the_bound_account_only` (line 221) →
     calls `google_mail_get_profile` with `{}`, its `{"account": "xa"}` refused — as above.
 

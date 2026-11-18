@@ -794,7 +794,7 @@ through `docs/adr.md` to its successor.
 | 16 | #286 `step/0.4.0-16` | seven rules of refusals, caps and fixtures; the review checklist and the definition of done | ADR-0003, ADR-0007, ADR-0016, ADR-0018, ADR-0020, ADR-0022 amendments | §5, §8, §10 | `d0787db74c2e198febef7fd865447f27c9061433` |
 | 17 | #289 `step/0.4.0-17` | a source's adoption of a core minor takes a minor; what binds the host; the `_TOKEN` suffix; the secret scan skips a cut or sampled body's sha256 line | ADR-0005, ADR-0009, ADR-0018, ADR-0026 amendments | header, §7, §10, §12, §15 | `2ce4f9680bf4e919a40601b2d15c83dd9e696956` |
 | 18 | #297 `step/0.4.0-18` | fifteen records restated as ADR-0028 to ADR-0042; the documents and docstrings cite `ADR-NNNN, decision N` | ADR-0028 to ADR-0042, superseding ADR-0003, ADR-0004, ADR-0005, ADR-0008, ADR-0009, ADR-0010, ADR-0012, ADR-0013, ADR-0014, ADR-0015, ADR-0016, ADR-0018, ADR-0019, ADR-0022, ADR-0024 | 1.28 | `10d56f96b55ad86f21d1ed24a038f89557876869` |
-| Release | `chore/release-0.4.0` | version 0.4.0 and the lock; the CHANGELOG's `[0.4.0]` section, assembled from the fragments, with its 29 Hand-apply notes; `CLAUDE.md`'s layout; this section and "Adopting core 0.4.0" | — | — | — |
+| Release | `chore/release-0.4.0` | version 0.4.0 and the lock; the README's install lines and Status at 0.4.0; the CHANGELOG's `[0.4.0]` section, assembled from the fragments, with its 29 Hand-apply notes; `CLAUDE.md`'s layout; this section and "Adopting core 0.4.0" | — | — | — |
 
 Before the release PR, one branch in sdk-google-mail
 (https://github.com/xippios/sdk-google-mail/issues/19) and one in sdk-cashctrl
