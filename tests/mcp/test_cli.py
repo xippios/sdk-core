@@ -360,11 +360,12 @@ def test_the_request_log_is_quiet_when_the_server_from_apply_options_runs(
 TENANTS = Tenants(
     "fictive-src",
     list_var="FICTIVE_SRC_TENANTS",
+    param="org",
     fields=("SUBDOMAIN", "API_KEY"),
     reserved=("demo",),
     validate={"SUBDOMAIN": lambda value: value if value.isalnum() else _refuse(value)},
 )
-LOCK = TenantLock("org", "demo", noun="organisation")
+LOCK = TenantLock(TENANTS, "demo", noun="organisation")
 TEXT = "Fictive via xippios."
 SENTENCE = (
     "This server is bound to org demo; every tool acts on that organisation and takes no org."
@@ -462,7 +463,7 @@ async def test_serve_tenants_binds_the_server_then_hands_over_to_main(
     build = Builds()
     unbound = build()
     argv = ["--host", "127.0.0.1", "--org=demo", "--http", "--port", "9001"]
-    serve_tenants(unbound, build, TENANTS, param="org", noun="organisation", argv=argv)
+    serve_tenants(unbound, build, TENANTS, noun="organisation", argv=argv)
     assert build.locks == [None, LOCK]
     ((server, transport, options),) = served
     assert server is not unbound, "the bound server is built anew"
@@ -478,7 +479,7 @@ def test_serve_tenants_without_the_option_serves_the_server_as_built(
     build = Builds()
     unbound = build()
     checked: list[str] = []
-    serve_tenants(unbound, build, TENANTS, param="org", check=checked.append, argv=[])
+    serve_tenants(unbound, build, TENANTS, check=checked.append, argv=[])
     assert served == [(unbound, "stdio", {})]
     assert build.locks == [None]
     assert checked == [], "no tenant, no check"
@@ -491,9 +492,7 @@ def test_an_undeclared_tenant_stops_the_process_before_anything_is_built(
     build = Builds()
     checked: list[str] = []
     with pytest.raises(SystemExit) as info:
-        serve_tenants(
-            build(), build, TENANTS, param="org", check=checked.append, argv=["--org", "nope"]
-        )
+        serve_tenants(build(), build, TENANTS, check=checked.append, argv=["--org", "nope"])
     assert info.value.code == 2
     err = capsys.readouterr().err
     assert f"{ENTRY_POINT}: error: unknown tenant 'nope'; declared tenants: demo" in err
@@ -511,7 +510,7 @@ def test_the_check_is_given_the_declared_tenant_before_the_build(
     def check(name: str) -> None:
         order.append(f"check {name}, built {len(build.locks)}")
 
-    serve_tenants(build(), build, TENANTS, param="org", check=check, argv=["--org", "demo"])
+    serve_tenants(build(), build, TENANTS, check=check, argv=["--org", "demo"])
     assert order == ["check demo, built 1"], "after the unbound build, before the bound one"
     assert len(served) == 1
 
@@ -541,7 +540,6 @@ def test_an_error_of_the_check_stops_the_process_and_names_no_value(
             build(),
             build,
             TENANTS,
-            param="org",
             check=lambda name: TENANTS.field(name, "SUBDOMAIN"),
             argv=["--org", "xa"],
         )
@@ -556,11 +554,16 @@ SLUG_AND_PREFIX = Tenants(
     "fictive-mail",
     var_prefix="FICTIVE",
     list_var="FICTIVE_ACCOUNTS",
+    param="account",
     fields=("REFRESH_TOKEN",),
     reserved=("demo",),
 )
 PREFIX_AS_SLUG = Tenants(
-    "fictive", list_var="FICTIVE_ACCOUNTS", fields=("REFRESH_TOKEN",), reserved=("demo",)
+    "fictive",
+    list_var="FICTIVE_ACCOUNTS",
+    param="account",
+    fields=("REFRESH_TOKEN",),
+    reserved=("demo",),
 )
 
 
@@ -582,10 +585,10 @@ def test_a_registry_under_a_shared_prefix_binds_either_way(
     """
     monkeypatch.setenv("FICTIVE_DEMO_REFRESH_TOKEN", "placeholder")
     build = Builds(task=echo_account)
-    serve_tenants(build(), build, registry, param="account", argv=["--account", "demo"])
-    assert build.locks == [None, TenantLock("account", "demo")]
+    serve_tenants(build(), build, registry, argv=["--account", "demo"])
+    assert build.locks == [None, TenantLock(registry, "demo")]
     with pytest.raises(SystemExit):
-        serve_tenants(build(), build, registry, param="account", argv=["--account", "nope"])
+        serve_tenants(build(), build, registry, argv=["--account", "nope"])
     assert f"{ENTRY_POINT}: error: unknown tenant 'nope'; declared tenants: demo" in (
         capsys.readouterr().err
     )
@@ -598,7 +601,7 @@ def test_the_help_names_the_option_with_its_noun_beside_core_s_options(
 ) -> None:
     build = Builds()
     with pytest.raises(SystemExit) as info:
-        serve_tenants(build(), build, TENANTS, param="org", noun="organisation", argv=["--help"])
+        serve_tenants(build(), build, TENANTS, noun="organisation", argv=["--help"])
     assert info.value.code == 0
     out = " ".join(capsys.readouterr().out.split())  # argparse wraps the help lines
     assert (
@@ -611,10 +614,12 @@ def test_the_help_names_the_option_with_its_noun_beside_core_s_options(
 def test_without_a_reserved_tenant_the_help_gives_no_example(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    registry = Tenants("fictive-src", list_var="FICTIVE_SRC_TENANTS", fields=("API_KEY",))
+    registry = Tenants(
+        "fictive-src", list_var="FICTIVE_SRC_TENANTS", param="account", fields=("API_KEY",)
+    )
     build = Builds()
     with pytest.raises(SystemExit):
-        serve_tenants(build(), build, registry, param="account", argv=["--help"])
+        serve_tenants(build(), build, registry, argv=["--help"])
     out = " ".join(capsys.readouterr().out.split())
     assert "serve only this account; every tool acts on it and takes no account" in out
 
@@ -623,9 +628,16 @@ def test_without_a_reserved_tenant_the_help_gives_no_example(
 def test_an_underscored_parameter_is_a_hyphenated_option(
     served: list[tuple[MCPServer, str, dict[str, Any]]],
 ) -> None:
+    registry = Tenants(
+        "fictive-src",
+        list_var="FICTIVE_SRC_TENANTS",
+        param="org_name",
+        fields=("SUBDOMAIN", "API_KEY"),
+        reserved=("demo",),
+    )
     build = Builds(task=echo_org_name)
-    serve_tenants(build(), build, TENANTS, param="org_name", argv=["--org-name", "demo"])
-    assert build.locks == [None, TenantLock("org_name", "demo")]
+    serve_tenants(build(), build, registry, argv=["--org-name", "demo"])
+    assert build.locks == [None, TenantLock(registry, "demo")]
 
 
 @pytest.mark.usefixtures("fictive_demo")
@@ -634,17 +646,22 @@ def test_unknown_options_still_fail_with_serve_tenants(
 ) -> None:
     build = Builds()
     with pytest.raises(SystemExit) as info:
-        serve_tenants(build(), build, TENANTS, param="org", argv=["--org", "demo", "--nope"])
+        serve_tenants(build(), build, TENANTS, argv=["--org", "demo", "--nope"])
     assert info.value.code == 2
     assert "unrecognized arguments: --nope" in capsys.readouterr().err
     assert (build.locks, served) == ([None], [])
 
 
-@pytest.mark.parametrize("param", ["", "an org", "org-name"])
-def test_serve_tenants_refuses_a_parameter_that_is_no_name(param: str) -> None:
+@pytest.mark.usefixtures("fictive_demo")
+def test_the_option_is_the_parameter_the_registry_declares(
+    served: list[tuple[MCPServer, str, dict[str, Any]]], capsys: pytest.CaptureFixture[str]
+) -> None:
+    """One declaration, ``Tenants(param=...)``: the command names no parameter of its own."""
     build = Builds()
-    with pytest.raises(ValueError, match="param must be a parameter name"):
-        serve_tenants(build(), build, TENANTS, param=param, argv=[])
+    with pytest.raises(SystemExit):
+        serve_tenants(build(), build, TENANTS, argv=["--account", "demo"])
+    assert "unrecognized arguments: --account demo" in capsys.readouterr().err
+    assert (build.locks, served) == ([None], [])
 
 
 @pytest.mark.parametrize(
@@ -665,14 +682,14 @@ def test_a_bound_server_stays_held_to_loopback(
     """``main`` checks the bound server ``build`` returns, as it checks the unbound one."""
     remote = ["--org", "demo", "--http", "--host", "0.0.0.0"]
     with pytest.raises(SystemExit) as info:
-        serve_tenants(build(), build, TENANTS, param="org", noun="organisation", argv=remote)
+        serve_tenants(build(), build, TENANTS, noun="organisation", argv=remote)
     assert info.value.code == 2
     assert f"xippios-fictive-src is {kind} and carries no authentication" in (
         capsys.readouterr().err
     )
     assert served == []
     for argv in ([*remote, "--allow-remote"], ["--org", "demo", "--http"]):
-        serve_tenants(build(), build, TENANTS, param="org", noun="organisation", argv=argv)
+        serve_tenants(build(), build, TENANTS, noun="organisation", argv=argv)
     assert [(options["host"], server.instructions) for server, _, options in served] == [
         ("0.0.0.0", f"{TEXT} {SENTENCE}"),
         ("127.0.0.1", f"{TEXT} {SENTENCE}"),
@@ -687,7 +704,7 @@ def test_serve_tenants_keeps_request_urls_out_of_the_log(
     server = build()
     for name in REQUEST_LOGGERS:
         logging.getLogger(name).setLevel(logging.NOTSET)
-    serve_tenants(server, build, TENANTS, param="org", argv=["--org", "demo"])
+    serve_tenants(server, build, TENANTS, argv=["--org", "demo"])
     assert [logging.getLogger(name).level for name in REQUEST_LOGGERS] == [logging.WARNING] * 4
 
 
@@ -721,7 +738,7 @@ async def test_serve_tenants_builds_the_bound_server_from_the_tool_set_build_ret
     # build, TENANTS, ...), as sdk-cashctrl and sdk-google-mail write it.
     build = ToolSetBuilds()
     unbound = build_server(build(), name="xippios-fictive-src-write")
-    serve_tenants(unbound, build, TENANTS, param="org", noun="organisation", argv=["--org=demo"])
+    serve_tenants(unbound, build, TENANTS, noun="organisation", argv=["--org=demo"])
     assert build.locks == [None, LOCK]
     ((server, transport, _),) = served
     assert server is not unbound, "the bound server is built anew"
@@ -753,7 +770,7 @@ def test_a_server_bound_from_a_tool_set_stays_held_to_loopback(
 ) -> None:
     remote = ["--org", "demo", "--http", "--host", "0.0.0.0"]
     with pytest.raises(SystemExit) as info:
-        serve_tenants(build_server(build()), build, TENANTS, param="org", argv=remote)
+        serve_tenants(build_server(build()), build, TENANTS, argv=remote)
     assert info.value.code == 2
     assert f"xippios-fictive-src is {kind} and carries no authentication" in (
         capsys.readouterr().err

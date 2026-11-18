@@ -389,7 +389,9 @@ def test_the_status_tables_are_read_under_the_status_heading_only() -> None:
 TENANT_CLIENT = """from xippios.core import Tenants
 
 SOURCE = "example"
-TENANTS = Tenants(SOURCE, list_var="EXAMPLE_ORGS", fields=("API_KEY",), reserved=("demo",))
+TENANTS = Tenants(
+    SOURCE, list_var="EXAMPLE_ORGS", param="org", fields=("API_KEY",), reserved=("demo",)
+)
 """
 
 TENANT_TASKS = '''
@@ -500,8 +502,8 @@ def test_a_task_of_a_multi_tenant_source_that_takes_no_tenant_fails_naming_it(
     result.assert_outcomes(passed=FAMILY_TESTS - 1, failed=1)
     result.stdout.fnmatch_lines(
         [
-            "*every task of a multi-tenant source takes exactly one tenant, required, its "
-            "parameter read as org*NO_TENANT_TASKS*",
+            "*every task of a multi-tenant source takes exactly one tenant, org, the parameter "
+            "its Tenants registry declares, required*NO_TENANT_TASKS*",
             "*- tasks.list_regions takes no org*",
             "*- tasks_write.rename_series takes no org*",
         ]
@@ -510,7 +512,7 @@ def test_a_task_of_a_multi_tenant_source_that_takes_no_tenant_fails_naming_it(
     own = undeclared.replace(
         "from xippios.example._client import TENANTS\n",
         "from xippios.core import Tenants\n\n"
-        'TENANTS = Tenants("example", list_var="EXAMPLE_ORGS", fields=("API_KEY",))\n',
+        'TENANTS = Tenants("example", list_var="EXAMPLE_ORGS", param="org", fields=("K",))\n',
     )
     moved = {
         "src/xippios/example/_client.py": SOURCE["src/xippios/example/_client.py"],
@@ -519,6 +521,16 @@ def test_a_task_of_a_multi_tenant_source_that_takes_no_tenant_fails_naming_it(
     result = run_family(pytester, {**changes, **moved})
     result.assert_outcomes(passed=FAMILY_TESTS - 1, failed=1)
     result.stdout.fnmatch_lines(["*- tasks.list_regions takes no org*"])
+
+
+def test_a_multi_tenant_source_that_declares_no_tenant_parameter_fails(
+    pytester: pytest.Pytester,
+) -> None:
+    """``Tenants`` takes ``param``, the one declaration the check and the lock read."""
+    client = TENANT_CLIENT.replace(' param="org",', "")
+    result = run_family(pytester, {**TENANT_SOURCE, "src/xippios/example/_client.py": client})
+    result.assert_outcomes(errors=FAMILY_TESTS)
+    result.stdout.fnmatch_lines(["*missing 1 required keyword-only argument: 'param'*"])
 
 
 TENANT_FORMS = '''
@@ -530,7 +542,8 @@ from xippios.core import Result, ResultMeta, list_task, sync
 from xippios.core.tenants import Tenants
 
 META = ResultMeta(source="example", endpoint="e")
-TENANTS = Tenants("example", list_var="EXAMPLE_ORGS", fields=("API_KEY",))
+TENANTS = Tenants("example", list_var="EXAMPLE_ORGS", param="org", fields=("API_KEY",))
+ACCOUNTS = Tenants("example", list_var="EXAMPLE_ACCOUNTS", param="account", fields=("API_KEY",))
 ORG = Annotated[str, Field(description="A declared organisation, e.g. demo.")]
 
 
@@ -569,6 +582,16 @@ def get_unresolved(org: "Missing") -> Result[int]:
     return Result[int](data=0, meta=META)
 
 
+def get_invoice(invoice_id: str, org: str) -> Result[int]:
+    """Get an invoice of an organisation."""
+    return Result[int](data=0, meta=META)
+
+
+def get_journal(invoice_id: str) -> Result[int]:
+    """Get the journal of an invoice; it takes no tenant and is not declared."""
+    return Result[int](data=0, meta=META)
+
+
 async def list_regions_async() -> Result[list[str]]:
     """List regions."""
     return Result[list[str]](data=[], meta=META)
@@ -589,7 +612,9 @@ def tenant_forms(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     return module
 
 
-def _tenant_family(tasks: ModuleType, names: list[str], *, multi_tenant: bool = True) -> None:
+def _tenant_family(
+    tasks: ModuleType, names: list[str], *, multi_tenant: bool = True, registry: str = "TENANTS"
+) -> None:
     tasks.__all__ = names  # type: ignore[attr-defined]
     package = ModuleType("xippios.example_forms")
     package.__file__ = "/nowhere/__init__.py"
@@ -600,7 +625,7 @@ def _tenant_family(tasks: ModuleType, names: list[str], *, multi_tenant: bool = 
         source="example",
         tasks=tasks,
         tasks_write=None,
-        tenants=tasks.TENANTS if multi_tenant else None,
+        tenants=getattr(tasks, registry) if multi_tenant else None,
     )
     family.test_family_tasks_take_one_tenant(source)
 
@@ -608,8 +633,18 @@ def _tenant_family(tasks: ModuleType, names: list[str], *, multi_tenant: bool = 
 def test_the_tenant_list_a_declared_task_and_an_annotated_tenant_pass(
     tenant_forms: ModuleType,
 ) -> None:
-    # get_one and get_two take org and limit alike: org fits the rule, so org is the tenant's.
+    # get_one takes org first, get_two last: the registry names it, not its place.
     _tenant_family(tenant_forms, ["get_one", "get_two", "list_regions", "list_orgs"])
+
+
+def test_the_tenant_parameter_is_the_one_the_registry_declares(tenant_forms: ModuleType) -> None:
+    """The review's probe: the tasks share invoice_id, yet the registry declares org."""
+    with pytest.raises(pytest.fail.Exception) as failed:
+        _tenant_family(tenant_forms, ["get_invoice", "get_journal", "list_regions"])
+    assert str(failed.value).splitlines()[1:] == ["- tasks.get_journal takes no org"]
+    with pytest.raises(pytest.fail.Exception) as failed:
+        _tenant_family(tenant_forms, ["get_one", "list_regions"], registry="ACCOUNTS")
+    assert str(failed.value).splitlines()[1:] == ["- tasks.get_one takes no account"]
 
 
 @pytest.mark.parametrize(
