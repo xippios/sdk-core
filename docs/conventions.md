@@ -2,7 +2,9 @@
 
 Version 1.27 · 2026-11-13 · applies to every `sdk-*` repository under
 github.com/xippios, and to the host `xippios-mcp` where ADR-0026 binds it.
-Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`.
+Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`. A
+convention that seems wrong is followed, and said in the pull request that meets it, until
+its ADR and its change of this file land (ADR-0018, amendment 2026-11-18, point t).
 The rules of ADR-0019 and ADR-0022, all of them (the download and decode calls, the
 cache bound, `BULK_TASKS`, the fixture cap and the `truncated` marker, the file-fixture
 rules, the spared `key`, the packaged-answer rule and the packaged-list file,
@@ -627,6 +629,12 @@ the one `QuotaPolicy` per process for that key on its config (ADR-0009, amendmen
 paths to `xippios.core.data_gov.NoDataForYear`, a `NotFoundError` that says the year holds
 no data (ADR-0009, amendment 2026-11-18, points a and b).
 
+Whoever works in a repository of the family, a person or an agent, never reads or prints
+`.envrc`, `.env` or a variable that holds a credential: each one the package reads a
+credential from, and any whose name ends in `_API_KEY`, `_TOKEN` or `_SECRET`, a
+`_REFRESH_TOKEN` among them. A leak check greps the files for key patterns; it never
+compares against a key (ADR-0005, amendment 2026-11-18, point b).
+
 A multi-tenant source, whose upstream serves each tenant from a host or under a key of
 its own (CashCtrl's organisations, Gmail's accounts), declares its tenants with core's
 `Tenants`, one client each, and names the tenant of every result in `ResultMeta.tenant`
@@ -923,7 +931,11 @@ standalone from the package. A task named in `BULK_TASKS` gets no route:
   request. The key reaches only that job's `uv run pytest -m live` step, from the org
   secret; checkout, setup-uv and `uv sync` never see it. Sources that share a key stagger
   their nightly start, so that they do not draw on the shared quota together; the
-  template derives the time from the slug (ADR-0009, amendment 2026-10-26).
+  template derives the time from the slug (ADR-0009, amendment 2026-10-26). Every live
+  run takes `--tb=short --assert=plain`, since the log of a public repository is public:
+  the first keeps a failing test's frame arguments out of it, a raw upstream payload among
+  them, and the second the values a failed `assert` compares. A live test asserts on
+  shapes and counts, never on a raw payload (ADR-0009, amendment 2026-11-18, point d).
 - The pytest plugin (`pytest_plugins = ["xippios.core.testing.plugin"]`) keeps the
   default run offline and free of real keys (ADR-0013):
   - No network, from `pytest_configure` on: while test modules are collected, in a
@@ -999,7 +1011,11 @@ which §12 bounds to one minor.
 
 - SemVer. Pre-1.0: only a breaking change bumps the minor, as `/release-prep` step 4
   reads; added tasks or parameters make a patch, which reaches every dependent inside
-  its `~=X.Y.0` bound (ADR-0018, amendment (g)). Post-1.0: breaking changes bump major.
+  its `~=X.Y.0` bound (ADR-0018, amendment (g)). A source's adoption of a core minor is a
+  breaking change of the source and takes a minor, whatever else its release brings: it
+  moves the source's core bound to the new minor, so its release no longer installs beside
+  a package still bound to the old one (ADR-0018, amendment 2026-11-18, point r).
+  Post-1.0: breaking changes bump major.
 - An upstream API change that changes our public surface is a breaking change.
 - A source depends on one core minor with an upper bound, `xippios-core~=0.2.0`, and its
   extras likewise (`xippios-core[mcp]~=0.2.0`); the template renders it as `~=X.Y.0`,
@@ -1015,7 +1031,10 @@ which §12 bounds to one minor.
   fragments into its section of `CHANGELOG.md` and deletes them (ADR-0018, amendment
   2026-11-13). A repository that keeps no `changelog/` yet, a source before its adoption
   of the template release that brings the folder, adds its entry under
-  `## [Unreleased]` of `CHANGELOG.md` instead.
+  `## [Unreleased]` of `CHANGELOG.md` instead. A release's section says an internal
+  label, such as a decision's number or a plan's item, in plain words, since
+  `publish.yml` makes the section the message of the tag it pushes (ADR-0018, amendment
+  2026-11-18, point s).
 - The release train (ADR-0018, amendment 2026-10-26): the reference-data refresh, where
   a source has one, runs before the release. It is a PR of its own, merged before the
   release PR, only when a record changed or `fetched` goes from a bare date to the full
@@ -1121,6 +1140,15 @@ Three routes depart from the list (ADR-0018, amendment (i)):
   `CLAUDE.md`; the template changes the new conventions version needs are hand-applied
   and listed file by file in the PR description, as
   https://github.com/xippios/sdk-cashctrl/pull/18 did.
+
+The host `xippios-mcp`, scaffolded by hand from the template's shared files (ADR-0026,
+decision 1), adopts a core minor in an adoption PR of its own without `copier update`,
+judged against items 1, 3, 4, 7, 8 and 9: item 1 raises the bound of `xippios-core` and of
+each of its extras, while its sources keep the `>=` floors of ADR-0026, decision 9, and item
+9's fragment names the core and conventions versions it adopts. Items 2, 5 and 6 have
+nothing to bind in it. The template changes that the new conventions version needs in the
+files it was scaffolded from are hand-applied and listed file by file in the PR
+description, as on route (3) (ADR-0026, amendment 2026-11-18, point e).
 
 An adoption PR changes nothing else: no new endpoints, tasks or fixtures ride along. It
 may delete the fixtures, mounts and tests that the adoption itself makes dead, and

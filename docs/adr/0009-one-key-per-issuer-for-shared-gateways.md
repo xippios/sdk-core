@@ -116,3 +116,29 @@ source=...)`. An empty 404 on another path, one with a body or another content t
 the gateway's `NOT_FOUND` are left to the source and to core, and a gateway without
 `data_path`, sdk-usda-gats's, whose data paths answer `[]`, maps none. The class keeps the
 name both sources gave it, so their adoption changes an import and deletes their copies.
+
+(c) **A pull request counts its live calls** (the consequences above; step 17;
+https://github.com/xippios/sdk-core/issues/208). The definition of done and the review
+checklist asked a pull request's description to count the live calls it spent, keyed calls
+by number and `none` a count, and no document said why or what counts, once the budgets of
+live calls that an earlier way of working kept were gone. The count stays a rule of the
+product, for the first consequence above: one key is one quota, which every source and every
+process holding the key draws on, so a keyed call that one change spends is not there for
+the others. A live call is every request the change sent to an upstream, a probe's, a
+recording's or a live test run's, and the description counts them, the keyed ones by number;
+`none` is a count.
+
+(d) **A live run's log keeps no payload** (the amendment of 2026-10-26; step 17;
+https://github.com/xippios/sdk-core/issues/219). The live workflow of the amendment of
+2026-10-26 runs in the source's repository, and the logs of a public repository are
+public. Every live run takes `--tb=short --assert=plain`: the first keeps a failing test's
+frame arguments out of the log, a raw upstream payload among them, and the second the
+values a failed `assert` compares. A live test therefore asserts on shapes and counts,
+never on a raw payload. Every source's `live.yml`, as the template renders it, runs
+`uv run pytest -m live --tb=short --assert=plain`, and the rule stood in the template's
+`.claude/family.md`, which sdk-template 0.3.3 deleted
+(https://github.com/xippios/sdk-template/pull/142).
+
+Conventions §7 and the README state points (a) and (b) from 1.28 on, the definition of
+done's Process block and the review checklist's item 10 point (c), and conventions §10
+point (d).
