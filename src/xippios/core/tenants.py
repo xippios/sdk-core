@@ -53,14 +53,15 @@ the tenant list or its module names it in ``NO_TENANT_TASKS``, beside ``BULK_TAS
     NO_TENANT_TASKS = frozenset({"list_currencies"})  # in tasks.py: the same for every tenant
 
 and the family check of ``xippios.core.testing`` holds every task of a source whose
-``_client`` holds a ``Tenants`` to it. A signature shows neither what a task reaches nor
-what it shares, so a task that takes one tenant and opens another's client passes both
-(https://github.com/xippios/sdk-core/issues/302).
+``_client``, ``tasks`` or ``tasks_write`` module holds a ``Tenants`` to it. A signature
+shows neither what a task reaches nor what it shares, so a task that takes one tenant and
+opens another's client passes both (https://github.com/xippios/sdk-core/issues/302).
 
 Isolation is by configuration: a deployment reaches exactly the tenants its environment
-declares. Nothing here returns a value; messages name tenants and variables, never what a
-variable holds (ADR-0030). The module left core in 0.3.0 for sdk-cashctrl alone and came
-back in 0.4.0 from its copy and sdk-google-mail's (ADR-0042, decision 1).
+declares. Nothing here returns a tenant's value: results and messages name tenants and
+variables, never what a variable holds (ADR-0030). The module left core in 0.3.0 for
+sdk-cashctrl alone and came back in 0.4.0 from its copy and sdk-google-mail's (ADR-0042,
+decision 1).
 """
 
 import asyncio
