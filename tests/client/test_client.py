@@ -889,6 +889,102 @@ async def test_any_explicit_auth_form_bypasses_the_cache(respx_mock: respx.MockR
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://files.example.test/bulk/psd.csv",  # another host
+        "https://api.example.test:8443/v1/x",  # another port
+        "http://api.example.test/v1/x",  # another scheme
+    ],
+)
+async def test_the_client_s_auth_goes_to_the_base_url_s_origin_only(
+    respx_mock: respx.MockRouter, config: ClientConfig, url: str
+) -> None:
+    # https://github.com/xippios/sdk-core/issues/163: a file link on another host got the key.
+    elsewhere = respx_mock.get(url).respond(200, json={})
+    home = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
+    client = AsyncClient(config, auth=HeaderKeyAuth("X-Api-Key", KEY_ENV))
+    await client.get(url)
+    await client.get_json(url)
+    await client.request("GET", url, raise_on_error=False)
+    await client.get("/v1/x")
+    await client.get("https://API.example.test/v1/x")  # the base URL's origin, spelt otherwise
+    assert not any("x-api-key" in call.request.headers for call in elsewhere.calls)
+    assert elsewhere.call_count == 3
+    assert all("x-api-key" in call.request.headers for call in home.calls)
+    assert home.call_count == 2
+
+
+@pytest.mark.anyio
+async def test_a_query_key_stays_off_a_link_to_another_host(
+    respx_mock: respx.MockRouter, config: ClientConfig
+) -> None:
+    route = respx_mock.get("https://files.example.test/f.json").respond(200, json={})
+    client = AsyncClient(config, auth=QueryKeyAuth("key", KEY_ENV))
+    await client.get_json("https://files.example.test/f.json", params={"year": 2024})
+    assert sent_urls(route) == ["https://files.example.test/f.json?year=2024"]
+
+
+@pytest.mark.anyio
+async def test_an_auth_of_the_call_s_own_goes_to_any_origin(
+    respx_mock: respx.MockRouter, config: ClientConfig
+) -> None:
+    # A publisher's mirror that takes the key gets it when the call passes it (conventions §6).
+    route = respx_mock.get("https://mirror.example.test/v1/x").respond(200, json={})
+    key = HeaderKeyAuth("X-Api-Key", KEY_ENV)
+    client = AsyncClient(config, auth=key)
+    await client.get("https://mirror.example.test/v1/x", auth=key)
+    assert "x-api-key" in route.calls.last.request.headers
+
+
+@pytest.mark.anyio
+async def test_every_request_tells_the_hooks_its_auth_and_its_origin(
+    respx_mock: respx.MockRouter, config: ClientConfig, sleeper: Sleeper
+) -> None:
+    # The quota policy and the gateway's classify read the two marks (ADR-0015, amendment
+    # 2026-11-18, point d); every retried attempt carries them too.
+    respx_mock.get(f"{BASE}/v1/x").mock(
+        side_effect=[httpx.Response(503), httpx.Response(200, json={})]
+    )
+    respx_mock.get("https://files.example.test/f").respond(200, json={})
+    marks: list[tuple[str, object, object]] = []
+
+    def mark(where: str, request: httpx.Request) -> None:
+        marks.append(
+            (
+                where,
+                request.extensions.get("xippios_auth"),
+                request.extensions.get("xippios_origin"),
+            )
+        )
+
+    hooked = dataclasses.replace(
+        config,
+        before_request=lambda request: mark("before", request),
+        observe=lambda response: mark("observe", response.request),
+    )
+    client = AsyncClient(hooked, auth=HeaderKeyAuth("X-Api-Key", KEY_ENV), sleep=sleeper)
+    await client.get("/v1/x")
+    assert marks == [
+        ("before", "client", "base"),
+        ("observe", "client", "base"),
+        ("observe", "client", "base"),
+    ]
+    marks.clear()
+    await client.get("https://files.example.test/f", auth=None)
+    await client.get("https://files.example.test/f")
+    await client.get("https://files.example.test/f", auth=httpx.BasicAuth("user", "pw"))
+    assert marks == [
+        ("before", "none", "other"),
+        ("observe", "none", "other"),
+        ("before", "client", "other"),
+        ("observe", "client", "other"),
+        ("before", "own", "other"),
+        ("observe", "own", "other"),
+    ]
+
+
+@pytest.mark.anyio
 async def test_auth_none_and_the_default_share_the_cache(respx_mock: respx.MockRouter) -> None:
     route = respx_mock.get(f"{BASE}/v1/reference").respond(200, json={"codes": [1]})
     config = ClientConfig(source="example", version="1", base_url=BASE, cache=MemoryCache())

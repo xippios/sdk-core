@@ -149,13 +149,18 @@ class ClientConfig:
             cache lookup (a cache hit returns before it) and before the rate limiter,
             with the request as built from base URL, path, query parameters, body and
             headers; credentials from ``auth`` are not on it yet, and changes to it are
-            not sent. It may be sync or async (an awaitable result is awaited), may wait,
-            e.g. for a spent quota (ADR-0010), and may raise a taxonomy error, in which
-            case nothing is sent. ``QuotaPolicy.install`` sets it (ADR-0015).
+            not sent. Its extensions say where the credentials go: ``xippios_auth``
+            (``"client"``, ``"none"`` for ``auth=None``, ``"own"``) and ``xippios_origin``
+            (``"base"``, or ``"other"`` for another origin than the base URL's, where the
+            client's auth is not sent). It may be sync or async (an awaitable result is
+            awaited), may wait, e.g. for a spent quota (ADR-0010), and may raise a
+            taxonomy error, in which case nothing is sent. ``QuotaPolicy.install`` sets
+            it (ADR-0015).
         observe: Called with every response that came from the wire, each retried
             attempt included and a cache hit never, before ``classify`` and before the
             retry decision, also when the caller asked for the raw response
-            (``raise_on_error=False``). For reading, e.g. quota headers; it returns
+            (``raise_on_error=False``); its ``request`` carries the extensions
+            ``before_request`` reads. For reading, e.g. quota headers; it returns
             nothing, and an exception it raises propagates as the programming error it
             is, except on a ``download``'s success, whose body goes to the file unread:
             a hook that reads it there is suppressed and counts as nothing observed

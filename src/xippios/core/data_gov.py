@@ -37,8 +37,16 @@ What the gateway sends, as sdk-usda-psd recorded it on 2026-10-23 (its
   body and no quota headers (``invalid_key.json``: 403 ``API_KEY_INVALID``); a path it
   does not route answers 404 ``NOT_FOUND`` (documented, not recorded).
 
+Behind the gateway, FAS's PSD and ESR answer a market year they hold no data for with HTTP
+404, an empty body and ``content-type: text/plain; charset=utf-8``, on every data path
+(sdk-usda-psd and sdk-usda-esr recorded it for 1900, their ``year_1900.json`` and
+``unknown_year.json``). A gateway given the source's data paths maps it to
+``NoDataForYear`` (https://github.com/xippios/sdk-core/issues/106).
+
 The gateway ends its messages with its URL (``"... https://api.fas.usda.gov:443"``);
-every error here writes it ``<host>`` (ADR-0005).
+every error here writes it ``<host>`` (ADR-0005). ``classify`` reads the answers of the
+client's base URL alone: the answer to a request the client marks as sent to another
+origin, a file link on another host, is none of the gateway's.
 """
 
 import re
@@ -58,6 +66,7 @@ __all__ = [
     "REMAINING_HEADER",
     "WINDOW",
     "Gateway",
+    "NoDataForYear",
 ]
 
 API_KEY_ENV = "DATA_GOV_API_KEY"  # pragma: allowlist secret (a variable name, not a key)
@@ -73,6 +82,64 @@ REMAINING_HEADER = "x-ratelimit-remaining"
 
 _GATEWAY = "api.data.gov"
 _URL = re.compile(r"https?://[^/\s]+")
+
+
+class NoDataForYear(NotFoundError):
+    """FAS's answer for a year a data path holds no data for: HTTP 404, an empty text body.
+
+    ``Gateway.classify`` returns it for that answer on a path that the gateway's
+    ``data_path`` matches, and nowhere else: the gateway's ``NOT_FOUND`` (no such route)
+    and an empty 404 on any other path say the request is wrong, not that the year is
+    empty, and stay the source's or core's plain ``NotFoundError``. A task that reads a
+    range of years skips a year that raises it; a task that asked for one year raises it
+    again with a message naming what it asked for, ``NoDataForYear(error.path, message,
+    source=error.source)``.
+
+    Args:
+        path: The request path, e.g. ``"/api/psd/commodity/0410000/country/US/year/1900"``.
+        message: The text; by default it names the path and says that the year it names
+            holds no data.
+        source: The source slug, e.g. ``"usda-psd"``.
+
+    Attributes:
+        path: As given.
+    """
+
+    def __init__(self, path: str, message: str | None = None, *, source: str | None = None) -> None:
+        super().__init__(
+            message
+            or f"no data for {path} (HTTP 404 with an empty body): the year it names holds no "
+            "data upstream",
+            source=source,
+        )
+        self.path = path
+
+
+def _from_elsewhere(response: httpx.Response) -> bool:
+    """True for the answer to a request the client sent to another origin than its base URL's.
+
+    A response built without a request, or whose request carries no mark, counts as the
+    base URL's.
+    """
+    try:
+        request = response.request
+    except RuntimeError:  # httpx raises it for a response built without a request
+        return False
+    return request.extensions.get("xippios_origin") == "other"
+
+
+def _path(response: httpx.Response) -> str | None:
+    """The path of ``response``'s request; ``None`` for a response built without one."""
+    try:
+        return response.request.url.path
+    except RuntimeError:  # httpx raises it for a response built without a request
+        return None
+
+
+def _empty_text(response: httpx.Response) -> bool:
+    """True for an empty body (blanks aside) sent as ``text/plain``, in any letter case."""
+    content_type = response.headers.get("content-type", "").lower()
+    return not response.content.strip() and content_type.startswith("text/plain")
 
 
 class _GatewayQuota(QuotaPolicy):
@@ -110,9 +177,15 @@ class Gateway:
     Args:
         source: The calling source's slug, e.g. ``"usda-psd"``, for its errors and for the
             ``ConfigError`` when ``DATA_GOV_API_KEY`` is unset.
+        data_path: The source's data paths, a pattern the whole request path matches,
+            e.g. ``re.compile(r"/api/psd/commodity/[^/]+/(?:country/[^/]+|world)/year/[^/]+")``:
+            ``classify`` maps FAS's empty ``text/plain`` 404 there to ``NoDataForYear``.
+            ``None``, the default, maps it nowhere, for a source whose data paths never
+            answer it (sdk-usda-gats's answer ``[]``).
 
     Attributes:
         source: As given.
+        data_path: As given.
         auth: The key from ``DATA_GOV_API_KEY`` in the ``X-Api-Key`` header, read on the
             first request (conventions §7); the client's ``auth``.
         policy: The process's one policy for the key: ``x-ratelimit-limit`` and
@@ -127,8 +200,9 @@ class Gateway:
         source=_GATEWAY,
     )
 
-    def __init__(self, source: str) -> None:
+    def __init__(self, source: str, *, data_path: re.Pattern[str] | None = None) -> None:
         self.source = source
+        self.data_path = data_path
         self.auth = HeaderKeyAuth(KEY_HEADER, API_KEY_ENV, source=source)
 
     def install(self, config: ClientConfig) -> ClientConfig:
@@ -164,14 +238,20 @@ class Gateway:
           seconds. Called on its own while the shared quota is spent, it reads the
           snapshot like any other call.
         - 404 with ``error.code`` ``NOT_FOUND`` is a ``NotFoundError`` naming the path.
+        - 404 with an empty ``text/plain`` body on a path ``data_path`` matches is
+          ``NoDataForYear``: FAS holds no data for the year the path names.
 
         Everything else is ``None``: the source's own ``classify`` goes on with its
-        documented answers, and core's status mapping follows. Messages name the path,
-        never the host.
+        documented answers, and core's status mapping follows. So is every answer to a
+        request the client marked as sent to another origin than its base URL's
+        (``xippios_origin: "other"``), a download from a file host say: none of those is
+        the gateway's. Messages name the path, never the host.
 
         Args:
             response: A response from the wire, any status.
         """
+        if _from_elsewhere(response):
+            return None
         status = response.status_code
         if status in (401, 403):
             code, message = _gateway_error(response)
@@ -194,6 +274,10 @@ class Gateway:
                     f"(HTTP 404 NOT_FOUND: {message})",
                     source=self.source,
                 )
+            if self.data_path is not None and _empty_text(response):
+                path = _path(response)
+                if path is not None and self.data_path.fullmatch(path):
+                    return NoDataForYear(path, source=self.source)
         return None
 
     def _over_rate_limit(self, response: httpx.Response) -> RateLimitError:

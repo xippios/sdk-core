@@ -313,7 +313,12 @@ data is never passed off as data (ADR-0022, amendment 2026-10-27).
 A task that reads a file (§2) sets `endpoint` to the file kind as upstream names it
 (`wasde.xls`, `qs.crops`), `vintage` to the release identifier (an ESMIS release id, a
 report date as printed), `published_at` to the catalog's release time, and `request` to
-the file's URL or release id plus the filters applied in Python (ADR-0020).
+the file's URL or release id plus the filters applied in Python (ADR-0020). A file it
+downloads from another origin than the base URL's, a link a catalog names, goes without
+the client's credentials (§6): `endpoint` is the file kind all the same, `request` holds
+the link as `ResultMeta` writes it, a signature in its query `REDACTED`, and the fixture
+of that download carries no key, neither the placeholder nor a credential header, so a
+leak check counts none in it (ADR-0015, amendment 2026-11-18, point d).
 
 `request` records what was sent: a parameter the caller left `None` is omitted
 (ADR-0022, rule 3). `ResultMeta` drops a top-level `None` at construction, so a task
@@ -327,7 +332,16 @@ is safe to hand to an agent, return over HTTP, or write to a store; personal ide
 in upstream data stay out of it by §3's rule for projections (ADR-0017). A bare `key` is
 not on the list: it is a credential in a process where a `QueryKeyAuth` sends the key
 under that name (USDA NASS), which registers it when built, and data elsewhere, as
-Eurostat's SDMX series `key` is (ADR-0019, amendment 2026-10-27). A task that wants the
+Eurostat's SDMX series `key` is (ADR-0019, amendment 2026-10-27). A source declares a
+name with a whole-word `token` data where its value is data, a paging cursor such as X's
+`next_token` and `pagination_token`, once, with
+`xippios.core.redaction.register_data_name`: the envelope, the recorder and replay keep
+its value. Every other name with a whole-word `token` stays a credential, and `token`,
+`access_token`, `refresh_token` and `id_token` cannot be declared (ADR-0019, amendment
+2026-11-18, point c). A link in `request`, a file's signed URL say, keeps its
+path and its other parameters and reads each credential of its query `REDACTED`, an
+Azure SAS `sig` or an S3 `X-Amz-Signature`, as `scrub_url` writes it, so a task records
+the link it sent (ADR-0019, amendment 2026-11-18, point d). A task that wants the
 credential's provenance records the variable name, never the value. A task that composes
 another (§2) and extends the composed answer's `request` builds a new `ResultMeta`
 through the constructor, `ResultMeta(**answer.meta.model_dump(exclude={"request"}),
@@ -441,6 +455,10 @@ the query can carry a key (ADR-0005).
   policy's own, replacing any the config had, and is the family's implementation of the
   quota rules above (ADR-0010); a source whose answer to a spent limit is not a 429
   passes `spent=`, which reads that answer. No source subclasses `AsyncClient` for them.
+  Every request the client builds says where its credentials go in two extensions, which
+  both hooks read (`observe` on `response.request`): `xippios_auth`, `client`, `none` or
+  `own`, and `xippios_origin`, `base` or `other` (ADR-0015, amendment 2026-11-18, point
+  d).
   Before a 429 or 5xx is retried, the client asks `classify`: a `RateLimitError` sets the
   wait from its `retry_after`; an `UpstreamError` for a 5xx changes nothing; any other
   error ends the retries.
@@ -467,11 +485,17 @@ the query can carry a key (ADR-0005).
   response; the stdlib's `csv.DictReader`, headers as upstream prints them) sit beside
   `decode_json`. The source opens gzip and zip with the stdlib; core ships no XML,
   spreadsheet or PDF parser (ADR-0019, ADR-0020).
-- Credentials come from the client's `auth`. A call to a keyless endpoint on the same
-  host passes `auth=None` and is sent without them; another `httpx.Auth` replaces them
-  for one call; no second client is needed to leave the key off (ADR-0015). `auth=None`
-  and the client's own share the cache; a call with an `httpx.Auth` of its own bypasses
-  it, neither looked up nor stored.
+- Credentials come from the client's `auth`, which goes to the base URL's origin, its
+  scheme, host and port, and to no other: a request to another origin, a file link on
+  another host, is sent without them, and a call that must send credentials there passes
+  an `httpx.Auth` of its own (ADR-0015, amendment 2026-11-18, point d). A call to a
+  keyless endpoint on the same host passes `auth=None` and is sent without them; another
+  `httpx.Auth` replaces them for one call; no second client is needed to leave the key
+  off (ADR-0015). `auth=None` and the client's own share the cache; a call with an
+  `httpx.Auth` of its own bypasses it, neither looked up nor stored. A request sent with
+  `auth=None` or to another origin spends no quota: the `QuotaPolicy` neither holds it
+  back nor reads its answer, and the limiter still paces it (ADR-0015, amendment
+  2026-11-18, point e).
 - One `User-Agent`: `xippios-<source>/<version> (+https://github.com/xippios)`.
 - Timeouts explicit; defaults 10 s connect, 60 s read.
 - A request body is JSON (`json=`) or form-encoded (`data=`, for an upstream whose
@@ -488,7 +512,10 @@ secrets in CI). A source behind api.data.gov takes its key, its gateway answers 
 quota from `xippios.core.data_gov`: `Gateway(SOURCE)` gives the `auth` on
 `DATA_GOV_API_KEY`, the `classify` its own `classify` asks first, and `install`, which puts
 the one `QuotaPolicy` per process for that key on its config (ADR-0009, amendment
-2026-10-27).
+2026-10-27). The gateway's `classify` reads the answers of the base URL's origin alone, and
+`Gateway(SOURCE, data_path=...)` maps FAS's empty `text/plain` 404 on the source's data
+paths to `xippios.core.data_gov.NoDataForYear`, a `NotFoundError` that says the year holds
+no data (ADR-0009, amendment 2026-11-18, points a and b).
 
 A multi-tenant source, whose upstream serves each tenant from a host or under a key of
 its own (CashCtrl's organisations), carries its tenant registry itself and names the
@@ -656,7 +683,9 @@ standalone from the package. A task named in `BULK_TASKS` gets no route:
   `x-transaction-id` and the others `REQUEST_ID_HEADERS` names), which change with every
   recording and trip the secret scan (ADR-0019, amendment 2026-11-18).
   The scrub redacts credentials by the rule `ResultMeta` applies (§4): a parameter named
-  `key` is data unless a `QueryKeyAuth` sends the key under that name (ADR-0019).
+  `key` is data unless a `QueryKeyAuth` sends the key under that name (ADR-0019), and a
+  `token` name its source declared data is written as sent, so replay can match it
+  (ADR-0019, amendment 2026-11-18, point c).
 - Live tests are marked `@pytest.mark.live`, skipped unless `XIPPIOS_LIVE_TESTS=1`,
   and run in CI only in the one live workflow, `.github/workflows/live.yml`, in the shape
   the template renders (a source whose secrets differ keeps that shape): one job,

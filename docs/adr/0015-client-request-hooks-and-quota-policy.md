@@ -271,3 +271,34 @@ it derives from the payload returns `Answer(value, answer.retrieved_at)`, an `An
 the value's type. It replaces sdk-comtrade's `ReferenceFile[T]` (`Answer[list[T]]`) and
 sdk-usda-nass's `ParamValues` (`Answer[list[str]]`), which their adoption of core 0.4.0
 deletes, with no alias, since no user depends on either yet.
+
+(d) **The client's auth reaches the base URL's origin only** (decisions 1 and 4; step 7;
+https://github.com/xippios/sdk-core/issues/163, found in the sdk-usda-psd 0.4.0 briefing).
+Decision 4 sent the client's credentials with every request whose call left `auth=` at its
+default, an absolute URL on another host included, so a file link that a catalog names
+received the key, and `download`'s docstring told the caller to pass `None` there. The
+client's `auth` now goes to the base URL's origin alone, its scheme, host and port as httpx
+normalises them: a request to any other origin is sent without it, and an `httpx.Auth` that
+the call passes goes wherever the call sends it. It covers every auth on a client, the
+`EnvKeyAuth` helpers and a source's own bearer (sdk-faostat's login, sdk-google-mail's
+refresh), and step 8's renewing bearer. Decision 1's hooks learn where a request's
+credentials go from two extensions that the client sets on every request it builds, the
+one `before_request` gets and each attempt that `observe` gets as `response.request`:
+`xippios_auth`, `"client"`, `"none"` or `"own"` for the default, `auth=None` and an auth of
+the call's own, and `xippios_origin`, `"base"` or `"other"`. Decision 4's cache rule is
+unchanged. A source that sent `auth=None` to keep its key off another host, sdk-faostat's
+bulk files, may keep it; no source sends its key to another origin on purpose.
+
+(e) **The quota policy skips a request outside the quota** (decision 2; step 7;
+https://github.com/xippios/sdk-core/issues/163, found by sdk-comtrade). Decision 2's
+`before_request` ran before every call and its `observe` read every answer, so once the
+key's daily quota was spent, sdk-comtrade's public operations and reference files, sent
+with `auth=None`, were held back or refused though they spend none, and an answer from
+another host could mark the key's quota spent. A request marked `xippios_auth: "none"` or
+`xippios_origin: "other"` is now outside the quota: `before_request` neither waits nor
+refuses before it, and `observe` leaves the snapshot alone for its answer. The client's
+limiter still paces it, since the pace is the host's (ADR-0010, decision 1). A request or a
+response built without the marks, by hand or in a test, counts as before. The row's other
+option, a path that the source names as outside the quota, is not taken: no source sends a
+keyed request that its quota does not count. The api.data.gov gateway's `classify` reads no
+answer marked `"other"` either (ADR-0009, amendment 2026-11-18, point a).
