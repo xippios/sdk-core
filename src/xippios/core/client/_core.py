@@ -357,8 +357,11 @@ class AsyncClient:
         ``config.retry`` says, and never answered from the cache nor stored in it.
         ``before_request`` runs once and the limiter paces the request, as for
         ``request``, and ``observe`` sees the answer; ``classify`` is not asked, since
-        nothing is retried or raised. The body is read up to ``max_read_bytes`` as
-        decoded, and no further (ADR-0019, amendment 2026-11-18 (e)).
+        nothing is retried or raised. The client's auth reaches the base URL's origin
+        only, and the request carries the marks ``xippios_auth`` and ``xippios_origin``,
+        as every request the client builds does (point (d) there). The body is read up
+        to ``max_read_bytes`` as decoded, and no further (ADR-0019, amendment 2026-11-18
+        (e)).
 
         Args:
             method: HTTP method.
@@ -384,12 +387,13 @@ class AsyncClient:
             raise ValueError("pass json= or data=, not both: a request has one body")
         pool = self._pool()
         method = method.upper()
-        sent_auth = httpx.USE_CLIENT_DEFAULT if isinstance(auth, _ClientAuth) else auth
+        reach = self._reach(auth)
         before_request = self.config.before_request
         if before_request is not None:
             built = pool.build_request(
                 method, path, params=params, json=json, data=data, headers=headers
             )
+            reach.mark(built)
             outcome = before_request(built)
             if inspect.isawaitable(outcome):
                 await outcome
@@ -399,7 +403,7 @@ class AsyncClient:
             method, path, params=params, json=json, data=data, headers=headers
         )
         try:
-            streamed = await pool.send(request, auth=sent_auth, stream=True)
+            streamed = await pool.send(request, auth=reach.mark(request), stream=True)
             try:
                 body = await _read_within(streamed, max_read_bytes)
             finally:
