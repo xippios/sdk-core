@@ -14,7 +14,9 @@ unprotected. This record states ADR-0014 with its supersession in part by ADR-00
 decisions 1 to 4, 6, 7 and 11 left core with the kit in 0.3.0, when ADR-0024 moved the code
 to sdk-cashctrl. ADR-0025, D-d named the pieces that return in 0.4.0, which bring decisions 1
 to 4, 6 and 7 back, decision 7 as the binding wrapper, and the human's answer of 2026-11-18
-(https://github.com/xippios/sdk-core/issues/298) returns decision 11 with them.
+(https://github.com/xippios/sdk-core/issues/298) returns decision 11 with them. Decision 13,
+the line of decision 11 for a source's own tasks and core's checks of it, is new in this
+record, the human's answer of 2026-11-18 (https://github.com/xippios/sdk-core/issues/299).
 
 ## Decision
 
@@ -119,10 +121,30 @@ to 4, 6 and 7 back, decision 7 as the binding wrapper, and the human's answer of
     source's schema-typed arguments. Johannes decided the check on 2026-10-27. The HTTP
     router keeps a parameter's `Annotated` metadata too (ADR-0007, amendment 2026-11-18,
     point a).
+13. **One tenant per call, in a source's own tasks too.** A multi-tenant source's tasks keep
+    the line of decision 11: each task takes exactly one tenant, required, the tenant list
+    returns names only, and nothing is shared between tenants. Core checks it where it can
+    break unseen. `bind_tasks` refuses with `ValueError`, naming the task and the parameter
+    and binding nothing, a task that lacks the lock's parameter, unless it is the tenant
+    list of decision 6 or its module declares it by name as touching no tenant, in
+    `NO_TENANT_TASKS`, a frozenset of task names beside `BULK_TASKS` in `tasks.py` or
+    `tasks_write.py`; a task so declared is served as it is on a bound server. The family
+    check holds every task of a source with a `Tenants` registry, which its `_client`,
+    `tasks` or `tasks_write` module holds, to the rule, with no opt-in: the tenant's
+    parameter once, required with no default, of a type that names one tenant, a `str`, the
+    tenant list and the declared tasks excepted; it reads the tenant's parameter from the
+    tasks, the name most of them take. The lock still binds a defaulted tenant parameter
+    (decision 7); the family check refuses one. Both read signatures, which show neither
+    what a task reaches nor what it shares: a task that takes one tenant and opens another's
+    client is the review's to find (https://github.com/xippios/sdk-core/issues/302). The
+    rule binds a source from its adoption of core 0.4.0. Johannes decided it on 2026-11-18
+    (https://github.com/xippios/sdk-core/issues/299).
 
 ## Consequences
 
 - A changed key rebuilds a tenant's client.
+- A multi-tenant source names a task that touches no tenant in `NO_TENANT_TASKS`, or its
+  bound server is not built and its family check fails.
 - The `mcp` SDK's middleware API is provisional in 2.x and core declares no upper bound for
   it; the argument check's tests through `mcp_call_text` guard it.
 - Core adds no authentication to MCP servers. A write server beyond loopback is the
@@ -130,4 +152,6 @@ to 4, 6 and 7 back, decision 7 as the binding wrapper, and the human's answer of
 
 Conventions §1, §4, §7 and §8, the README and the docstrings of `xippios.core.tenants`,
 `xippios.core.mcp`, `main`, `serve_tenants`, `register_tasks` and `InvalidRequestError`
-state its decisions from 1.28 on, decision 11 the docstring of `xippios.core.tenants` alone.
+state its decisions from 1.28 on; decisions 11 and 13 conventions §7, item 17 of the review
+checklist, the README and the docstrings of `xippios.core.tenants`, `bind_tasks` and the
+family check.

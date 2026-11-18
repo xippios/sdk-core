@@ -502,7 +502,15 @@ source than the registry's, for a registry that several sources share.
 
 Every other task takes the tenant's name and sets `ResultMeta(tenant=name, ...)`; its
 messages and results name tenants and variables, never a value, and core's error messages
-leave the host out, since it names the tenant.
+leave the host out, since it names the tenant. One tenant per call (ADR-0036, decisions 11
+and 13): each task takes exactly one tenant, required, the tenant list returns names only,
+nothing is shared between tenants, and nothing in core works across them. A task that
+touches no tenant, a list that is the same for every tenant say, is declared by name beside
+`BULK_TASKS` in `tasks.py`:
+
+```python
+NO_TENANT_TASKS = frozenset({"list_currencies"})  # tasks_write.py declares its own
+```
 
 A server bound to one tenant serves that tenant alone, and none of its tools takes the
 tenant's name. `bind_tasks(tasks, lock)` binds them to a `TenantLock`, and
@@ -548,6 +556,9 @@ def run() -> None:  # xippios-example-mcp --org acme serves acme alone
 A bound tool keeps its name and its other parameters' `Annotated` constraints, and its
 docstring and signature lose `org`, so a call that still names a tenant is refused like
 any argument the tool does not declare; the tenant list lists the bound tenant alone.
+`bind_tasks` refuses with `ValueError`, naming the task and `org`, a task that takes no
+`org`, unless it is the tenant list or named in its module's `NO_TENANT_TASKS`, which the
+bound server serves as it is, so a bound server serves no task unbound.
 The bound server's instructions end "This server is bound to org acme; every tool acts on
 that organisation and takes no org." `--org acme` stops the process with exit status 2
 before anything is served when `acme` is not declared or `check` raises, a missing
@@ -865,9 +876,14 @@ shares, kept once in core. The namespace levels stay empty and `py.typed` ships;
 and `http.py` serve exactly `tasks.__all__` minus `BULK_TASKS`; every task, read and
 write, is synchronous, returns `Result[T]` and has an agent docstring; the README's status
 table lists exactly the read and the write tasks; `.copier-answers.yml` names a template
-tag; `pyproject.toml` bounds `xippios-core` with `~=`. A write server is its source's to
-test, with `await assert_write_tools(write_server, write_tasks, source="example",
-read_server=read_server, router=router)`: a write server, its tools exactly the write
+tag; `pyproject.toml` bounds `xippios-core` with `~=`; and every task, read and write, of a
+source whose `_client`, `tasks` or `tasks_write` module holds a `Tenants` registry takes
+exactly one tenant, its parameter once, required, a `str`, the tenant list and the tasks of
+`NO_TENANT_TASKS` excepted, with no opt-in. The check reads the tenant's parameter from the
+tasks, the name most of them take (`org` for sdk-cashctrl), and reads signatures only, so a
+task that takes one tenant and opens another's client is the review's to find. A write
+server is its source's to test, with `await assert_write_tools(write_server, write_tasks,
+source="example", read_server=read_server, router=router)`: a write server, its tools exactly the write
 tasks, each taking `confirm: bool = False` last, and none of them on the read server or
 the router. A source whose adapters drop a task, or whose README table is stale, fails CI
 before a reviewer looks. The package under test is the one `tasks.py` under
