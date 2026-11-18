@@ -211,3 +211,15 @@ write server and for a read server built with `loopback_only=True`, against the 
 list goes, and an endpoint with `auth: none` that mounts sdk-google-mail's read server is
 held as a write server is, once the host and sdk-google-mail run on core 0.4.0 rather than
 at the package contract's minor that the amendment of 2026-10-30, part (e), names.
+
+(b) **Error answers are flagged** (decision 6; step 2,
+https://github.com/xippios/sdk-core/issues/168). Core sets `isError` on the result of every
+error answer a tool gives, beside the text `error: <ErrorClass>: <message>` of conventions
+§8: a `XippiosError` that the task raises, arguments that the tool's schema refuses, and an
+argument that the tool does not declare (ADR-0014, amendment 2026-11-18, (a)). So decision
+6's condition holds from core 0.4.0: the host reads the flag once it runs on that core, and a
+client tells an error answer from data without reading its text, which stays as it was.
+`mcp_call_text` returns the text of an answer so flagged, as the sources' tests assert it,
+and still fails a call that the SDK answers with an error of another kind, an unknown tool
+or a task that crashed, which it tells by its text; so ADR-0014's amendment of 2026-10-27,
+by which an unknown tool fails both helpers, holds.

@@ -1,19 +1,21 @@
 """Register task functions as MCP tools.
 
-Each tool keeps the task's signature and docstring, so the SDK derives the input
-schema and the description from them. The body awaits the task's async twin, turns
-taxonomy errors into text and applies the result cap: the tool's own from ``caps``,
-else the server's (ADR-0016).
+Each tool keeps the task's signature and docstring, the metadata of an ``Annotated``
+parameter included, so the SDK derives the input schema and the description from them.
+The body awaits the task's async twin, turns taxonomy errors into text flagged
+``is_error`` and applies the result cap: the tool's own from ``caps``, else the server's
+(ADR-0016).
 
 A task its ``tasks.py`` names in ``BULK_TASKS`` is no tool and is skipped (ADR-0019);
 ``tool_functions(tasks)`` gives the rest of ``tasks.__all__``.
 
-Every server answers arguments a tool's schema refuses in conventions §8's form, through
-one middleware ``register_tasks`` installs before the tool runs, instead of the SDK's
-MCP error. A server whose tasks were registered with ``read_only=False`` is a write
-server (``is_write_server``); it and a read server registered with
-``loopback_only=True`` are held to loopback (``is_loopback_only``), which ``main``
-serves on a loopback ``--host`` only unless told otherwise.
+Every server answers an argument a tool does not declare and arguments its schema
+refuses in conventions §8's form, flagged ``is_error``, through one middleware
+``register_tasks`` installs before the tool runs, instead of the SDK's MCP error. A
+server whose tasks were registered with ``read_only=False`` is a write server
+(``is_write_server``); it and a read server registered with ``loopback_only=True`` are
+held to loopback (``is_loopback_only``), which ``main`` serves on a loopback ``--host``
+only unless told otherwise.
 
 Building a server also quiets the request log of httpx and httpx2
 (``quiet_request_logging``).
@@ -32,12 +34,12 @@ import pydantic
 from mcp.server.context import CallNext, HandlerResult, ServerMiddleware, ServerRequestContext
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.utilities.func_metadata import FuncMetadata, func_metadata
-from mcp.types import CallToolResult, TextContent, ToolAnnotations
+from mcp.types import CallToolResult, ToolAnnotations
 
 from xippios.core._loop import as_async
 from xippios.core._tasks import is_bulk_task, tool_functions
-from xippios.core.errors import XippiosError
-from xippios.core.mcp.errors import _refused_arguments, error_to_text
+from xippios.core.errors import XippiosError, _refused_arguments
+from xippios.core.mcp.errors import _error_answer
 from xippios.core.mcp.results import cap_result
 from xippios.core.models import ResultCap
 
@@ -119,19 +121,17 @@ def is_loopback_only(server: MCPServer) -> bool:
     return server in _LOOPBACK_SERVERS or server in _WRITE_SERVERS
 
 
-def _answer(error: XippiosError) -> CallToolResult:
-    """The family's error text as a tool's answer, not an MCP error (conventions §8)."""
-    return CallToolResult(content=[TextContent(type="text", text=error_to_text(error))])
-
-
 def _arguments_middleware(record: _ServerRecord) -> ServerMiddleware[Any]:
     """The pre-call middleware that answers refused arguments as ``InvalidRequestError``.
 
-    For a tool ``register_tasks`` registered, the call's arguments are validated against
-    the argument model the SDK builds for it (``func_metadata``), before the SDK does; a
-    refusal is answered as ``error: InvalidRequestError: <argument>: <message>``, where
-    the SDK would answer an MCP error quoting pydantic's text, the input value included
-    (queue row 41 a). Every other call, request and failure reaches the SDK unchanged.
+    For a tool ``register_tasks`` registered, the call's arguments are checked against
+    the argument model the SDK builds for it (``func_metadata``), before the SDK does: an
+    argument the model does not declare, which the SDK would drop, is refused naming the
+    ones it declares (https://github.com/xippios/sdk-core/issues/84), and the others are
+    validated. A refusal is answered as ``error: InvalidRequestError: <argument>:
+    <message>``, flagged ``is_error``, where the SDK would answer an MCP error quoting
+    pydantic's text, the input value included (queue row 41 a). Every other call, request
+    and failure reaches the SDK unchanged.
     """
 
     async def check_arguments(
@@ -153,14 +153,37 @@ def _arguments_middleware(record: _ServerRecord) -> ServerMiddleware[Any]:
 
 
 def _refusal_of(metadata: FuncMetadata, arguments: dict[str, Any]) -> CallToolResult | None:
-    """The answer to ``arguments`` the argument model refuses, or ``None`` to go on."""
+    """The answer to ``arguments`` the argument model refuses, or ``None`` to go on.
+
+    The errors are the arguments the model does not declare, in the call's order, then
+    what its validation of the declared ones refuses; the answer names the first, with
+    the count when there are several. A validator that crashes leaves the SDK to answer,
+    unless an argument is undeclared.
+    """
+    declared = _declared(metadata)
+    takes = ", ".join(declared) if declared else "no arguments"
+    errors: list[Mapping[str, Any]] = [
+        {"loc": (name,), "msg": f"Not an argument of this tool; it takes {takes}"}
+        for name in arguments
+        if name not in declared
+    ]
     try:
-        metadata.validate_arguments(arguments)
+        metadata.validate_arguments({k: v for k, v in arguments.items() if k in declared})
     except pydantic.ValidationError as exc:
-        return _answer(_refused_arguments(exc))
+        errors.extend(exc.errors(include_url=False, include_context=False, include_input=False))
     except Exception:
-        return None  # a validator that crashes: the SDK answers it as it does
-    return None
+        pass  # a validator that crashes: the SDK answers it as it does
+    return _error_answer(_refused_arguments(errors)) if errors else None
+
+
+def _declared(metadata: FuncMetadata) -> list[str]:
+    """The argument names a tool's model declares, in the signature's order.
+
+    A field's alias where it has one: the SDK renames a parameter that shadows a
+    ``BaseModel`` attribute and keeps its name as the alias, which the input schema shows.
+    """
+    fields = metadata.arg_model.model_fields
+    return [field.alias or name for name, field in fields.items()]
 
 
 def tool_name(source: str, fn: Callable[..., Any]) -> str:
@@ -209,26 +232,38 @@ def _check_caps(tasks: list[Callable[..., Any]], caps: Mapping[str, ResultCap]) 
         )
 
 
-def _as_tool(fn: Callable[..., Any], cap: ResultCap) -> Callable[..., Awaitable[str]]:
+def _as_tool(
+    fn: Callable[..., Any], cap: ResultCap
+) -> Callable[..., Awaitable[str | CallToolResult]]:
+    """The tool for ``fn``: its signature, ``Annotated`` metadata kept, and its docstring.
+
+    The hints are resolved with ``include_extras=True``, so a ``Field`` constraint, a
+    description or a validator that an ``Annotated`` parameter declares reaches the
+    argument model, the input schema and the argument check
+    (https://github.com/xippios/sdk-core/issues/68). The tool returns the capped result
+    as text, or a ``XippiosError`` as the family's text flagged ``is_error``.
+    """
     target = as_async(fn)
-    hints = typing.get_type_hints(fn)
+    hints = typing.get_type_hints(fn, include_extras=True)
     signature = inspect.signature(fn)
     parameters = [
         p.replace(annotation=hints.get(p.name, p.annotation)) for p in signature.parameters.values()
     ]
 
-    async def tool(*args: Any, **kwargs: Any) -> str:
+    async def tool(*args: Any, **kwargs: Any) -> str | CallToolResult:
         try:
             result = await target(*args, **kwargs)
         except XippiosError as exc:
-            return error_to_text(exc)
+            return _error_answer(exc)
         return cap_result(result, cap)
 
     functools.update_wrapper(tool, fn)
     tool.__signature__ = signature.replace(  # type: ignore[attr-defined]
-        parameters=parameters, return_annotation=str
+        parameters=parameters, return_annotation=str | CallToolResult
     )
-    tool.__annotations__ = {p.name: p.annotation for p in parameters} | {"return": str}
+    tool.__annotations__ = {p.name: p.annotation for p in parameters} | {
+        "return": str | CallToolResult
+    }
     return tool
 
 
@@ -247,11 +282,14 @@ def register_tasks(
     Arguments a tool's schema refuses are answered as ``error: InvalidRequestError:
     <argument>: <message>`` before the tool runs, by a middleware installed once per
     server (conventions §8), never with pydantic's rendered error (its URL, input type or
-    input value). It is appended to ``server.middleware`` at the first registration, and
-    the SDK runs that list outermost-first, so a middleware appended later runs inside
-    the check. A source that installs middleware of its own chooses its place in
-    ``server.middleware``; index 0 is ahead of the SDK's own OpenTelemetry and
-    request-state middleware as well.
+    input value). So is an argument the tool does not declare, which the answer names
+    with the ones it declares: ``yaer: Not an argument of this tool; it takes series_id,
+    year``. Every error answer, the task's own ``XippiosError`` included, sets
+    ``is_error`` on its result beside the text (ADR-0026, decision 6). The middleware is
+    appended to ``server.middleware`` at the first registration, and the SDK runs that
+    list outermost-first, so a middleware appended later runs inside the check. A source
+    that installs middleware of its own chooses its place in ``server.middleware``; index
+    0 is ahead of the SDK's own OpenTelemetry and request-state middleware as well.
 
     A task the module that defines it names in ``BULK_TASKS`` (``tasks.py``, beside
     ``MCP_CAPS``) is skipped: a bulk task returns a file, or a list read from one, and is

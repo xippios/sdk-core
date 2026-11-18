@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 import pytest
+from mcp.client import Client
 
 from xippios.core import NotFoundError, Result, ResultMeta, UpstreamModel, parse_decimal, sync
 from xippios.core.mcp import build_server
@@ -66,19 +67,38 @@ async def test_mcp_call_fails_on_error_text() -> None:
 
 @pytest.mark.anyio
 async def test_mcp_call_text_returns_the_text_error_text_included() -> None:
+    # https://github.com/xippios/sdk-core/issues/168: the error answer is flagged
+    # is_error, and mcp_call_text still returns its text for the test to assert.
     server = build_server("example", [get_thing])
+    async with Client(server) as client:
+        flagged = await client.call_tool("example_get_thing", {"name": "missing"})
+    assert flagged.is_error is True
     text = await mcp_call_text(server, "example_get_thing", {"name": "missing"})
     assert text == "error: NotFoundError: no such thing"
     assert (await mcp_call_text(server, "example_get_thing", {"name": "a"})).startswith('{"data"')
 
 
+def crash(name: str) -> None:
+    """Crash.
+
+    Args:
+        name: Anything.
+    """
+    raise RuntimeError("a task that crashes")
+
+
 @pytest.mark.anyio
 async def test_mcp_call_fails_when_the_server_reports_an_error() -> None:
-    server = build_server("example", [get_thing])
-    # The argument middleware answers: §8's text, not is_error, so the middleware ran.
+    server = build_server("example", [get_thing, crash])
+    # The argument middleware answers in §8's form, flagged, so the middleware ran.
     refused = "error: InvalidRequestError: name: Field required"
     assert await mcp_call_text(server, "example_get_thing", {}) == refused
     with pytest.raises(AssertionError, match=refused):
         await mcp_call(server, "example_get_thing", {})
-    with pytest.raises(AssertionError):
+    # An MCP error of another kind fails both: an unknown tool, a task that crashed.
+    with pytest.raises(AssertionError, match="Unknown tool: example_no_such_tool"):
         await mcp_call_text(server, "example_no_such_tool", {})
+    with pytest.raises(AssertionError, match="Error executing tool example_crash"):
+        await mcp_call_text(server, "example_crash", {"name": "a"})
+    with pytest.raises(AssertionError, match="Error executing tool example_crash"):
+        await mcp_call(server, "example_crash", {"name": "a"})
