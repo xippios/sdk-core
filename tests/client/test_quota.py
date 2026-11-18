@@ -473,7 +473,7 @@ async def test_a_cache_hit_never_waits_and_never_updates_the_snapshot() -> None:
     upstream = Upstream(events, answer(headers=SPENT))
     cached = make_config(retry=RetryPolicy(max_attempts=1), cache=MemoryCache(ttl=None))
     client = AsyncClient(policy.install(cached), transport=upstream)
-    first = await client.get_json("/v1/reference")
+    first = (await client.get_answer("/v1/reference")).payload
     spent = policy.snapshot()
     assert spent is not None
     assert spent.remaining == 0

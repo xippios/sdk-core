@@ -18,7 +18,7 @@ script runs again.
 - [ADR-0012](adr/0012-upstream-totals-in-the-result-envelope.md): Upstream totals in the result envelope · Accepted · 2026-10-23
 - [ADR-0013](adr/0013-offline-tests-guaranteed-by-the-plugin.md): Offline tests guaranteed by the plugin · Accepted · 2026-10-23 · amended 2026-11-18
 - [ADR-0014](adr/0014-multi-tenant-sources.md): Multi-tenant sources · Accepted · 2026-10-23
-- [ADR-0015](adr/0015-client-request-hooks-and-quota-policy.md): Client request hooks and a quota policy · Accepted · 2026-10-24
+- [ADR-0015](adr/0015-client-request-hooks-and-quota-policy.md): Client request hooks and a quota policy · Accepted · 2026-10-24 · amended 2026-11-18
 - [ADR-0016](adr/0016-per-tool-result-caps.md): Per-tool result caps · Accepted · 2026-10-24
 - [ADR-0017](adr/0017-sensitive-upstream-fields.md): Sensitive upstream fields — personal identifiers stay out of task projections · Accepted · 2026-10-25
 - [ADR-0018](adr/0018-core-versioning-and-source-adoption.md): Core versioning and source adoption · Accepted · 2026-10-25

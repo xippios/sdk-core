@@ -134,7 +134,7 @@ async def test_a_cache_hit_reaches_neither_hook(respx_mock: respx.MockRouter) ->
         observe=lambda response: events.seen.append(f"observe {response.status_code}"),
     )
     client = AsyncClient(config)
-    await client.get("/v1/x")
+    await client.get_answer("/v1/x")
     hit = await client.get("/v1/x")
     raw = await client.request("GET", "/v1/x", raise_on_error=False)
     assert hit.extensions["xippios_cache"] == "hit"

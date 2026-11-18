@@ -17,10 +17,12 @@ It gives a source package the things that should be identical across the family:
   (`json=`) or form-encoded (`data=`). Two hooks, `before_request` and `observe`, see
   each call and each response; `QuotaPolicy` uses them to wait out or refuse a request
   into a spent quota.
-  `auth=None` sends one call without the client's key. `get_answer` returns the payload
-  with its `retrieved_at`, a cache hit's stored time. A file is streamed to disk with
-  `download`, never held in memory; `decode_text` and `decode_csv` read text and CSV
-  next to `decode_json`; the cache stores no body over `cache_max_bytes` (8 MiB).
+  `auth=None` sends one call without the client's key. `get_answer` returns the payload,
+  parsed into the type it names, with its `retrieved_at`, a cache hit's stored time, and
+  it alone stores an answer in the cache, once the answer decoded. A file is streamed
+  to disk with `download`, never held in memory; `decode_text` and `decode_csv` read
+  text and CSV next to `decode_json`; the cache stores no body over `cache_max_bytes`
+  (8 MiB).
 - **Auth helpers** that read the key from the environment on the first request:
   query parameter, header, bearer token or basic auth. A source's documented error
   shapes go into `ClientConfig.classify`, consulted on every response.
@@ -233,14 +235,23 @@ any source in the process waits within the policy's cap or is refused before sen
 A request the cache answers never waits: `before_request` runs after the cache lookup,
 and a cache hit carries the time its entry was stored in
 `response.extensions["xippios_cache_stored_at"]`, the hit's `retrieved_at`. A wrapper
-whose answer may come from the cache calls `get_answer()` instead of `get_json()`: its
-`Answer` carries the payload and `retrieved_at`, the stored time on a hit and the time
-the answer arrived otherwise.
+whose answer may come from the cache calls `get_answer()` instead of `get_json()`, the
+one call that stores an answer: a 200 once its body decoded and, with `parse=`, its
+payload parsed, so a body that fails is requested again on the next call. `get`,
+`get_json` and `request` read the cache and store nothing. The `Answer` carries the
+payload and `retrieved_at`, the stored time on a hit and on the miss that stored it,
+which reads the clock once for both.
 
 ```python
-answer = await client.get_answer("/api/regions", auth=None)
+answer = await client.get_answer(
+    "/api/regions", auth=None, parse=list[Region], endpoint="regions"
+)  # Answer[list[Region]]; a payload that is not a list[Region] raises ValidationError
 meta = ResultMeta(source="example", endpoint="regions", retrieved_at=answer.retrieved_at)
 ```
+
+A wrapper that returns a value it derives from the payload keeps the time with it as an
+`Answer` of that value's type, `Answer(codes, answer.retrieved_at)`, not as a pair of
+its own.
 
 The hooks are plain callables on `ClientConfig` (`before_request` may be async) for
 anything else that has to see each call or each response.
