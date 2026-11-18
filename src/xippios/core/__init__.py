@@ -51,7 +51,14 @@ from xippios.core.models import (
     parse_decimal,
 )
 from xippios.core.pagination import collect, paginate_offset
-from xippios.core.reference import PackagedList, closest, load_json, load_table, matches
+from xippios.core.reference import (
+    PackagedList,
+    closest,
+    load_json,
+    load_table,
+    matches,
+    nearest,
+)
 from xippios.core.tenants import TenantLock, Tenants, bind_tasks, list_task, tenant_instructions
 
 __all__ = [
@@ -97,6 +104,7 @@ __all__ = [
     "load_json",
     "load_table",
     "matches",
+    "nearest",
     "paginate_offset",
     "parse",
     "parse_decimal",

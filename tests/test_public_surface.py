@@ -23,6 +23,8 @@ EXPORTS = {
         "Result", "ResultCap", "ResultMeta", "UpstreamModel", "parse", "parse_decimal",
         "collect", "paginate_offset", "load_json", "load_table", "PackagedList", "matches",
         "closest", "sync", "__version__",
+        # the nearest-integer strategy of two sources (https://github.com/xippios/sdk-core/issues/107)
+        "nearest",
         # tenants, back from the two sources' copies (ADR-0024, amendment 2026-11-18, (b))
         "Tenants", "list_task",
         # and the lock that binds a server to one of them (the same amendment, (d))

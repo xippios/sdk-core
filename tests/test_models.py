@@ -207,7 +207,10 @@ class Wide(UpstreamModel):
 @pytest.mark.parametrize(
     ("text", "expected"),
     [("510,000", Decimal("510000")), ("4.61", Decimal("4.61")), (" 98 ", Decimal("98")),
-     ("(D)", None), ("", None), ("(NA)", None), ("1,234.5", Decimal("1234.5"))],
+     ("(D)", None), ("", None), ("(NA)", None), ("1,234.5", Decimal("1234.5")),
+     # what Decimal reads but is no finite number (https://github.com/xippios/sdk-core/issues/128)
+     ("NaN", None), ("-Infinity", None), ("sNaN", None), ("Infinity", None), (" inf ", None),
+     ("-nan", None), ("-0", Decimal("-0"))],
 )  # fmt: skip
 def test_parse_decimal(text: str, expected: Decimal | None) -> None:
     assert parse_decimal(text) == expected

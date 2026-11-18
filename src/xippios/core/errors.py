@@ -163,12 +163,13 @@ class UnknownCode(InvalidRequestError):
     For an upstream that answers an unknown code with an empty result, the same answer as
     a query without data: the source checks the value against its ``PackagedList`` first
     and refuses one the list lacks, naming the closest known codes (ADR-0022). A source
-    finds them with ``xippios.core.closest`` or with a strategy of its own (nearest by
-    number, ISO codes first) and passes the result. The message names the value, the
-    parameter, the list with its fetch date, the closest codes (``Did you mean 0410000
-    (Wheat), 0440000 (Corn)?``) unless ``hint`` is given, the ``reason`` when given, and
-    that a code upstream added since needs a refresh of the packaged list
-    (``/refresh-reference-data``).
+    finds them with ``xippios.core.closest``, with ``xippios.core.nearest`` for integer
+    codes, or with a strategy of its own (ISO codes first) and passes the result. The
+    message names the value, the parameter, the list with its fetch date, the closest codes
+    (``Did you mean 0410000 (Wheat), 0440000 (Corn)?``, and a code whose name is its own
+    text named once, ``Did you mean VA?``) unless ``hint`` is given, the ``reason`` when
+    given, and that the packaged list is out of date if upstream added the value since. An
+    agent reads the message over MCP, so it names no command of the package's maintainers.
 
     Args:
         param: The parameter, as the package names it, e.g. ``"commodity_code"``.
@@ -178,7 +179,8 @@ class UnknownCode(InvalidRequestError):
         fetched: When the list was fetched, ``PackagedList.fetched``; the message names
             its day, e.g. ``2026-10-23``.
         closest: Known codes close to ``value`` with their upstream names, best match
-            first, e.g. ``[("0410000", "Wheat")]``; empty when none is close.
+            first, e.g. ``[("0410000", "Wheat")]``, or ``[("VA", "VA")]`` for a list of
+            bare values; empty when none is close.
         hint: A sentence that explains the value instead of the closest codes, e.g.
             ``"Omit country_code for every country."``; when given, ``closest`` is not
             named in the message.
@@ -208,13 +210,15 @@ class UnknownCode(InvalidRequestError):
         source: str | None = None,
     ) -> None:
         if hint is None and closest:
-            hint = "Did you mean " + ", ".join(f"{code} ({name})" for code, name in closest) + "?"
+            named = (
+                str(code) if name == str(code) else f"{code} ({name})" for code, name in closest
+            )
+            hint = f"Did you mean {', '.join(named)}?"
         article = "an" if param[:1] in set("aeiou") else "a"
         super().__init__(
             f"{value!r} is not {article} {param} in the packaged {list_name} list (fetched "
             f"{fetched:%Y-%m-%d}).{' ' + hint if hint else ''}{' ' + reason if reason else ''} "
-            "If upstream added it since, the packaged list needs a refresh "
-            "(/refresh-reference-data).",
+            "If upstream added it since, the packaged list is out of date.",
             source=source,
         )
         self.param = param
