@@ -67,8 +67,8 @@ minor, conventions §12).
     bound=BOUND_INSTRUCTIONS), version=__version__, loopback_only=True)`, the imports as in
     sdk-cashctrl's `mcp.py` (lines 11 and 12), `server = build()` (line 46) → `server =
     build_server(build())`, and the entry point `serve_tenants(server, build, TENANTS,
-    check=check_account)` — the read server is held to loopback by core
-    (ADR-0025, D-a), bound or not.
+    check=check_account)` — the read server is held to loopback by core, as ADR-0025
+    decides for this source's read server, bound or not.
     `src/xippios/google/mail/mcp_write.py` (sdk-google-mail) — after the serve command's
     entry, `build` (lines 39 to 48) → returning `ToolSet(SOURCE,
     bind_tasks(tool_functions(tasks_write), lock), caps=getattr(tasks_write, "MCP_CAPS",
@@ -150,8 +150,8 @@ minor, conventions §12).
     (line 190). The other tests of `LoginAuth` hold as written, the sync flow's refusal
     included, since core's message says "async client only" — the margin is core's.
     `CLAUDE.md` (sdk-faostat) — "and two requests that start together before the first login
-    answers may each log in" (lines 214 and 215) goes, "(queue row 252)" (lines 16 and 212)
-    names core's `RenewingBearerAuth`, and "core's `error_from_response`" (line 218) is core's
+    answers may each log in" (lines 214 and 215) goes, "(queue row 252)", the label of the
+    row that asked core for this base (lines 16 and 212), names core's `RenewingBearerAuth`, and "core's `error_from_response`" (line 218) is core's
     `token_refused`, which quotes nothing of the answer — the base exchanges once for both.
     `src/xippios/google/mail/_auth.py` (sdk-google-mail) — `RefreshTokenAuth(EnvKeyAuth)`
     (line 154) becomes a `RenewingBearerAuth` that keeps what is Google's. Its signature
@@ -166,7 +166,8 @@ minor, conventions §12).
     `super().token_refused(response)`, which quotes nothing of the answer where
     `error_from_response` quoted it. Its `credential_help` returns `_credential`'s text for
     the two client variables and "export it or pass the key explicitly" for the refresh
-    token's. Deleted are the comment naming row 252 (lines 1 to 3), `_credential` (lines 110
+    token's. Deleted are the comment that names the row asking core for this base (lines 1
+    to 3), `_credential` (lines 110
     to 124), `EXPIRY_MARGIN` (lines 76 and 77, and line 59 of `__all__`),
     `requires_response_body` (line 202), `_access_token` and `_lapses_at`, `reset`,
     `_current`, `apply` and `auth_flow`, and the imports `os`, `Generator`, `EnvKeyAuth`,
@@ -192,7 +193,8 @@ minor, conventions §12).
     EnvKeyAuth" (line 22) names every credential of the refresh, pinned on
     `RenewingBearerAuth.credential` — the same.
     `CLAUDE.md` (sdk-google-mail) — `RefreshTokenAuth` (lines 16 and 33) is named a subclass
-    of core's `RenewingBearerAuth`, without "queue row 252" — the row closes with core 0.4.0.
+    of core's `RenewingBearerAuth`, without "queue row 252", the label of the row that asked
+    core for the base — core 0.4.0 brings it.
 - A multi-tenant source's bound server, its serve command and its write server's check come
   from core again, out of sdk-cashctrl's and sdk-google-mail's copies: `TenantLock`,
   `bind_tasks` and `tenant_instructions` from `xippios.core`, `serve_tenants` from
@@ -479,7 +481,8 @@ minor, conventions §12).
     module — core's `list_task` sets that mark, so the bound server still lists the bound
     organisation alone until core's lock wrapper replaces the file.
     `tests/test_tenants.py` (sdk-cashctrl) — deleted, with its import of the copy (line 30)
-    — core's `tests/test_tenants.py` holds its tests, the close of row 24 b among them.
+    — core's `tests/test_tenants.py` holds its tests, the one that a replaced client is
+    closed among them.
     `tests/test_registry.py` (sdk-cashctrl) — the docstring's lines 3 to 6, which name
     `_tenants.py` and `tests/test_tenants.py` → core's `Tenants`, tested in core — as above.
     `tests/test_tasks.py` (sdk-cashctrl) — the docstring of `TENANT_LIST` (line 51) → core's
