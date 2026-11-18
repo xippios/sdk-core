@@ -19,27 +19,39 @@ src/xippios/core/
   py.typed           PEP 561 marker; without it mypy --strict fails in every source repo
   _version.py        __version__ from distribution metadata
   _loop.py           one background event loop; sync() derives sync functions from async
-  _tasks.py          is_bulk_task: what the adapters read from a source's tasks.py (BULK_TASKS)
+  _tasks.py          what core reads from a source's tasks.py: tool_functions (tasks.__all__ minus
+                     BULK_TASKS), BULK_TASKS for the adapters, NO_TENANT_TASKS for bind_tasks
+  contract.py        EnvVar, a variable of the package contract; imports nothing of core's
   errors.py          error taxonomy (UnknownCode: a code a packaged list lacks), response/exception
-                     classifiers
-  redaction.py       the one credential rule (REDACTED, the names QueryKeyAuth registers),
-                     scrub_params/url/headers; imports nothing of core's
+                     classifiers, request_description (the method and path a message names)
+  redaction.py       the one credential rule (REDACTED, the names QueryKeyAuth registers,
+                     register_data_name for a cursor that is data), scrub_params/url/headers;
+                     imports nothing of core's
   models.py          UpstreamModel (dump_upstream), ResultMeta (unknown fields refused,
                      published_at_naive, request without None and redacted by redaction),
                      Result[T], ResultCap, parse(); re-exports REDACTED
   pagination.py      paginate_offset (page numbers map onto offsets), collect()
   reference.py       loader for packaged reference data (CSV, JSON); PackagedList (load, meta, parse,
-                     write), matches, closest; render_enums (StrEnum and IntEnum in one module)
-  data_gov.py        the api.data.gov gateway: Gateway (key, classify, one QuotaPolicy per process)
-  client/            httpx client: config, retry, ratelimit, cache, quota, auth (env-key helpers),
-                     download (Downloaded, streaming), _core (AsyncClient with download and
-                     get_answer, Answer, decode_json/decode_text/decode_csv)
-  mcp/               MCP server helpers: server, results (caps), errors (to text), cli   [extra: mcp]
+                     write), matches, closest, nearest; render_enums (StrEnum and IntEnum in one
+                     module)
+  data_gov.py        the api.data.gov gateway: Gateway (key, classify, one QuotaPolicy per process),
+                     NoDataForYear (FAS's empty 404 on a data path)
+  tenants.py         Tenants (one client per tenant), list_task; TenantLock, bind_tasks and
+                     tenant_instructions, a server bound to one tenant
+  client/            httpx client: config, retry, ratelimit, cache, quota, auth (env-key helpers,
+                     the renewing bearer), download (Downloaded, streaming), _core (AsyncClient
+                     with post_json, delete_json, download and get_answer, the generic Answer,
+                     decode_json/decode_text/decode_csv)
+  mcp/               MCP server helpers: server (register_tasks, tool_functions, the loopback
+                     option), toolset (ToolSet), results (caps), errors (to text), cli (main,
+                     serve_tenants, LOOPBACK_HOSTS)                                 [extra: mcp]
   http/              FastAPI helpers: router (from tasks), problems (RFC 9457)          [extra: http]
-  testing/           pytest plugin (live gate, offline guarantees, anyio_backend), fixtures (max_bytes
-                     truncation), record, replay, scrub (Scrub: named secrets, plain verify;
-                     credentials by redaction), adapters (mcp_call), clock (slack for wall-clock
-                     reads), family (the conformance check)                              [extra: testing]
+  testing/           pytest plugin (live gate, offline guarantees, anyio_backend), fixtures (the
+                     writer, the sample mark, max_bytes truncation), record, replay (sent_bodies),
+                     scrub (Scrub: named secrets and response_secrets, plain verify; credentials
+                     by redaction), adapters (mcp_call, mcp_call_text, assert_write_tools),
+                     environment (keep_reserved_tenants), clock (slack for wall-clock reads),
+                     family (the conformance check)                             [extra: testing]
 tests/               mirrors the tree: tests/client/, tests/mcp/, tests/http/, tests/testing/
 scripts/
   adr_index.py       writes docs/adr.md and docs/adr.json from the records; --check writes nothing
@@ -60,18 +72,19 @@ docs/
 with every `xippios-<source>` distribution. `tests/test_public_surface.py` fails if one
 appears.
 
-Rules of the tree (ADR-0004):
+Rules of the tree (ADR-0029):
 
 - A concern is a subpackage when it has an optional dependency or more than one
   internal module; otherwise it is a single module. Do not add empty directories.
-- Imports point downward only: `errors`, `redaction`, `_tasks` and `models` at the bottom;
-  `client`, `pagination`, `reference`, `data_gov` above; `mcp`, `http`, `testing` on top.
-  Nothing below an adapter imports an adapter.
+- Imports point downward only: `errors`, `redaction`, `_tasks`, `contract` and `models` at
+  the bottom; `client`, `pagination`, `reference`, `data_gov` and `tenants` above; `mcp`,
+  `http`, `testing` on top. Nothing below an adapter imports an adapter.
 - The MCP adapter targets the official `mcp` SDK 2.x (`mcp.server.mcpserver.MCPServer`).
   `FastMCP` no longer exists there; the standalone `fastmcp` package is not used.
-- Constructing an `MCPServer` configures root logging at `INFO`, and httpx logs every
-  request URL at `INFO`; URLs can carry a key or a tenant host (ADR-0005). `build_server`
-  and `main` therefore call `quiet_request_logging()`. Keep both calls; the tests in
+- Constructing an `MCPServer` configures root logging at `INFO`, and httpx, as the `mcp`
+  SDK's own httpx2, logs every request URL at `INFO`; URLs can carry a key or a tenant
+  host (ADR-0030, decision 4). `build_server` and `main` therefore call
+  `quiet_request_logging()`, which quiets all four loggers. Keep both calls; the tests in
   `tests/mcp/` guard them, and the testing plugin restores the logger levels per test.
 - The public surface is the `__all__` of the five `__init__.py` files and nothing else:
   each exports what consumers import (ADR-0023, decision 5), and
@@ -98,8 +111,9 @@ uv run python scripts/adr_index.py   # after a record changes; --check verifies 
   `changelog/README.md` gives.
 - No tag by hand: the release PR's merge runs `publish.yml`, which tags `vX.Y.Z` from
   `pyproject.toml` on the merge commit (conventions §12).
-- Never read or print `.envrc`, `.env`, or any variable ending in `_API_KEY`,
-  `_REFRESH_TOKEN` or `_SECRET`.
+- Never read or print `.envrc`, `.env` or a variable that holds a credential: each one
+  the package reads a credential from, and any whose name ends in `_API_KEY`, `_TOKEN` or
+  `_SECRET` (conventions §7).
 - `ruff` is configured to leave `docs/` alone; never reformat code blocks in the
   governing documents.
 - If a convention seems wrong, say so in the PR description and follow it anyway; changing
