@@ -27,7 +27,7 @@ says whether it holds again with the code's return; this record states no rule f
    `-` made `_` (`CASHCTRL_ACME_SUBDOMAIN`, `CASHCTRL_ACME_API_KEY`); the source slug names
    the source in every error either way. `fields` names the suffixes, `validate` checks a
    value where the source knows its shape, and `hints` tells the operator what a field holds
-   when `validate` refuses its value.
+   when `validate` refuses its value. sdk-cashctrl's scheme is unchanged.
 2. **A reserved test tenant is declared by its own variables.** It exists when every one of
    its field variables is set and is never listed; listing it is a `ConfigError`. A
    deployment that does not set them has no test tenant.
@@ -93,8 +93,10 @@ says whether it holds again with the code's return; this record states no rule f
 10. **Tests go through the middleware.** `xippios.core.testing.mcp_call` and `mcp_call_text`
     connect `mcp.Client(server)` in-process, so the argument check and any other middleware
     run as they do for a real client. `mcp_call` raises `AssertionError` on every `error:`
-    text; `mcp_call_text` returns the tool's text, so a
-    test can assert a refusal; an unknown tool fails both.
+    text; `mcp_call_text` returns the tool's text, an error answer's flagged `isError`
+    included, so a test can assert a refusal, and fails a call that the SDK answers with an
+    error of another kind, an unknown tool or a task that crashed, which it tells by its text
+    (ADR-0026, amendment 2026-11-18, point b); an unknown tool fails both.
 11. **The argument check.** `register_tasks` installs a middleware, once per server, that
     validates a call's arguments before the tool runs, with the argument model the `mcp` SDK
     builds for the tool (`func_metadata`) from the task's hints with their `Annotated`

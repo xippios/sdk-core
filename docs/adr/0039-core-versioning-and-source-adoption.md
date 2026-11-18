@@ -27,18 +27,20 @@ their history stays in ADR-0018.
      ADR-0021's amendment of 2026-10-29 follows a breaking minor only. Johannes decided it
      on 2026-10-29 (D110 (1)).
    - "A minor" (https://github.com/xippios/sdk-core/issues/243): a source's adoption of a core
-     minor takes a minor, whatever else its release brings, since the adoption moves the
-     source's core bound to the new minor and its release then no longer installs beside a
-     package still bound to the old one; an added surface alone still makes a patch. The host
+     minor takes a minor, whatever else its release brings: the adoption moves the source's
+     core bound to the new minor, so its release no longer installs beside a package still
+     bound to the old one, and the adoption is therefore a breaking change of the source; an
+     added surface alone still makes a patch. The host
      keeps its minors (ADR-0026, amendment 2026-10-30, point e).
 2. **One adoption PR, against one checklist.** Conventions §15 lists what an adoption PR
    does: raise the core floor, `copier update`, delete the workarounds a core change
    replaced, move logic duplicated across sources into core or drop it, mark or override the
    tests that asserted a limiter wait, a quota pause or key resolution, re-render the
    generated enum files once, run `mypy --strict` over `scripts/`, apply the current
-   conventions version, and add its changelog entry. An adoption PR is judged against the
-   definition of done's Adoption PR block with its Enforced by CI and Process blocks, and no
-   new endpoints, tasks or fixtures ride along; it may delete the fixtures, mounts and tests
+   conventions version, and add its changelog entry. The definition of done's Adoption PR
+   block mirrors the list. An adoption PR is judged against that block with the Enforced by
+   CI and Process blocks and nothing else, and no new endpoints, tasks or fixtures ride
+   along; it may delete the fixtures, mounts and tests
    that the adoption itself makes dead, and nothing else. The definition of done is what a
    change satisfies, not a list its pull request's description copies and ticks; a release
    PR, which changes no code, test or fixture, has nothing for its Code and Tests blocks to

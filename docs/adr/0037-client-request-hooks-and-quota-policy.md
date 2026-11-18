@@ -53,7 +53,8 @@ history stays in ADR-0015.
      (api.data.gov), a daily quota sets `window=86400` (UN Comtrade's).
    - `before_request(request)` does nothing until the snapshot shows the quota spent and not
      yet back. Then it waits until `resumes_at` when that is within `pause_cap`, 30.0 s by
-     default, the default `backoff_max`, the one bound of the pause, logging one warning
+     default, the default `backoff_max`, the one bound of the pause, as the hook and called
+     directly, logging one warning
      naming the method and path, and otherwise raises `RateLimitError` with `retry_after` set
      to the wait, saying that nothing was sent and when the quota is expected back. Messages
      and the log line carry numbers, times, the method and the path; never a host, a query,
@@ -102,13 +103,14 @@ history stays in ADR-0015.
 5. **A cached answer says when it was stored, and only `get_answer` stores.** Next to
    `"xippios_cache": "hit"`, a hit carries `response.extensions["xippios_cache_stored_at"]`,
    the entry's `stored_at` in epoch seconds, and on a hit a task sets `retrieved_at` from it
-   (conventions §4). Every GET reads the cache, but `request`, `get`, `get_json` and `record`
-   store nothing: `AsyncClient.get_answer` stores a 200 within `cache_max_bytes`, where the
+   (conventions §4). Every GET but a recording's (decision 6) reads the cache, and `request`,
+   `get`, `get_json` and `record` store nothing: `AsyncClient.get_answer` stores a 200 within `cache_max_bytes`, where the
    cache and `cache_filter` take it, once its body decoded and, with `parse=`, its payload
    parsed, so a body that fails either is requested again on the next call. It reads the
    clock once, when the answer arrives and before the decode and the parse, and that reading
    is both the entry's `stored_at` and the miss's `retrieved_at`, so a hit and the miss that
-   stored it carry one `retrieved_at`. It returns `Answer[T]`, `payload: T` with
+   stored it carry one `retrieved_at`, which a test asserts equal instead of bracketing it
+   with `CLOCK_SLACK`. It returns `Answer[T]`, `payload: T` with
    `retrieved_at`: `get_answer(path, ...)` an `Answer[Any]`, and `get_answer(path, ...,
    parse=T, endpoint="<operation>")` the payload parsed with core's `parse(T, payload,
    source=<the client's source>, endpoint=...)` as an `Answer[T]`. `endpoint` comes with
@@ -166,6 +168,9 @@ history stays in ADR-0015.
 - The two hooks are general: a source can observe other headers or refuse other requests
   before they are sent, with the same placement guarantees, without subclassing
   `AsyncClient`.
+- `Answer[T]` replaces sdk-comtrade's `ReferenceFile[T]` (`Answer[list[T]]`) and
+  sdk-usda-nass's `ParamValues` (`Answer[list[str]]`), which their adoption of core 0.4.0
+  deletes, with no alias, since no user depends on either yet.
 - The testing plugin keeps offline tests free of quota pauses and of quotas left spent by a
   replay (ADR-0035, decision 4). It turns off the pause step alone, so a wait or a refusal of
   a subclass's own override of `before_request` is not neutralised.

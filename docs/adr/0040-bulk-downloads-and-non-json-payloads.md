@@ -56,7 +56,7 @@ history stays in ADR-0019.
    exist, with sizes and release identifiers) and, where the slice fits the cap (ADR-0038),
    a filtered read of the file.
 5. **Fixtures for files.** A download fixture holds either a small real answer (a short date
-   range, one commodity) or the first part of the file, which the recorder cuts on request.
+   range, one commodity) or a part of the file, which the recorder cuts on request.
    - One `max_bytes=`, on `record`, `record_sync` and `fixture_from_response`, cuts texts and
      JSON arrays alike; it bounds the body, not the fixture file, which escapes the body as a
      JSON string. A JSON array (a `Content-Type` of `application/json` or `...+json`, or a

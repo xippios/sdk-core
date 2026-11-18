@@ -27,7 +27,7 @@ and changes no decision; their history stays in ADR-0009.
    portal is three APIs and gets three packages, nested under one provider by ADR-0006
    (`xippios.usda.psd`, `xippios.usda.esr`, `xippios.usda.gats`).
 5. **The gateway module.** `xippios.core.data_gov` is the code side of one key per issuer;
-   Johannes decided it on 2026-10-27. Its `Gateway(source, data_path=None)` gives a source
+   Johannes decided it on 2026-10-27. Its `Gateway(source, data_path=...)` gives a source
    behind api.data.gov:
    - the key from `DATA_GOV_API_KEY` in the `X-Api-Key` header;
    - the gateway's `classify`, its `API_KEY_*`, 429 and `NOT_FOUND` answers as taxonomy
@@ -58,7 +58,7 @@ and changes no decision; their history stays in ADR-0009.
 6. **The live workflow.** A source runs its live tests in one workflow,
    `.github/workflows/live.yml`, the shape sdk-template renders: one job, `contents: read`,
    nightly and on `workflow_dispatch`, never on a pull request. The org secret named by
-   `api_key_env` reaches only that job's live test step, so checkout, setup-uv and
+   `api_key_env` reaches only that job's `uv run pytest -m live` step, so checkout, setup-uv and
    `uv sync` never see it. Its start time is derived from the slug and folded onto 01:00 to
    05:59 UTC, so the sources that read one key start at different times and do not draw on
    the shared hourly quota together. The logs of a public repository are public, so every

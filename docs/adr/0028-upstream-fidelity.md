@@ -70,7 +70,8 @@ which source showed it, stays in ADR-0003.
      and records the full document's byte size and sha256 in `FETCHED.md`, so a refresh can
      tell a change in its part from a change elsewhere in the whole.
    - An adoption PR (conventions §15), which fetches nothing, leaves
-     `docs/upstream/FETCHED.md` to the next refresh and ports only the capture script's
+     `docs/upstream/FETCHED.md` to the next `/refresh-upstream` and ports only the capture
+     script's
      changes (`scripts/refresh_upstream.py`, where the source keeps one). `FETCHED.md`
      records a fetch, so a rule that changes what it records reaches it with the next run
      that fetches.

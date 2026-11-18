@@ -63,7 +63,8 @@ Decided 2026-10-23 for every package.
    `ClientConfig.classify`: a `RateLimitError` whose `retry_after` comes from `Retry-After`
    when upstream sends it, otherwise from the source's quota headers or a documented
    fallback. A quota snapshot is kept from the quota headers: limit, remaining, the time it
-   was observed and, after a refusal, when the quota is back. It is a `QuotaPolicy` on the
+   was observed and, after a refusal, its `retry_after`, otherwise the documented fallback
+   counted from the observation time. It is a `QuotaPolicy` on the
    client's `before_request` and `observe` hooks (ADR-0037, decision 2), whose instance the
    package installs where it chooses, one per key per process for api.data.gov
    (ADR-0032, decision 5). Retries honour `retry_after` up to `RetryPolicy.backoff_max`;
@@ -83,9 +84,10 @@ Decided 2026-10-23 for every package.
 - Conventions §5 (`RateLimitError`) and §6 (the rate-limiter bullet) state this policy.
 - The template's CLAUDE.md rate-limit row should state where the pace comes from, documented
   or self-imposed.
-- The quota snapshot is per policy instance and per process, so processes, and packages that
-  install policies of their own, do not see each other's spending; the sources behind
-  api.data.gov share one policy per process.
+- The quota snapshot is per process, so processes and packages that share one key do not see
+  each other's spending, as api.data.gov counts the quota across every API the key is used
+  for (ADR-0032); for api.data.gov the snapshot is kept per key, one per process
+  (ADR-0032, decision 5).
 - A 5xx and a transport failure are retried for idempotent methods only (ADR-0011).
 
 Conventions §2, §4, §5 and §6, the README and the docstrings of `ClientConfig`,

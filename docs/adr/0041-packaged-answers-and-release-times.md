@@ -74,8 +74,8 @@ the sources cite them.
    holds the four keys and an optional `note`, nothing else: `PackagedList` refuses any other
    key, and `note` is free-text provenance that core reads nothing from. A list of values is
    records of one field named by the upstream parameter, and a table records of its columns.
-   Two lists derived from one parameter keep that `param` in files of their own names, which
-   `load(package, name)` takes. `endpoint` names the upstream operation, an operationId or a
+   sdk-usda-nass's two lists derived from `unit_desc` keep `param: "unit_desc"` in files of
+   their own names, which `load(package, name)` takes. `endpoint` names the upstream operation, an operationId or a
    URL path; sdk-comtrade's `files/v1/app/reference/<file>.json` is a URL path and qualifies.
 6. **Period series.** A task that assembles a series from one upstream call per period
    states its ceiling, the most periods one call fetches (the MCP tool's, where it is
