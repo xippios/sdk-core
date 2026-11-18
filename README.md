@@ -613,7 +613,8 @@ records of one field named by the upstream parameter (`[{"state_alpha": "AK"}, .
 `UnknownCode` names the value, the list and its fetch date, the closest codes (or a
 `hint=`), an optional `reason=`, and that the list is out of date if upstream added the
 code since. `closest` matches a code by its text and its name, with a `cutoff=` below
-0.6 for short codes; `nearest(value, codes)` names the integer codes nearest by number.
+0.6 for short codes, and `nearest(value, codes)` names the integer codes nearest by
+number.
 
 Other code lists are read with `load_json` or `load_table` (`load_csv`, which
 `load_table` calls for a CSV file, stays in `xippios.core.reference`). The refresh

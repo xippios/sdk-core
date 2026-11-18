@@ -223,12 +223,12 @@ sources have it.
 sdk-usda-nass). Point 3 gave `UnknownCode` the copies' common message, written for a list
 of codes with names that a maintainer reads. A list of values is records of one field
 (point 2), so a value's code and its name are one text, and the message read `Did you
-mean VA (VA)?`; its fixed tail named `/refresh-reference-data`, a command of the
+mean VA (VA)?`. Its fixed tail named `/refresh-reference-data`, a command of the
 package's maintainers, which an agent that reads the error over MCP (conventions §8)
 cannot run. A closest pair whose name is the code's own text is named once, `Did you
-mean VA?`, and every other pair as before, `0410000 (Wheat)`; the tail reads `If upstream
-added it since, the packaged list is out of date.` sdk-usda-nass, which passes a hint of
-its own for the first reason, can leave the closest values to `UnknownCode`.
+mean VA?`, and every other pair as before, `0410000 (Wheat)`. The tail reads `If
+upstream added it since, the packaged list is out of date.` sdk-usda-nass, which passes
+a hint of its own for the first reason, can leave the closest values to `UnknownCode`.
 
 (g) **`closest` takes a `cutoff`** (amendment 2026-10-27, point 3; step 13;
 https://github.com/xippios/sdk-core/issues/111, found by sdk-usda-nass). Point 3's

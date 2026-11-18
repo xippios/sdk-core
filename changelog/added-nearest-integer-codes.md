@@ -8,7 +8,7 @@
     to 93): its first pass, `sorted(codes, key=lambda code: (abs(code - value), code))[:2]`
     (line 87), → `[code for code, _ in nearest(value, codes, n=2)]`, imported from
     `xippios.core` (line 24), and the local name `nearest` of line 87 renamed, since it
-    would shadow the import; its digit pass stays, ESR's own, so `999` still names
+    would shadow the import. Its digit pass stays, ESR's own, so `999` still names
     `1001` and `902`, and `1040` still `104`, and the tests of `tests/test_params.py` pass
     unchanged — core takes the second copy (ADR-0023, decision 4).
     `src/xippios/usda/gats/params.py` (sdk-usda-gats) — `_nearest` (lines 409 to 412) and

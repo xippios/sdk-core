@@ -1,8 +1,8 @@
 - `UnknownCode` names a closest code whose name is its own text once, `Did you mean VA?`
   where it wrote `VA (VA)`, and its tail reads `If upstream added it since, the packaged
   list is out of date.`, where it named the maintainers' `/refresh-reference-data`, which
-  an agent cannot run. `closest` takes `cutoff=`, 0.6 by default as before; 0.5 lets a
-  code of two characters with one of them wrong match, `VS` naming `VA`.
+  an agent cannot run. `closest` takes `cutoff=`, 0.6 by default as before, and 0.5
+  lets a code of two characters with one of them wrong match, `VS` naming `VA`.
   (ADR-0022, §5, https://github.com/xippios/sdk-core/issues/111)
   - Hand-apply: `tests/test_tasks.py` (sdk-comtrade) — `REFUSED_756` (lines 275 to 276)
     and `REFUSED_C16` (lines 740 to 741) end with the old tail, so the tests that compare
