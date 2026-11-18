@@ -84,8 +84,9 @@ Rules of the tree (ADR-0029):
 - Constructing an `MCPServer` configures root logging at `INFO`, and httpx, as the `mcp`
   SDK's own httpx2, logs every request URL at `INFO`; URLs can carry a key or a tenant
   host (ADR-0030, decision 4). `build_server` and `main` therefore call
-  `quiet_request_logging()`, which quiets all four loggers. Keep both calls; the tests in
-  `tests/mcp/` guard them, and the testing plugin restores the logger levels per test.
+  `quiet_request_logging()`, which sets the `httpx`, `httpcore`, `httpx2` and `httpcore2`
+  loggers to `WARNING`. Keep both calls; the tests in `tests/mcp/` guard them, and the
+  testing plugin restores the logger levels per test.
 - The public surface is the `__all__` of the five `__init__.py` files and nothing else:
   each exports what consumers import (ADR-0023, decision 5), and
   `tests/test_public_surface.py` pins all five. A helper core calls itself stays
