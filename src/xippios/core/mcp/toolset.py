@@ -36,10 +36,10 @@ applies each one's hooks with ``option_defaults()``.
 """
 
 import argparse
-from collections.abc import Callable, Mapping, Sequence
-from dataclasses import KW_ONLY, dataclass, field
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any
+from typing import Any, NoReturn
 
 from mcp.server.mcpserver import MCPServer
 
@@ -48,27 +48,29 @@ from xippios.core.models import ResultCap
 __all__ = ["ToolSet"]
 
 
-@dataclass(frozen=True, slots=True, eq=False)
+@dataclass(frozen=True, slots=True, eq=False, init=False)
 class ToolSet:
     """What a package serves over MCP: its tasks, caps, text, version, hooks and holds.
 
     ``build_server(tool_set)`` builds the package's server from it, and a host registers
     several tool sets on one server with ``register_tasks(server, tool_set)``; both take
     every field but the hooks from the tool set, so a server a host builds keeps a
-    package's caps, its write rule and its hold to loopback. The fields are
-    ``build_server``'s parameters, less the server's ``name`` and the default ``cap``, and
-    ``main``'s two hooks. Both check a tool set as ``register_tasks`` checks its
-    arguments, when the server is built. ``dataclasses.replace`` gives a narrowed copy,
+    package's caps, its write rule and its hold to loopback. ``serve_tenants`` builds a
+    multi-tenant source's bound server from the tool set its ``build(lock)`` returns. The
+    fields are ``build_server``'s parameters, less the server's ``name`` and the default
+    ``cap``, and ``main``'s two hooks. A server built from a tool set checks it as
+    ``register_tasks`` checks its arguments. ``dataclasses.replace`` gives a narrowed copy,
     and checks it as a new tool set.
 
-    Attributes:
+    Args:
         source: Source slug, e.g. ``"usda-nass"``; prefixes every tool name.
         tasks: The task functions as the package's lock binds them, e.g.
             ``bind_tasks(tool_functions(tasks), lock)``, kept as a tuple; one in its
             module's ``BULK_TASKS`` becomes no tool.
         caps: A tool's own result cap, keyed by the task function's ``__name__``, a
-            source's ``MCP_CAPS``, kept as a read-only copy; every other tool takes the
-            family default.
+            source's ``MCP_CAPS``, kept as a read-only copy; ``None``, as
+            ``getattr(tasks, "MCP_CAPS", None)`` gives for a source without them, is no
+            cap of a tool's own. Every other tool takes the family default.
         instructions: Server-level guidance for agents; ``None`` for none.
         version: The package's version, shown to clients.
         add_options: Adds the package's options to core's parser, ``main``'s hook;
@@ -86,28 +88,50 @@ class ToolSet:
     """
 
     source: str
-    tasks: Sequence[Callable[..., Any]]
-    _: KW_ONLY
-    caps: Mapping[str, ResultCap] = field(default_factory=dict)
-    instructions: str | None = None
-    version: str = ""
-    add_options: Callable[[argparse.ArgumentParser], None] | None = None
-    apply_options: Callable[[argparse.Namespace, MCPServer], MCPServer] | None = None
-    read_only: bool = True
-    loopback_only: bool = False
+    tasks: Sequence[Callable[..., Any]]  # kept a tuple; a Sequence, so replace() takes a list
+    caps: Mapping[str, ResultCap]
+    instructions: str | None
+    version: str
+    add_options: Callable[[argparse.ArgumentParser], None] | None
+    apply_options: Callable[[argparse.Namespace, MCPServer], MCPServer] | None
+    read_only: bool
+    loopback_only: bool
 
-    def __post_init__(self) -> None:
-        if not self.source:
+    def __init__(
+        self,
+        source: str,
+        tasks: Iterable[Callable[..., Any]],
+        *,
+        caps: Mapping[str, ResultCap] | None = None,
+        instructions: str | None = None,
+        version: str = "",
+        add_options: Callable[[argparse.ArgumentParser], None] | None = None,
+        apply_options: Callable[[argparse.Namespace, MCPServer], MCPServer] | None = None,
+        read_only: bool = True,
+        loopback_only: bool = False,
+    ) -> None:
+        if not source:
             raise ValueError("source must name the source, e.g. 'usda-nass'")
-        tasks = tuple(self.tasks)
-        for position, fn in enumerate(tasks, start=1):
+        functions = tuple(tasks)
+        for position, fn in enumerate(functions, start=1):
             if not callable(fn):
                 raise TypeError(
                     f"entry {position} of tasks is no function; a tool set takes the task "
                     "functions, e.g. tool_functions(tasks)"
                 )
-        object.__setattr__(self, "tasks", tasks)
-        object.__setattr__(self, "caps", MappingProxyType(dict(self.caps)))
+        given: dict[str, object] = {
+            "source": source,
+            "tasks": functions,
+            "caps": MappingProxyType(dict(caps or {})),
+            "instructions": instructions,
+            "version": version,
+            "add_options": add_options,
+            "apply_options": apply_options,
+            "read_only": read_only,
+            "loopback_only": loopback_only,
+        }
+        for name, value in given.items():
+            object.__setattr__(self, name, value)  # frozen: the dataclass refuses setattr
 
     def option_defaults(self) -> argparse.Namespace:
         """The options ``main`` hands ``apply_options`` when the command line names none.
@@ -117,8 +141,24 @@ class ToolSet:
         serves the tool set without its entry point applies the hooks with them,
         ``tool_set.apply_options(tool_set.option_defaults(), server)``, so the server holds
         what the entry point holds when it runs without options.
+
+        Raises:
+            ValueError: An option of ``add_options`` takes no value from an empty command
+                line, a required one or one whose default its type refuses; the message
+                names the source and gives argparse's. Nothing is printed and the process
+                goes on, where argparse would print its usage and exit, which would end a
+                host that serves other packages too.
         """
         # Imported here: cli imports server, which imports this module.
         from xippios.core.mcp.cli import build_parser
 
-        return build_parser(add_options=self.add_options).parse_args([])
+        parser = build_parser(add_options=self.add_options)
+
+        def refuse(message: str) -> NoReturn:
+            raise ValueError(
+                f"{self.source}: add_options needs a default for each of its options, since a "
+                f"host applies the hooks without a command line: {message}"
+            )
+
+        parser.error = refuse  # type: ignore[method-assign]
+        return parser.parse_args([])

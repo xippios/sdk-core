@@ -17,7 +17,13 @@ from collections.abc import Callable, Sequence
 from mcp.server.mcpserver import MCPServer
 
 from xippios.core.errors import XippiosError
-from xippios.core.mcp.server import is_loopback_only, is_write_server, quiet_request_logging
+from xippios.core.mcp.server import (
+    build_server,
+    is_loopback_only,
+    is_write_server,
+    quiet_request_logging,
+)
+from xippios.core.mcp.toolset import ToolSet
 from xippios.core.tenants import TenantLock, Tenants
 
 __all__ = ["LOOPBACK_HOSTS", "build_parser", "main", "serve_tenants"]
@@ -143,7 +149,7 @@ def main(
 
 def serve_tenants(
     server: MCPServer,
-    build: Callable[[TenantLock | None], MCPServer],
+    build: Callable[[TenantLock | None], ToolSet | MCPServer],
     tenants: Tenants,
     *,
     param: str,
@@ -157,22 +163,28 @@ def serve_tenants(
     (ADR-0014, amendment 2026-11-18, (d)). It puts ``--<param>`` on core's parser, ``_``
     written ``-``, so ``--help`` lists it beside core's options. Given ``--org acme``, it
     checks the tenant as a call would, declared (``tenants.require``) and then by
-    ``check``, and runs ``build(TenantLock(param, "acme", noun=noun))``, built anew: every
-    tool acts on ``acme`` and takes no ``org``. An undeclared name, or an error ``check``
-    raises, stops the process with exit status 2 and the message, before the bound server
-    is built or anything is served. Without the option it runs ``server`` as built, for
-    every tenant the environment declares. ``main`` then applies its loopback rule to the
-    server it runs, bound or not, and quiets the request log.
+    ``check``, and runs the server of ``build(TenantLock(param, "acme", noun=noun))``, built
+    anew: every tool acts on ``acme`` and takes no ``org``. A ``build`` that returns its
+    ``ToolSet``, as a source's ``build(**options)`` does under the package contract, has
+    the bound server built from it with ``build_server``, named as ``server`` is (ADR-0026,
+    amendment 2026-11-18, (d)); one that returns a server has that server run. An
+    undeclared name, or an error ``check`` raises, stops the process with exit status 2
+    and the message, before the bound server is built or anything is served. Without the
+    option it runs ``server`` as built, for every tenant the environment declares.
+    ``main`` then applies its loopback rule to the server it runs, bound or not, and
+    quiets the request log.
 
-    A source's entry point is one line::
+    A source's entry point is one line, ``build`` returning its tool set and ``server``
+    being ``build_server(build())``::
 
         def run() -> None:
             serve_tenants(server, build, TENANTS, param="org", noun="organisation")
 
     Args:
-        server: The source's server for every declared tenant, ``build(None)``.
-        build: Builds the source's server, bound to the lock it is given or, given
-            ``None``, unbound; with ``bind_tasks`` and ``tenant_instructions``.
+        server: The source's server for every declared tenant, ``build_server(build())``.
+        build: Builds the source's tool set, bound to the lock it is given or, given
+            ``None``, unbound, with ``bind_tasks`` and ``tenant_instructions``; or the
+            source's server so bound.
         tenants: The source's registry, e.g. ``TENANTS``; its messages name its tenants
             and variables, never its source or a value.
         param: The task parameter that names the tenant, e.g. ``"org"`` for ``--org``.
@@ -203,6 +215,9 @@ def serve_tenants(
         tenants.require(name)
         if check is not None:
             check(name)
-        return build(TenantLock(param, name, noun=noun))
+        built = build(TenantLock(param, name, noun=noun))
+        if isinstance(built, ToolSet):
+            return build_server(built, name=unbound.name)
+        return built
 
     main(server, argv, add_options=add_tenant, apply_options=bound)
