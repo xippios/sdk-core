@@ -55,12 +55,28 @@ __all__ = [
 REDACTED: Final = "REDACTED"
 """What a credential's value is replaced with, in an envelope and in a fixture."""
 
-_CREDENTIAL_WORD = re.compile(
-    r"(?i)(?:^|[_-])"
-    r"(?:api[_-]?key|token|secret|password|passwd|pwd|auth|authorization|sig|signature"
-    r"|credentials?)"
-    r"(?:[_-]|$)"
+_CREDENTIAL_WORDS: Final = (
+    r"api[_-]?key",
+    "token",
+    "secret",
+    "password",
+    "passwd",
+    "pwd",
+    "auth",
+    "authorization",
+    "sig",
+    "signature",
+    "credentials?",
 )
+"""The credential words, as patterns: the rule and ``register_data_name`` read these alone."""
+
+
+def _whole_word(words: Iterable[str]) -> re.Pattern[str]:
+    """One of ``words`` between ``_``, ``-`` or the ends of a name, in any letter case."""
+    return re.compile(r"(?i)(?:^|[_-])(?:" + "|".join(words) + r")(?:[_-]|$)")
+
+
+_CREDENTIAL_WORD = _whole_word(_CREDENTIAL_WORDS)
 _SENSITIVE_HEADERS = frozenset(
     {
         "authorization",
@@ -73,13 +89,8 @@ _SENSITIVE_HEADERS = frozenset(
     }
 )
 
-_TOKEN_WORD = re.compile(r"(?i)(?:^|[_-])token(?:[_-]|$)")
-_OTHER_CREDENTIAL_WORD = re.compile(
-    r"(?i)(?:^|[_-])"
-    r"(?:api[_-]?key|secret|password|passwd|pwd|auth|authorization|sig|signature"
-    r"|credentials?)"
-    r"(?:[_-]|$)"
-)
+_TOKEN_WORD = _whole_word(["token"])
+_OTHER_CREDENTIAL_WORD = _whole_word(word for word in _CREDENTIAL_WORDS if word != "token")
 _NEVER_DATA = frozenset({"token", "access_token", "refresh_token", "id_token"})
 """The token names of OAuth 2.0 (RFC 6749) and OpenID Connect, and the word alone."""
 _LINK = re.compile(r"(?i)https?://")

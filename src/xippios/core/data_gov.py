@@ -128,6 +128,14 @@ def _from_elsewhere(response: httpx.Response) -> bool:
     return request.extensions.get("xippios_origin") == "other"
 
 
+def _path(response: httpx.Response) -> str | None:
+    """The path of ``response``'s request; ``None`` for a response built without one."""
+    try:
+        return response.request.url.path
+    except RuntimeError:  # httpx raises it for a response built without a request
+        return None
+
+
 def _empty_text(response: httpx.Response) -> bool:
     """True for an empty body (blanks aside) sent as ``text/plain``, in any letter case."""
     content_type = response.headers.get("content-type", "").lower()
@@ -259,16 +267,17 @@ class Gateway:
         if status == 429:
             return self._over_rate_limit(response)
         if status == 404:
-            path = response.request.url.path
             code, message = _gateway_error(response)
             if code == "NOT_FOUND":
                 return NotFoundError(
-                    f"api.data.gov has no route for {path} (HTTP 404 NOT_FOUND: {message})",
+                    f"api.data.gov has no route for {response.request.url.path} "
+                    f"(HTTP 404 NOT_FOUND: {message})",
                     source=self.source,
                 )
-            data_path = self.data_path
-            if data_path is not None and _empty_text(response) and data_path.fullmatch(path):
-                return NoDataForYear(path, source=self.source)
+            if self.data_path is not None and _empty_text(response):
+                path = _path(response)
+                if path is not None and self.data_path.fullmatch(path):
+                    return NoDataForYear(path, source=self.source)
         return None
 
     def _over_rate_limit(self, response: httpx.Response) -> RateLimitError:
