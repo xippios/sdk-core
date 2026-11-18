@@ -368,11 +368,19 @@ def test_a_default_class_name_keeps_a_camel_case_hump() -> None:
     # The names the sources set by hand are the default (https://github.com/xippios/sdk-core/issues/95).
     source = render_enums({key: ["A"] for key in COMMITTED}, fetched="2026-11-18")
     assert run(source)["__all__"] == list(COMMITTED.values())
+    # A hump after a digit too: Comtrade's partner2Code, as the template's line names it.
+    after_digits = render_enums({"partner2Code": ["A"], "level10Id": ["A"]}, fetched="2026-11-18")
+    assert run(after_digits)["__all__"] == ["Partner2Code", "Level10Id"]
 
 
-@pytest.mark.parametrize("key", ["STATE_ALPHA", "state alpha", "State_Alpha"])
-def test_a_key_without_a_hump_keeps_its_class_name(key: str) -> None:
-    assert "class StateAlpha(StrEnum):" in render_enums({key: ["A"]}, fetched="2026-11-18")
+@pytest.mark.parametrize(
+    ("key", "name"),
+    [("STATE_ALPHA", "StateAlpha"), ("state alpha", "StateAlpha"), ("State_Alpha", "StateAlpha"),
+     ("STATE2ALPHA", "State2alpha"), ("HSCode", "Hscode")],
+)  # fmt: skip
+def test_a_key_without_a_hump_keeps_its_class_name(key: str, name: str) -> None:
+    # A part in upper case alone has no hump, nor has an upper-case run: the name main gave.
+    assert f"class {name}(StrEnum):" in render_enums({key: ["A"]}, fetched="2026-11-18")
 
 
 ATTRIBUTES: list[dict[str, Any]] = [
