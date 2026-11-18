@@ -331,7 +331,13 @@ request and reads its answer; core sends it, keeps the bearer and renews it:
 import httpx
 from pydantic import SecretStr
 
-from xippios.core import AsyncClient, BearerToken, ClientConfig, RenewingBearerAuth
+from xippios.core import (
+    AsyncClient,
+    BearerToken,
+    ClientConfig,
+    RenewingBearerAuth,
+    ValidationError,
+)
 
 
 class LoginAuth(RenewingBearerAuth):
@@ -345,8 +351,15 @@ class LoginAuth(RenewingBearerAuth):
         return httpx.Request("POST", "https://api.example.org/auth/login", data=form)
 
     def read_token(self, response: httpx.Response) -> BearerToken:
-        answer = response.json()  # {"access_token": "...", "expires_in": 3600}
-        return BearerToken(SecretStr(answer["access_token"]), answer["expires_in"])
+        try:
+            answer = response.json()  # {"access_token": "...", "expires_in": 3600}
+            return BearerToken(SecretStr(answer["access_token"]), answer["expires_in"])
+        except (ValueError, TypeError, KeyError):
+            raise ValidationError(  # never quoting the answer, which holds the bearer
+                "POST /auth/login answered HTTP 200, but not the documented answer",
+                raw="",
+                source="example",
+            ) from None
 
 
 client = AsyncClient(
@@ -364,14 +377,18 @@ refuses a bearer with a 403 too sets `renew_on = frozenset({401, 403})` on its c
 request that finds an exchange running on its event loop waits for it, so two first
 requests exchange once, and two requests refused with one bearer renew it once.
 
-A token answer other than HTTP 200 raises `token_refused(response)`: core's status
-mapping, unless the source maps its upstream's refusals first and names what to run
-again, the variables to check or the consent and its scope set. `read_token` raises
+A token answer other than HTTP 200 raises `token_refused(response)`: the taxonomy error
+of its status, `503 from POST /auth/login: Service Unavailable`, with the reason phrase and
+nothing of the answer, which a token endpoint may write from the credentials it was sent,
+unless the source maps its upstream's refusals first and names what to run again, the
+variables to check or the consent and its scope set. `read_token` raises
 `ValidationError` for an answer that is not the documented one, quoting nothing of it.
 `credential(name)` reads a credential from `credentials=`, given to the constructor, or
 else from the variable, and an unset one raises `ConfigError` with the text of
 `credential_help(name)`. The exchange runs inside httpx's auth flow, where it is not
-paced, observed, cached or retried, and its error ends the call. It reads the token answer
+paced, observed or cached, and its refusal ends the call; a transport failure of the
+exchange is the request's own, which the retry policy sends again where it would without
+the exchange, a GET say. It reads the token answer
 and no other, so a `download` streams to its file, and the client sends its auth to the
 base URL's origin only. httpx keeps the token answer in the final response's `history`
 while that response lives; `get_json`, `get_answer` and the cache keep no response.

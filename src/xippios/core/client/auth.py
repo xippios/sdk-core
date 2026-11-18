@@ -22,7 +22,15 @@ from typing import ClassVar, Final
 import httpx
 from pydantic import SecretStr
 
-from xippios.core.errors import ConfigError, UpstreamError, XippiosError, error_from_response
+from xippios.core.errors import (
+    AuthError,
+    ConfigError,
+    NotFoundError,
+    RateLimitError,
+    UpstreamError,
+    XippiosError,
+    parse_retry_after,
+)
 from xippios.core.redaction import register_credential_name
 
 __all__ = [
@@ -218,10 +226,10 @@ class RenewingBearerAuth(httpx.Auth):
     - ``token_request(request)`` builds the request that exchanges the credential, and
       reads each credential through ``credential(name)``;
     - ``read_token(response)`` reads the token answer's HTTP 200 into a ``BearerToken``;
-    - ``token_refused(response)`` makes the error for any other status: core's status
-      mapping by default. A source maps its upstream's refusals first and names what the
-      user does next, the variables to check for a refused login, the consent to run
-      again and its scope set for a revoked grant.
+    - ``token_refused(response)`` makes the error for any other status: the status's
+      taxonomy error by default, quoting nothing of the answer. A source maps its
+      upstream's refusals first and names what the user does next, the variables to check
+      for a refused login, the consent to run again and its scope set for a revoked grant.
 
     For a request while no bearer is held, or the one held runs out within ``margin``
     seconds, the flow sends the token request first, with the request's ``User-Agent``
@@ -232,14 +240,17 @@ class RenewingBearerAuth(httpx.Auth):
     exchange running on its event loop waits for it and sends the bearer it brought: two
     first requests exchange once, and two requests refused with one bearer renew it once.
 
-    The exchange runs inside httpx's auth flow, below the client's limiter, hooks, cache,
-    ``classify`` and retries: it is not paced, observed or retried, and an error it raises
-    ends the call. The flow reads the token answer and no other, so a download through it
-    streams to its file (ADR-0019, decision 1). httpx keeps the token answer, its body
-    read, in the final response's ``history`` for as long as that response lives: a
-    caller that keeps a response of ``request`` or ``get`` keeps the bearer with it,
-    while ``get_json``, ``get_answer`` and the cache keep no response. The client sends
-    its auth to the base URL's origin only (ADR-0015, amendment 2026-11-18, point d).
+    The exchange runs inside httpx's auth flow, below the client's limiter, hooks, cache
+    and ``classify``: it is not paced or observed, and a refused or unreadable token answer
+    raises an error that ends the call. A transport failure of the exchange counts as one
+    of the request it precedes, so the client's retry policy sends that request again,
+    exchange included, where it would for the request alone (ADR-0011). The flow reads the
+    token answer and no other, so a download through it streams to its file (ADR-0019,
+    decision 1). httpx keeps the token answer, its body read, in the final response's
+    ``history`` for as long as that response lives: a caller that keeps a response of
+    ``request`` or ``get`` keeps the bearer with it, while ``get_json``, ``get_answer`` and
+    the cache keep no response. The client sends its auth to the base URL's origin only
+    (ADR-0015, amendment 2026-11-18, point d).
 
     The bearer is kept as a ``SecretStr``, and a credential is read when the token request
     is built and kept nowhere, unless it is given to the constructor. It runs on an async
@@ -350,22 +361,35 @@ class RenewingBearerAuth(httpx.Auth):
     def token_refused(self, response: httpx.Response) -> XippiosError:
         """The error for a token answer of another status than HTTP 200, read in full.
 
-        Raised by the flow, it ends the call. Core's status mapping by default
-        (``error_from_response``): ``AuthError`` for a 401 or 403, ``RateLimitError`` for
-        a 429, ``UpstreamError`` for a 5xx; another status is an ``UpstreamError`` that
-        names the method, the path and the status and quotes nothing.
+        Raised by the flow, it ends the call. By default the error that core's status
+        mapping gives the status, its message the status, the method, the path and the
+        reason phrase, ``503 from POST /token: Service Unavailable``, and nothing of the
+        answer, which a token endpoint may write from the credentials it was sent:
+        ``AuthError`` for a 401 or 403, ``RateLimitError`` for a 429 with ``Retry-After``'s
+        wait, ``NotFoundError`` for a 404 and ``UpstreamError`` with no ``body`` for any
+        other 4xx or 5xx. Another status below 400 is an ``UpstreamError`` that says the
+        answer is not the documented 200. A source that knows its endpoint's error answers
+        reads them in its override, as it reads the 200 in ``read_token``.
         """
-        error = error_from_response(response, source=self.source)
-        if error is not None:
-            return error
         request = response.request
-        return UpstreamError(
-            f"{request.method} {request.url.path} answered HTTP {response.status_code}, not "
-            "the documented 200; nothing of it is shown",
-            status=response.status_code,
-            body="",
-            source=self.source,
-        )
+        status = response.status_code
+        where = f"{request.method} {request.url.path}"
+        if status < 400:
+            return UpstreamError(
+                f"{where} answered HTTP {status}, not the documented 200; nothing of it is shown",
+                status=status,
+                body="",
+                source=self.source,
+            )
+        message = f"{status} from {where}: {response.reason_phrase or 'no reason phrase'}"
+        if status in (401, 403):
+            return AuthError(message, status=status, source=self.source)
+        if status == 429:
+            retry_after = parse_retry_after(response.headers.get("Retry-After"))
+            return RateLimitError(message, retry_after=retry_after, source=self.source)
+        if status == 404:
+            return NotFoundError(message, source=self.source)
+        return UpstreamError(message, status=status, body="", source=self.source)
 
     def reset(self) -> None:
         """Forget the bearer, so that the next request exchanges the credential again."""

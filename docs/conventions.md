@@ -580,13 +580,14 @@ constructor argument (`key=`; ADR-0002, amendment 2026-10-27). An upstream that 
 long-lived credential for a short-lived bearer, a login or a refresh token, is served by a
 subclass of `RenewingBearerAuth`: the source writes its token request (`token_request`) and
 the reading of the answer (`read_token` for an HTTP 200, `token_refused` for any other
-status, core's status mapping by default), and reads each credential through
-`credential(name)`, from `credentials=` or else from the variable, when it builds the
-request. The base keeps the bearer until `margin` seconds, 60 by default, before its
-`expires_in` runs out, and on a status of `renew_on`, 401 by default, exchanges once more
-and sends the request again, once (ADR-0025, amendment 2026-11-18, point c). No config
-files, no dotenv loading inside the package — the environment is the contract (direnv in
-development, secrets in CI). A source behind api.data.gov takes its key, its gateway answers and its
+status, by default the taxonomy error of the status, quoting nothing of the answer), and
+reads each credential through `credential(name)`, from `credentials=` or else from the
+variable, when it builds the request. The base keeps the bearer until `margin` seconds, 60
+by default, before its `expires_in` runs out, and on a status of `renew_on`, 401 by
+default, exchanges once more and sends the request again, once (ADR-0025, amendment
+2026-11-18, point c). No config files, no dotenv loading inside the package — the
+environment is the contract (direnv in development, secrets in CI). A source behind
+api.data.gov takes its key, its gateway answers and its
 quota from `xippios.core.data_gov`: `Gateway(SOURCE)` gives the `auth` on
 `DATA_GOV_API_KEY`, the `classify` its own `classify` asks first, and `install`, which puts
 the one `QuotaPolicy` per process for that key on its config (ADR-0009, amendment

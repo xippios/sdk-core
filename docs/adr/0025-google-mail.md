@@ -234,8 +234,9 @@ ADR-0023, decision 2). D-b's base is `RenewingBearerAuth` in `xippios.core.clien
 exported from `xippios.core.client` and `xippios.core` with `BearerToken`, the token and
 its `expires_in` that a token answer gives. A source subclasses it and writes its token
 request, `token_request(request)`, and the reading of the answer, `read_token(response)`
-for an HTTP 200 and `token_refused(response)` for any other status, whose default is core's
-status mapping and else an `UpstreamError` that quotes nothing. It reads each credential
+for an HTTP 200 and `token_refused(response)` for any other status, whose default is the
+taxonomy error that core's status mapping gives the status, quoting nothing of the answer,
+which a token endpoint may write from the credentials it was sent. It reads each credential
 through `credential(name)`, from `credentials=` given to the constructor or else from the
 variable, at the moment it builds the request, and `credential_help(name)` says what an
 unset one needs. The base sends the token request ahead of the first request, with that
