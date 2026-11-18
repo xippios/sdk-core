@@ -16,7 +16,7 @@ import httpx
 import pytest
 import respx
 
-from xippios.core.client.auth import EnvKeyAuth
+from xippios.core.client.auth import EnvKeyAuth, RenewingBearerAuth
 from xippios.core.client.cache import _clear_every_cache
 from xippios.core.client.quota import QuotaPolicy, _every_policy, _reset_every_policy
 from xippios.core.client.ratelimit import TokenBucket
@@ -27,7 +27,8 @@ __all__ = ["LIVE_ENV", "PLACEHOLDER_KEY", "live_enabled"]
 
 LIVE_ENV = "XIPPIOS_LIVE_TESTS"
 PLACEHOLDER_KEY = "placeholder-for-fixture-replay"
-"""The key every ``EnvKeyAuth`` sends in a test not marked ``live``."""
+"""The key every ``EnvKeyAuth`` sends in a test not marked ``live``, and every credential that a
+``RenewingBearerAuth`` reads."""
 _KEY_ENVS = "xippios_placeholder_key_envs"
 PACKAGE_INI = "xippios_package"
 """The ini option naming the package the family check tests (``xippios.core.testing.family``)."""
@@ -291,6 +292,13 @@ def _placeholder_key(self: EnvKeyAuth) -> str:
     return PLACEHOLDER_KEY
 
 
+def _placeholder_credential(self: RenewingBearerAuth, name: str) -> str:
+    """``PLACEHOLDER_KEY`` for a credential the auth finds, its ``ConfigError`` for another."""
+    if not self._holds(name):
+        raise self._unset(name)
+    return PLACEHOLDER_KEY
+
+
 @pytest.fixture(autouse=True)
 def placeholder_api_key(
     request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
@@ -298,7 +306,10 @@ def placeholder_api_key(
     """Every test but a live one sends ``PLACEHOLDER_KEY``, whatever the shell holds.
 
     ADR-0013, decision 3: the variables ``xippios_placeholder_key_envs`` names hold it and
-    ``EnvKeyAuth.key`` returns it; a module overrides this fixture to resolve keys itself.
+    ``EnvKeyAuth.key`` returns it. ADR-0013, amendment 2026-11-18, point (c):
+    ``RenewingBearerAuth.credential`` returns it for every credential a token request
+    reads, one given to the constructor included, and still raises ``ConfigError`` for a
+    variable unset or empty. A module overrides this fixture to resolve both itself.
 
     Returns:
         ``PLACEHOLDER_KEY``, or ``None`` in a live test, which uses the key in the
@@ -309,6 +320,7 @@ def placeholder_api_key(
     for name in request.config.getini(_KEY_ENVS):
         monkeypatch.setenv(name, PLACEHOLDER_KEY)
     monkeypatch.setattr(EnvKeyAuth, "key", _placeholder_key)
+    monkeypatch.setattr(RenewingBearerAuth, "credential", _placeholder_credential)
     return PLACEHOLDER_KEY
 
 

@@ -8,7 +8,14 @@ package exports what consumers import; the helpers the client calls itself
 """
 
 from xippios.core.client._core import Answer, AsyncClient, decode_csv, decode_json, decode_text
-from xippios.core.client.auth import BasicKeyAuth, BearerAuth, HeaderKeyAuth, QueryKeyAuth
+from xippios.core.client.auth import (
+    BasicKeyAuth,
+    BearerAuth,
+    BearerToken,
+    HeaderKeyAuth,
+    QueryKeyAuth,
+    RenewingBearerAuth,
+)
 from xippios.core.client.cache import CachedResponse, MemoryCache, cache_key
 from xippios.core.client.config import ClientConfig, RateLimit, RetryPolicy, Timeouts
 from xippios.core.client.download import Downloaded
@@ -19,6 +26,7 @@ __all__ = [
     "AsyncClient",
     "BasicKeyAuth",
     "BearerAuth",
+    "BearerToken",
     "CachedResponse",
     "ClientConfig",
     "Downloaded",
@@ -27,6 +35,7 @@ __all__ = [
     "QueryKeyAuth",
     "QuotaPolicy",
     "RateLimit",
+    "RenewingBearerAuth",
     "RetryPolicy",
     "Timeouts",
     "cache_key",

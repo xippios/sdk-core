@@ -5,7 +5,7 @@ import httpcore
 import pytest
 
 from xippios.core.client import QuotaPolicy
-from xippios.core.client.auth import EnvKeyAuth
+from xippios.core.client.auth import EnvKeyAuth, RenewingBearerAuth
 from xippios.core.client.ratelimit import TokenBucket
 from xippios.core.testing.plugin import LIVE_ENV, live_enabled
 
@@ -25,6 +25,7 @@ POOL_SEND_ASYNC = httpcore.AsyncConnectionPool.handle_async_request
 ACQUIRE = TokenBucket.acquire
 PAUSE = QuotaPolicy._pause
 KEY = EnvKeyAuth.key
+CREDENTIAL = RenewingBearerAuth.credential
 TEST_FILE = """
 import pytest
 
@@ -641,6 +642,82 @@ def test_a_source_fixture_of_the_same_name_overrides_the_plugin(
     pytester.makepyfile(SOURCE_TESTS)
     result = pytester.runpytest("--strict-markers", "--strict-config")
     result.assert_outcomes(passed=1)
+
+
+BEARER_TESTS = """
+import os
+
+import httpx
+import pytest
+from pydantic import SecretStr
+
+from xippios.core import BearerToken, ConfigError, RenewingBearerAuth
+from xippios.core.testing.plugin import PLACEHOLDER_KEY
+
+CREDENTIAL = RenewingBearerAuth.credential
+SHELL = dict(os.environ)
+
+
+class Login(RenewingBearerAuth):
+    def token_request(self, request):
+        return httpx.Request("POST", "https://login.test/token")
+
+    def read_token(self, response):
+        return BearerToken(SecretStr("made-up"), 3600.0)
+
+
+@pytest.mark.live
+def test_a_live_test_reads_the_shell(placeholder_api_key):
+    assert placeholder_api_key is None
+    assert RenewingBearerAuth.credential is CREDENTIAL
+    assert Login().credential("EXAMPLE_SECRET") == SHELL["EXAMPLE_SECRET"]
+
+
+def test_every_credential_of_a_token_request_is_the_placeholder():
+    auth = Login(credentials={"EXAMPLE_GIVEN": "given-value"})
+    assert auth.credential("EXAMPLE_USER") == PLACEHOLDER_KEY  # named in the ini option
+    assert auth.credential("EXAMPLE_SECRET") == PLACEHOLDER_KEY  # not named: the shell's
+    assert auth.credential("EXAMPLE_GIVEN") == PLACEHOLDER_KEY  # given to the constructor
+
+
+def test_an_unset_or_empty_variable_is_still_refused(monkeypatch):
+    monkeypatch.delenv("EXAMPLE_SECRET")
+    monkeypatch.setenv("EXAMPLE_USER", "")
+    for name in ("EXAMPLE_SECRET", "EXAMPLE_USER", "EXAMPLE_MISSING"):
+        with pytest.raises(ConfigError, match=f"^{name} is not set; "):
+            Login().credential(name)
+
+
+@pytest.mark.live
+def test_a_later_live_test_gets_the_method_back(placeholder_api_key):
+    assert placeholder_api_key is None
+    assert RenewingBearerAuth.credential is CREDENTIAL
+    assert Login().credential("EXAMPLE_USER") == SHELL["EXAMPLE_USER"]
+"""
+
+
+@pytest.fixture
+def shell_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+    """What direnv would have loaded for a login: values an offline test must never send."""
+    monkeypatch.setenv(LIVE_ENV, "1")
+    monkeypatch.setenv("EXAMPLE_USER", "shell-user")
+    monkeypatch.setenv("EXAMPLE_SECRET", "shell-secret")
+    monkeypatch.delenv("EXAMPLE_MISSING", raising=False)
+    monkeypatch.delenv("EXAMPLE_GIVEN", raising=False)
+
+
+@pytest.mark.usefixtures("shell_credentials")
+def test_offline_tests_pin_the_placeholder_on_every_credential_of_a_token_request(
+    pytester: pytest.Pytester,
+) -> None:
+    # https://github.com/xippios/sdk-core/issues/156: the pin covered EnvKeyAuth.key alone,
+    # so a client id and secret held the placeholder only where the ini option named them.
+    pytester.makeini("[pytest]\nxippios_placeholder_key_envs = EXAMPLE_USER\n")
+    pytester.makeconftest('pytest_plugins = ["xippios.core.testing.plugin"]\n')
+    pytester.makepyfile(BEARER_TESTS)
+    result = pytester.runpytest("--strict-markers", "--strict-config")
+    result.assert_outcomes(passed=4)
+    assert RenewingBearerAuth.credential is CREDENTIAL
 
 
 REQUEST_LOGGERS = ("httpx", "httpcore", "httpx2", "httpcore2")

@@ -228,6 +228,35 @@ sdk-google-mail's `list_task` took for the same reason stays in core, the regist
 default, for the account registry that the Google sources will share as
 `xippios.core.google` (D-d).
 
+(c) **The renewing bearer in core** (D-b; step 8;
+https://github.com/xippios/sdk-core/issues/156, found by sdk-faostat and sdk-google-mail;
+ADR-0023, decision 2). D-b's base is `RenewingBearerAuth` in `xippios.core.client.auth`,
+exported from `xippios.core.client` and `xippios.core` with `BearerToken`, the token and
+its `expires_in` that a token answer gives. A source subclasses it and writes its token
+request, `token_request(request)`, and the reading of the answer, `read_token(response)`
+for an HTTP 200 and `token_refused(response)` for any other status, whose default is the
+taxonomy error that core's status mapping gives the status, quoting nothing of the answer,
+which a token endpoint may write from the credentials it was sent. It reads each credential
+through `credential(name)`, from `credentials=` given to the constructor or else from the
+variable, at the moment it builds the request, and `credential_help(name)` says what an
+unset one needs. The base sends the token request ahead of the first request, with that
+request's `User-Agent`, and keeps the bearer until `margin` seconds before its `expires_in`
+runs out, `RENEWAL_MARGIN`, 60 seconds by default, as both sources had it; on a status of
+`renew_on`, 401 by default, it exchanges once more and sends the request again, once. The
+first exchange is single-flight on each event loop, and so is the one after a refusal: a
+request that finds an exchange running waits for it and sends the bearer it brought. The
+flow reads the token answer and no other, so a download through it streams (ADR-0019,
+decision 1), and it runs on core's async client only. The client's auth goes to the base
+URL's origin alone, the bearer included (ADR-0015, amendment 2026-11-18, point d), and
+httpx keeps the token answer in the final response's `history` for that response's life.
+Each source keeps what is its own: sdk-faostat's `LoginAuth` its login form, its Cognito
+refusals and a `renew_on` of 401 and 403, since FAOSTAT refuses a bearer with either
+(`tests/fixtures/get_data/`); sdk-google-mail's `RefreshTokenAuth` its refresh form,
+`invalid_grant` and `invalid_client`, and the granted scopes that its `read_token` keeps
+for `classify`. Neither keeps its flow, and the refresh token is a credential that
+`RefreshTokenAuth` reads through `credential`, so D-b's `RefreshTokenAuth(EnvKeyAuth)`
+becomes a `RenewingBearerAuth`.
+
 (d) **The lock, the serve command, the write checks and the strip in core** (D-d (c) to
 (f); step 4, https://github.com/xippios/sdk-core/issues/166). D-d's last four pieces come
 from core (ADR-0024, amendment 2026-11-18, (d); ADR-0014, amendment 2026-11-18, (d)), so

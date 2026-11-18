@@ -576,9 +576,18 @@ amendment 2026-11-18).
 The environment is read through the `EnvKeyAuth` helpers (`QueryKeyAuth`,
 `HeaderKeyAuth`, `BearerAuth`, `BasicKeyAuth`), on the first request: keys from
 `<SOURCE>_API_KEY`, or the issuer's variable where ADR-0009 applies, overridable by
-constructor argument (`key=`; ADR-0002, amendment 2026-10-27). No config files, no dotenv
-loading inside the package — the environment is the contract (direnv in development,
-secrets in CI). A source behind api.data.gov takes its key, its gateway answers and its
+constructor argument (`key=`; ADR-0002, amendment 2026-10-27). An upstream that exchanges a
+long-lived credential for a short-lived bearer, a login or a refresh token, is served by a
+subclass of `RenewingBearerAuth`: the source writes its token request (`token_request`) and
+the reading of the answer (`read_token` for an HTTP 200, `token_refused` for any other
+status, by default the taxonomy error of the status, quoting nothing of the answer), and
+reads each credential through `credential(name)`, from `credentials=` or else from the
+variable, when it builds the request. The base keeps the bearer until `margin` seconds, 60
+by default, before its `expires_in` runs out, and on a status of `renew_on`, 401 by
+default, exchanges once more and sends the request again, once (ADR-0025, amendment
+2026-11-18, point c). No config files, no dotenv loading inside the package — the
+environment is the contract (direnv in development, secrets in CI). A source behind
+api.data.gov takes its key, its gateway answers and its
 quota from `xippios.core.data_gov`: `Gateway(SOURCE)` gives the `auth` on
 `DATA_GOV_API_KEY`, the `classify` its own `classify` asks first, and `install`, which puts
 the one `QuotaPolicy` per process for that key on its config (ADR-0009, amendment
@@ -837,7 +846,10 @@ standalone from the package. A task named in `BULK_TASKS` gets no route:
     `PLACEHOLDER_KEY`, pinned on the class, and the variables named in the ini option
     `xippios_placeholder_key_envs` hold it; the fixture `placeholder_api_key` returns
     it, `None` in a live test. A source names its key variable there and carries no
-    placeholder fixture of its own.
+    placeholder fixture of its own. Every credential that a `RenewingBearerAuth` reads
+    through `credential` is the placeholder too, one given to the constructor included,
+    and a variable unset or empty is still its `ConfigError`, so a source names each
+    variable of its token request there (ADR-0013, amendment 2026-11-18, point c).
   - Logger levels: the `httpx`, `httpcore`, `httpx2` and `httpcore2` logger levels are
     restored after every test, live ones included (ADR-0013, amendment 2026-11-18). They are saved per test, after fixtures of wider scope
     are set up, so one of those that changes a level leaves it behind.

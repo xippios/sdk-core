@@ -233,3 +233,17 @@ never the body. It redacts by the one rule of `xippios.core.redaction`, as `sent
 request from `route.calls` in its frame, where a failing assertion or `pytest -l` would
 print it. sdk-google-mail decoded its writes' JSON, sdk-cashctrl its writes' forms and
 sdk-faostat its logins' forms, each from `route.calls`.
+
+(c) **The placeholder on a renewing bearer's credentials** (decision 3; step 8;
+https://github.com/xippios/sdk-core/issues/156, found by sdk-google-mail). Decision 3
+pinned `EnvKeyAuth.key` alone, so a credential that a token request reads beside a key,
+sdk-google-mail's client id and secret or sdk-faostat's user name and password, held the
+placeholder only where the source named its variable in `xippios_placeholder_key_envs`. The
+fixture `placeholder_api_key` also pins `RenewingBearerAuth.credential` on the class
+(ADR-0025, amendment 2026-11-18, point c), so every credential that such a token request
+reads is the placeholder in every test not marked `live`, one given to the constructor
+included. The pin replaces the value and keeps the check: a variable unset or empty is
+still the `ConfigError` that names it, so a source tests that refusal without an override,
+and it names its variables in the ini option as before, since one it leaves out is refused
+where the shell does not hold it, in CI say, and sent as the placeholder where it does. A
+module that needs real resolution overrides the fixture, which lifts both pins.
