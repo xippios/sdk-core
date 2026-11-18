@@ -554,7 +554,7 @@ async def test_a_call_to_another_origin_is_outside_the_quota() -> None:
     )
     await client.get("/v1/x")
     spent = policy.snapshot()
-    response = await client.get("https://files.example.test/f.csv", raise_on_error=False)
+    response = await client.request("GET", "https://files.example.test/f.csv", raise_on_error=False)
     assert response.status_code == 429
     assert events == ["sent /v1/x", "sent /f.csv"]
     assert policy.snapshot() is spent, "another host's 429 is not the quota's"
