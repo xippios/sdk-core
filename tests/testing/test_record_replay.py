@@ -1,4 +1,7 @@
+import gzip
 import hashlib
+import json
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
@@ -11,10 +14,11 @@ from xippios.core.client import (
     AsyncClient,
     ClientConfig,
     HeaderKeyAuth,
+    MemoryCache,
     QueryKeyAuth,
     RetryPolicy,
 )
-from xippios.core.errors import NotFoundError, error_from_response
+from xippios.core.errors import NotFoundError, TransportError, error_from_response
 from xippios.core.testing import (
     REDACTED,
     Fixture,
@@ -27,6 +31,7 @@ from xippios.core.testing import (
     record_sync,
     recorded_query,
     response_from_fixture,
+    sent_bodies,
     sent_query,
     sent_urls,
     write_fixture,
@@ -152,6 +157,254 @@ async def test_record_without_the_client_s_auth(
     assert "x-api-key" in route.calls.last.request.headers
 
 
+def _retrying(sleeps: list[float], **options: Any) -> AsyncClient:
+    """A client whose policy retries a 429, a 5xx and a transport failure, as a source's does.
+
+    Each wait the retries would take is appended to ``sleeps`` instead of slept.
+    """
+
+    async def sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    config = ClientConfig(source="example", version="1", base_url=BASE, **options)
+    assert config.retry.max_attempts > 1, "the default policy retries"
+    return AsyncClient(config, sleep=sleep)
+
+
+@pytest.mark.parametrize("status", [429, 503])
+def test_a_recording_sends_once_whatever_the_client_s_retry_policy(
+    respx_mock: respx.MockRouter, tmp_path: Path, status: int
+) -> None:
+    # https://github.com/xippios/sdk-core/issues/148: a source with a quota or a bill built
+    # a client of its own to record; the recorder now sends once through the source's.
+    route = respx_mock.get(f"{BASE}/v1/x").respond(
+        status, json={"error": "busy"}, headers={"Retry-After": "0"}
+    )
+    sleeps: list[float] = []
+    fixture = record_sync(_retrying(sleeps), "/v1/x", tmp_path / "busy.json")
+    assert route.call_count == 1
+    assert sleeps == []
+    assert fixture.response.status == status
+    assert load_fixture(tmp_path / "busy.json").response.status == status
+
+
+def test_a_transport_failure_while_recording_is_sent_once_and_writes_nothing(
+    respx_mock: respx.MockRouter, tmp_path: Path
+) -> None:
+    route = respx_mock.get(f"{BASE}/v1/x").mock(side_effect=httpx.ConnectError("refused"))
+    sleeps: list[float] = []
+    with pytest.raises(TransportError, match=r"^ConnectError: refused$"):
+        record_sync(_retrying(sleeps), "/v1/x", tmp_path / "x.json")
+    assert (route.call_count, sleeps) == (1, [])
+    assert not (tmp_path / "x.json").exists()
+
+
+@pytest.mark.anyio
+async def test_a_recording_neither_reads_nor_stores_the_cache(
+    respx_mock: respx.MockRouter, tmp_path: Path
+) -> None:
+    # A recording is one live exchange: an answer the cache holds is not one.
+    route = respx_mock.get(f"{BASE}/v1/x")
+    route.side_effect = [httpx.Response(200, json={"n": 1}), httpx.Response(200, json={"n": 2})]
+    client = _retrying([], cache=MemoryCache())
+    assert (await client.get_answer("/v1/x")).payload == {"n": 1}  # stored
+    fixture = await record(client, "/v1/x", tmp_path / "x.json")
+    assert route.call_count == 2
+    assert json.loads(fixture.response.body) == {"n": 2}
+    assert (await client.get_answer("/v1/x")).payload == {"n": 1}, "the entry stands"
+    assert route.call_count == 2
+
+
+@pytest.mark.anyio
+async def test_a_recording_runs_before_request_once_and_observe_sees_its_answer(
+    respx_mock: respx.MockRouter, tmp_path: Path
+) -> None:
+    # A quota policy hears of the request a recording spends, as of any other.
+    respx_mock.get(f"{BASE}/v1/x").respond(503, headers={"X-Left": "9"}, text="busy")
+    before: list[str] = []
+    observed: list[tuple[int, str, bytes]] = []
+
+    def observe(response: httpx.Response) -> None:
+        observed.append((response.status_code, response.headers["x-left"], response.content))
+
+    client = _retrying(
+        [], before_request=lambda request: before.append(request.url.path), observe=observe
+    )
+    await record(client, "/v1/x", tmp_path / "x.json")
+    assert before == ["/v1/x"]
+    assert observed == [(503, "9", b"busy")]
+
+
+@pytest.mark.anyio
+async def test_a_recording_keeps_the_client_s_key_to_its_origin_and_marks_its_request(
+    respx_mock: respx.MockRouter, tmp_path: Path
+) -> None:
+    # https://github.com/xippios/sdk-core/issues/163: the client's auth reaches the base
+    # URL's origin only, and the hooks read where a request's credentials go.
+    files = respx_mock.get("https://files.example.test/bulk/x.csv").respond(200, text="a,b\n")
+    api = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
+    before: list[tuple[str, str]] = []
+    observed: list[tuple[str, str]] = []
+
+    def marks(request: httpx.Request) -> tuple[str, str]:
+        return request.extensions["xippios_auth"], request.extensions["xippios_origin"]
+
+    config = ClientConfig(
+        source="example",
+        version="1",
+        base_url=BASE,
+        before_request=lambda request: before.append(marks(request)),
+        observe=lambda response: observed.append(marks(response.request)),
+    )
+    client = AsyncClient(config, auth=HeaderKeyAuth("X-Api-Key", "EXAMPLE_API_KEY"))
+    await record(client, "https://files.example.test/bulk/x.csv", tmp_path / "file.json")
+    await record(client, "/v1/x", tmp_path / "x.json")
+    await record(client, "/v1/x", tmp_path / "keyless.json", auth=None)
+    assert "x-api-key" not in files.calls.last.request.headers
+    assert [("x-api-key" in call.request.headers) for call in api.calls] == [True, False]
+    expected = [("client", "other"), ("client", "base"), ("none", "base")]
+    assert before == observed == expected
+
+
+@pytest.mark.anyio
+async def test_a_body_past_max_read_bytes_raises_and_writes_nothing(
+    respx_mock: respx.MockRouter, config: ClientConfig, tmp_path: Path
+) -> None:
+    # https://github.com/xippios/sdk-core/issues/62: an unfiltered Eurostat dataset that
+    # upstream may answer synchronously is 145 MB.
+    route = respx_mock.get(f"{BASE}/v1/x").respond(200, content=b"x" * 1001)
+    fixture_file = tmp_path / "x" / "big.json"
+    client = AsyncClient(config)
+    with pytest.raises(
+        ValueError,
+        match=r"^GET /v1/x answered a body over 1000 bytes, the recording's max_read_bytes; ",
+    ):
+        await record(client, "/v1/x", fixture_file, params={"year": 2024}, max_read_bytes=1000)
+    assert not fixture_file.exists()
+    whole = await record(client, "/v1/x", fixture_file, max_read_bytes=1001)
+    assert len(whole.response.body) == 1001
+    assert len((await record(client, "/v1/x", fixture_file, max_read_bytes=None)).response.body)
+    for bound in (0, -1):
+        with pytest.raises(ValueError, match=r"^max_read_bytes must be at least 1$"):
+            await record(client, "/v1/x", fixture_file, max_read_bytes=bound)
+    assert route.call_count == 3, "a bound below 1 is refused before anything is sent"
+
+
+@pytest.mark.anyio
+async def test_max_read_bytes_counts_the_body_as_decoded(
+    respx_mock: respx.MockRouter, config: ClientConfig, tmp_path: Path
+) -> None:
+    # The bound is upstream's whole body as httpx decodes it, as original_bytes counts it.
+    packed = gzip.compress(b"x" * 5000)
+    assert len(packed) < 100
+    respx_mock.get(f"{BASE}/v1/x").respond(
+        200, content=packed, headers={"Content-Encoding": "gzip"}
+    )
+    client = AsyncClient(config)
+    with pytest.raises(ValueError, match="answered a body over 4999 bytes"):
+        await record(client, "/v1/x", tmp_path / "x.json", max_read_bytes=4999)
+    fixture = await record(client, "/v1/x", tmp_path / "x.json", max_read_bytes=5000)
+    assert fixture.response.body == "x" * 5000
+
+
+class _Chunks(httpx.AsyncByteStream):
+    """A body of ``count`` chunks of one MiB, counting the chunks a reader took."""
+
+    def __init__(self, count: int) -> None:
+        self.count = count
+        self.taken = 0
+
+    async def __aiter__(self) -> AsyncIterator[bytes]:
+        for _ in range(self.count):
+            self.taken += 1
+            yield bytes(1024 * 1024)
+
+
+@pytest.mark.anyio
+async def test_the_recorder_stops_reading_at_32_mib_by_default(tmp_path: Path) -> None:
+    # Four times the largest body a source records whole (sdk-usda-gats, 7.6 MB), and the
+    # reading stops there: the rest of a 145 MB answer is never fetched.
+    body = _Chunks(40)
+    observed: list[int] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, stream=body, request=request)
+
+    config = ClientConfig(
+        source="example",
+        version="1",
+        base_url=BASE,
+        observe=lambda response: observed.append(response.status_code),
+    )
+    client = AsyncClient(config, transport=httpx.MockTransport(answer))
+    with pytest.raises(ValueError, match=f"answered a body over {32 * 1024 * 1024} bytes"):
+        await record(client, "/v1/x", tmp_path / "x.json")
+    assert body.taken == 33
+    assert observed == [200], "observe still hears of the request the recording spent"
+    assert not (tmp_path / "x.json").exists()
+
+
+TOKENS = ("tok-access-1", "tok-id-2", "tok-refresh-3")  # pragma: allowlist secret
+"""A login answer's tokens, which name no credential: ``AccessToken`` is one word."""
+
+
+def _tokens(response: httpx.Response) -> list[str]:
+    """The tokens of a login answer, as sdk-faostat's Cognito login returns them."""
+    result = response.json().get("AuthenticationResult", {})
+    return [result[name] for name in ("AccessToken", "IdToken", "RefreshToken") if name in result]
+
+
+def test_a_login_answer_records_through_record_sync_its_tokens_redacted(
+    respx_mock: respx.MockRouter, config: ClientConfig, tmp_path: Path
+) -> None:
+    # https://github.com/xippios/sdk-core/issues/164: the tokens are known once the answer
+    # is, so the source names where they are read, not their values.
+    access, identity, refresh = TOKENS
+    answer = {"AccessToken": access, "IdToken": identity, "RefreshToken": refresh}
+    respx_mock.post(f"{BASE}/auth/login").respond(
+        200,
+        json={"AuthenticationResult": {**answer, "ExpiresIn": 3600}},
+        headers={"X-Echo": access},
+    )
+    fixture_file = tmp_path / "auth_login" / "login.json"
+    fixture = record_sync(
+        AsyncClient(config),
+        "/auth/login",
+        fixture_file,
+        method="POST",
+        data={"user": "user-1", "pass": "pass-2"},
+        scrub=Scrub(secrets=["user-1", "pass-2"], response_secrets=_tokens),
+    )
+    result = json.loads(fixture.response.body)["AuthenticationResult"]
+    assert result == {
+        "AccessToken": REDACTED,
+        "IdToken": REDACTED,
+        "RefreshToken": REDACTED,
+        "ExpiresIn": 3600,
+    }
+    assert dict(fixture.response.headers)["x-echo"] == REDACTED
+    assert fixture.request.body == f"user={REDACTED}&pass={REDACTED}"
+    written = fixture_file.read_text(encoding="utf-8")
+    assert not [value for value in (*TOKENS, "user-1", "pass-2") if value in written]
+
+
+def test_response_secrets_refuses_one_string_and_an_empty_value(
+    respx_mock: respx.MockRouter, config: ClientConfig, tmp_path: Path
+) -> None:
+    respx_mock.get(f"{BASE}/v1/x").respond(200, json={"token": "tok-1", "empty": ""})
+    fixture_file = tmp_path / "x.json"
+    one_string = Scrub(response_secrets=lambda response: response.json()["token"])
+    with pytest.raises(TypeError, match=r"^response_secrets returns a sequence of values"):
+        record_sync(AsyncClient(config), "/v1/x", fixture_file, scrub=one_string)
+    empty = Scrub(response_secrets=lambda response: [response.json()["empty"]])
+    with pytest.raises(ValueError, match=r"^response_secrets returned an empty value"):
+        record_sync(AsyncClient(config), "/v1/x", fixture_file, scrub=empty)
+    not_text = Scrub(response_secrets=lambda response: [7])  # type: ignore[list-item]
+    with pytest.raises(TypeError, match=r"^response_secrets returns text values"):
+        record_sync(AsyncClient(config), "/v1/x", fixture_file, scrub=not_text)
+    assert not fixture_file.exists()
+
+
 def _recorded(url: str, body: object, method: str = "GET") -> Fixture:
     """A synthetic fixture, built here: this repository records from no upstream."""
     request = httpx.Request(method, url)
@@ -229,12 +482,13 @@ async def test_replay_ignores_the_body_and_the_test_asserts_it(
     respx_mock.routes.clear()
     route = replay(respx_mock, fixture_file)
     await client.request("POST", "/v1/create.json", data={"name": "Corn", "n": 2})
-    assert route.calls.last.request.content.decode() == recorded.request.body == "name=Corn&n=2"
+    assert recorded.request.body == "name=Corn&n=2"
+    assert sent_bodies(route) == [{"name": "Corn", "n": "2"}]
     assert route.calls.last.request.headers["content-type"] == recorded.request.content_type
 
     await client.request("POST", "/v1/create.json", data={"name": "Rice"})
     assert route.call_count == 2  # the body is not matched; the assertion is the test's
-    assert route.calls.last.request.content.decode() != recorded.request.body
+    assert sent_bodies(route)[-1] == {"name": "Rice"}
 
 
 @pytest.mark.anyio
@@ -361,6 +615,61 @@ def test_sent_query_refuses_a_repeated_parameter(respx_mock: respx.MockRouter) -
     httpx.get(f"{BASE}/v1/x?period=2022&period=2023&flow=M")
     with pytest.raises(AssertionError, match=r"sent more than once: \['period'\]"):
         sent_query(route)
+
+
+@pytest.mark.anyio
+async def test_sent_bodies_decodes_json_and_forms_with_credentials_redacted(
+    respx_mock: respx.MockRouter, config: ClientConfig
+) -> None:
+    # https://github.com/xippios/sdk-core/issues/183: sdk-google-mail decoded its writes'
+    # JSON, sdk-cashctrl its writes' forms and sdk-faostat its logins' forms, each from
+    # route.calls, where a failing assertion prints the request.
+    route = respx_mock.post(f"{BASE}/v1/write").respond(200, json={})
+    client = AsyncClient(config)
+    assert sent_bodies(route) == []
+    grant = {"access_token": "tok-1"}  # pragma: allowlist secret
+    await client.request("POST", "/v1/write", json={"addLabelIds": ["L1"], "grant": grant, "n": 2})
+    listed = [{"client_secret": "s-1"}, 3]  # pragma: allowlist secret
+    await client.request("POST", "/v1/write", json=listed)
+    await client.request(
+        "POST",
+        "/v1/write",
+        data={"name": "Corn ü", "password": "p-1", "note": ""},  # pragma: allowlist secret
+        headers={"Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"},
+    )
+    await client.request("POST", "/v1/write")
+    assert sent_bodies(route) == [
+        {"addLabelIds": ["L1"], "grant": {"access_token": REDACTED}, "n": 2},
+        [{"client_secret": REDACTED}, 3],
+        {"name": "Corn ü", "password": REDACTED, "note": ""},
+        None,
+    ]
+
+
+def test_sent_bodies_refuses_a_body_it_does_not_decode(respx_mock: respx.MockRouter) -> None:
+    cases: list[tuple[dict[str, Any], str]] = [
+        (
+            {"content": b"tok-1", "headers": {"Content-Type": "text/plain"}},
+            r"^call 2 sent a text/plain body; sent_bodies decodes JSON and forms$",
+        ),
+        ({"content": b"tok-1"}, r"^call 2 sent a body without a content type; "),
+        (
+            {"content": b"{tok-1", "headers": {"Content-Type": "application/json"}},
+            r"^call 2 sent a body declared application/json that is not JSON$",
+        ),
+        (
+            {"data": {"id": [1, 2], "q": "tok-1"}},
+            r"^call 2 sent form fields more than once: \['id'\]$",
+        ),
+    ]
+    for options, refusal in cases:
+        respx_mock.routes.clear()
+        route = respx_mock.post(f"{BASE}/v1/write").respond(200, json={})
+        httpx.post(f"{BASE}/v1/write", json={"n": 1})
+        httpx.post(f"{BASE}/v1/write", **options)
+        with pytest.raises(AssertionError, match=refusal) as refused:
+            sent_bodies(route)
+        assert "tok-1" not in str(refused.value)
 
 
 def test_recorded_query_is_the_scrubbed_recorded_query(tmp_path: Path) -> None:

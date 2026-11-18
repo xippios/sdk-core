@@ -217,3 +217,18 @@ cannot read is `REDACTED` whole, since its credentials cannot be told from the r
 records the link it sent and scrubs nothing itself. No source keeps a signed link yet; the
 file sources whose catalogs may name one are sdk-usda-esmis, sdk-usda-nass, sdk-eurostat
 and sdk-faostat.
+
+(e) **A recording reads a bounded body** (decision 5; step 11;
+https://github.com/xippios/sdk-core/issues/62, found by sdk-eurostat). `record` and
+`record_sync` take `max_read_bytes`, 32 MiB by default (`MAX_READ_BYTES` of
+`xippios.core.testing.record`), `None` for no bound. The body is streamed and counted as
+httpx decodes it, the measure of `original_bytes`, and once it passes the bound the
+reading stops, the rest is never fetched, and the recording raises `ValueError` naming the
+request's method and path and the bound, with nothing written; `observe` sees the
+refused answer's status and headers, its body unread, as for a download's success.
+`max_bytes` cuts what the fixture keeps and is no refusal; this bound refuses what the
+recorder would read, so an answer far larger than expected, an unfiltered Eurostat
+dataset of 145 MB answered at once, costs neither its download nor the memory to hold it.
+32 MiB is four times the largest body a source records whole, sdk-usda-gats's 7.6 MB
+`get_commodities/all`, so no recording of the family's passes it; a source that means to
+read more and cut it raises the bound.

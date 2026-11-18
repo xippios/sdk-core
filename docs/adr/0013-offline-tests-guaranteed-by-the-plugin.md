@@ -219,3 +219,17 @@ and `httpcore2` loggers to `WARNING` beside `httpx` and `httpcore`, since the `m
 builds its own HTTP client on httpx2, which logs each request's full URL at `INFO` as httpx
 does. Every test, `live` or not, gets all four levels back when it ends, and conventions
 §10 names the four.
+
+(b) **What a route received, as bodies** (the amendment of 2026-10-27; step 11;
+https://github.com/xippios/sdk-core/issues/183, found by sdk-google-mail; ADR-0023,
+decision 2). `sent_bodies(route)` gives each body a route received, oldest first: a JSON
+body (`application/json` or `...+json`) decoded, the value of every key that names a
+credential `REDACTED` at any depth; a form (`application/x-www-form-urlencoded`) as a
+mapping of its fields, blank values kept and a credential field `REDACTED`; and `None`
+for a request without a body. A body of another type, a body declared JSON that does not
+parse and a form that sends a field twice fail the test, the message naming the call and
+never the body. It redacts by the one rule of `xippios.core.redaction`, as `sent_urls`,
+`sent_query` and `recorded_query` do, so a test asserts a write's body without keeping a
+request from `route.calls` in its frame, where a failing assertion or `pytest -l` would
+print it. sdk-google-mail decoded its writes' JSON, sdk-cashctrl its writes' forms and
+sdk-faostat its logins' forms, each from `route.calls`.

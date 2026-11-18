@@ -1,6 +1,9 @@
-"""The recorded fixture format: one JSON file per ``tests/fixtures/<endpoint>/<case>.json``.
+"""The recorded fixture format: one JSON file per ``tests/fixtures/<wrapper>/<case>.json``.
 
-A fixture holds the scrubbed request (method, URL, body and its content type) and the
+The directory is named after the wrapper function that sends the request, or after the
+task for an exchange recorded through a task (conventions §10); the parameter that names
+it keeps its name, ``endpoint``, as in ``fixture_path(root, endpoint, case)``. A fixture
+holds the scrubbed request (method, URL, body and its content type) and the
 decoded response. Bodies are stored as text; the headers that describe wire encoding
 are dropped because the body is already decoded, and so are the headers that only
 identify a request (``REQUEST_ID_HEADERS``), which change with every recording.
@@ -189,7 +192,15 @@ class Fixture(BaseModel):
 
 
 def fixture_path(root: Path, endpoint: str, case: str) -> Path:
-    """``<root>/<endpoint>/<case>.json``, the family's fixture layout."""
+    """``<root>/<wrapper>/<case>.json``, the family's fixture layout (conventions §10).
+
+    Args:
+        root: The fixtures directory, e.g. ``Path("tests/fixtures")``.
+        endpoint: The fixture directory: the wrapper function's name, e.g. ``"api_get"``
+            for sdk-usda-nass's ``/api/api_GET/``, or the task's for an exchange recorded
+            through a task.
+        case: The case, e.g. ``"corn_2024"``.
+    """
     return root / endpoint / f"{case}.json"
 
 
@@ -205,8 +216,9 @@ def fixture_from_response(
 
     Credentials are always scrubbed (``scrub_url``, ``scrub_headers``), and the headers
     that only identify a request are dropped (``REQUEST_ID_HEADERS``). ``scrub`` adds
-    the secret values and decides about a binary body; ``None`` is ``Scrub()``: nothing
-    else replaced, a binary body refused. With ``secrets`` set, the result is verified
+    the secret values, those it names and those its ``response_secrets`` reads from
+    ``response``, and decides about a binary body; ``None`` is ``Scrub()``: nothing
+    else replaced, a binary body refused. With secret values, the result is verified
     before it is returned: a secret value still present as given in the URL, a header
     value or a text body refuses the exchange (conventions §10). A source that rewrites
     more, a tenant's host or a field by key, does it on the returned ``Fixture`` and
@@ -259,13 +271,16 @@ def fixture_from_response(
         ValueError: ``max_bytes`` below 1, ``keep`` neither ``"first"`` nor ``"last"``,
             or ``array_key`` or ``keep="last"`` without ``max_bytes``; the request or
             response body is not UTF-8 text and ``scrub`` does not set
-            ``allow_binary``; a secret value survived the scrub (the message names
-            where, never the value); or ``max_bytes`` cannot cut this body (the message,
-            starting ``max_bytes:``, names the format and what to record instead).
+            ``allow_binary``; ``scrub.response_secrets`` returned an empty value; a
+            secret value survived the scrub (the message names where, never the value);
+            or ``max_bytes`` cannot cut this body (the message, starting ``max_bytes:``,
+            names the format and what to record instead).
+        TypeError: ``scrub.response_secrets`` returned one string, or a value that is no
+            string.
     """
     _check_cut(max_bytes, array_key, keep)
     request = response.request
-    scrubber = _Scrubber(scrub if scrub is not None else Scrub())
+    scrubber = _Scrubber(scrub if scrub is not None else Scrub(), response)
     request_body: str | None = None
     request_base64 = False
     if request.content:

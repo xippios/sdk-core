@@ -171,7 +171,14 @@ except RateLimitError as exc:
 ```
 
 A message names the method and path of the request, never its host or query string:
-the host can name a tenant and the query can carry a key.
+the host can name a tenant and the query can carry a key. `request_description(response)`
+gives that description, `GET /v1/series`, for the errors a source's `classify` maps:
+
+```python
+from xippios.core import NotFoundError, request_description
+
+NotFoundError(f"no data for {request_description(response)}", source="example")
+```
 
 ## Quotas, hooks and keyless calls
 
@@ -652,17 +659,20 @@ xippios_placeholder_key_envs = ["EXAMPLE_API_KEY"]
   After a live run the summary prints each quota policy's last reading, `quota after the
   live run: usda-psd: 986 of 1000 requests left as of ...`. ADR-0013 states the edges of
   these guarantees.
-- `replay_fixture("api_GET", "corn_2024")` mounts `tests/fixtures/api_GET/corn_2024.json`
-  on its method, host and path; `match_params=["countOnly"]` makes the route match those
-  recorded query parameters too. A parameter's absence cannot be matched: where two
-  fixtures share a path, mount the one with `match_params` first, since `respx` tries
-  routes in order. The request body is never matched: assert it from the route's calls
-  against `fixture.request.body`. `sent_urls(route)` gives the URLs the route received
-  as scrubbed strings, so no request has to sit in the test's frame, and
+- `replay_fixture("api_get", "corn_2024")` mounts `tests/fixtures/api_get/corn_2024.json`
+  on its method, host and path, the directory named after the wrapper function (or the
+  task, for an exchange recorded through a task); `match_params=["countOnly"]` makes the
+  route match those recorded query parameters too. A parameter's absence cannot be
+  matched: where two fixtures share a path, mount the one with `match_params` first,
+  since `respx` tries routes in order. `sent_urls(route)` gives the URLs the route
+  received as scrubbed strings, so no request has to sit in the test's frame, and
   `sent_query(route)` the last one's query as a mapping, to compare with
-  `recorded_query(fixture)`. `url=` serves a recorded answer at another URL, such as an
-  empty 404 recorded for one year standing in for another. Annotate the fixture as
-  `ReplayFixture`.
+  `recorded_query(fixture)`. The request body is never matched: `sent_bodies(route)`
+  gives each body the route received, oldest first, a JSON body decoded and a form as a
+  mapping of its fields, credentials `REDACTED` by the same rule, `None` for a request
+  without one, so a test asserts `sent_bodies(route)[-1] == {"name": "Corn", "n": "2"}`.
+  `url=` serves a recorded answer at another URL, such as an empty 404 recorded for one
+  year standing in for another. Annotate the fixture as `ReplayFixture`.
 - `response_from_fixture(load_fixture(path))` is a recorded answer as an
   `httpx.Response`, its request attached, for calling a source's `classify` directly.
 - `assert_time_between(result.meta.retrieved_at, before, after)` brackets a time with
@@ -673,8 +683,12 @@ xippios_placeholder_key_envs = ["EXAMPLE_API_KEY"]
   request (`x-request-id`, `x-amz-cf-id`, `x-transaction-id` and the others of
   `xippios.core.testing.fixtures.REQUEST_ID_HEADERS`). Never hand-write a fixture.
   `json=` or `data=` (a form) send a body, recorded with its content type. The recording
-  goes through the client as it is configured; one that must not retry a 5xx goes
-  through a client whose config says `RetryPolicy(max_attempts=1)`. `max_bytes=80_000`
+  goes through the source's client, its base URL, auth, rate limit and hooks, and sends
+  once: never retried, whatever its `RetryPolicy` says, and never answered from the cache,
+  so a 429 or a 5xx is recorded as it came and spends no second request. It reads at
+  most `max_read_bytes` of the body (32 MiB by default, `None` for no bound): past it,
+  the reading stops and the recording raises, naming the method, the path and the bound,
+  and nothing is written. `max_bytes=80_000`
   cuts a large answer's body: a JSON array after its first whole elements, in upstream's
   own text, a text after its first bytes, never inside a secret, and the fixture is
   marked `truncated` with the whole body's size and sha256 (and an array's length).
@@ -705,9 +719,29 @@ record_sync(
 )
 ```
 
-The fixture is scrubbed in memory, verified and written once: if a named value is still
-in the URL, a header value or a text body, nothing is written and the error says where,
-never what. A form a value takes that differs from it (percent-encoded, behind a JSON
+A value known only once upstream answers, such as a login's or a refresh's tokens, whose
+names (`AccessToken`) are no credential's, is read from the answer by a function of it:
+
+```python
+def tokens(response: httpx.Response) -> list[str]:
+    result = response.json().get("AuthenticationResult", {})  # none in an error answer
+    return [result[name] for name in ("AccessToken", "IdToken", "RefreshToken") if name in result]
+
+
+record_sync(
+    client,
+    "/auth/login",
+    fixture_path(FIXTURES, "auth_login", "login"),
+    method="POST",
+    data={"username": username, "password": password},
+    auth=None,
+    scrub=Scrub(secrets=[username, password], response_secrets=tokens),
+)
+```
+
+The fixture is scrubbed in memory, verified and written once: if a named value or one
+`response_secrets` read is still in the URL, a header value or a text body, nothing is
+written and the error says where, never what. A form a value takes that differs from it (percent-encoded, behind a JSON
 escape), or a tenant's host, the source rewrites itself, on the `Fixture` that
 `fixture_from_response` returns, and writes the file with `write_fixture(fixture, path)`,
 laid out as `record` writes it; `fixture_text(fixture)` gives that text. A body that is
@@ -750,7 +784,7 @@ fragment until the release assembles it.
 | Module | What | Status |
 | --- | --- | --- |
 | `xippios.core.client` | httpx client, retries, rate limit, cache with a byte bound, quota policy, request hooks, env-key auth, `get_answer`, `download`, `decode_text`, `decode_csv` | alpha |
-| `xippios.core.errors` | taxonomy, `UnknownCode`, response classification | alpha |
+| `xippios.core.errors` | taxonomy, `UnknownCode`, response classification, `request_description` | alpha |
 | `xippios.core.data_gov` | `Gateway`: the api.data.gov key, the gateway's `classify` of its own answers with `NoDataForYear` on a data path, one quota policy per process | alpha |
 | `xippios.core.redaction` | the one credential rule of the envelope, the recorder and replay, `register_data_name`, signed links | alpha |
 | `xippios.core.models` | `UpstreamModel` with `dump_upstream`, `Result`, `ResultMeta` with `published_at_naive`, `ResultCap`, `parse` | alpha |
@@ -759,7 +793,7 @@ fragment until the release assembles it.
 | `xippios.core.tenants` | `Tenants`, a multi-tenant source's tenants declared in the environment with one client each, and `list_task`, the tool that names them | alpha |
 | `xippios.core.mcp` | tool registration with the argument check and the write server's `confirm` rule, `tool_functions`, result caps, error text, CLI with option hooks and the loopback rule for write and `loopback_only` servers, quiet request log | alpha |
 | `xippios.core.http` | router factory, problem details | alpha |
-| `xippios.core.testing` | live gate, offline run, record (with `max_bytes=`, `array_key=` and `keep=`), the fixture writer and the `sample` mark, replay, scrub of named secrets with a plain verify, `mcp_call`, family check | alpha |
+| `xippios.core.testing` | live gate, offline run, record (sent once, read up to `max_read_bytes`, with `max_bytes=`, `array_key=` and `keep=`), the fixture writer and the `sample` mark, replay with `sent_urls`, `sent_query` and `sent_bodies`, scrub of named secrets and of values read from the answer with a plain verify, `mcp_call`, family check | alpha |
 
 Alpha: while core is 0.x, a new minor version may change the public surface, with no
 backward compatibility across minors; patch releases stay compatible. A source depends

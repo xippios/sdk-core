@@ -37,7 +37,9 @@ from xippios.core.errors import (
     ValidationError,
     XippiosError,
     _raise,
+    error_from_exception,
     raise_for_status,
+    request_description,
 )
 from xippios.core.models import parse as parse_payload
 
@@ -336,6 +338,99 @@ class AsyncClient:
             ),
         )
 
+    async def _send_once(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: Params = None,
+        json: Any = None,
+        data: Mapping[str, Any] | None = None,
+        headers: Mapping[str, str] | None = None,
+        auth: httpx.Auth | _ClientAuth | None = _CLIENT_AUTH,
+        max_read_bytes: int | None = None,
+    ) -> httpx.Response:
+        """The recorder's request: sent once, its answer returned whatever its status.
+
+        ``xippios.core.testing.record`` sends through it, so a recording is one live
+        exchange (ADR-0015, amendment 2026-11-18 (f)): never retried, whatever
+        ``config.retry`` says, and never answered from the cache nor stored in it.
+        ``before_request`` runs once and the limiter paces the request, as for
+        ``request``, and ``observe`` sees the answer; ``classify`` is not asked, since
+        nothing is retried or raised. The client's auth reaches the base URL's origin
+        only, and the request carries the marks ``xippios_auth`` and ``xippios_origin``,
+        as every request the client builds does (point (d) there). The body is read up
+        to ``max_read_bytes`` as decoded, and no further (ADR-0019, amendment 2026-11-18
+        (e)).
+
+        Args:
+            method: HTTP method.
+            path: Path joined onto the base URL, e.g. ``"/api/api_GET"``.
+            params: Query parameters.
+            json: JSON body.
+            data: Form body.
+            headers: Extra headers for this request only.
+            auth: As for ``request``.
+            max_read_bytes: The most bytes of the body to read; ``None`` reads it whole.
+
+        Returns:
+            The answer with its body read, without the wire-encoding headers, since the
+            body is decoded, and with the request as sent, credentials included.
+
+        Raises:
+            ValueError: Both ``json`` and ``data``, before anything is sent; or the body
+                passes ``max_read_bytes``, once that much is read: ``observe`` has seen
+                the answer's status and headers, its body unread.
+            TransportError: The request or its body failed in transit.
+        """
+        if json is not None and data is not None:
+            raise ValueError("pass json= or data=, not both: a request has one body")
+        pool = self._pool()
+        method = method.upper()
+        reach = self._reach(auth)
+        before_request = self.config.before_request
+        if before_request is not None:
+            built = pool.build_request(
+                method, path, params=params, json=json, data=data, headers=headers
+            )
+            reach.mark(built)
+            outcome = before_request(built)
+            if inspect.isawaitable(outcome):
+                await outcome
+        if self._bucket is not None:
+            await self._bucket.acquire(self._sleep)
+        request = pool.build_request(
+            method, path, params=params, json=json, data=data, headers=headers
+        )
+        try:
+            streamed = await pool.send(request, auth=reach.mark(request), stream=True)
+            try:
+                body = await _read_within(streamed, max_read_bytes)
+            finally:
+                await streamed.aclose()
+        except httpx.RequestError as exc:
+            raise error_from_exception(exc, source=self.source) from exc
+        observe = self.config.observe
+        if body is None:
+            if observe is not None:
+                with contextlib.suppress(httpx.ResponseNotRead):
+                    observe(streamed)
+            raise ValueError(
+                f"{request_description(streamed)} answered a body over {max_read_bytes} "
+                "bytes, the recording's max_read_bytes; reading stopped there and nothing is "
+                "written: narrow the request, or raise max_read_bytes and cut the body with "
+                "max_bytes"
+            )
+        response = httpx.Response(
+            streamed.status_code,
+            headers=strip_wire_headers(streamed.headers.multi_items()),
+            content=body,
+            request=streamed.request,
+        )
+        if observe is not None:
+            observe(response)
+        return response
+
     async def get(
         self,
         path: str,
@@ -550,7 +645,7 @@ class AsyncClient:
             raise_for_status(response, source=self.source)
             if not response.is_success:
                 raise UpstreamError(
-                    f"{response.status_code} from GET {response.request.url.path}: a download "
+                    f"{response.status_code} from {request_description(response)}: a download "
                     "writes a 2xx answer only, and redirects are not followed",
                     status=response.status_code,
                     body=response.text[:BODY_LIMIT],
@@ -642,7 +737,7 @@ def decode_json(
     except ValueError as exc:
         _raise(
             ValidationError(
-                f"{source + ': ' if source else ''}{_where(response, path)} is not JSON: "
+                f"{source + ': ' if source else ''}{_response_from(response, path)} is not JSON: "
                 f"{_reason(exc)}",
                 raw=response.text[:BODY_LIMIT],
                 source=source,
@@ -659,8 +754,12 @@ def _reason(exc: ValueError) -> str:
     return type(exc).__name__
 
 
-def _where(response: httpx.Response, path: str | None) -> str:
-    """``response from <path>`` for an error message, the request's path when not given."""
+def _response_from(response: httpx.Response, path: str | None) -> str:
+    """``response from <path>``, the decoders' subject, the request's path when not given.
+
+    No request description (``request_description``): a decoder names a path its caller
+    may give, for a response built without a request.
+    """
     if path is None:
         try:
             path = response.request.url.path
@@ -696,8 +795,8 @@ def decode_text(
         reason = _reason(exc) if isinstance(exc, UnicodeDecodeError) else "an unknown charset"
         _raise(
             ValidationError(
-                f"{source + ': ' if source else ''}{_where(response, path)} is not {charset} "
-                f"text: {reason}",
+                f"{source + ': ' if source else ''}{_response_from(response, path)} is not "
+                f"{charset} text: {reason}",
                 raw=response.content[:BODY_LIMIT],
                 source=source,
             )
@@ -760,6 +859,19 @@ def _rows(
                 f"{prefix}{name} is not CSV the csv module reads: {exc}", raw="", source=source
             )
         )
+
+
+async def _read_within(response: httpx.Response, limit: int | None) -> bytes | None:
+    """``response``'s body as decoded, or ``None`` once it passes ``limit`` bytes.
+
+    The reading stops at the chunk that passes the limit: the rest is never fetched.
+    """
+    body = bytearray()
+    async for chunk in response.aiter_bytes():
+        body += chunk
+        if limit is not None and len(body) > limit:
+            return None
+    return bytes(body)
 
 
 class _ClassifyOnce:

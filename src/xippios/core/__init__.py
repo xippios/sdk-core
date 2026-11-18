@@ -38,6 +38,7 @@ from xippios.core.errors import (
     XippiosError,
     error_from_response,
     parse_retry_after,
+    request_description,
 )
 from xippios.core.models import (
     Result,
@@ -94,5 +95,6 @@ __all__ = [
     "parse",
     "parse_decimal",
     "parse_retry_after",
+    "request_description",
     "sync",
 ]

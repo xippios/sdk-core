@@ -17,6 +17,8 @@ EXPORTS = {
         "AuthError", "ConfigError", "InvalidRequestError", "NotFoundError", "RateLimitError",
         "TransportError", "UpstreamError", "ValidationError", "XippiosError", "UnknownCode",
         "BODY_LIMIT", "error_from_response", "parse_retry_after",
+        # the request description error messages use (https://github.com/xippios/sdk-core/issues/62)
+        "request_description",
         # models and helpers
         "Result", "ResultCap", "ResultMeta", "UpstreamModel", "parse", "parse_decimal",
         "collect", "paginate_offset", "load_json", "load_table", "PackagedList", "matches",
@@ -35,6 +37,8 @@ EXPORTS = {
         "assert_projection", "assert_time_between", "fixture_from_response", "fixture_path",
         "fixture_text", "load_fixture", "mcp_call", "mcp_call_text", "record", "record_sync",
         "recorded_query", "response_from_fixture", "sent_query", "sent_urls", "write_fixture",
+        # the bodies a route received (https://github.com/xippios/sdk-core/issues/183)
+        "sent_bodies",
     },
     "xippios.core.mcp": {
         "ResultCap", "build_parser", "build_server", "cap_result", "error_to_text", "main",

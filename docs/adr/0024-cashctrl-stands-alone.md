@@ -150,3 +150,17 @@ from the source slug, since sdk-google-mail's copy took the `GOOGLE_` prefix as 
 and its errors named `google` (ADR-0014, amendment 2026-11-18, (c); ADR-0025, amendment
 2026-11-18, (b)). The lock wrapper, `assert_write_tools`, the conftest strip and the serve
 command stay the sources' until they return in turn.
+
+(c) **`Scrub` reads secrets from the answer** (decisions 2 and 3; step 11;
+https://github.com/xippios/sdk-core/issues/164, found by sdk-faostat).
+`Scrub(response_secrets=...)` takes a function of the response that returns the values
+that must never be written, for a value known only once upstream answers, such as a
+login's or a refresh's tokens, whose names (`AccessToken`, `IdToken`, `RefreshToken`)
+the credential rule does not match. The recorder calls it once, with the whole answer,
+an error answer included and before any cut, and scrubs and verifies each value it
+returns as decision 3 does a named one, so such an exchange records through
+`record_sync` instead of a step of the source's own. One string, a value that is no
+string and an empty value are refused, with nothing written. sdk-faostat wrote its
+login fixture outside `record_sync` for this reason, and sdk-google-mail reads the
+tokens from the answer before it names them; secret scrubbing stays core's (ADR-0023,
+decision 3 (b)). Decision 4 stands: a rewrite by key stays the source's step.

@@ -2,12 +2,13 @@
 
 Five things live here: the pytest plugin, which gates live tests and keeps the run
 offline (no network for the session; no rate-limit wait and a placeholder key in every
-test not marked live; ADR-0013); fixture recording with secrets scrubbed in memory and
-verified before the write (``Scrub``), a large answer cut on request (``max_bytes=``,
-ADR-0019), and the writer with which a source's own recorder step writes a fixture it
-rewrote (``write_fixture``, ``fixture_text``; ADR-0024); fixture replay through
-``respx``, with what was sent and recorded as plain
-values (``sent_urls``, ``sent_query``, ``recorded_query``, ``response_from_fixture``);
+test not marked live; ADR-0013); fixture recording, one request sent once and read up
+to a bound, with secrets scrubbed in memory and verified before the write (``Scrub``),
+a large answer cut on request (``max_bytes=``, ADR-0019), and the writer with which a
+source's own recorder step writes a fixture it rewrote (``write_fixture``,
+``fixture_text``; ADR-0024); fixture replay through ``respx``, with what was sent and
+recorded as plain values (``sent_urls``, ``sent_query``, ``sent_bodies``,
+``recorded_query``, ``response_from_fixture``);
 checks for adapters (``mcp_call``, ``mcp_call_text``) and for times read around a call
 (``assert_time_between``); and the family conformance check,
 ``xippios.core.testing.family``, which a source collects by importing it into
@@ -46,7 +47,7 @@ from xippios.core.testing.fixtures import (
     write_fixture,
 )
 from xippios.core.testing.record import record, record_sync
-from xippios.core.testing.replay import ReplayFixture, sent_query, sent_urls
+from xippios.core.testing.replay import ReplayFixture, sent_bodies, sent_query, sent_urls
 from xippios.core.testing.scrub import REDACTED, Scrub
 
 __all__ = [
@@ -68,6 +69,7 @@ __all__ = [
     "record_sync",
     "recorded_query",
     "response_from_fixture",
+    "sent_bodies",
     "sent_query",
     "sent_urls",
     "write_fixture",

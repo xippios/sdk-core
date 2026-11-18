@@ -1,6 +1,6 @@
 # ADR-0005: Credentials never enter the result envelope; core is exempt from the upstream snapshot
 
-Status: Accepted · Date: 2026-10-22
+Status: Accepted · Date: 2026-10-22 · Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240
 
 ## Context
 
@@ -68,3 +68,24 @@ Amended 2026-10-27 (ADR-0024): the verify step named above searches each value o
 `Scrub(secrets=...)` as given, a plain substring, in the URL, the header values and the
 text bodies of a recording; the JSON-decoded and percent-encoded forms it searched before
 are the source's recorder's to look for.
+
+## Amendment 2026-11-18
+
+Core 0.4.0, the package of https://github.com/xippios/sdk-core/issues/240, whose steps
+each add their points here.
+
+(a) **The request description is public** (the amendment of 2026-10-23; step 11;
+https://github.com/xippios/sdk-core/issues/62, found by sdk-eurostat; ADR-0023, decision
+2). `xippios.core.errors.request_description(response)`, which `xippios.core` exports
+beside `error_from_response`, gives the method and path that `error_from_response`'s
+messages name, `GET /v1/x` for an answer to `https://host.test/v1/x?year=2024`, and
+replaces core's private copy, and `download`'s refusal of a 1xx or 3xx names the request
+with it too. A quota policy's refusal of a request it does not send is written before any
+answer exists, and names the request's method and path from the request itself.
+sdk-eurostat and sdk-x each kept a copy as `_where`, and sdk-faostat, sdk-google-mail and
+sdk-usda-esmis wrote it inline in their `classify` and their auth errors, so the rule
+above is now one function that a source's own messages name the request with; their
+adoption of core 0.4.0 deletes the copies. A message that shows the path as sent, its
+percent-escapes kept, as sdk-usda-esmis's refusal of an encoded slash does, keeps its own.
+The decoders' subject, `response from <path>`, names a path their caller may give for a
+response built without a request, and stays.

@@ -81,6 +81,20 @@ def test_message_names_method_and_path_never_the_host(status: int, cls: type[Xip
     assert "lang=" not in message
 
 
+def test_request_description_is_the_method_and_path_error_messages_name() -> None:
+    # https://github.com/xippios/sdk-core/issues/62: sdk-eurostat and sdk-x each kept a
+    # copy, `_where`, and sdk-faostat and sdk-google-mail wrote it inline in `classify`.
+    request = httpx.Request("GET", "https://host.test/v1/x?year=2024&api_key=not-named")
+    response = httpx.Response(404, text="no such series", request=request)
+    assert errors.request_description(response) == "GET /v1/x"
+    assert str(error_from_response(response)) == (
+        f"404 from {errors.request_description(response)}: no such series"
+    )
+    tenant = httpx.Request("post", "https://acme.cashctrl.test/api/v1/a%20b/list.json?lang=de")
+    described = errors.request_description(httpx.Response(200, request=tenant))
+    assert described == "POST /api/v1/a b/list.json"
+
+
 def test_upstream_error_carries_status_and_body() -> None:
     error = error_from_response(_response(502, "x" * 20_000))
     assert isinstance(error, UpstreamError)

@@ -455,7 +455,12 @@ usda-nass's HTTP 413 over the record limit, comtrade's HTTP 400, cashctrl's
 request. Adapters convert these to structured text (MCP) or problem+json (HTTP;
 `InvalidRequestError` is 422); they never leak tracebacks. An error message names the
 request's method and path, never its host or query string: the host can name a tenant,
-the query can carry a key (ADR-0005).
+the query can carry a key (ADR-0005). `xippios.core.errors.request_description(response)`
+gives that description, `GET /v1/series`: core's messages about an answer use it, and a
+source's `classify` words the errors it maps with it, not with a copy of its own. A
+message written before any answer exists, such as a quota policy's refusal of a request
+it does not send, names the request's method and path from the request itself (ADR-0005,
+amendment 2026-11-18).
 
 ## 6. HTTP client (`xippios.core.client`)
 
@@ -727,12 +732,23 @@ standalone from the package. A task named in `BULK_TASKS` gets no route:
   parameters a test names (`match_params`); a parameter whose recorded value holds
   `REDACTED` cannot be matched and is refused by name. A parameter's absence cannot be
   matched: where two fixtures share a path, the more specific one is mounted first,
-  since `respx` tries routes in the order they were added.
+  since `respx` tries routes in the order they were added. What a route received reads
+  as plain values: `sent_urls` and `sent_query` the URLs, `sent_bodies` the bodies, a
+  JSON body decoded and a form as a mapping of its fields, each with credentials redacted
+  by the rule of §4 (ADR-0013, amendment 2026-11-18).
+- The recorder sends one request through the source's client and records the answer
+  whatever its status: never retried, whatever the client's `RetryPolicy` says, and never
+  answered from the cache, so a recording spends one request and needs no client of its
+  own (ADR-0015, amendment 2026-11-18). It reads at most `max_read_bytes` of the body,
+  32 MiB by default: past it the reading stops, and the recording is refused before
+  anything is written (ADR-0019, amendment 2026-11-18).
 - The recorder scrubs in memory and writes once, so nothing unscrubbed touches disk, and
   names the values that must never be written (`xippios.core.testing.Scrub(secrets=...)`),
-  each replaced as given. The scrubbed exchange is verified before the write: a named
-  value still present as given in the URL, a header value or a text body refuses it, the
-  error naming where, never the value. The verify is a backstop, with the fixture grep of
+  or reads those known only from the answer, such as a login's or a refresh's tokens
+  (`Scrub(response_secrets=...)`, ADR-0024, amendment 2026-11-18), each replaced as
+  given. The scrubbed exchange is verified before the write: a named or read value still
+  present as given in the URL, a header value or a text body refuses it, the error
+  naming where, never the value. The verify is a backstop, with the fixture grep of
   the definition of done; a form the source's values take that differs from them
   (percent-encoded, behind a JSON escape), or a tenant's host to replace, the source
   rewrites in its own recorder step, on the `Fixture`, and writes it with core's
