@@ -18,34 +18,33 @@ the repository it reviews.
   upstream API.
 - Never read or print `.envrc`, `.env` or a variable that holds a credential, any whose
   name ends in `_API_KEY`, `_TOKEN` or `_SECRET` among them; a leak check greps the files
-  for key patterns, it never compares against a key (conventions §7; ADR-0005, amendment
-  2026-11-18, point b).
+  for key patterns, it never compares against a key (conventions §7; ADR-0030,
+  decision 6).
 
 ## Check, in this order
 
 1. **Layering** (ADR-0001; not the host's): the adapters register `tasks.__all__`, minus
-   `BULK_TASKS` (ADR-0019), and hold no logic.
-2. **Fidelity** (ADR-0003; not the host's): upstream names and semantics, no cross-source
+   `BULK_TASKS` (ADR-0040), and hold no logic.
+2. **Fidelity** (ADR-0028; not the host's): upstream names and semantics, no cross-source
    normalisation; every parameter and default traceable to `docs/upstream/`, its
    hand-written `OBSERVED.md` included (conventions §3), or listed as an assumption in the
    description.
 3. **Errors** (not the host's): mapped through the taxonomy (conventions §5) and the
    `classify` hook (§6); each shape `classify` maps is documented in `docs/upstream/` or
-   recorded in a fixture that a test passes to it (ADR-0008, amendment 2026-11-18,
-   point a).
+   recorded in a fixture that a test passes to it (ADR-0031, decision 2).
 4. **Fixtures** (conventions §10; not the host's): recorded, never hand-written; scrubbed;
    free of key patterns and of production tenant names; the fixture files this PR adds or
    changes under 256 KiB, a file it only moves, its content unchanged, being neither, and
-   a truncated one marked `truncated: true` (ADR-0019; binds from the source's 0.3.0
+   a truncated one marked `truncated: true` (ADR-0040; binds from the source's 0.3.0
    adoption); a download fixture whose body is its parser tests' sample marked
    `sample: true` with the whole file's size and sha256 (ADR-0020, amendment 2026-11-18,
    point a; binds from the source's adoption of core 0.4.0); a sample a script wrote from
    a file over the cap in the file's own form, its row saying what it keeps (ADR-0020,
    amendment 2026-11-18, point d); a body a test serves where it was not recorded one of
    §10's kinds, saying where it comes from, and its test asserting what the source does
-   with it (ADR-0003, amendment 2026-11-18, point d); a recorded fixture that no test
+   with it (ADR-0028, decision 8); a recorded fixture that no test
    replays after the change, and no test or document cites, deleted and named in the
-   description (ADR-0018, amendment 2026-11-18, point q).
+   description (ADR-0039, decision 8).
 5. **Checks green**: the PR's `ci` check passes; a reviewer who runs the checks runs
    `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest
    && uv run pre-commit run --all-files`.
@@ -63,18 +62,18 @@ the repository it reviews.
 10. **Live calls**: the description counts the live calls the PR spent, every request it
     sent to an upstream, a probe's, a recording's or a live test run's, the keyed ones by
     number (`none` is a count), since a keyed call spends the quota that every source and
-    process holding its key draws on (ADR-0009, amendment 2026-11-18, point c).
+    process holding its key draws on (ADR-0032, decision 7).
 11. **Core PR** (`sdk-core`, code added): it names the two consumers of what it adds (in
     its ADR, or in its description when it has none), or, in its ADR, the one-consumer
     reason of ADR-0023 decision 3.
 12. **Adoption PR** (conventions §15): judged against conventions §15 and nothing else,
     that is the definition of done's Adoption PR block with its Enforced by CI and
-    Process blocks; it deletes only what the adoption itself makes dead (ADR-0018,
-    amendment 2026-10-26). On §15's routes (1) and (3), a core release without a
+    Process blocks; it deletes only what the adoption itself makes dead (ADR-0039,
+    decision 2). On §15's routes (1) and (3), a core release without a
     template tag and a source frozen on a template tag, §15's item 2 does not apply: the
     first raises the bound with `copier update --vcs-ref=:current:`, the second runs no
     `copier update` and lists the template changes it hand-applies file by file
-    (ADR-0018, amendment (i)). The host's adoption PR runs no `copier update` and is
+    (ADR-0039, decision 2). The host's adoption PR runs no `copier update` and is
     judged against §15's items 1, 3, 4, 7, 8 and 9, read for the host as §15 reads them,
     and lists the template changes it hand-applies file by file (ADR-0026, amendment
     2026-11-18, point e).
@@ -84,7 +83,7 @@ the repository it reviews.
     `docs/handover.md`, and the fragments under `changelog/`, which it deletes); the
     reference-data refresh ran before it, in a PR of its own only when a record changed
     or `fetched` went from a bare date to the full time, otherwise cited by the release
-    PR (conventions §12; ADR-0018, amendment (h)).
+    PR (conventions §12; ADR-0039, decision 6).
 14. **Stale sentences**: no sentence in a changed `README.md`, `CLAUDE.md`, docstring or
     document contradicts the state after the change (a version, a count, a file name, a
     rule the PR replaced).
@@ -96,7 +95,7 @@ the repository it reviews.
     wrapper's module and function carry the upstream operation name by §2's rule, and its
     fixtures live under `tests/fixtures/<wrapper>/`, under `<service>_<wrapper>/` where
     two wrappers carry its name, or under the tasks that record its every exchange, where
-    none is its own (ADR-0003, amendment 2026-11-18, point e); the verbatim operation id
+    none is its own (ADR-0028, decision 3); the verbatim operation id
     is in the first line of the wrapper function's docstring and in the `endpoint=` it
     passes.
 

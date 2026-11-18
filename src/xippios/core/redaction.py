@@ -1,6 +1,6 @@
 """The one credential rule: what is redacted wherever a request is kept or shown.
 
-The result envelope (``ResultMeta.request``, ADR-0005), the fixture recorder's scrub and
+The result envelope (``ResultMeta.request``, ADR-0030), the fixture recorder's scrub and
 the replay helpers (``sent_urls``, ``sent_query``, ``recorded_query``, ``mount_fixture``)
 all ask this module, so a name is a credential in all of them or in none.
 
@@ -11,7 +11,7 @@ between ``_``, ``-`` or the ends of the name, in any letter case: ``api_key`` (a
 ``x-api-key``, ``access_token``, ``client_secret`` and the ``sig`` of a pre-signed
 storage URL (Azure SAS) are credentials; ``keyword``, ``author``, ``tokens_used``,
 ``design`` and ``sort_key`` are data. A bare ``key`` is not on the list: Eurostat's
-SDMX series ``key`` is data (ADR-0019, decision 6).
+SDMX series ``key`` is data (ADR-0040, decision 6).
 
 A name a ``QueryKeyAuth`` sends its key under is registered when that auth object is
 built, and is a credential from then on for the whole process, matched exactly in any
@@ -105,7 +105,7 @@ _lock = threading.Lock()
 def register_credential_name(name: str) -> None:
     """Make ``name`` a credential for the rest of the process, in any letter case.
 
-    ``QueryKeyAuth`` calls it with its ``param`` when it is built (ADR-0019, decision 6).
+    ``QueryKeyAuth`` calls it with its ``param`` when it is built (ADR-0040, decision 6).
     Registering a name again changes nothing.
 
     Args:

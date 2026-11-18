@@ -99,7 +99,7 @@ async def latest_release_async() -> Result[list[str]]:
 
 @pytest.mark.anyio
 async def test_a_naive_release_time_reaches_the_agent_with_its_flag() -> None:
-    # ADR-0022, rule 2: the MCP text carries the flag.
+    # ADR-0041, decision 2: the MCP text carries the flag.
     server = build_server("example", [sync(latest_release_async)])
     meta = (await mcp_call(server, "example_latest_release", {}))["meta"]
     assert (meta["published_at"], meta["published_at_naive"]) == ("2026-10-06T08:00:00", True)
@@ -229,7 +229,7 @@ download_series = sync(download_series_async)  # keeps the module, as in a tasks
 
 @pytest.mark.anyio
 async def test_a_task_in_bulk_tasks_is_no_tool(monkeypatch: pytest.MonkeyPatch) -> None:
-    # ADR-0019, decision 4: the rendered mcp.py passes every name of tasks.__all__.
+    # ADR-0040, decision 4: the rendered mcp.py passes every name of tasks.__all__.
     tasks = types.ModuleType("example_bulk_tasks")
     tasks.BULK_TASKS = frozenset({"download_series"})  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, tasks.__name__, tasks)

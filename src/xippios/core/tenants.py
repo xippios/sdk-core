@@ -46,9 +46,9 @@ naming the tenant::
 
 Isolation is by configuration: a deployment reaches exactly the tenants its environment
 declares. Nothing here spans tenants or returns a value; messages name tenants and
-variables, never what a variable holds (ADR-0005). The module left core in 0.3.0 for
-sdk-cashctrl alone and came back in 0.4.0 from its copy and sdk-google-mail's (ADR-0024,
-amendment 2026-11-18, (b) and (d)).
+variables, never what a variable holds (ADR-0030). The module left core in 0.3.0 for
+sdk-cashctrl alone and came back in 0.4.0 from its copy and sdk-google-mail's (ADR-0042,
+decision 1).
 """
 
 import asyncio
@@ -411,7 +411,7 @@ def list_task(
     """A task returning the declared tenants' names, for a ``<source>_list_<tenants>`` tool.
 
     The task is synchronous and takes no argument; it reads ``tenants.names()`` on every
-    call and returns names only (ADR-0005), with ``meta.endpoint`` set to ``name`` and no
+    call and returns names only (ADR-0030), with ``meta.endpoint`` set to ``name`` and no
     ``meta.tenant``. Register it with the source's other tasks, on the read server: a
     write server exposes write tools only (conventions §8). The task carries a mark by
     which ``bind_tasks`` lists the tenant a ``TenantLock`` binds alone.
@@ -449,8 +449,8 @@ class TenantLock:
     """Bind a server to one tenant: every tool acts on it and none takes ``param``.
 
     The lock of a server that a source's ``--org`` or ``--account`` binds, sdk-cashctrl's
-    ``OrgLock`` and sdk-google-mail's ``AccountLock`` until core 0.4.0 (ADR-0014, amendment
-    2026-11-18, (d)). ``bind_tasks`` binds a server's tasks to it, ``tenant_instructions``
+    ``OrgLock`` and sdk-google-mail's ``AccountLock`` until core 0.4.0 (ADR-0036,
+    decision 7). ``bind_tasks`` binds a server's tasks to it, ``tenant_instructions``
     names it in the server's instructions, and ``xippios.core.mcp.serve_tenants`` builds it
     from the command line.
 

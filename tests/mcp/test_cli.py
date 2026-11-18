@@ -353,7 +353,7 @@ def test_the_request_log_is_quiet_when_the_server_from_apply_options_runs(
 
 # serve_tenants: --<param> binds a multi-tenant source's server to one tenant ----------
 # The tests of the two copies' serve commands, sdk-cashctrl's --org and sdk-google-mail's
-# --account (ADR-0024, amendment 2026-11-18, (d)), on a fictitious source whose variables
+# --account (ADR-0042, decision 1), on a fictitious source whose variables
 # no shell sets.
 
 TENANTS = Tenants(

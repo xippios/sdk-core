@@ -4,9 +4,9 @@ Each tool keeps the task's signature and docstring, the metadata of an ``Annotat
 parameter included, so the SDK derives the input schema and the description from them.
 The body awaits the task's async twin, turns taxonomy errors into text flagged
 ``is_error`` and applies the result cap: the tool's own from ``caps``, else the server's
-(ADR-0016).
+(ADR-0038).
 
-A task its ``tasks.py`` names in ``BULK_TASKS`` is no tool and is skipped (ADR-0019);
+A task its ``tasks.py`` names in ``BULK_TASKS`` is no tool and is skipped (ADR-0040);
 ``tool_functions(tasks)`` gives the rest of ``tasks.__all__``.
 
 Every server answers an argument a tool does not declare and arguments its schema
@@ -19,7 +19,7 @@ only unless told otherwise.
 
 ``build_server`` builds a server from one ``ToolSet``, the package contract's, and
 ``register_tasks`` registers a tool set on a server a host builds from several
-(ADR-0026, amendment 2026-11-18, (d)).
+(ADR-0026, amendment 2026-11-18, point d).
 
 Building a server also quiets the request log of httpx and httpx2
 (``quiet_request_logging``).
@@ -71,7 +71,7 @@ def quiet_request_logging() -> None:
     ``INFO`` as ``HTTP Request: GET <full URL> "HTTP/1.1 200 OK"``, and MCP clients
     capture a server's stderr into their own logs. The full URL carries the API key for
     a source that sends it as a query parameter (``QueryKeyAuth``) and names the tenant
-    for a source with one host per tenant; neither belongs in a log (ADR-0005).
+    for a source with one host per tenant; neither belongs in a log (ADR-0030).
     httpcore's ``DEBUG`` traces name the host as well, so httpcore is quieted with it.
     The ``mcp`` SDK 2.x builds its own HTTP client on httpx2 and httpcore2, which log
     the same way under the loggers ``httpx2`` and ``httpcore2``, so a process that also
@@ -119,7 +119,7 @@ def is_loopback_only(server: MCPServer) -> bool:
     ``main`` serves such a server over ``--http`` on a loopback ``--host`` only
     (``LOOPBACK_HOSTS``) unless ``--allow-remote`` is passed, since it carries no
     authentication; a host that serves the server itself holds it the same way
-    (ADR-0014, decision 9; ADR-0025, D-a; ADR-0026, decision 5). Tasks registered with
+    (ADR-0036, decision 9; ADR-0025, D-a; ADR-0026, decision 5). Tasks registered with
     ``loopback_only=True`` (``register_tasks``, ``build_server``) or ``read_only=False``
     hold the server from then on.
     """
@@ -332,7 +332,7 @@ def register_tasks(
 
     A task the module that defines it names in ``BULK_TASKS`` (``tasks.py``, beside
     ``MCP_CAPS``) is skipped: a bulk task returns a file, or a list read from one, and is
-    Python-only; no tool returns a file path to an agent (conventions §8, ADR-0019). So
+    Python-only; no tool returns a file path to an agent (conventions §8, ADR-0040). So
     an adapter may pass every name of ``tasks.__all__``. A wrapper is skipped as the
     task it wraps when ``__wrapped__`` leads to it, whatever its own ``__module__``
     (``functools.wraps`` sets it); ``tool_functions(tasks)`` leaves the bulk tasks out
@@ -360,7 +360,7 @@ def register_tasks(
         caps: A tool's own result cap, replacing ``cap`` for it, keyed by the task
             function's ``__name__``, e.g. ``{"list_partners": ResultCap(max_rows=400,
             max_bytes=100_000)}`` for the tool ``comtrade_list_partners``: for a
-            reference tool whose whole list an agent needs (conventions §8, ADR-0016).
+            reference tool whose whole list an agent needs (conventions §8, ADR-0038).
             It sets ``max_rows`` and ``max_bytes`` as the source judges; a byte bound
             above the default 64 KB is a deliberate choice for that tool, so that an
             agent gets the list whole. Its ``note`` says how to see the rest when the
@@ -494,7 +494,7 @@ def build_server(
         source: Source slug, or a ``ToolSet``, which carries every argument but ``name``.
         tasks: Task functions to expose, e.g. ``tool_functions(tasks)``, which is
             ``tasks.__all__`` minus ``BULK_TASKS``; a task in its module's
-            ``BULK_TASKS`` is skipped here too (ADR-0019), no tool returns a file path to
+            ``BULK_TASKS`` is skipped here too (ADR-0040), no tool returns a file path to
             an agent. Required with a slug.
         name: Server name; defaults to ``xippios-<source>``.
         version: Source package version, shown to clients.

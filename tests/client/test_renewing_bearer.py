@@ -1,11 +1,11 @@
 """``RenewingBearerAuth``: the exchange, its reuse, the margin, the refusal, single-flight.
 
-ADR-0025, amendment 2026-11-18, point (c); https://github.com/xippios/sdk-core/issues/156.
+ADR-0025, amendment 2026-11-18, point c; https://github.com/xippios/sdk-core/issues/156.
 Every exchange is a test double behind ``httpx.MockTransport``: a token endpoint on an
 origin of its own, as Google's is, that answers a made-up bearer numbered by the exchange,
 and the API on the base URL. The shell holds made-up values for the two variables the
-login reads; the plugin pins the placeholder on both (ADR-0013, amendment 2026-11-18,
-point c), so a token request carries the placeholder and no shell value.
+login reads; the plugin pins the placeholder on both (ADR-0035, decision 3), so a
+token request carries the placeholder and no shell value.
 """
 
 import asyncio

@@ -120,7 +120,7 @@ async def test_mcp_call_fails_when_the_server_reports_an_error() -> None:
 # assert_write_tools: a write server against its write tasks (conventions §8) ---------
 # The tests of the two copies, sdk-cashctrl's and sdk-google-mail's
 # tests/test_tasks_write.py, which core removed in 0.3.0 and takes back in 0.4.0 with the
-# check that confirm is the last parameter (ADR-0024, amendment 2026-11-18, (d)).
+# check that confirm is the last parameter (ADR-0042, decision 1).
 
 
 def create_thing(name: str, confirm: bool = False) -> dict[str, str]:

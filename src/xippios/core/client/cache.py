@@ -77,7 +77,7 @@ def cache_key(method: str, url: httpx.URL) -> str:
 
 
 _CACHES: "weakref.WeakSet[MemoryCache]" = weakref.WeakSet()
-"""Every live ``MemoryCache``, for the testing plugin's clearing between tests (ADR-0013)."""
+"""Every live ``MemoryCache``, for the testing plugin's clearing between tests (ADR-0035)."""
 _CACHES_LOCK = threading.Lock()
 
 
@@ -93,7 +93,7 @@ class MemoryCache:
     """In-memory LRU cache with a TTL, shareable across threads and event loops.
 
     The testing plugin clears every instance before and after each test not marked
-    ``live`` (ADR-0013).
+    ``live`` (ADR-0035).
 
     Args:
         ttl: Seconds an entry stays valid; ``None`` keeps entries until evicted.

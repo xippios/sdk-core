@@ -1,11 +1,11 @@
 """The binding lock: a server bound to one tenant, whose tools take no tenant argument.
 
-The tests of the two copies that return to core (ADR-0024, amendment 2026-11-18, (d)):
+The tests of the two copies that return to core (ADR-0042, decision 1):
 sdk-cashctrl's ``tests/test_org_lock.py`` and sdk-google-mail's
 ``tests/test_account_lock.py``, the parts that test the lock itself, on a fictitious source
 whose variables no shell sets. A call goes through ``mcp_call_text``, an in-process client,
 so the argument check runs as it does for a real client: on a bound server it refuses the
-tenant's argument, which no tool declares (ADR-0014, amendment 2026-11-18, (a)).
+tenant's argument, which no tool declares (ADR-0036, decision 11).
 """
 
 import asyncio

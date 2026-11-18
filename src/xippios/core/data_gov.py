@@ -2,7 +2,7 @@
 
 api.data.gov (API Umbrella) fronts the APIs of every agency that takes part in it, USDA
 FAS's PSD, ESR and GATS at ``api.fas.usda.gov`` among them. One key serves them all, and
-one hourly quota counts every request made with it (ADR-0009). ``Gateway`` holds what
+one hourly quota counts every request made with it (ADR-0032). ``Gateway`` holds what
 every source behind it shares, once (ADR-0023: sdk-usda-psd, sdk-usda-esr and
 sdk-usda-gats each carried a copy)::
 
@@ -31,7 +31,7 @@ What the gateway sends, as sdk-usda-psd recorded it on 2026-10-23 (its
   with ``x-ratelimit-remaining: 0`` and ``Retry-After: 3151`` (``over_rate_limit.json``).
   The developer manual (https://api.data.gov/docs/developer-manual/, read 2026-10-23)
   documents no ``Retry-After``, only that "the block will automatically be lifted by
-  waiting an hour", which ADR-0010's context records; so the wait is ``Retry-After``
+  waiting an hour", which ADR-0033's context records; so the wait is ``Retry-After``
   when the gateway sends one and ``WINDOW``, the hour, when it does not.
 - A key the gateway refuses answers 401 or 403 with an ``API_KEY_*`` code in the same
   body and no quota headers (``invalid_key.json``: 403 ``API_KEY_INVALID``); a path it
@@ -44,7 +44,7 @@ Behind the gateway, FAS's PSD and ESR answer a market year they hold no data for
 ``NoDataForYear`` (https://github.com/xippios/sdk-core/issues/106).
 
 The gateway ends its messages with its URL (``"... https://api.fas.usda.gov:443"``);
-every error here writes it ``<host>`` (ADR-0005). ``classify`` reads the answers of the
+every error here writes it ``<host>`` (ADR-0030). ``classify`` reads the answers of the
 client's base URL alone: the answer to a request the client marks as sent to another
 origin, a file link on another host, is none of the gateway's.
 """
@@ -70,7 +70,7 @@ __all__ = [
 ]
 
 API_KEY_ENV = "DATA_GOV_API_KEY"  # pragma: allowlist secret (a variable name, not a key)
-"""The variable every source behind api.data.gov reads its key from (ADR-0009)."""
+"""The variable every source behind api.data.gov reads its key from (ADR-0032)."""
 KEY_HEADER = "X-Api-Key"
 """The header the key is sent in."""
 WINDOW = 3600.0
@@ -170,7 +170,7 @@ class Gateway:
     Every instance shares ``Gateway.policy``, one ``QuotaPolicy`` per process for the key
     in ``DATA_GOV_API_KEY``: what one source spends, another source's next request sees,
     and it waits that out within the policy's cap or is refused without being sent
-    (ADR-0009; ADR-0010, decision 4). ``classify``'s errors carry the source's slug; the
+    (ADR-0032; ADR-0033, decision 4). ``classify``'s errors carry the source's slug; the
     policy's refusal before sending speaks for the gateway, ``source="api.data.gov"``,
     and names the variable, the method and the path.
 
@@ -226,7 +226,7 @@ class Gateway:
           the code and the variable, never the key.
         - 429 (``OVER_RATE_LIMIT``) is a ``RateLimitError`` whose ``retry_after`` is the
           wait ``Gateway.policy`` keeps the quota spent for: ``observe`` has read this
-          answer before ``classify`` runs (ADR-0015, decision 1), so the wait counts to
+          answer before ``classify`` runs (ADR-0037, decision 1), so the wait counts to
           the snapshot's ``resumes_at``, from ``Retry-After`` or one ``WINDOW``. The
           message names the gateway's allowance, that every package using the key
           shares it, and the quota as the snapshot reports it. Whether the client

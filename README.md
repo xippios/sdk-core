@@ -466,7 +466,7 @@ returned and not cached.
 An upstream that serves each tenant from a host or under a key of its own (CashCtrl's
 organisations, Gmail's mailboxes) is served by a source that declares its tenants in the
 environment with `Tenants`, one client each, and names them with `list_task`
-(`xippios.core.tenants`; ADR-0014, ADR-0024):
+(`xippios.core.tenants`; ADR-0036, ADR-0042):
 
 ```python
 from xippios.core import AsyncClient, BasicKeyAuth, ClientConfig, Tenants, list_task
@@ -508,7 +508,7 @@ A server bound to one tenant serves that tenant alone, and none of its tools tak
 tenant's name. `bind_tasks(tasks, lock)` binds them to a `TenantLock`, and
 `tenant_instructions` ends the server's instructions with a sentence that names the
 tenant; `serve_tenants` builds the bound server from `--org` and runs it through `main`
-(ADR-0014, ADR-0024). The source's `build(lock)` returns its tool set, as the package
+(ADR-0036, ADR-0042). The source's `build(lock)` returns its tool set, as the package
 contract has it, and `serve_tenants` builds the bound server from the tool set, named as
 `server` is (ADR-0026):
 
@@ -610,7 +610,7 @@ def validate_commodity_code(code: str) -> str:
     return code
 ```
 
-The answer's `meta` follows ADR-0022: `endpoint` is the upstream operation the list came
+The answer's `meta` follows ADR-0041, decision 1: `endpoint` is the upstream operation the list came
 from, `retrieved_at` the time it was fetched, `vintage` an upstream release identifier
 only when one is passed (a fetch date is not a vintage), `total` `None`. A file whose
 `fetched` is a bare date, as refresh scripts wrote it before template v0.3.0, reads as
@@ -714,10 +714,10 @@ task function's name, with the rows and bytes the source judges it needs:
 `build_server(..., caps={"list_commodities": ResultCap(max_rows=500,
 max_bytes=100_000)})`. So does a tool whose result is one upstream page that must return
 whole, a cursor-paged page with its `next_token` or a bounded lookup, with a byte bound
-of its own and the row bound unchanged (ADR-0016, amendment 2026-10-30), and so does a
+of its own and the row bound unchanged (ADR-0038, decision 4), and so does a
 tool whose result is one upstream document or table that an agent reads whole, a report
 or a table's page, with the rows and bytes it needs and a note that says how to read a
-part of it (ADR-0016, amendment 2026-11-18, point c); every other tool keeps 200 rows or
+part of it (ADR-0038, decision 4); every other tool keeps 200 rows or
 64 KB. The note says "narrow the query to see the rest" and
 promises no filter; a tool with filters names them in its cap, `ResultCap(note="filter
 by year to see the rest")`. `ResultCap` comes from `xippios.core`, so the `MCP_CAPS` in
@@ -881,7 +881,7 @@ xippios_placeholder_key_envs = ["EXAMPLE_API_KEY"]
 
 - `@pytest.mark.live` tests are skipped unless `XIPPIOS_LIVE_TESTS=1`, and `anyio`
   tests run on asyncio (the plugin's `anyio_backend`).
-- The whole run is offline (ADR-0013). From `pytest_configure` on, during collection, in
+- The whole run is offline (ADR-0035). From `pytest_configure` on, during collection, in
   fixtures and in tests, a request through httpx's default transports (the plugin
   patches httpcore's connection pools, which they all send through) raises
   `RuntimeError` naming its method and path unless `respx` answers it, a `respx` route
@@ -897,7 +897,7 @@ xippios_placeholder_key_envs = ["EXAMPLE_API_KEY"]
   variable a token request reads. The `httpx`, `httpcore`, `httpx2` and `httpcore2` logger levels come back
   after every test.
   After a live run the summary prints each quota policy's last reading, `quota after the
-  live run: usda-psd: 986 of 1000 requests left as of ...`. ADR-0013 states the edges of
+  live run: usda-psd: 986 of 1000 requests left as of ...`. ADR-0035 states the edges of
   these guarantees.
 - `replay_fixture("api_get", "corn_2024")` mounts `tests/fixtures/api_get/corn_2024.json`
   on its method, host and path, the directory named after the wrapper function (or the
@@ -1041,7 +1041,7 @@ fragment until the release assembles it.
 Alpha: while core is 0.x, a new minor version may change the public surface, with no
 backward compatibility across minors; patch releases stay compatible. A source depends
 on one minor (`xippios-core~=0.3.0`) and adopts the next through conventions §15
-(ADR-0018).
+(ADR-0039).
 
 ## Documents
 

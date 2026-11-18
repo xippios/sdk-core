@@ -114,7 +114,7 @@ class QueryKeyAuth(EnvKeyAuth):
     Building one registers ``param`` as a credential name for the whole process
     (``xippios.core.redaction``): its value is ``REDACTED`` in every ``ResultMeta.request``,
     every recorded fixture and every URL ``sent_urls`` gives, also where the name is no
-    credential by itself, as ``key`` is not (ADR-0019, decision 6).
+    credential by itself, as ``key`` is not (ADR-0040, decision 6).
 
     Args:
         param: Query parameter name, e.g. ``"key"``.
@@ -247,11 +247,11 @@ class RenewingBearerAuth(httpx.Auth):
     exchange counts as one of the request it precedes, so the client's retry policy sends
     that request again, exchange included, where it would for the request alone (ADR-0011).
     The flow reads the token answer and no other, so a download through it streams to its
-    file (ADR-0019, decision 1). httpx keeps the token answer, its body read, in the final
+    file (ADR-0040, decision 1). httpx keeps the token answer, its body read, in the final
     response's ``history`` for as long as that response lives: a caller that keeps a
     response of ``request`` or ``get`` keeps the bearer with it, while ``get_json``,
     ``get_answer`` and the cache keep no response. The client sends its auth to the base
-    URL's origin only (ADR-0015, amendment 2026-11-18, point d).
+    URL's origin only (ADR-0037, decision 4).
 
     The bearer is kept as a ``SecretStr``, and a credential is read when the token request
     is built and kept nowhere, unless it is given to the constructor. It runs on an async
@@ -275,7 +275,7 @@ class RenewingBearerAuth(httpx.Auth):
 
     renew_on: ClassVar[frozenset[int]] = frozenset({401})
     # The flow reads the token answer itself: the answer of the request it signs, a
-    # streamed download's among them, is never buffered (ADR-0019, decision 1).
+    # streamed download's among them, is never buffered (ADR-0040, decision 1).
     requires_request_body = False
     requires_response_body = False
 
@@ -306,8 +306,8 @@ class RenewingBearerAuth(httpx.Auth):
 
         ``token_request`` reads each credential here, where it builds the request, and
         keeps it in no attribute and in no local that outlives the call. Offline, the
-        testing plugin pins it to the placeholder, the check below kept (ADR-0013,
-        amendment 2026-11-18, point c), so a source never overrides it.
+        testing plugin pins it to the placeholder, the check below kept (ADR-0035,
+        decision 3), so a source never overrides it.
 
         Args:
             name: The variable, named as upstream's documents name the credential, e.g.

@@ -5,7 +5,7 @@ transport failure are retried for idempotent methods only, unless the policy set
 ``retry_non_idempotent``: a write that met them may already have been applied. Before a
 429 or 5xx is retried, the source's ``classify`` is asked: its ``RateLimitError`` sets
 the wait, an ``UpstreamError`` for a 5xx changes nothing, any other error stops the
-retries (ADR-0015).
+retries (ADR-0037).
 """
 
 import asyncio
@@ -56,7 +56,7 @@ async def send_with_retries(
     failure that is not retried is raised as ``TransportError``.
 
     Before a 429 or 5xx is retried, ``classify`` is called with it, when given
-    (ADR-0015). A ``RateLimitError`` it returns sets the wait: its ``retry_after``, else
+    (ADR-0037). A ``RateLimitError`` it returns sets the wait: its ``retry_after``, else
     the ``Retry-After`` header's, goes to ``policy.delay``, so a wait beyond
     ``policy.backoff_max`` stops the retries. An ``UpstreamError`` for a 5xx, the
     default mapping restated (with a cleaner message, say), and ``None`` keep the rule

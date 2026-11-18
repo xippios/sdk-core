@@ -1,4 +1,4 @@
-"""What ``AsyncClient.download`` returns, and the streaming it is built from (ADR-0019).
+"""What ``AsyncClient.download`` returns, and the streaming it is built from (ADR-0040).
 
 A file is streamed to disk, never held in memory: the body goes chunk by chunk into a
 temporary file beside the destination, which is renamed when the body is complete. An
@@ -24,7 +24,7 @@ __all__ = ["Downloaded"]
 class Downloaded:
     """A file ``AsyncClient.download`` wrote, with what upstream said about it.
 
-    A bulk task returns it as ``Result[Downloaded]`` (conventions §2, ADR-0019); the
+    A bulk task returns it as ``Result[Downloaded]`` (conventions §2, ADR-0040); the
     adapters never serve it.
 
     Attributes:

@@ -404,7 +404,7 @@ def test_id_name_pairs_render_an_int_enum_equal_to_upstreams_ids() -> None:
         ("TOTAL_DISAPPEARANCE_173", 173),
         ("BEGINNING_STOCKS", 20),
     ]
-    assert attribute_id.AREA_HARVESTED == 4  # equal to the id in upstream's data (ADR-0008)
+    assert attribute_id.AREA_HARVESTED == 4  # equal to the id in upstream's data (ADR-0031)
     assert "from enum import IntEnum\n" in source
 
 
@@ -416,7 +416,7 @@ LONG_VALUE = (
 
 
 def test_a_mixed_module_is_clean_after_the_refresh_scripts_ruff(tmp_path: Path) -> None:
-    # ADR-0008, amended 2026-10-27: plain output, then ruff format && ruff check --fix.
+    # ADR-0031, decision 6: plain output, then ruff format && ruff check --fix.
     values = [
         LONG_VALUE,
         "CORN, GRAIN, IRRIGATED - ACRES HARVESTED, NET OF ABANDONMENT",  # fits once wrapped

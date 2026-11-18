@@ -1,6 +1,6 @@
 """keep_reserved_tenants: the demo-only strip of a multi-tenant source's ``tests/conftest.py``.
 
-The strip of the two copies (ADR-0024, amendment 2026-11-18, (d)), by the registry's
+The strip of the two copies (ADR-0042, decision 1), by the registry's
 scheme: sdk-google-mail's, which removes the list variable and every listed tenant's
 field variables and keeps the rest of the shared prefix. On fictitious sources whose
 variables no shell sets; every value here is a placeholder.

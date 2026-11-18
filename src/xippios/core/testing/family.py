@@ -24,7 +24,7 @@ than one fails every test here, naming the option. The repository's files (``REA
   ``__init__.py``, and the package ships ``py.typed`` and a ``__version__`` (ADR-0006);
 - ``mcp.py``'s ``server`` registers exactly ``tasks.__all__`` minus
   ``getattr(tasks, "BULK_TASKS", frozenset())``, each tool taking its task's parameters
-  and described by its docstring (conventions §8, ADR-0019);
+  and described by its docstring (conventions §8, ADR-0040);
 - ``http.py``'s ``router`` routes the same tasks at ``/<source>/<task>``, ``GET`` when
   every parameter is a scalar and ``POST`` otherwise (conventions §9, ADR-0007);
 - every task, read and write, is a synchronous function returning ``Result[T]``
@@ -40,10 +40,10 @@ than one fails every test here, naming the option. The repository's files (``REA
   commas; whatever follows the first non-backticked text is prose;
 - ``.copier-answers.yml`` names a template tag, ``_commit: vX.Y.Z`` (conventions §15);
 - ``pyproject.toml`` bounds ``xippios-core`` and each of its extras to one minor,
-  ``~=X.Y.Z``, all alike (conventions §12, ADR-0018).
+  ``~=X.Y.Z``, all alike (conventions §12, ADR-0039).
 
 A write server is its source's to test: the family check reads ``tasks_write`` for the
-two task checks and the status table only (ADR-0024).
+two task checks and the status table only (ADR-0042).
 
 **Two family checks are CI steps, not tests**, since they read the pull request rather
 than the package; sdk-template's ``ci.yml`` carries them, on ``pull_request`` with the
@@ -53,7 +53,7 @@ changelog entry, a fragment it adds or changes under ``changelog/`` or a change 
 ``CHANGELOG.md``, a release's and an adoption's included (conventions §12, §15, the
 definition of done); and the fixture files it adds or changes under ``tests/fixtures/``
 stay under 256 KiB, a fixture it only moves being neither, one moved and changed judged
-under its new path (ADR-0019). The cap binds a source from its 0.3.0 adoption
+under its new path (ADR-0040). The cap binds a source from its 0.3.0 adoption
 (conventions, header of 1.14), so the step warns in template v0.2.1 and fails from v0.3.0.
 """
 
@@ -131,7 +131,7 @@ class FamilySource:
         return {} if self.tasks_write is None else _named(self.tasks_write)
 
     def bulk_tasks(self) -> frozenset[str]:
-        """``tasks.BULK_TASKS``, the tasks the adapters skip (ADR-0019); empty if absent."""
+        """``tasks.BULK_TASKS``, the tasks the adapters skip (ADR-0040); empty if absent."""
         return frozenset(getattr(self.tasks, "BULK_TASKS", frozenset()))
 
 
@@ -230,7 +230,7 @@ def test_family_mcp_server_registers_the_tasks(family_source: FamilySource) -> N
     """``mcp.server`` has exactly one tool per task in ``tasks.__all__`` minus ``BULK_TASKS``.
 
     Each tool takes its task's parameters and carries its docstring (conventions §8,
-    ADR-0019).
+    ADR-0040).
     """
     from xippios.core._loop import run
     from xippios.core.mcp import tool_name
@@ -445,7 +445,7 @@ def test_family_core_is_bound_to_one_minor(family_source: FamilySource) -> None:
 
     ``~=X.Y.Z`` (``~=0.2.0``, or ``~=0.2.1`` when patch 1 shipped what the source adopts)
     in ``[project] dependencies`` and in every extra that names core (conventions §12,
-    ADR-0018).
+    ADR-0039).
     """
     pyproject = tomllib.loads((family_source.root / "pyproject.toml").read_text(encoding="utf-8"))
     project = pyproject.get("project", {})

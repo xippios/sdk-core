@@ -49,7 +49,7 @@ def test_result_meta_rejects_naive_datetimes() -> None:
 
 
 def test_a_naive_release_time_is_kept_as_printed_with_the_flag() -> None:
-    # ADR-0022, rule 2: FAS prints release times without a zone (sdk-usda-gats).
+    # ADR-0041, decision 2: FAS prints release times without a zone (sdk-usda-gats).
     printed = datetime(2026, 10, 6, 8, 0)
     meta = ResultMeta(
         source="usda-gats",
@@ -85,7 +85,7 @@ def test_result_meta_refuses_a_field_it_does_not_define() -> None:
 
 
 def test_request_omits_what_the_caller_left_none() -> None:
-    # ADR-0022, rule 3 (sdk-usda-psd): request records what was sent.
+    # ADR-0041, decision 3 (sdk-usda-psd): request records what was sent.
     meta = ResultMeta(
         source="s",
         endpoint="e",
@@ -105,7 +105,7 @@ def test_result_envelope_round_trips() -> None:
         endpoint="account/list.json",
         retrieved_at=datetime(2026, 10, 20, tzinfo=UTC),
         request={"id": 7},
-        total=40,  # upstream's count, never len(data) (ADR-0012)
+        total=40,  # upstream's count, never len(data) (ADR-0034)
         tenant="acme",
     )
     result = Result[list[Series]](data=[Series(series_id="a", value=1)], meta=meta)

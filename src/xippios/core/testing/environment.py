@@ -14,7 +14,7 @@ credential, a productive one the shell holds among them::
     keep_reserved_tenants(TENANTS)
 
 The demo-only strip of sdk-cashctrl's and sdk-google-mail's ``tests/conftest.py`` until core
-0.4.0 (ADR-0024, amendment 2026-11-18, (d)).
+0.4.0 (ADR-0042, decision 1).
 """
 
 import os

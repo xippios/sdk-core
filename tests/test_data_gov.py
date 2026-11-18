@@ -97,7 +97,7 @@ def test_a_refused_key_is_an_auth_error_naming_the_variable_and_the_code() -> No
     assert error.status == 403
     assert "HTTP 403 API_KEY_INVALID: An invalid api_key was supplied" in error.message
     assert API_KEY_ENV in error.message
-    assert HOST not in error.message, "host-free (ADR-0005)"
+    assert HOST not in error.message, "host-free (ADR-0030)"
     assert error.source == "usda-psd"
 
 

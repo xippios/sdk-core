@@ -1,6 +1,6 @@
 """ClientConfig.before_request and ClientConfig.observe: where they run, and how often.
 
-The placement is ADR-0015's: the pre-request hook once per call, after the cache lookup
+The placement is ADR-0037's: the pre-request hook once per call, after the cache lookup
 and before the rate limiter; the observer on every response from the wire, before
 ``classify`` and the retry decision.
 """
@@ -175,7 +175,7 @@ async def test_observe_sees_every_attempt_before_classify(respx_mock: respx.Mock
 
 @pytest.mark.anyio
 async def test_observe_sees_raw_responses_too(respx_mock: respx.MockRouter) -> None:
-    # The recorder asks for raw responses; ADR-0010 wants the quota observed on them too.
+    # The recorder asks for raw responses; ADR-0033 wants the quota observed on them too.
     seen: list[int] = []
     respx_mock.get(f"{BASE}/v1/x").respond(500, json={})
     client = AsyncClient(

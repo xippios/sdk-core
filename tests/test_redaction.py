@@ -51,7 +51,7 @@ def test_a_credential_word_is_always_a_credential(name: str) -> None:
     ["key", "sort_key", "keyword", "author", "tokens_used", "design", "commodity_desc", "year"],
 )
 def test_a_name_without_a_credential_word_is_data(name: str) -> None:
-    # Eurostat's SDMX series key is data (ADR-0019, decision 6); sort_key with it.
+    # Eurostat's SDMX series key is data (ADR-0040, decision 6); sort_key with it.
     assert not is_credential_name(name)
 
 
@@ -107,7 +107,7 @@ def test_scrub_headers() -> None:
 
 
 def test_register_data_name_is_the_module_s() -> None:
-    # Imported by its path, as xippios.core.data_gov is (ADR-0009, amendment 2026-10-27).
+    # Imported by its path, as xippios.core.data_gov is (ADR-0032, decision 5).
     assert "register_data_name" in redaction.__all__
 
 

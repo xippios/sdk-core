@@ -1,8 +1,8 @@
 """A quota policy: the quota headers observed, and no request fired into a spent quota.
 
-ADR-0010 decides how the family spends an upstream's longer-window quota: spend it when
+ADR-0033 decides how the family spends an upstream's longer-window quota: spend it when
 the data is worth it, interpret the refusal, and never fire into a quota known to be
-spent. ``QuotaPolicy`` implements that on the client's two hooks (ADR-0015): ``observe``
+spent. ``QuotaPolicy`` implements that on the client's two hooks (ADR-0037): ``observe``
 reads the quota headers of every response from the wire, and ``before_request``, which
 runs after the cache lookup, waits a spent quota out when the wait is short and
 otherwise refuses without sending::
@@ -42,12 +42,12 @@ _TEN_YEARS = 315_360_000.0
 
 
 _POLICIES: "weakref.WeakSet[QuotaPolicy]" = weakref.WeakSet()
-"""Every live policy, for the testing plugin's reset between tests (ADR-0013)."""
+"""Every live policy, for the testing plugin's reset between tests (ADR-0035)."""
 _POLICIES_LOCK = threading.Lock()
 
 
 def _every_policy() -> list["QuotaPolicy"]:
-    """Every live policy, for the testing plugin (ADR-0013)."""
+    """Every live policy, for the testing plugin (ADR-0035)."""
     with _POLICIES_LOCK:
         return list(_POLICIES)
 
@@ -144,8 +144,8 @@ class QuotaSnapshot:
 class QuotaPolicy:
     """An upstream's request quota observed from its headers, and requests paced to it.
 
-    Implements ADR-0010's quota rules on ``ClientConfig.observe`` and
-    ``ClientConfig.before_request`` (ADR-0015); ``install`` sets both. ``observe`` keeps
+    Implements ADR-0033's quota rules on ``ClientConfig.observe`` and
+    ``ClientConfig.before_request`` (ADR-0037); ``install`` sets both. ``observe`` keeps
     a snapshot of the quota headers of every response from the wire, raw ones
     (``raise_on_error=False``) included, and never of a cache hit. When the snapshot
     shows the quota spent, ``before_request`` waits until it is expected back if that
@@ -164,7 +164,7 @@ class QuotaPolicy:
     for ``window``. A source whose upstream answers a spent limit otherwise, UN
     Comtrade's 403 "Quota will be replenished in HH:MM:SS" for one, passes ``spent``,
     which reads that answer. The source's ``classify`` still maps the refusal
-    (ADR-0010) and can read ``snapshot()`` for its message: ``observe`` runs before it.
+    (ADR-0033) and can read ``snapshot()`` for its message: ``observe`` runs before it.
 
     Args:
         limit_header: The header with the quota's size, e.g. ``"x-ratelimit-limit"``;
@@ -188,7 +188,7 @@ class QuotaPolicy:
             403's body and returns ``3723.0``. An exception it raises propagates, as one
             from any ``observe`` hook does, except on a ``download``'s success, whose
             body goes to the file unread: reading it there is suppressed and counts as
-            nothing observed (ADR-0019).
+            nothing observed (ADR-0040).
         pause_cap: The longest wait inside a call, in seconds, e.g. ``30.0``, the
             default, which is ``RetryPolicy``'s default ``backoff_max``. A spent quota
             expected back later than that is refused without sending.
@@ -257,7 +257,7 @@ class QuotaPolicy:
 
         A response with neither quota header leaves the snapshot alone, unless it is a
         429 or ``spent`` returns a number for it, either of which marks the quota spent.
-        A cache hit is ignored: its headers are as old as the entry (ADR-0010), and so is
+        A cache hit is ignored: its headers are as old as the entry (ADR-0033), and so is
         the answer to a request outside the quota, sent with ``auth=None`` or to another
         origin, as the client marks it. The ``ClientConfig.observe`` hook.
 
@@ -295,7 +295,7 @@ class QuotaPolicy:
         sent with ``auth=None`` or to another origin, as the client marks it. Its wait
         and its refusal are the
         pause step, which the testing plugin turns off in offline tests; a subclass's
-        override that waits or refuses on its own is not turned off (ADR-0015).
+        override that waits or refuses on its own is not turned off (ADR-0037).
 
         Args:
             request: The request about to be sent; its method and path name it in the

@@ -88,7 +88,7 @@ class RateLimit:
     Attributes:
         per_minute: Sustained requests per minute: the pace the source sets within
             upstream's documented per-second or per-minute limit, or a self-imposed pace
-            (ADR-0010).
+            (ADR-0033).
         burst: Requests allowed at once; defaults to ``per_minute``.
     """
 
@@ -131,16 +131,16 @@ class ClientConfig:
             is looked up and stored only when it returns ``True``. ``None`` caches every
             GET. Lets one client cache a reference endpoint and nothing else.
         cache_max_bytes: The largest body the cache stores, in bytes as ``httpx``
-            decoded them; 8 MiB by default (ADR-0019, decision 3). A larger answer is
+            decoded them; 8 MiB by default (ADR-0040, decision 3). A larger answer is
             returned as usual and not stored, so the next call fetches it again. A
             source that wants a larger answer cached raises the bound and says why in
             its ``CLAUDE.md``. ``download`` never touches the cache.
         headers: Extra headers sent with every request.
-        classify: The source's own error mapping (ADR-0008): called with every response
+        classify: The source's own error mapping (ADR-0031): called with every response
             before the default status mapping; return a taxonomy error to raise it, or
             ``None`` to fall through. Where a source states its documented error shapes,
             including errors upstream sends with a 200. It is also asked before a 429 or
-            5xx is retried, ``raise_on_error=False`` or not (ADR-0015): a
+            5xx is retried, ``raise_on_error=False`` or not (ADR-0037): a
             ``RateLimitError`` sets the wait from its ``retry_after``, so one beyond
             ``retry.backoff_max`` is not retried; an ``UpstreamError`` for a 5xx and
             ``None`` leave the decision to the retry policy; any other error stops the
@@ -153,9 +153,9 @@ class ClientConfig:
             (``"client"``, ``"none"`` for ``auth=None``, ``"own"``) and ``xippios_origin``
             (``"base"``, or ``"other"`` for another origin than the base URL's, where the
             client's auth is not sent). It may be sync or async (an awaitable result is
-            awaited), may wait, e.g. for a spent quota (ADR-0010), and may raise a
+            awaited), may wait, e.g. for a spent quota (ADR-0033), and may raise a
             taxonomy error, in which case nothing is sent. ``QuotaPolicy.install`` sets
-            it (ADR-0015).
+            it (ADR-0037).
         observe: Called with every response that came from the wire, each retried
             attempt included and a cache hit never, before ``classify`` and before the
             retry decision, also when the caller asked for the raw response
@@ -164,8 +164,8 @@ class ClientConfig:
             nothing, and an exception it raises propagates as the programming error it
             is, except on a ``download``'s success, whose body goes to the file unread:
             a hook that reads it there is suppressed and counts as nothing observed
-            (``httpx.ResponseNotRead``, ADR-0019). ``QuotaPolicy.install`` sets it
-            (ADR-0015).
+            (``httpx.ResponseNotRead``, ADR-0040). ``QuotaPolicy.install`` sets it
+            (ADR-0037).
     """
 
     source: str

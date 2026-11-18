@@ -25,11 +25,11 @@ EXPORTS = {
         "closest", "sync", "__version__",
         # the nearest-integer strategy of two sources (https://github.com/xippios/sdk-core/issues/107)
         "nearest",
-        # tenants, back from the two sources' copies (ADR-0024, amendment 2026-11-18, (b))
+        # tenants, back from the two sources' copies (ADR-0042, decision 1)
         "Tenants", "list_task",
         # and the lock that binds a server to one of them (the same amendment, (d))
         "TenantLock", "bind_tasks", "tenant_instructions",
-        # a variable of the package contract (ADR-0026, amendment 2026-11-18, (c))
+        # a variable of the package contract (ADR-0026, amendment 2026-11-18, point c)
         "EnvVar",
     },
     "xippios.core.client": {
@@ -45,7 +45,7 @@ EXPORTS = {
         "recorded_query", "response_from_fixture", "sent_query", "sent_urls", "write_fixture",
         # the bodies a route received (https://github.com/xippios/sdk-core/issues/183)
         "sent_bodies",
-        # the write server's check and the demo-only strip (ADR-0024, amendment 2026-11-18, (d))
+        # the write server's check and the demo-only strip (ADR-0042, decision 1)
         "assert_write_tools", "keep_reserved_tenants",
     },
     "xippios.core.mcp": {
@@ -54,9 +54,9 @@ EXPORTS = {
         # what the host imports (https://github.com/xippios/sdk-core/issues/170, #167)
         "LOOPBACK_HOSTS", "is_loopback_only", "is_write_server", "quiet_request_logging",
         "register_tasks", "tool_functions",
-        # the serve command of a multi-tenant source (ADR-0024, amendment 2026-11-18, (d))
+        # the serve command of a multi-tenant source (ADR-0042, decision 1)
         "serve_tenants",
-        # the tool set of the package contract (ADR-0026, amendment 2026-11-18, (c))
+        # the tool set of the package contract (ADR-0026, amendment 2026-11-18, point c)
         "ToolSet",
     },
     "xippios.core.http": {"is_scalar", "router_from_tasks", "status_for"},

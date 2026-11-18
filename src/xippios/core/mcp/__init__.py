@@ -15,7 +15,7 @@ it is given, each name its function's ``__name__``.
 
 A source's own command-line options reach ``main`` through two hooks, parsed once with
 core's: ``add_options`` puts them on the parser, ``apply_options`` returns the server to
-run, and a ``XippiosError`` it raises stops the process with exit status 2 (ADR-0014).
+run, and a ``XippiosError`` it raises stops the process with exit status 2 (ADR-0036).
 A multi-tenant source runs ``serve_tenants`` instead, whose ``--org acme`` serves the
 server bound to one tenant (``xippios.core.TenantLock``).
 
@@ -24,7 +24,7 @@ returns: its tasks as its lock binds them, its caps, instructions and version, i
 hooks, and whether it writes and is held to loopback. ``build_server(tool_set)`` builds
 the source's server from it, and a host builds one server from several with
 ``register_tasks(server, tool_set)`` and applies each one's hooks with
-``option_defaults()`` (ADR-0026, amendment 2026-11-18, (c) and (d)).
+``option_defaults()`` (ADR-0026, amendment 2026-11-18, points c and d).
 
 ``ResultCap`` is defined in ``xippios.core.models`` and exported from ``xippios.core``
 too, so a source's ``tasks.py`` declares its caps without this extra; it is re-exported

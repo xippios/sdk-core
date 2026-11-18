@@ -5,7 +5,7 @@ through the source's client, its base URL, authentication, rate limit and hooks 
 production, and records the answer, an error response included, rather than raising it.
 A recording is one live exchange: never retried and never answered from the cache, so a
 5xx spends no second request on an upstream that counts a quota or bills a call
-(ADR-0015, amendment 2026-11-18 (f)). The body is read up to a bound
+(ADR-0037, decision 6). The body is read up to a bound
 (``MAX_READ_BYTES``), and the exchange is scrubbed in memory and written once
 (``Scrub``).
 """
@@ -34,7 +34,7 @@ MAX_READ_BYTES: Final = 32 * 1024 * 1024
 
 Four times the largest body a source records whole (sdk-usda-gats, 7.6 MB), and a
 fifth of the unfiltered Eurostat dataset upstream may answer at once, 145 MB
-(https://github.com/xippios/sdk-core/issues/62; ADR-0019, amendment 2026-11-18 (e)).
+(https://github.com/xippios/sdk-core/issues/62; ADR-0040, decision 5).
 """
 
 
@@ -59,7 +59,7 @@ async def record(
 
     The request is sent once, whatever ``client.config.retry`` says, and never answered
     from the cache nor stored in it: a 429 or a 5xx is recorded as it came, so a
-    recording needs no client of its own (ADR-0015, amendment 2026-11-18 (f)). The
+    recording needs no client of its own (ADR-0037, decision 6). The
     client's base URL, timeouts, rate limit, ``before_request`` and ``observe`` apply as
     for any request. The file is laid out as ``write_fixture`` writes it, without the
     response headers that only identify a request (``REQUEST_ID_HEADERS``).
@@ -87,7 +87,7 @@ async def record(
         max_bytes: Keep at most this many bytes of a large response body, e.g.
             ``80_000``: a JSON array keeps its first whole elements, a text its first
             bytes, and the fixture is marked ``truncated`` with the whole body's size,
-            sha256 and, for an array, length (ADR-0019, decision 5; see
+            sha256 and, for an array, length (ADR-0040, decision 5; see
             ``fixture_from_response``). It bounds the body, not the file, which escapes
             the body as a JSON string, text outside ASCII up to three times as long:
             ``80_000`` keeps a file under the 256 KiB cap. ``None`` keeps it whole.
@@ -100,7 +100,7 @@ async def record(
             measure of ``original_bytes``: past it the reading stops, the rest of the
             body is never fetched, and the recording raises, so an answer far larger
             than expected costs neither its download nor the memory to hold it
-            (ADR-0019, amendment 2026-11-18 (e)). ``MAX_READ_BYTES``, 32 MiB, by default;
+            (ADR-0040, decision 5). ``MAX_READ_BYTES``, 32 MiB, by default;
             ``None`` reads the body whole.
 
     Raises:

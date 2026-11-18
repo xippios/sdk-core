@@ -8,7 +8,7 @@ decoded response. Bodies are stored as text; the headers that describe wire enco
 are dropped because the body is already decoded, and so are the headers that only
 identify a request (``REQUEST_ID_HEADERS``), which change with every recording.
 
-A recording may cut a large body (``max_bytes=``, ADR-0019, decision 5): the response is
+A recording may cut a large body (``max_bytes=``, ADR-0040, decision 5): the response is
 then marked ``truncated`` and keeps the full body's size, its sha256 and, for a JSON
 array, its length. A source may replace a download's body with a sample of the file it
 cut itself, marked ``sample`` with the same three fields (ADR-0020, decision 6, as
@@ -16,7 +16,7 @@ amended). A fixture neither cut nor a sample is written without those fields, as
 fixtures were before them, and every fixture written before them loads.
 
 ``write_fixture`` writes a ``Fixture`` as ``record`` writes it, so a source that rewrites
-one before the write lays it out as core does (ADR-0024, decision 4, as amended).
+one before the write lays it out as core does (ADR-0042, decision 4).
 """
 
 import base64
@@ -121,7 +121,7 @@ class FixtureResponse(BaseModel):
         truncated: True when the recording cut the body (``max_bytes=``): the first
             bytes of a text, or whole elements of a JSON array, the first ones or on
             request the last, the text around the array as upstream wrote it; never all
-            of upstream's answer (ADR-0019, decision 5).
+            of upstream's answer (ADR-0040, decision 5).
         sample: True when the body is a sample of upstream's answer that the source
             cut itself, such as a few pages of an XML file, in place of the body
             recorded, so that a download replays the file its parser tests read
@@ -222,10 +222,10 @@ def fixture_from_response(
     before it is returned: a secret value still present as given in the URL, a header
     value or a text body refuses the exchange (conventions §10). A source that rewrites
     more, a tenant's host or a field by key, does it on the returned ``Fixture`` and
-    writes it with ``write_fixture`` (ADR-0024).
+    writes it with ``write_fixture`` (ADR-0042).
 
     ``max_bytes`` cuts a response body larger than it before the scrub, which then runs
-    on what is kept, as the verify does (ADR-0019, decision 5; conventions §10):
+    on what is kept, as the verify does (ADR-0040, decision 5; conventions §10):
 
     - a JSON array (a ``Content-Type`` of ``application/json`` or ``...+json``, or a
       body that parses as JSON, a byte order mark allowed) is cut at an element
@@ -551,7 +551,7 @@ def fixture_text(fixture: Fixture) -> str:
 
     Args:
         fixture: The exchange, e.g. from ``fixture_from_response``, rewritten with
-            ``model_copy`` (ADR-0024, decision 4, as amended).
+            ``model_copy`` (ADR-0042, decision 4).
 
     Raises:
         ValueError: ``load_fixture`` would not read the text back, as when a
@@ -585,7 +585,7 @@ def write_fixture(fixture: Fixture, path: Path) -> Fixture:
     The text is ``fixture_text(fixture)``, written once; a refusal writes nothing. A source
     that rewrites values on the ``Fixture`` that ``fixture_from_response`` returns, a
     tenant's host or a field by key, or that replaces a download's body with its sample,
-    writes the result with it (ADR-0024, decision 4, as amended), e.g.
+    writes the result with it (ADR-0042, decision 4), e.g.
     ``write_fixture(fixture.model_copy(update={"response": rewritten}), path)``.
 
     Args:

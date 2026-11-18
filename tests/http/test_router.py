@@ -77,7 +77,7 @@ def test_routes_return_the_envelope() -> None:
 
 
 def test_a_task_in_bulk_tasks_gets_no_route(monkeypatch: pytest.MonkeyPatch) -> None:
-    # ADR-0019, decision 4: the rendered http.py passes every name of tasks.__all__.
+    # ADR-0040, decision 4: the rendered http.py passes every name of tasks.__all__.
     tasks = types.ModuleType("example_bulk_tasks")
     tasks.BULK_TASKS = frozenset({"download_series"})  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, tasks.__name__, tasks)
@@ -325,7 +325,7 @@ async def latest_release_async() -> Result[list[str]]:
 
 
 def test_http_responses_carry_a_naive_release_time_with_its_flag() -> None:
-    # ADR-0022, rule 2: the HTTP envelope carries the flag.
+    # ADR-0041, decision 2: the HTTP envelope carries the flag.
     app = FastAPI()
     app.include_router(router_from_tasks("example", [sync(latest_release_async)]))
     meta = TestClient(app).get("/example/latest_release").json()["meta"]

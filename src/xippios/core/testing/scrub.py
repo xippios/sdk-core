@@ -1,7 +1,7 @@
 """Remove credentials and named secret values from what gets written into a fixture.
 
 Credentials are always redacted by the one rule of ``xippios.core.redaction``, the rule
-``ResultMeta.request`` applies (ADR-0005, ADR-0019): a query parameter that names a
+``ResultMeta.request`` applies (ADR-0030, ADR-0040): a query parameter that names a
 credential (``api_key``, ``token``, ``secret``, ..., and a name a ``QueryKeyAuth``
 registered, such as USDA NASS's ``key``), the userinfo and the credential headers. A
 ``token`` name the source declared data with ``register_data_name``, X's ``next_token``
@@ -10,7 +10,7 @@ say, is written as sent, and replay can match it.
 here as well. A ``Scrub`` adds what only the source knows: the secret values themselves,
 named before the request or read from its answer, such as a login's tokens. What a
 source rewrites beyond them, a tenant's host or a field by key, it rewrites in its own
-recorder step on the ``Fixture`` before the write (ADR-0024).
+recorder step on the ``Fixture`` before the write (ADR-0042).
 """
 
 import base64
@@ -55,7 +55,7 @@ class Scrub:
             e.g. ``lambda response: [response.json()["AccessToken"]]``. It is called
             once per recording with the whole response, an error answer included, before
             any cut, and each value it returns is scrubbed and verified as ``secrets``
-            are (ADR-0024, amendment 2026-11-18 (c)). An answer that carries none gives
+            are (ADR-0042, decision 3). An answer that carries none gives
             ``[]``. ``None`` reads nothing.
         allow_binary: Store a body that is not UTF-8 text base64 and flagged instead of
             raising ``ValueError``. Nothing in it is scrubbed.
@@ -166,7 +166,7 @@ class _Scrubber:
         Runs on what the scrub produced, before anything is kept or written, when the
         ``Scrub`` names secrets: the URL, every header value and both bodies are
         searched for each value as given, a plain substring in the letter case given;
-        ``REDACTED`` is masked first and never counts. A backstop (ADR-0005): an encoded
+        ``REDACTED`` is masked first and never counts. A backstop (ADR-0030): an encoded
         form is not looked for, and a body stored base64 (``allow_binary``) is not
         searched, since it is kept unscrubbed by design.
 

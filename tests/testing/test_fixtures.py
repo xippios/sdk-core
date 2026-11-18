@@ -67,7 +67,7 @@ def test_write_scrubs_and_round_trips(tmp_path: Path) -> None:
 
 def test_write_fixture_writes_a_rewritten_fixture_as_record_lays_it_out(tmp_path: Path) -> None:
     # Row 125: sdk-cashctrl, sdk-google-mail, sdk-x and sdk-usda-wasde each copied the
-    # private writer to write a fixture they had rewritten (ADR-0024, decision 4, as amended).
+    # private writer to write a fixture they had rewritten (ADR-0042, decision 4).
     recorded = fixture_from_response(_response(content=b'{"org": "acme"}'))
     response = recorded.response.model_copy(update={"body": '{"org": "ORG"}'})
     rewritten = recorded.model_copy(update={"response": response})
@@ -399,7 +399,7 @@ def test_array_key_and_keep_need_max_bytes() -> None:
 def test_max_bytes_refuses_what_a_cut_would_break(
     content: bytes, content_type: str, reason: str
 ) -> None:
-    # ADR-0019, decision 5, as amended: a small real answer or sample instead.
+    # ADR-0040, decision 5: a small real answer or sample instead.
     with pytest.raises(ValueError, match=f"^max_bytes: {reason}"):
         fixture_from_response(_answer(content, content_type), max_bytes=20)
 
@@ -479,7 +479,7 @@ def test_refused(monkeypatch, where):
 
 
 def test_the_verify_refuses_a_secret_left_in_the_exchange(pytester: pytest.Pytester) -> None:
-    # The backstop of ADR-0005: the refusal names where, never the value, not even in the
+    # The backstop of ADR-0030: the refusal names where, never the value, not even in the
     # arguments pytest prints for the frame that raised, and nothing is written.
     pytester.makepyfile(LEAKY_TEST)
     result = pytester.runpytest("--tb=long")
