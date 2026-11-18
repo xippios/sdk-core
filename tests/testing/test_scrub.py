@@ -40,4 +40,11 @@ def test_scrub_refuses_one_string_as_secrets() -> None:
 def test_scrub_keeps_secrets_out_of_its_repr() -> None:
     scrub = Scrub(secrets=["tenant-name"])
     assert "tenant-name" not in repr(scrub)
-    assert repr(scrub) == "Scrub(allow_binary=False)"
+    assert repr(scrub) == "Scrub(response_secrets=None, allow_binary=False)"
+
+
+def test_scrub_refuses_response_secrets_that_cannot_be_called() -> None:
+    # https://github.com/xippios/sdk-core/issues/164: a function of the response, e.g. one
+    # reading a login answer's tokens, not the values themselves.
+    with pytest.raises(TypeError, match=r"^response_secrets is a function of the response"):
+        Scrub(response_secrets=["tok-1"])  # type: ignore[arg-type]

@@ -492,3 +492,41 @@ def test_the_verify_refuses_a_secret_left_in_the_exchange(pytester: pytest.Pytes
         ) in output
     assert SECRET not in output
     assert not list(pytester.path.glob("*.json"))
+
+
+LEAKY_ANSWER_TEST = """
+from pathlib import Path
+
+import httpx
+
+from xippios.core.testing import Scrub, fixture_from_response, write_fixture
+from xippios.core.testing.scrub import _Scrubber
+
+TOKEN = "tok" + "-access-1"
+
+
+def test_refused(monkeypatch):
+    monkeypatch.setattr(_Scrubber, "text", lambda self, text: text)  # a scrub that misses
+    request = httpx.Request("POST", "https://api.example.test/auth/login")
+    answer = {"AccessToken": TOKEN}
+    response = httpx.Response(200, headers={"X-Token": TOKEN}, json=answer, request=request)
+    scrub = Scrub(response_secrets=lambda got: [got.json()["AccessToken"]])
+    write_fixture(fixture_from_response(response, scrub=scrub), Path("login.json"))
+"""
+
+
+def test_the_verify_refuses_a_response_secret_left_in_a_header(
+    pytester: pytest.Pytester,
+) -> None:
+    # https://github.com/xippios/sdk-core/issues/164: the values a function reads from the
+    # answer are verified as the named ones are, the location named, never the value.
+    pytester.makepyfile(LEAKY_ANSWER_TEST)
+    result = pytester.runpytest("--tb=long")
+    result.assert_outcomes(failed=1)
+    output = result.stdout.str()
+    assert (
+        "ValueError: the scrubbed fixture still holds a secret value in the response header "
+        "'x-token'; it is refused before anything is written"
+    ) in output
+    assert "tok-access-1" not in output  # pragma: allowlist secret
+    assert not list(pytester.path.glob("*.json"))
