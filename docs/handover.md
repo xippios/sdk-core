@@ -807,3 +807,497 @@ maintainer's approval; the recovery path is the one under "Core 0.2.1". sdk-temp
 0.4.0 follows the tag and renders the package contract
 (https://github.com/xippios/sdk-template/issues/159).
 
+## Adopting core 0.4.0
+
+Each source adopts core 0.4.0 and sdk-template 0.4.0 together, once, in one adoption PR
+before its next release (https://github.com/xippios/sdk-template/issues/159; conventions
+§12 and §15, ADR-0039); the reviewer judges it against the definition of done's Adoption
+PR block and nothing else. A source's adoption of a core minor takes a minor (conventions
+§12, ADR-0039, decision 1). A dependency adopts before its dependent, sdk-usda-esmis
+before sdk-usda-wasde (conventions §12), and the host adopts after the sources
+(https://github.com/xippios/xippios-mcp/issues/21). Pre-filled below from the 29
+Hand-apply notes of the CHANGELOG's `[0.4.0]` section, which give each file's lines and
+the texts that change, and checked against each repository's `main` on 2026-11-18; each
+item cites the issue its note's bullet answers. The adoption PR confirms every item
+against the source as it is then.
+
+### Every source
+
+- Item 1, core floor: `core_version=0.4.0`, so `xippios-core~=0.4.0` and its `[mcp]`,
+  `[http]` and `[testing]` extras likewise, from PyPI, with no git pin left in
+  `[tool.uv.sources]` and `uv.lock` updated; all read `~=0.3.0` today.
+- Item 2, `copier update` to sdk-template 0.4.0: `mcp.py`'s `build()` returns a `ToolSet`
+  of `tool_functions(tasks)` with `caps=getattr(tasks, "MCP_CAPS", None)`, its
+  instructions, version and option hooks, `server = build_server(build())`, and `main`
+  takes the tool set's hooks, so a host serves what the entry point serves
+  (https://github.com/xippios/sdk-core/issues/245; ADR-0026, amendment 2026-11-18, points c
+  and d). `_client.py`, the source's own, declares the variables it reads as `EnvVar`
+  entries, each with `secret=` and `required=`, in the list the template renders beside
+  `SOURCE` (https://github.com/xippios/sdk-template/issues/81), since a host reads the
+  list.
+- Items 3 and 4, the copies each core change replaced, deleted with their tests, and the
+  core change named for each in the PR description; per source below:
+  - the multi-tenant kit, `Tenants`, `list_task`, the binding lock, the serve command,
+    `assert_write_tools` and the demo-only strip → core's
+    (https://github.com/xippios/sdk-core/issues/166; ADR-0042, decision 6): cashctrl,
+    google-mail;
+  - a login's or a refresh's own bearer flow → `RenewingBearerAuth`
+    (https://github.com/xippios/sdk-core/issues/156): faostat, google-mail;
+  - a write's `request` and its own decode → `post_json` and `delete_json`
+    (https://github.com/xippios/sdk-core/issues/178): google-mail, cashctrl, faostat;
+  - a description of the request of its own → `request_description`
+    (https://github.com/xippios/sdk-core/issues/62): eurostat, x, google-mail, faostat,
+    esmis;
+  - the nearest-integer pass → `nearest` (https://github.com/xippios/sdk-core/issues/107):
+    esr, gats;
+  - `NoDataForYear` with its `classify` branch → `xippios.core.data_gov.NoDataForYear`
+    through `Gateway(SOURCE, data_path=...)`
+    (https://github.com/xippios/sdk-core/issues/106): psd, esr;
+  - a pair of a value and its `retrieved_at` → `Answer[T]`
+    (https://github.com/xippios/sdk-core/issues/123): comtrade's `ReferenceFile`, nass's
+    `ParamValues`;
+  - a CSV reader of its own over an open stream → `decode_csv`
+    (https://github.com/xippios/sdk-core/issues/89): eurostat, faostat;
+  - a fixture writer of its own → `write_fixture` and `fixture_text`
+    (https://github.com/xippios/sdk-core/issues/125): cashctrl, google-mail, x, wasde;
+  - the `class_names[id_field]` line of `scripts/refresh_reference.py` → `render_enums`'
+    default class name (https://github.com/xippios/sdk-core/issues/95): esr, gats, psd,
+    cashctrl, faostat, google-mail, x, and comtrade's `class_names=` argument.
+- What core does not provide stays the source's, named in the PR description (§15 item
+  4): the client built for one attempt that a recorder sends through to rewrite a fixture
+  before its write, in sdk-cashctrl's, sdk-google-mail's and sdk-x's
+  `scripts/record_fixture.py` and sdk-usda-wasde's `scripts/cut_sample.py`, until
+  https://github.com/xippios/sdk-core/issues/281 decides it (ADR-0037, decision 6); the
+  audited entries of the bodies stored base64 in `.secrets.baseline`, sdk-eurostat's
+  three, sdk-faostat's one and sdk-usda-wasde's two, until
+  https://github.com/xippios/sdk-core/issues/290 lets the scan tell them from a text body.
+- Item 5, unchanged: the plugin pins every credential a `RenewingBearerAuth` reads through
+  `credential`, so `xippios_placeholder_key_envs` names each variable a token request
+  reads, as sdk-faostat's and sdk-google-mail's do today
+  (https://github.com/xippios/sdk-core/issues/156).
+- Item 6: `enums.py` re-rendered once; `render_enums`' default class name gives every class
+  name a source commits, sdk-usda-nass's `ProgressStage` and `ConditionCategory` kept in its
+  `class_names`, so the re-render writes the same module
+  (https://github.com/xippios/sdk-core/issues/95).
+- Item 7, unchanged: `files = ["src", "tests", "scripts"]` under `[tool.mypy]`.
+- Item 8, conventions 1.28: every rule changed since the version the source last applied
+  holds in it; among them an error that names another task names that task's MCP tool too
+  (§8, https://github.com/xippios/sdk-core/issues/111), in nine sources below, and one
+  tenant per call for a source with a `Tenants` registry, which the family check holds
+  every task to (§7, https://github.com/xippios/sdk-core/issues/298,
+  https://github.com/xippios/sdk-core/issues/299). The source's own files that cite a
+  restated record cite its successor as `ADR-NNNN, decision N`, per source below; an old
+  number still resolves through core's index
+  (https://github.com/xippios/sdk-core/pull/297, Consumers).
+- Item 9: the adoption's fragment under `changelog/` names core 0.4.0, sdk-template 0.4.0
+  and conventions 1.28.
+- A fixture recorded on core 0.4.0 carries none of the response headers that only identify
+  a request, `x-amz-cf-id`, `x-request-id` and `x-transaction-id` among them, so it adds no
+  audited entry for them (https://github.com/xippios/sdk-core/issues/161).
+
+### sdk-cashctrl
+
+The trial branch of https://github.com/xippios/sdk-cashctrl/issues/61, which pins core's
+`main` and deletes the copies below, becomes the adoption PR once core's tag and
+sdk-template 0.4.0 are out.
+
+- Deletes (item 3), the kit's copies (https://github.com/xippios/sdk-core/issues/166):
+  - `src/xippios/cashctrl/_tenants.py` and `tests/test_tenants.py` → `Tenants` and
+    `list_task` from `xippios.core`, the close of a replaced client included;
+  - `src/xippios/cashctrl/_org_lock.py` → `TenantLock(TENANTS, name,
+    noun="organisation")`, `bind_tasks` and `tenant_instructions`, the same sentence;
+  - `src/xippios/cashctrl/_cli.py` → `serve_tenants(server, build, TENANTS,
+    noun="organisation", check=check_org)`, its subdomain check moved to `check_org` in
+    `_client.py`;
+  - in `tests/test_tasks_write.py`, the copy of `assert_write_tools` with `_confirm_problem`,
+    `_tool_names`, `_serves` and the helper's own tests → `xippios.core.testing`;
+  - in `tests/conftest.py`, `DEMO_PAIR` and `_strip_productive_organisations` →
+    `keep_reserved_tenants(TENANTS)`, then `os.environ.pop("CASHCTRL_API_KEY", None)`:
+    core strips by the registry's scheme, so it removes `CASHCTRL_ORGS` and every
+    organisation's pair but demo's and keeps a variable the scheme names for no
+    organisation;
+  - in `tests/test_org_lock.py`, the tests of the lock and the command, which core's
+    `tests/test_tenant_lock.py` and `tests/mcp/test_cli.py` hold; what stays tests the
+    package's own wiring;
+  - in `scripts/record_fixture.py`, `to_json` and `_CUT_MARKS` → `fixture_text`, its write
+    → `write_fixture` (https://github.com/xippios/sdk-core/issues/125);
+  - in `src/xippios/cashctrl/api/_form.py`, `post_form`'s `request` and its decode →
+    `post_json(path, data=fields, headers=...)`
+    (https://github.com/xippios/sdk-core/issues/178).
+- Changes:
+  - `_client.py`: `Tenants` from `xippios.core`, `param="org",` after
+    `list_var="CASHCTRL_ORGS",` in `TENANTS = Tenants(...)`, which core's `Tenants`
+    requires and the family check holds each of the 46 tasks to
+    (https://github.com/xippios/sdk-core/issues/298,
+    https://github.com/xippios/sdk-core/issues/299), and `check_org(org)` in `__all__`;
+  - `tasks.py`: `list_task` from `xippios.core`;
+  - `mcp.py` and `mcp_write.py`: `build(lock: TenantLock | None = None)` returns
+    `ToolSet(SOURCE, bind_tasks(tool_functions(...), lock), ...)`, `read_only=False` for the
+    write server, `server = build_server(build())`, the write server named
+    `xippios-cashctrl-write`, and the entry points `serve_tenants(...)`
+    (https://github.com/xippios/sdk-core/issues/166,
+    https://github.com/xippios/sdk-core/issues/245);
+  - `tasks_write.py`: the messages that name `list_order_categories`, `create_person`,
+    `update_order` and `list_accounts` name each task's tool beside it, and the tests that
+    pin a message follow (https://github.com/xippios/sdk-core/issues/111);
+  - `api/_download.py`: `check_dest` stays, since `download` streams into a temporary file
+    of its own, and its docstrings and `download`'s drop "where core's `download` raises
+    `ValueError`" (https://github.com/xippios/sdk-core/issues/152), though the trial's issue
+    listed the check among the deletions;
+  - `scripts/refresh_reference.py`: the `class_names[id_field]` line, its dict and its
+    argument dropped (https://github.com/xippios/sdk-core/issues/95);
+  - its tests: in `tests/test_org_lock.py` a call that still passes `org` is refused,
+    `org: Not an argument of this tool; it takes note`
+    (https://github.com/xippios/sdk-core/issues/84), and the `xippios-cashctrl: error:`
+    assertions name the entry point (https://github.com/xippios/sdk-core/issues/167); in
+    `tests/test_tasks_write.py` `sent_body` → `sent_bodies(route)[-1]`
+    (https://github.com/xippios/sdk-core/issues/183); in `tests/test_tasks.py` the route's
+    refusal has the title `InvalidRequestError`
+    (https://github.com/xippios/sdk-core/issues/66) and `get_report_data` over its cap has
+    its rows cut and its other fields whole (https://github.com/xippios/sdk-core/issues/131);
+    `tests/test_registry.py` and `tests/test_tasks.py` name core's registry and list task;
+  - `CLAUDE.md`: Organisations, the `--org` bullet, Demo only, the Layout and
+    `assert_write_tools` name core's kit; the sentence that a call that still passes `org`
+    is not refused goes; a report's result has its rows cut
+    (https://github.com/xippios/sdk-core/issues/166,
+    https://github.com/xippios/sdk-core/issues/84,
+    https://github.com/xippios/sdk-core/issues/131).
+- Stays: the one-attempt client of `scripts/record_fixture.py`
+  (https://github.com/xippios/sdk-core/issues/281).
+- Cite a restated record: `README.md`, `scripts/record_fixture.py`, `api/_download.py`,
+  `models.py` and nine test files, beside the copies the adoption deletes
+  (https://github.com/xippios/sdk-core/pull/297).
+
+### sdk-google-mail
+
+The trial branch of https://github.com/xippios/sdk-google-mail/issues/19, which pins
+core's `main` and deletes the copies below, becomes the adoption PR once core's tag and
+sdk-template 0.4.0 are out.
+
+- Deletes (item 3):
+  - `src/xippios/google/mail/_tenants.py` → `Tenants` and `list_task` from `xippios.core`,
+    `list_task`'s `source=` included (https://github.com/xippios/sdk-core/issues/166);
+  - `src/xippios/google/mail/_account_lock.py` → `TenantLock(TENANTS, name)`, `bind_tasks`
+    and `tenant_instructions(..., bound=...)` (https://github.com/xippios/sdk-core/issues/166);
+  - `src/xippios/google/mail/_cli.py` → `serve_tenants(server, build, TENANTS,
+    check=check_account)`, its refresh token check moved to `check_account` in
+    `_client.py`; its copy of the loopback hosts and `REMOTE_REFUSAL` go, since core's
+    `main` holds the read server to loopback, refusing a remote `--host` in its own words
+    after the account check (https://github.com/xippios/sdk-core/issues/166,
+    https://github.com/xippios/sdk-core/issues/167);
+  - in `_auth.py`, `RefreshTokenAuth`'s own flow: it becomes a `RenewingBearerAuth`, and
+    `_credential`, `EXPIRY_MARGIN`, `requires_response_body`, `_access_token`,
+    `_lapses_at`, `reset`, `_current`, `apply` and `auth_flow` go; `keep` splits into
+    `read_token` and `token_refused` (https://github.com/xippios/sdk-core/issues/156);
+  - in `tests/test_tasks_write.py`, the copy of `assert_write_tools` with its helpers and
+    its own tests → `xippios.core.testing` (https://github.com/xippios/sdk-core/issues/166);
+  - in `tests/conftest.py`, `DEMO_TOKEN`, `_ACCOUNT_TOKEN` and `_strip_productive_accounts`
+    → `keep_reserved_tenants(TENANTS)`, the same strip
+    (https://github.com/xippios/sdk-core/issues/166);
+  - in `tests/test_account_lock.py`, the tests of the lock and the command, and
+    `test_the_loopback_rule_comes_before_the_account`
+    (https://github.com/xippios/sdk-core/issues/166);
+  - in `scripts/record_fixture.py`, `to_json` and `_CUT_MARKS` → `fixture_text` and
+    `write_fixture` (https://github.com/xippios/sdk-core/issues/125), and the answer's
+    tokens added to `Scrub(secrets=...)` → `Scrub(secrets=secret_values(),
+    response_secrets=answer_tokens)` (https://github.com/xippios/sdk-core/issues/164);
+  - in `api/drafts_create.py`, `api/messages_send.py`, `api/messages_modify.py` and
+    `api/messages_trash.py`, the `request` and `decode_json` → `post_json`, and in
+    `api/drafts_delete.py` the `request("DELETE", ...)` → `delete_json`, which returns
+    `None` for the 204 (https://github.com/xippios/sdk-core/issues/178).
+- Changes:
+  - `_client.py`: `Tenants` from `xippios.core`, its first argument `SOURCE,
+    var_prefix="GOOGLE"` for `"google"`, so the variables keep the shared prefix and its
+    errors name `google-mail` (ADR-0025, amendment 2026-11-18, point b;
+    https://github.com/xippios/sdk-core/issues/279), and `param="account",` after
+    `list_var="GOOGLE_ACCOUNTS",`, which the family check holds each of the 11 tasks to
+    (https://github.com/xippios/sdk-core/issues/298,
+    https://github.com/xippios/sdk-core/issues/299); `check_account(account)`; the inline
+    `where` → `request_description(response)`, and in `_auth.py` the same
+    (https://github.com/xippios/sdk-core/issues/62);
+  - `tasks.py`: `list_task` from `xippios.core` without `source=SOURCE`, and the refusal
+    naming `list_messages` names its tool (https://github.com/xippios/sdk-core/issues/111);
+  - `mcp.py`: `build(lock: TenantLock | None = None)` returns `ToolSet(SOURCE,
+    bind_tasks(tool_functions(tasks), lock), ..., loopback_only=True)`, the read server held
+    to loopback by core, bound or not (ADR-0025, D-a), `server = build_server(build())`, the
+    entry point `serve_tenants(...)`; `mcp_write.py` likewise with `read_only=False`
+    (https://github.com/xippios/sdk-core/issues/245,
+    https://github.com/xippios/sdk-core/issues/167);
+  - `scripts/refresh_reference.py`: the `class_names[id_field]` line, its dict and its
+    argument dropped (https://github.com/xippios/sdk-core/issues/95);
+  - its tests: `tests/test_auth.py` reads `auth.margin`, `tests/test_tasks.py` calls
+    `auth.read_token`, `tests/conftest.py`'s comment names `RenewingBearerAuth.credential`
+    (https://github.com/xippios/sdk-core/issues/156); in `tests/test_account_lock.py` a
+    call that still passes `account` is refused
+    (https://github.com/xippios/sdk-core/issues/84) and the `xippios-google-mail: error:`
+    assertions name the entry point (https://github.com/xippios/sdk-core/issues/167);
+    `tests/test_tasks_write.py`, `tests/test_record_fixture.py` and `tests/test_consent.py`
+    read `sent_bodies` (https://github.com/xippios/sdk-core/issues/183);
+  - `CLAUDE.md`: the Layout drops `_tenants.py`, `_account_lock.py` and `_cli.py`; the
+    strip, `assert_write_tools` and the lock are core's; `RefreshTokenAuth` is a subclass
+    of core's `RenewingBearerAuth` (https://github.com/xippios/sdk-core/issues/166,
+    https://github.com/xippios/sdk-core/issues/156).
+- Stays: the one-attempt client of `scripts/record_fixture.py`
+  (https://github.com/xippios/sdk-core/issues/281).
+- Cite a restated record: `scripts/record_fixture.py`, `_account_lock.py`, `_cli.py`,
+  `_tenants.py`, `mcp_write.py`, `models.py`, `tasks_write.py` and three test files
+  (https://github.com/xippios/sdk-core/pull/297).
+
+### sdk-faostat
+
+- Changes, items 3 and 4:
+  - `_client.py`: `LoginAuth` becomes a `RenewingBearerAuth` that keeps what is
+    FAOSTAT's, with `renew_on = REFUSED`, since FAOSTAT refuses a bearer with a 401 or a
+    403 (ADR-0025, amendment 2026-11-18, point c); `_credential`, `EXPIRY_MARGIN`,
+    `reset`, `_current`, `_keep`, `_sign`, `async_auth_flow` and `sync_auth_flow` go
+    (https://github.com/xippios/sdk-core/issues/156); the inline request descriptions →
+    `request_description(response)` (https://github.com/xippios/sdk-core/issues/62); the
+    refusal naming `list_domains` names its tool
+    (https://github.com/xippios/sdk-core/issues/111);
+  - `api/auth_login.py`: `request` and `decode_json` → `post_json(LOGIN_PATH, data=...,
+    auth=None)` (https://github.com/xippios/sdk-core/issues/178);
+  - `parse/bulk_csv.py`: the table's rows through `decode_csv(io.TextIOWrapper(...))`, its
+    header read apart for the check of a column named twice; its errors name the member
+    alone, as `tests/test_parse.py` then expects
+    (https://github.com/xippios/sdk-core/issues/89);
+  - `tasks.py`: the refusal naming `get_data` names its tool
+    (https://github.com/xippios/sdk-core/issues/111);
+  - `tests/test_client.py` reads `timed.margin`, and `CLAUDE.md` names core's
+    `RenewingBearerAuth` and `token_refused` (https://github.com/xippios/sdk-core/issues/156);
+  - `scripts/refresh_reference.py`: the `class_names[id_field]` line, its dict and its
+    argument dropped (https://github.com/xippios/sdk-core/issues/95).
+- Stays: its audited binary body in `.secrets.baseline`
+  (https://github.com/xippios/sdk-core/issues/290).
+- Once it runs on core 0.4.0: its first fixture recorded then, which carries no
+  `x-amz-cf-id` and adds no baseline entry, is the second proof of
+  https://github.com/xippios/sdk-core/issues/161, which waits for this adoption.
+- Cite a restated record: `docs/handover.md`, `models.py`, `params.py`,
+  `reference/README.md`, `tests/fixtures/files/README.md`, `tests/test_tasks.py`
+  (https://github.com/xippios/sdk-core/pull/297).
+
+### sdk-x
+
+- Changes, items 3 and 4:
+  - `_client.py`: `register_data_name("next_token")` and
+    `register_data_name("pagination_token")` at import, so `meta.request`, a fixture and
+    replay keep X's cursors (https://github.com/xippios/sdk-core/issues/184); `_where` →
+    `request_description` (https://github.com/xippios/sdk-core/issues/62);
+  - `tasks.py`: the module docstring and the `Args:` of the five paged tasks say that
+    `meta.request` keeps the token as sent (https://github.com/xippios/sdk-core/issues/184);
+  - its tests: `tests/test_tasks.py`, `tests/test_api.py` and
+    `tests/test_probe_accounts.py` assert the token as sent, and their comparisons with the
+    two page-2 fixtures, which recorded `next_token=REDACTED`, leave `next_token` out until
+    a PR records them again (https://github.com/xippios/sdk-core/issues/184);
+  - paging: a page past its byte bound has its rows cut, keeps its other fields and keeps
+    its `next_token`, which points past the rows the cut left out, where it came back as a
+    note and a preview that lost it; a page that must return whole keeps its byte bound of
+    its own, 128,000 bytes for the four post tools (ADR-0038, decision 4;
+    https://github.com/xippios/sdk-core/issues/131). `tests/test_tasks.py`'s `count_posts`
+    over its cap and `CLAUDE.md`'s MCP caps paragraph say so;
+  - `scripts/record_fixture.py`: `to_json` and `_CUT_MARKS` → `fixture_text` and
+    `write_fixture` (https://github.com/xippios/sdk-core/issues/125);
+  - `scripts/refresh_reference.py`: the `class_names[id_field]` line, its dict and its
+    argument dropped (https://github.com/xippios/sdk-core/issues/95);
+  - `CLAUDE.md`: the fixtures' paragraph and the task layer's `meta` say that the cursors
+    are data (https://github.com/xippios/sdk-core/issues/184).
+- Stays: the one-attempt client of `scripts/record_fixture.py`
+  (https://github.com/xippios/sdk-core/issues/281).
+- Cite a restated record: `scripts/probe_accounts.py`, `scripts/record_fixture.py`,
+  `models.py`, `tests/test_client.py`, `tests/test_record_fixture.py`
+  (https://github.com/xippios/sdk-core/pull/297).
+
+### sdk-eurostat
+
+- Changes, items 3 and 4:
+  - `_client.py`: `_where` and its five uses → `request_description`
+    (https://github.com/xippios/sdk-core/issues/62);
+  - `parse/sdmx_csv.py`: `_gzip_records` yields from `decode_csv(text, source=SOURCE)`, and
+    the module docstring says both files' rows go through it
+    (https://github.com/xippios/sdk-core/issues/89);
+  - `tasks.py`: `_target` goes, and `download_dataset_async` and `download_trade_async` pass
+    `Path(dest)`, which core refuses with the same two texts; `api/sdmx.py`'s `Raises:`
+    names `InvalidRequestError` (https://github.com/xippios/sdk-core/issues/152); the
+    refusals naming its tasks name their tools
+    (https://github.com/xippios/sdk-core/issues/111);
+  - its tests: `tests/test_tasks.py`'s unknown product ends with `UnknownCode`'s new tail
+    (https://github.com/xippios/sdk-core/issues/111), and its route refusal asserts
+    problem details (https://github.com/xippios/sdk-core/issues/66).
+- Stays: its three audited binary bodies (https://github.com/xippios/sdk-core/issues/290).
+- Cite a restated record: `docs/handover.md`, `api/__init__.py`, `api/catalogue.py`,
+  `api/sdmx.py`, `errors.py`, `models.py`, `params.py`, `parse/sdmx_csv.py`,
+  `reference/README.md`, `tests/test_client.py`, `tests/test_tasks.py`
+  (https://github.com/xippios/sdk-core/pull/297).
+
+### sdk-comtrade
+
+- Changes, items 3 and 4:
+  - `api/reference.py`: `ReferenceFile[T]` goes, `reference_rows` returns
+    `Answer[list[dict[str, Any]]]` from `get_answer(..., parse=..., endpoint=...)` and
+    `reference` an `Answer[list[M]]`; `api/__init__.py` drops `ReferenceFile`; `tasks.py`,
+    `scripts/refresh_reference.py`, `tests/test_tasks.py` and `tests/test_live.py` read
+    `.payload` and `.retrieved_at` (https://github.com/xippios/sdk-core/issues/123);
+  - `errors.py` and `params.py`: `QueryTooLarge`'s advice and the reasons and refusals
+    that name a task name its tool beside it, and `tests/test_tasks.py`'s `REFUSED_756`
+    and `REFUSED_C16` end with `UnknownCode`'s new tail
+    (https://github.com/xippios/sdk-core/issues/111);
+  - `_client.py`'s comment, the docstrings of `api/get_comtrade_releases.py` and
+    `api/get_world_share.py`, and `CLAUDE.md`: a spent key quota holds no keyless call back
+    (https://github.com/xippios/sdk-core/issues/163);
+  - `scripts/refresh_reference.py`: `class_names=class_names` leaves the `render_enums`
+    call, the dict kept for its order (https://github.com/xippios/sdk-core/issues/95).
+- Cite a restated record: `api/reference.py`, `models.py`, `params.py`,
+  `reference/README.md`, `tests/test_tasks.py`
+  (https://github.com/xippios/sdk-core/pull/297).
+
+### sdk-usda-psd
+
+- Deletes (item 3): `src/xippios/usda/psd/errors.py`, `NoDataForYear` being all it holds →
+  `xippios.core.data_gov.NoDataForYear`, which `Gateway(SOURCE, data_path=DATA_PATH)` maps;
+  `classify`'s empty-404 branch keeps its plain `NotFoundError`, `tasks.py` imports
+  core's class and `_absent` passes `source=exc.source`, and `tests/test_client.py`,
+  `tests/test_tasks.py`, `tests/test_slices.py` and `CLAUDE.md` follow
+  (https://github.com/xippios/sdk-core/issues/106).
+- Changes: `params.py`'s messages that name a task name its tool beside it, and
+  `tests/test_params.py` meets `UnknownCode`'s new tail
+  (https://github.com/xippios/sdk-core/issues/111); `scripts/refresh_reference.py` drops
+  the `class_names[id_field]` line, its dict and its argument
+  (https://github.com/xippios/sdk-core/issues/95).
+- Cite a restated record: `errors.py`, `models.py` and six test files
+  (https://github.com/xippios/sdk-core/pull/297).
+
+### sdk-usda-esr
+
+- Deletes (item 3): `src/xippios/usda/esr/errors.py` → `xippios.core.data_gov.NoDataForYear`,
+  as for psd: `_client.py`, `tasks.py`, the docstrings of `api/get_country_data.py`,
+  `api/get_all_countries_data.py` and `params.py`, `tests/test_client.py`,
+  `tests/test_tasks.py`, `tests/test_slices.py` and `CLAUDE.md` follow
+  (https://github.com/xippios/sdk-core/issues/106); `_closest`'s first pass in
+  `params.py` → `nearest(value, codes, n=2)`, its digit pass ESR's own
+  (https://github.com/xippios/sdk-core/issues/107).
+- Changes: the docstrings of `get_exports`, `get_latest_week` and `get_top_destinations`
+  say that an empty list may be a market year not yet released
+  (https://github.com/xippios/sdk-core/issues/136); `tests/test_params.py` meets
+  `UnknownCode`'s new tail (https://github.com/xippios/sdk-core/issues/111);
+  `scripts/refresh_reference.py` drops the `class_names[id_field]` line, its dict and its
+  argument (https://github.com/xippios/sdk-core/issues/95).
+- Cite a restated record: `errors.py`, `models.py`, `params.py` and six test files
+  (https://github.com/xippios/sdk-core/pull/297).
+
+### sdk-usda-gats
+
+- Deletes (item 3): `_nearest` in `params.py` and its call →
+  `nearest(customs_district_id, codes)`, the same three ids in the same order
+  (https://github.com/xippios/sdk-core/issues/107).
+- Changes: `errors.py`'s `HS6_REASON` and `params.py`'s messages that name a list task
+  name its tool beside it, and `tests/test_params.py` meets `UnknownCode`'s new tail
+  (https://github.com/xippios/sdk-core/issues/111); `scripts/refresh_reference.py` drops
+  the `class_names[id_field]` line, its dict and its argument
+  (https://github.com/xippios/sdk-core/issues/95).
+- Cite a restated record: four `api/*_release_info.py` wrappers and
+  `api/get_commodities.py`, `errors.py`, `models.py`, `params.py` and four test files
+  (https://github.com/xippios/sdk-core/pull/297).
+
+### sdk-usda-nass
+
+- Deletes (item 3): `ParamValues` in `api/get_param_values.py` and in `api/__init__.py` →
+  `Answer[list[str]]`, which `tasks.py`, `scripts/refresh_reference.py` and
+  `tests/test_tasks.py` read as `.payload` and `.retrieved_at`
+  (https://github.com/xippios/sdk-core/issues/123).
+- Changes: `params.py`'s `_check_value` passes its own hint only when `closest` finds
+  nothing (https://github.com/xippios/sdk-core/issues/111); the docstring of each task
+  that fetches one year says that an empty answer may be a year not yet released
+  (https://github.com/xippios/sdk-core/issues/136). Its errors name the tool already, the
+  example of conventions §8.
+- Cite a restated record: `README.md`, `api/get_param_values.py`, `models.py`,
+  `tests/test_tasks.py` (https://github.com/xippios/sdk-core/pull/297).
+
+### sdk-usda-esmis
+
+- Changes: `_client.py`'s inline description → `request_description(response)`, the line
+  that shows the encoded slash keeping its raw path
+  (https://github.com/xippios/sdk-core/issues/62); `tasks.py`'s refusals naming
+  `search_publications` and `list_releases` name their tools
+  (https://github.com/xippios/sdk-core/issues/111); `scripts/refresh_reference.py`'s
+  `Refused` loses the reason that a `SystemExit` stops the loop's thread, and may stay as
+  the walk's refusal (https://github.com/xippios/sdk-core/issues/77).
+- It adopts before sdk-usda-wasde, its dependent (conventions §12).
+- Cite a restated record: `README.md`, `params.py`, `reference/README.md`,
+  `tests/test_tasks.py` (https://github.com/xippios/sdk-core/pull/297).
+
+### sdk-usda-wasde
+
+- Item 1 also raises `xippios-usda-esmis` to the minor sdk-usda-esmis releases on core
+  0.4.0 (conventions §12, §15 item 1; ADR-0021).
+- Changes: `scripts/cut_sample.py` marks the replay fixture `sample` for `truncated`, writes
+  the download fixtures again and writes them with `write_fixture`
+  (https://github.com/xippios/sdk-core/issues/125); `parse/wasde_xml.py`'s `_value` returns
+  `parse_decimal(text)` without its `is_finite()` guard
+  (https://github.com/xippios/sdk-core/issues/128); `tasks.py`'s reasons and refusals that
+  name a task name its tool (https://github.com/xippios/sdk-core/issues/111).
+- Stays: the one-attempt client of `scripts/cut_sample.py`
+  (https://github.com/xippios/sdk-core/issues/281) and its two audited binary bodies
+  (https://github.com/xippios/sdk-core/issues/290).
+- Cite a restated record: `README.md`, `scripts/cut_sample.py`, `_vocabulary.py`,
+  `models.py`, `reference/README.md`, `tests/test_live.py`, `tests/test_tasks.py`
+  (https://github.com/xippios/sdk-core/pull/297).
+
+### xippios-mcp
+
+The host adopts in an adoption PR of its own without `copier update`, judged against
+conventions §15's items 1, 3, 4, 7, 8 and 9 (ADR-0026, amendment 2026-11-18, point e):
+
+- Item 1: `xippios-core[mcp]` and `xippios-core[testing]` `~=0.4.0`, both `~=0.3.0` today,
+  while its sources keep their `>=` floors (ADR-0026, decision 9).
+- Items 3 and 4: `app.py`'s copy of `_LOOPBACK_HOSTS` → `LOOPBACK_HOSTS`, and its loopback
+  check holds an endpoint with `auth: none` by `is_loopback_only`, so sdk-google-mail's
+  read server is held as a write server is; `tests/test_app.py`'s
+  `test_the_loopback_hosts_are_cores` goes, its loopback cases parametrized on
+  `LOOPBACK_HOSTS` (https://github.com/xippios/sdk-core/issues/167); `packages.py`'s
+  `is_bulk_task` from `xippios.core._tasks` → the names of `tool_functions(tasks)`, and the
+  imports from `xippios.core.mcp.server` in `servers.py`, `app.py` and `cli.py` →
+  `xippios.core.mcp` (https://github.com/xippios/sdk-core/issues/170).
+- The package contract (https://github.com/xippios/sdk-core/issues/245): `packages.py`
+  reads a package's `ToolSet` from `<path>.mcp.build()` (`mcp_write.build()`) for what it
+  read by name; `servers.py` builds each endpoint's server with `build_server(tool_set)`
+  and a server it builds from several with `register_tasks(server,
+  dataclasses.replace(tool_set, tasks=kept, caps=cut))` and each tool set's hooks; and
+  `app.py`'s `_check_mounted_once` goes. Whether the adoption PR takes the contract up or
+  a later pull request of that minor does, ADR-0026, amendment 2026-11-18, point e, leaves
+  open.
+- Item 8: from core 0.4.0 an error answer carries `isError` beside its text (ADR-0026,
+  amendment 2026-11-18, point b).
+- Item 9: its fragment names core 0.4.0 and conventions 1.28; the template changes the new
+  conventions version needs in the files it was scaffolded from are hand-applied and listed
+  file by file in the PR description.
+- Cite a restated record: `CLAUDE.md`, `README.md`, `src/xippios/mcp/app.py`, `cli.py`,
+  `config.py`, `packages.py`, `tests/conftest.py`, `ci.yml` and `publish.yml`
+  (https://github.com/xippios/sdk-core/pull/297).
+
+### sdk-template
+
+sdk-template 0.4.0 follows core's tag and renders what the sources' adoption takes
+(https://github.com/xippios/sdk-template/issues/159):
+
+- `core_version=0.4.0`, the bound of item 1.
+- The package contract: `mcp.py.jinja` builds `build()`'s `ToolSet` and `server =
+  build_server(build())` and gives `main` the tool set's hooks, where it passes
+  `[getattr(tasks, name) for name in tasks.__all__]` to `build_server` today, and
+  `_client.py.jinja` renders the list of `EnvVar` entries beside `SOURCE`
+  (https://github.com/xippios/sdk-core/issues/245,
+  https://github.com/xippios/sdk-template/issues/81).
+- `.pre-commit-config.yaml`, which differs from core's by step 17 alone: the secret scan's
+  `--exclude-lines` rule for the sha256 line of a cut or sampled body, and the comment that
+  `.copier-answers.yml` can name a key's variable
+  (https://github.com/xippios/sdk-template/issues/42,
+  https://github.com/xippios/sdk-core/issues/210).
+- `template/scripts/refresh_reference.py.jinja` renders the `class_names[id_field]` line
+  that four sources drop, which `render_enums`' default makes redundant for an id field in
+  camelCase (https://github.com/xippios/sdk-core/issues/95).
+- Its skeleton and its own files that cite a restated record:
+  `template/CLAUDE.md.jinja`, the four `template/.claude/commands/*.md.jinja`,
+  `template/.github/workflows/ci.yml`, `live.yml.jinja` and `publish.yml`,
+  `template/docs/upstream/FETCHED.md.jinja`, `template/pyproject.toml.jinja`,
+  `template/scripts/refresh_*.py.jinja`, the four package modules under `template/src/`
+  and `template/tests/conftest.py.jinja`, and `README.md`, `CLAUDE.md`, `copier.yml`,
+  `scripts/prove.sh`, `tests/test_template.py` and `.github/workflows/release.yml`
+  (https://github.com/xippios/sdk-core/pull/297).
