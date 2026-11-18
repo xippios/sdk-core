@@ -34,6 +34,24 @@ class SyncFunction[**P, T](Protocol):
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> T: ...
 
 
+def _serve(loop: asyncio.AbstractEventLoop) -> None:
+    """Run ``loop`` until it is stopped, whatever a task raises.
+
+    asyncio lets a ``SystemExit`` or a ``KeyboardInterrupt`` that a task raises out of
+    ``run_forever``, its task already done with it. Ending the thread there would leave
+    the callback that hands the result to the waiting caller unrun, and every later call
+    waiting on a loop no thread runs (https://github.com/xippios/sdk-core/issues/77).
+    Running the loop again runs that callback: the caller gets the exception, and the
+    loop serves the next call.
+    """
+    while True:
+        try:
+            loop.run_forever()
+        except (SystemExit, KeyboardInterrupt):
+            continue
+        return
+
+
 class _Runner:
     def __init__(self) -> None:
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -45,7 +63,7 @@ class _Runner:
             if self._loop is None or self._loop.is_closed():
                 loop = asyncio.new_event_loop()
                 thread = threading.Thread(
-                    target=loop.run_forever, name=_LOOP_THREAD_NAME, daemon=True
+                    target=_serve, args=(loop,), name=_LOOP_THREAD_NAME, daemon=True
                 )
                 thread.start()
                 self._loop, self._thread = loop, thread
@@ -66,7 +84,11 @@ _runner = _Runner()
 
 
 def run[T](coro: Coroutine[Any, Any, T]) -> T:
-    """Run ``coro`` to completion on the background loop and return its result."""
+    """Run ``coro`` to completion on the background loop and return its result.
+
+    What ``coro`` raises is raised here, ``SystemExit`` and ``KeyboardInterrupt``
+    included, and the loop serves the next call.
+    """
     return _runner.run(coro)
 
 
@@ -77,19 +99,37 @@ def sync[**P, T](fn: Callable[P, Coroutine[Any, Any, T]]) -> SyncFunction[P, T]:
     background loop, and exposes the original as ``.async_fn`` so adapters can
     await it natively instead of blocking their own loop. A trailing ``_async`` is
     dropped from the name, so ``get_series = sync(get_series_async)`` is named
-    ``get_series`` wherever the name is shown, such as in MCP tool names. The loop
-    is not fork-safe; see the module docstring.
+    ``get_series`` wherever the name is shown, such as in MCP tool names. What the
+    coroutine raises reaches the caller, a ``SystemExit`` too, so a script may exit
+    from inside a task with its status. The loop is not fork-safe; see the module
+    docstring.
 
     Args:
-        fn: An ``async def`` function.
+        fn: An ``async def`` function, or a callable that returns a coroutine and has
+            a ``__name__``: a ``functools.partial`` has none until
+            ``functools.update_wrapper(partial, function)`` gives it the function's.
+
+    Raises:
+        TypeError: ``fn`` has no ``__name__``, which the derived function is named
+            after.
     """
+    name = getattr(fn, "__name__", None)
+    if not isinstance(name, str):
+        raise TypeError(
+            f"sync() names the function it derives after fn, and {fn!r} has no __name__: "
+            "name it with functools.update_wrapper(partial, function) or wrap it in an "
+            "async def"
+        )
+    qualname = getattr(fn, "__qualname__", None)
+    if not isinstance(qualname, str):
+        qualname = name
 
     @functools.wraps(fn)
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
         return run(fn(*args, **kwargs))
 
-    wrapper.__name__ = fn.__name__.removesuffix("_async")
-    wrapper.__qualname__ = fn.__qualname__.removesuffix("_async")
+    wrapper.__name__ = name.removesuffix("_async")
+    wrapper.__qualname__ = qualname.removesuffix("_async")
     wrapper.async_fn = fn  # type: ignore[attr-defined]
     return cast(SyncFunction[P, T], wrapper)
 
