@@ -135,9 +135,10 @@ paces apart. Each case keeps decision 1 whole by pacing every host with one limi
 2. **A mirror the publisher runs.** Task code may send to an origin or mirror that the
    publisher runs itself where its canonical host refuses automated requests, as
    sdk-usda-wasde's snapshot reads USDA's CDN origin, `usda.azureedge.us`, for pages that
-   `www.usda.gov` refuses, and as the history task its next minor plans is to read the
-   archive of past releases there (https://github.com/xippios/sdk-core/issues/239,
-   decided by Johannes on 2026-11-17). `meta.endpoint` names the URL sent, the canonical
+   `www.usda.gov` refuses, and as the history task of its 0.2.0
+   (https://github.com/xippios/sdk-usda-wasde/issues/8) is to read the archive of past
+   releases there (https://github.com/xippios/sdk-core/issues/239, decided by Johannes on
+   2026-11-17). `meta.endpoint` names the URL sent, the canonical
    host's pace applies, one limiter for both hosts where the source sends to both, and the
    source's `docs/upstream/` names both hosts. A mirror that anyone else runs is never
    sent to, since the provenance of ADR-0003 would then rest on the bytes alone.

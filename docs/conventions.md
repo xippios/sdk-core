@@ -112,10 +112,11 @@ Every source package has three layers, top to bottom, and nothing skips a layer.
 Supporting modules: `models.py` (pydantic models), `reference/` (packaged data files
 plus a loader), `_client.py` (the configured `xippios.core.client` instance).
 
-Task code may send, beside its base URL, to a second base URL from which upstream serves
-part of its data, and to an origin or mirror that the publisher runs itself where its
-canonical host refuses automated requests, never to a mirror that anyone else runs
-(ADR-0010, amendment 2026-11-18, point a; https://github.com/xippios/sdk-core/issues/239).
+Task code may send, beside its base URL, to a second base URL on the host of the first,
+from which upstream serves part of its data, and to an origin or mirror that the publisher
+runs itself where its canonical host refuses automated requests, never to a mirror that
+anyone else runs (ADR-0010, amendment 2026-11-18, point a;
+https://github.com/xippios/sdk-core/issues/239).
 A source that depends on another sends nothing to a host that its dependency sends to,
 and reaches that host through the dependency's tasks alone (ADR-0021, §12). §6 gives
 each case its client and its pace.
@@ -129,7 +130,7 @@ one module per file kind, `parse/<file_kind>.py`, with one function,
 bulk task downloads, may return `Iterator[Model]` instead, a generator that reads the file
 as the records are taken, closes it when it ends or is closed, and says so in its
 docstring (sdk-eurostat's `parse_sdmx_csv`, sdk-faostat's `parse_bulk_csv`; ADR-0020,
-amendment 2026-11-18, point a). A parser's library (a spreadsheet reader,
+amendment 2026-11-18, point b). A parser's library (a spreadsheet reader,
 `pypdf`) is the source's dependency, never core's. A PDF is read for its narrative text
 only, never for numbers: a figure a task returns comes from the XLS, XML, CSV or TXT the
 release carries, or is not returned (ADR-0020). A bulk task, which returns
