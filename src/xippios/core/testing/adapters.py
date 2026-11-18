@@ -1,6 +1,7 @@
 """Helpers for tests that go through the adapters or check projections."""
 
 import json
+import re
 from typing import Any
 
 from pydantic import BaseModel
@@ -27,14 +28,20 @@ def assert_projection(projected: BaseModel, source: BaseModel, **overrides: Any)
         assert actual == expected, f"{name}: {actual!r} != {expected!r}"
 
 
+_ERROR_TEXT = re.compile(r"error: [A-Za-z_][A-Za-z0-9_]*: ")
+"""The start of the family's error text, ``error: <ErrorClass>: `` (conventions §8)."""
+
+
 async def mcp_call_text(server: Any, name: str, arguments: dict[str, Any]) -> str:
     """Call a tool on an ``MCPServer`` through an in-process client and return its text.
 
     The call goes through ``mcp.Client(server)``, as a real client's would, so the
-    server's middleware runs: arguments the tool's schema refuses come back here as the
-    family's ``error: InvalidRequestError: ...`` text, which a test can assert. Fails the
-    test when the server reports an MCP error (``is_error``, e.g. an unknown tool or a
-    task that crashed) or answers with anything but text.
+    server's middleware runs: an argument the tool does not declare and arguments its
+    schema refuses come back here as the family's ``error: InvalidRequestError: ...``
+    text, which a test can assert. An error answer is flagged ``is_error`` beside that
+    text (conventions §8; ADR-0026, decision 6), and its text is returned as well. Fails
+    the test when the server reports an MCP error of another kind, flagged with any other
+    text (e.g. an unknown tool or a task that crashed), or answers with anything but text.
 
     Args:
         server: The ``MCPServer`` under test, e.g. from ``build_server``.
@@ -46,10 +53,11 @@ async def mcp_call_text(server: Any, name: str, arguments: dict[str, Any]) -> st
 
     async with Client(server) as client:
         result = await client.call_tool(name, arguments)
-    assert not result.is_error, result.content
     assert result.content, "tool returned no content"
     content = result.content[0]
     assert isinstance(content, TextContent), content
+    if result.is_error:
+        assert _ERROR_TEXT.match(content.text), result.content
     return content.text
 
 

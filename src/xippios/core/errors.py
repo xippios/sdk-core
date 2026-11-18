@@ -8,7 +8,7 @@ tracebacks.
 import email.utils
 import math
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime
 from typing import Any, NoReturn
 
@@ -221,6 +221,29 @@ class UnknownCode(InvalidRequestError):
         self.list_name = list_name
         self.fetched = fetched
         self.closest = tuple(closest)
+
+
+def _refused_arguments(
+    errors: Sequence[Mapping[str, Any]], *, source: str | None = None
+) -> InvalidRequestError:
+    """The error for arguments an adapter refuses before the task runs.
+
+    ``<argument>: <message>`` for the first of ``errors``, with the count when there are
+    several, e.g. ``year: Input should be a valid integer (the first of 2 errors)``. Each
+    error is read for its ``loc``, the argument's path joined with dots, and its ``msg``
+    alone, as pydantic's error details carry them; its input value, input type and URL are
+    the caller's data and never read (ADR-0014, amendment 2026-10-27; ADR-0007, amendment
+    2026-11-18). Both adapters answer with it, the MCP adapter as text and the HTTP router
+    as problem details.
+
+    Args:
+        errors: At least one error, each a mapping with ``loc`` and ``msg``.
+        source: Source slug, e.g. ``"usda-nass"``, which an HTTP problem names.
+    """
+    first = errors[0]
+    argument = ".".join(str(part) for part in first["loc"]) or "arguments"
+    more = f" (the first of {len(errors)} errors)" if len(errors) > 1 else ""
+    return InvalidRequestError(f"{argument}: {first['msg']}{more}", source=source)
 
 
 def parse_retry_after(value: str | None, *, now: datetime | None = None) -> float | None:

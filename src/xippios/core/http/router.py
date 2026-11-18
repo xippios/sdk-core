@@ -4,26 +4,31 @@ A task whose parameters are all scalars becomes ``GET /<source>/<function>`` wit
 parameters. A task with any non-scalar parameter (a mapping, a list, a model) becomes
 ``POST /<source>/<function>`` whose JSON body is an object keyed by parameter name
 (ADR-0007). Either way the return annotation is the response model and the docstring the
-description, and errors come back as problem details, never as tracebacks. A task its
-``tasks.py`` names in ``BULK_TASKS`` gets no route (ADR-0019).
+description, and errors come back as problem details, never as tracebacks: a task's
+``XippiosError``, and an argument a typed parameter refuses before the task runs, which
+the route answers as ``InvalidRequestError``, status 422, with no input value
+(ADR-0007, amendment 2026-11-18). A parameter keeps its ``Annotated`` metadata. A task
+its ``tasks.py`` names in ``BULK_TASKS`` gets no route (ADR-0019).
 """
 
 import functools
 import inspect
 import types
 import typing
-from collections.abc import Awaitable, Callable, Iterable, Sequence
+from collections.abc import Awaitable, Callable, Coroutine, Iterable, Mapping, Sequence
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request, Response
+from fastapi.exceptions import RequestValidationError
+from fastapi.routing import APIRoute
 from pydantic import BaseModel, create_model
 
 from xippios.core._loop import as_async
 from xippios.core._tasks import is_bulk_task
-from xippios.core.errors import XippiosError
+from xippios.core.errors import InvalidRequestError, XippiosError, _refused_arguments
 from xippios.core.http.problems import problem_response
 
 __all__ = ["is_scalar", "router_from_tasks"]
@@ -53,12 +58,61 @@ def is_scalar(annotation: Any) -> bool:
 
 
 def _resolved(fn: Callable[..., Any]) -> tuple[inspect.Signature, list[inspect.Parameter], Any]:
-    hints = typing.get_type_hints(fn)
+    """The signature of ``fn``, its parameters with resolved hints, and its return hint.
+
+    The hints keep ``Annotated`` metadata (``include_extras=True``), so a ``Field``
+    constraint, a description or a validator that a parameter declares holds in the route
+    as in the tool (https://github.com/xippios/sdk-core/issues/68).
+    """
+    hints = typing.get_type_hints(fn, include_extras=True)
     signature = inspect.signature(fn)
     parameters = [
         p.replace(annotation=hints.get(p.name, p.annotation)) for p in signature.parameters.values()
     ]
     return signature, parameters, hints.get("return", signature.return_annotation)
+
+
+def _refused_request(exc: RequestValidationError, source: str) -> InvalidRequestError:
+    """The error for a request a route's parameters refuse: ``<argument>: <message>``.
+
+    FastAPI's error location starts with the part of the request, ``query`` or ``body``,
+    which the argument's name leaves out, as the MCP adapter's does. A refusal of the
+    body as a whole, missing, not an object or no JSON, names ``body``. Only the location
+    and the message are read, never the input (``_refused_arguments``).
+    """
+    errors: list[Mapping[str, Any]] = []
+    for error in exc.errors():
+        part, *rest = error["loc"]
+        if error["type"] == "json_invalid":
+            rest = []  # its location ends with a position in the text, not an argument
+        errors.append({"loc": tuple(rest) or (part,), "msg": error["msg"]})
+    return _refused_arguments(errors, source=source)
+
+
+def _problem_route(source: str) -> type[APIRoute]:
+    """A route class that answers a request its parameters refuse as problem details.
+
+    FastAPI validates the parameters before the endpoint runs and raises
+    ``RequestValidationError``, which its default handler answers with a ``detail`` list
+    that echoes the input. A router has no exception handlers of its own, so its routes
+    catch the error and answer ``InvalidRequestError`` with ``problem_response``: status
+    422, ``application/problem+json``, the detail ``<argument>: <message>`` (conventions
+    §9; ADR-0007, amendment 2026-11-18). An app that includes the router keeps the class.
+    """
+
+    class ProblemRoute(APIRoute):
+        def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:
+            handler = super().get_route_handler()
+
+            async def answer(request: Request) -> Response:
+                try:
+                    return await handler(request)
+                except RequestValidationError as exc:
+                    return problem_response(_refused_request(exc, source))
+
+            return answer
+
+    return ProblemRoute
 
 
 def _query_endpoint(fn: Callable[..., Any]) -> Callable[..., Awaitable[Any]]:
@@ -124,6 +178,13 @@ def router_from_tasks(
     path (conventions §9, ADR-0019). So an adapter may pass every name of
     ``tasks.__all__``.
 
+    An argument a typed parameter refuses, a value outside an enum, a missing one or a
+    body that is no JSON object, is answered before the task runs as problem details:
+    status 422, title ``InvalidRequestError``, detail ``<argument>: <message>`` with the
+    count when there are several, ``source`` the slug, and no input value (ADR-0007,
+    amendment 2026-11-18). A query parameter or a body key that the task does not
+    declare is ignored, as FastAPI ignores it.
+
     Args:
         source: Source slug, e.g. ``"usda-nass"``; becomes the path prefix and the tag.
         tasks: Task functions, e.g. ``[getattr(tasks, n) for n in tasks.__all__]``; one
@@ -134,6 +195,7 @@ def router_from_tasks(
     router = APIRouter(
         prefix=prefix if prefix is not None else f"/{source}",
         tags=list(tags) if tags else [source],
+        route_class=_problem_route(source),
     )
     for fn in tasks:
         if is_bulk_task(fn):

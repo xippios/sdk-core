@@ -1,8 +1,8 @@
 """Errors cross the MCP boundary as text, never as exceptions (conventions §8)."""
 
-import pydantic
+from mcp.types import CallToolResult, TextContent
 
-from xippios.core.errors import InvalidRequestError, RateLimitError, XippiosError
+from xippios.core.errors import RateLimitError, XippiosError
 
 __all__ = ["error_to_text"]
 
@@ -15,14 +15,13 @@ def error_to_text(exc: XippiosError) -> str:
     return text
 
 
-def _refused_arguments(exc: pydantic.ValidationError) -> InvalidRequestError:
-    """The error for arguments a tool's schema refuses: ``<argument>: <pydantic message>``.
+def _error_answer(exc: XippiosError) -> CallToolResult:
+    """The family's error text as a tool's answer flagged ``is_error``, not an MCP error.
 
-    The first error only, with the count when there are several; never pydantic's URL,
-    the input type or the input value, which is the caller's data (queue row 41 a).
+    A client tells the answer from data by the flag and an agent reads the text, which
+    stays conventions §8's (https://github.com/xippios/sdk-core/issues/168; ADR-0026,
+    decision 6 and its amendment of 2026-11-18).
     """
-    errors = exc.errors(include_url=False, include_context=False, include_input=False)
-    first = errors[0]
-    argument = ".".join(str(part) for part in first["loc"]) or "arguments"
-    more = f" (the first of {len(errors)} errors)" if len(errors) > 1 else ""
-    return InvalidRequestError(f"{argument}: {first['msg']}{more}")
+    return CallToolResult(
+        content=[TextContent(type="text", text=error_to_text(exc))], is_error=True
+    )
