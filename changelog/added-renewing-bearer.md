@@ -20,7 +20,8 @@
     `EXPIRY_MARGIN` (lines 96 and 97, and line 412 of `__all__`), `reset`, `_current`,
     `_keep`, `_sign`, `async_auth_flow` and `sync_auth_flow`, and the imports `os`,
     `threading`, `AsyncGenerator`, `Generator`, `SecretStr`, `ConfigError`, `UpstreamError`
-    and `error_from_response`. The module docstring names core's `RENEWAL_MARGIN` for
+    and `error_from_response`, while `BearerToken` and `RenewingBearerAuth` are imported from
+    `xippios.core`. The module docstring names core's `RENEWAL_MARGIN` for
     `EXPIRY_MARGIN` (line 14), and the class docstring drops "Two requests that start
     together before the first login has answered may each log in" (lines 185 and 186). Its
     importers hold as written: `api/auth_login.py` (`LOGIN_PATH`), and `tests/test_api.py`,
@@ -50,7 +51,8 @@
     124), `EXPIRY_MARGIN` (lines 76 and 77, and line 59 of `__all__`),
     `requires_response_body` (line 202), `_access_token` and `_lapses_at`, `reset`,
     `_current`, `apply` and `auth_flow`, and the imports `os`, `Generator`, `EnvKeyAuth`,
-    `UpstreamError` and `error_from_response`. The docstrings name the base for
+    `UpstreamError` and `error_from_response`, while `BearerToken`, `RenewingBearerAuth` and
+    `XippiosError` are imported from `xippios.core`. The docstrings name the base for
     `EnvKeyAuth.key` and `auth_flow` (lines 8 to 10) and for the plugin's pin (lines 28 and
     29), and drop "may each refresh" (lines 166 and 167) and the buffering of every answer
     (lines 173 to 175). Its importers hold as written: `_client.py`, `_tenants.py`, `_cli.py`
