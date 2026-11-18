@@ -218,4 +218,48 @@ a day, and 00:00 of the day or the first of the month would date the release bef
 happened, a look-ahead in an as-of store. The plan of core 0.4.0 settled it as both
 sources have it.
 
-Conventions §4 states the five points from 1.28 on.
+(f) **`UnknownCode` names a bare code once, and its tail names no command** (amendment
+2026-10-27, point 3; step 13; https://github.com/xippios/sdk-core/issues/111, found by
+sdk-usda-nass). Point 3 gave `UnknownCode` the copies' common message, written for a list
+of codes with names that a maintainer reads. A list of values is records of one field
+(point 2), so a value's code and its name are one text, and the message read `Did you
+mean VA (VA)?`; its fixed tail named `/refresh-reference-data`, a command of the
+package's maintainers, which an agent that reads the error over MCP (conventions §8)
+cannot run. A closest pair whose name is the code's own text is named once, `Did you
+mean VA?`, and every other pair as before, `0410000 (Wheat)`; the tail reads `If upstream
+added it since, the packaged list is out of date.` sdk-usda-nass, which passes a hint of
+its own for the first reason, can leave the closest values to `UnknownCode`.
+
+(g) **`closest` takes a `cutoff`** (amendment 2026-10-27, point 3; step 13;
+https://github.com/xippios/sdk-core/issues/111, found by sdk-usda-nass). Point 3's
+`closest` runs both of its `difflib` passes at `difflib`'s cutoff of 0.6, under which a
+code of two characters with one of them wrong scores 0.5 and is not found: sdk-usda-nass's
+`VS` names no `VA`. `closest(value, codes, *, n=3, cutoff=0.6)` passes `cutoff` to both
+passes, and its default is the one the passes used, so a call that names none answers as
+before. `closest` has eight consumers, and sdk-usda-nass's row asks for the argument.
+
+(h) **The nearest-integer strategy enters core** (amendment 2026-10-27, point 3; step 13;
+https://github.com/xippios/sdk-core/issues/107, found by sdk-usda-gats). Point 3 left the
+nearest integers to sdk-usda-esr as a strategy of its own, one consumer. sdk-usda-gats
+carries it too, for its customs districts, so core takes it (ADR-0023, decisions 2 and
+4): `nearest(value, codes, *, n=3)`, exported from `xippios.core` beside `closest`, gives
+up to `n` known integer codes nearest to `value` by number with their names, nearest first
+and the lower of two equally near. `codes` is keyed by the integer, as sdk-usda-esr keys
+its commodities, or by its text, as sdk-usda-gats keys its districts, and each pair keeps
+its code as `codes` keys it. Its two consumers are sdk-usda-esr's `_closest`, whose first
+pass takes the nearest two by number, and sdk-usda-gats's `_nearest`, the nearest three
+(ADR-0023, decision 6). sdk-usda-esr's second pass, a `difflib` match of the digits that
+leads `1040` to `104`, stays its own, one consumer.
+
+(i) **An error that names another task names its MCP tool too** (step 13;
+https://github.com/xippios/sdk-core/issues/111, found by sdk-usda-nass). An agent reads an
+error over MCP as text and calls a tool by the tool's name, `<source>_<verb>_<noun>`
+(conventions §1 and §8), while a Python caller calls the task. An error that a tool can
+return and that names another task, the one to call instead or the list task that names
+the known values, names that task's MCP tool too, as sdk-usda-nass's refusal of a value
+its packaged list lacks does: `list_param_values('state_alpha') lists the known values
+(over MCP, the tool usda_nass_list_param_values).` A task of `BULK_TASKS` has no tool
+(ADR-0019, decision 4), and an error names it alone.
+
+Conventions §4 states points (a) to (e), §5 points (f) and (h), and §8 point (i), from
+1.28 on.

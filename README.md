@@ -53,8 +53,9 @@ It gives a source package the things that should be identical across the family:
   `parse_decimal` reads a published figure.
 - **Reference data**: loaders for code lists shipped inside a package, `PackagedList`
   for a list fetched from one upstream operation (its file, the meta of an answer from
-  it, its writer), `matches` and `closest` for the list tasks and their refusals, and
-  `render_enums`, which generates one module of `StrEnum` and `IntEnum` classes.
+  it, its writer), `matches`, `closest` and `nearest` for the list tasks and their
+  refusals, and `render_enums`, which generates one module of `StrEnum` and `IntEnum`
+  classes.
 - **Adapters** that turn task functions into MCP tools (`xippios.core.mcp`) and FastAPI
   routes (`xippios.core.http`) without any logic of their own.
 - **Test support**: a live-test gate, offline guarantees for every other test (no
@@ -610,8 +611,9 @@ only when one is passed (a fetch date is not a vintage), `total` `None`. A file 
 00:00 UTC of that day; `write` writes `fetched` to the second. A list of values is
 records of one field named by the upstream parameter (`[{"state_alpha": "AK"}, ...]`).
 `UnknownCode` names the value, the list and its fetch date, the closest codes (or a
-`hint=`), an optional `reason=`, and that a code upstream added since needs a refresh of
-the list.
+`hint=`), an optional `reason=`, and that the list is out of date if upstream added the
+code since. `closest` matches a code by its text and its name, with a `cutoff=` below
+0.6 for short codes; `nearest(value, codes)` names the integer codes nearest by number.
 
 Other code lists are read with `load_json` or `load_table` (`load_csv`, which
 `load_table` calls for a CSV file, stays in `xippios.core.reference`). The refresh
@@ -634,7 +636,7 @@ source = render_enums(
         "attributeId": id_name_pairs(records, id_field="attributeId", name_field="attributeName"),
     },
     fetched={"sector_desc": "2026-10-27", "attributeId": "2026-10-24"},  # or one date
-    class_names={"sector_desc": "Sector", "attributeId": "AttributeId"},
+    class_names={"sector_desc": "Sector"},  # attributeId gives AttributeId by default
     generator="scripts/refresh_reference.py",
 )
 ENUMS.write_text(source, encoding="utf-8")
@@ -951,7 +953,7 @@ fragment until the release assembles it.
 | `xippios.core.data_gov` | `Gateway`: the api.data.gov key, the gateway's `classify` of its own answers with `NoDataForYear` on a data path, one quota policy per process | alpha |
 | `xippios.core.redaction` | the one credential rule of the envelope, the recorder and replay, `register_data_name`, signed links | alpha |
 | `xippios.core.models` | `UpstreamModel` with `dump_upstream`, `Result`, `ResultMeta` with `published_at_naive`, `ResultCap`, `parse` | alpha |
-| `xippios.core.reference` | packaged CSV/JSON loaders, `PackagedList`, `matches`, `closest`, generated `StrEnum`/`IntEnum` modules | alpha |
+| `xippios.core.reference` | packaged CSV/JSON loaders, `PackagedList`, `matches`, `closest`, `nearest`, generated `StrEnum`/`IntEnum` modules | alpha |
 | `xippios.core.pagination` | `paginate_offset` (a page-numbered endpoint maps the offset to its page), `collect` | alpha |
 | `xippios.core.tenants` | `Tenants`, a multi-tenant source's tenants declared in the environment with one client each, `list_task`, the tool that names them, and `TenantLock` with `bind_tasks` and `tenant_instructions`, a server bound to one of them | alpha |
 | `xippios.core.mcp` | tool registration with the argument check and the write server's `confirm` rule, `tool_functions`, result caps, error text, CLI with option hooks and the loopback rule for write and `loopback_only` servers, `serve_tenants`, quiet request log | alpha |

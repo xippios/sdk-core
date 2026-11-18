@@ -126,3 +126,29 @@ shapes the source recorded, each backed by a fixture of that answer under
 `response_from_fixture`, as sdk-usda-esmis's tests do. The reviewer checks a documented
 shape against `docs/upstream/` and a recorded one against its fixture. Conventions §6 and
 the review checklist's item 3 state it from 1.28 on.
+
+(b) **A default class name keeps a camelCase hump** (amendment 2026-10-24, as amended
+2026-10-27; step 13; https://github.com/xippios/sdk-core/issues/95, found in the family's
+refresh scripts). `render_enums` derives a class name from its key where `class_names`
+names none, and it capitalized each part of the key, which lowercased a camelCase hump:
+`attributeId` gave `Attributeid`, so the template's refresh script names each id list's
+class by hand and sdk-comtrade's each of its ten lists'. The default splits each part
+before a hump, an upper-case letter after a lower-case one, and capitalizes each word:
+`attributeId` gives `AttributeId`, `qtyUnitCode` `QtyUnitCode`, and a key without a hump
+the name it had, `state_alpha` and `STATE_ALPHA` `StateAlpha`. It gives every class name
+that sdk-comtrade, sdk-usda-esr, sdk-usda-gats, sdk-usda-nass and sdk-usda-psd commit,
+read from their `enums.py` on 2026-11-17, but sdk-usda-nass's two singular names,
+`ProgressStage` and `ConditionCategory`, which stay in its `class_names`, so no class a
+source commits changes its name. Its consumer is every source, through the template's
+refresh script (ADR-0023, decision 1).
+
+(c) **`parse_decimal` gives `None` for what is no finite number** (the helpers; step 13;
+https://github.com/xippios/sdk-core/issues/128, found by sdk-usda-wasde). The decision's
+`parse_decimal` drops thousands separators and gives `None` for a suppression code, and it
+returned whatever `Decimal` reads, so the texts `NaN`, `Infinity` and `sNaN` gave
+`Decimal('NaN')`, `Decimal('Infinity')` and `Decimal('sNaN')`: no figure that upstream
+printed as a number, and none that a JSON number carries in the adapters, where
+`float(Decimal('sNaN'))` raises. It gives `None` for every result that is not finite, as
+for a suppression code, and every finite text reads as before. Its consumers are
+sdk-usda-wasde, which guards each parse with `is_finite()` and can drop the guard, and
+sdk-usda-nass, which parses Quick Stats' values with it.

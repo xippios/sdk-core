@@ -447,8 +447,11 @@ a refusal the package makes itself, such as a query over a documented record lim
 an unknown filter name, subclasses `InvalidRequestError`. A code the packaged list lacks,
 where upstream answers an unknown code with an empty result, is refused before the call
 with core's `UnknownCode`, naming the list, its fetch date and the closest known codes
-(`xippios.core.closest`, or a strategy of the source's own) (ADR-0022, amendment
-2026-10-27). Upstream's own refusal of
+(`xippios.core.closest`, `xippios.core.nearest` for integer codes nearest by number, or a
+strategy of the source's own) (ADR-0022, amendment 2026-10-27, and amendment 2026-11-18,
+point h), a code whose name is its own text named once (`Did you mean VA?`), and that the
+packaged list is out of date if upstream added the code since, naming no command of the
+package's maintainers (ADR-0022, amendment 2026-11-18, point f). Upstream's own refusal of
 the query as given is mapped to `InvalidRequestError`, or a subclass, in `classify` (§6):
 usda-nass's HTTP 413 over the record limit, comtrade's HTTP 400, cashctrl's
 `RequestRejected`. Agents and HTTP 422 treat both alike: the caller has to change the
@@ -703,6 +706,12 @@ which deletes its copies (ADR-0025, amendment 2026-11-18, (b) and (d)).
   which binds a source from its adoption of that release
   (https://github.com/xippios/sdk-core/issues/168; ADR-0026, decision 6 and its amendment
   of 2026-11-18, (b)); until then a client tells an error answer by the text.
+- An error that a tool can return and that names another task, the one to call instead or
+  the list task that names the known values, names that task's MCP tool too, as
+  sdk-usda-nass's refusal of a value its packaged list lacks does:
+  `list_param_values('state_alpha') lists the known values (over MCP, the tool
+  usda_nass_list_param_values).` A task of `BULK_TASKS` has no tool, and an error names it
+  alone (ADR-0022, amendment 2026-11-18, point i).
 - An entry point, `xippios-<source>-mcp` or, for a source with a write server,
   `xippios-<source>-mcp-read` and `xippios-<source>-mcp-write`, runs stdio by default;
   `--http` for streamable HTTP.
