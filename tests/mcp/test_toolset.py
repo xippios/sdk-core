@@ -126,6 +126,16 @@ def test_a_tool_set_takes_build_servers_defaults() -> None:
     assert (tools.read_only, tools.loopback_only) == (True, False)
 
 
+@pytest.mark.anyio
+async def test_a_tool_set_takes_caps_none_as_no_caps() -> None:
+    # Finding 1 of https://github.com/xippios/sdk-core/pull/288: §8's
+    # caps=getattr(tasks, "MCP_CAPS", None) for a source without MCP_CAPS.
+    tools = ToolSet("example", [get_series, list_areas], caps=None)
+    assert dict(tools.caps) == {}
+    areas = await mcp_call(build_server(tools), "example_list_areas", {})
+    assert (len(areas["data"]), areas["note"][:20]) == (200, "showing 200 of 310 r")
+
+
 def test_a_tool_set_keeps_a_read_only_copy_of_its_caps() -> None:
     caps = {"list_areas": AREAS_CAP}
     tools = ToolSet("example", [get_series, list_areas], caps=caps)
@@ -318,6 +328,39 @@ def test_option_defaults_without_add_options_are_core_options_alone() -> None:
     defaults = ToolSet("example", [get_series]).option_defaults()
     core = {"http": False, "host": "127.0.0.1", "port": 8000, "allow_remote": False}
     assert vars(defaults) == core
+
+
+def add_required_org(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--org", required=True)
+
+
+def add_bad_default(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--years", type=int, default="five")
+
+
+@pytest.mark.parametrize(
+    ("add_options", "message"),
+    [
+        (add_required_org, "the following arguments are required: --org"),
+        (add_bad_default, "argument --years: invalid int value: 'five'"),
+    ],
+    ids=["required", "bad-default"],
+)
+def test_option_defaults_refuse_an_option_without_a_default_and_exit_nothing(
+    capsys: pytest.CaptureFixture[str],
+    add_options: Any,
+    message: str,
+) -> None:
+    # Finding 3 of https://github.com/xippios/sdk-core/pull/288: argparse's exit would end
+    # a host that serves every other package too.
+    tools = ToolSet("example", [get_series], add_options=add_options)
+    with pytest.raises(ValueError, match="add_options needs a default") as refused:
+        tools.option_defaults()
+    assert str(refused.value) == (
+        "example: add_options needs a default for each of its options, since a host "
+        f"applies the hooks without a command line: {message}"
+    )
+    assert capsys.readouterr() == ("", ""), "no usage printed"
 
 
 def test_a_host_applies_the_hooks_with_their_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
