@@ -25,6 +25,8 @@ EXPORTS = {
         "closest", "sync", "__version__",
         # tenants, back from the two sources' copies (ADR-0024, amendment 2026-11-18, (b))
         "Tenants", "list_task",
+        # and the lock that binds a server to one of them (the same amendment, (d))
+        "TenantLock", "bind_tasks", "tenant_instructions",
     },
     "xippios.core.client": {
         "AsyncClient", "BasicKeyAuth", "BearerAuth", "CachedResponse", "ClientConfig",
@@ -39,6 +41,8 @@ EXPORTS = {
         "recorded_query", "response_from_fixture", "sent_query", "sent_urls", "write_fixture",
         # the bodies a route received (https://github.com/xippios/sdk-core/issues/183)
         "sent_bodies",
+        # the write server's check and the demo-only strip (ADR-0024, amendment 2026-11-18, (d))
+        "assert_write_tools", "keep_reserved_tenants",
     },
     "xippios.core.mcp": {
         "ResultCap", "build_parser", "build_server", "cap_result", "error_to_text", "main",
@@ -46,6 +50,8 @@ EXPORTS = {
         # what the host imports (https://github.com/xippios/sdk-core/issues/170, #167)
         "LOOPBACK_HOSTS", "is_loopback_only", "is_write_server", "quiet_request_logging",
         "register_tasks", "tool_functions",
+        # the serve command of a multi-tenant source (ADR-0024, amendment 2026-11-18, (d))
+        "serve_tenants",
     },
     "xippios.core.http": {"is_scalar", "router_from_tasks", "status_for"},
 }  # fmt: skip
