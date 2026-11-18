@@ -225,3 +225,18 @@ validator that a parameter declares reaches the tool's input schema, and the che
 what it refuses in the same form. The model dropped the metadata until now, and an
 `AfterValidator` on a parameter never ran. The HTTP router keeps it too (ADR-0007,
 amendment 2026-11-18, (a)).
+
+(c) **Decisions 1 to 4 and 6 hold in core again** (the amendment of 2026-10-29; step 3,
+https://github.com/xippios/sdk-core/issues/166; ADR-0024, amendment 2026-11-18, (b)).
+`Tenants` and `list_task` come from `xippios.core`, out of the module `xippios.core.tenants`,
+with three changes to the decisions as written. Decision 1:
+`Tenants(source, *, var_prefix=None, list_var, fields, reserved=(), validate=None,
+hints=None)` keeps a tenant's values in `<PREFIX>_<NAME>_<FIELD>`, the prefix `var_prefix`
+where the source gives one, `GOOGLE` for sdk-google-mail, and otherwise the source
+upper-cased with `-` made `_`, so sdk-cashctrl's scheme is unchanged; the source slug names
+the source in every error either way, and `hints` tells the operator what a field holds
+when `validate` refuses its value. Decision 3: the client that a changed value replaces is
+closed, no longer dropped (queue row 24 b). Decision 6: `list_task(tenants, *, name,
+doc=None, source=None)`, whose `source` names `meta.source` where the registry's slug is
+not the source's, for a registry that several sources share. Decisions 2 and 4 hold as
+written.

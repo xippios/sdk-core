@@ -215,3 +215,15 @@ in `apply_options` with its copy of `_LOOPBACK_HOSTS`, and the host's copy, go w
 adoptions of core 0.4.0 (ADR-0023, decision 4). `main`'s usage line names the entry point
 that runs, and its refusal and the help of `--allow-remote` name the server's kind, "a read
 server held to loopback" beside "a write server". Conventions §8 states the option.
+
+(b) **The registry and the tenant list in core** (D-d (a) and (b); step 3,
+https://github.com/xippios/sdk-core/issues/166). `Tenants` and `list_task` come from
+`xippios.core` (ADR-0024, amendment 2026-11-18, (b)), so sdk-google-mail's `_tenants.py` and
+sdk-cashctrl's go with their adoptions of core 0.4.0 (ADR-0023, decision 4). D-b's registry
+is then `Tenants("google-mail", var_prefix="GOOGLE", list_var="GOOGLE_ACCOUNTS",
+fields=("REFRESH_TOKEN",), reserved=("demo",))`: its variables keep the `GOOGLE_` prefix
+that every Google source shares, and its errors name the source, `google-mail`, where the
+copy, whose first argument was the prefix, named `google`. The `source=` that
+sdk-google-mail's `list_task` took for the same reason stays in core, the registry's slug by
+default, for the account registry that the Google sources will share as
+`xippios.core.google` (D-d).

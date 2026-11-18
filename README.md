@@ -29,6 +29,9 @@ It gives a source package the things that should be identical across the family:
 - **The api.data.gov gateway** (`xippios.core.data_gov`) for every source behind it:
   the key from `DATA_GOV_API_KEY`, the gateway's error answers, and one quota policy per
   process for that key.
+- **Tenants** (`xippios.core.tenants`) for a source whose upstream serves each tenant from
+  a host or under a key of its own: `Tenants` declares them in the environment, one
+  client each, and `list_task` gives the tool that names them.
 - **Error taxonomy**: `ConfigError`, `AuthError`, `RateLimitError`, `NotFoundError`,
   `ValidationError`, `UpstreamError`, `TransportError` and `InvalidRequestError` (the
   request as given cannot be served: a bad argument, or a refusal the source documents,
@@ -344,10 +347,46 @@ over `ClientConfig.cache_max_bytes` (8 MiB by default) is returned and not cache
 ## Multi-tenant sources
 
 An upstream that serves each tenant from a host or under a key of its own (CashCtrl's
-organisations) is served by a source that carries its tenant registry itself (ADR-0024).
-Its tasks take the tenant's name and set `ResultMeta(tenant=name, ...)`; its messages and
-results name tenants and variables, never a value, and core's error messages leave the
-host out, since it names the tenant.
+organisations, Gmail's mailboxes) is served by a source that declares its tenants in the
+environment with `Tenants`, one client each, and names them with `list_task`
+(`xippios.core.tenants`; ADR-0014, ADR-0024):
+
+```python
+from xippios.core import AsyncClient, BasicKeyAuth, ClientConfig, Tenants, list_task
+
+TENANTS = Tenants(
+    "example",
+    list_var="EXAMPLE_TENANTS",  # EXAMPLE_TENANTS=acme,acme_test
+    fields=("SUBDOMAIN", "API_KEY"),  # EXAMPLE_ACME_SUBDOMAIN, EXAMPLE_ACME_API_KEY
+    reserved=("demo",),  # declared by EXAMPLE_DEMO_SUBDOMAIN and _API_KEY alone
+)
+
+
+def build(name: str) -> AsyncClient:
+    subdomain = TENANTS.field(name, "SUBDOMAIN")  # EXAMPLE_<NAME>_SUBDOMAIN, stripped
+    config = ClientConfig(..., base_url=f"https://{subdomain}.example.org/api")
+    return AsyncClient(config, auth=BasicKeyAuth(TENANTS.var(name, "API_KEY")))
+
+
+client = TENANTS.client_for("acme", build)  # acme's own client, built on first use
+list_tenants = list_task(TENANTS, name="list_tenants")  # the tool example_list_tenants
+```
+
+The environment is read on every call. `client_for` keeps one client per tenant under a
+digest of its variables, never their values, so a changed variable builds a new client
+and closes the one it replaces. A name that is not declared is the caller's
+`InvalidRequestError`, which lists the declared ones; a malformed list, or a missing or
+refused value of a declared tenant, is the operator's `ConfigError`, which names the
+variable. A source whose variables carry a prefix other than its slug names it:
+`Tenants("google-mail", var_prefix="GOOGLE", ...)` reads `GOOGLE_WORK_REFRESH_TOKEN`, and
+its errors name `google-mail`. The list task takes no argument and returns names only,
+`meta.tenant` `None`, on the read server; `list_task(..., source=...)` names another
+source than the registry's, for a registry that several sources share.
+
+Every other task takes the tenant's name and sets `ResultMeta(tenant=name, ...)`; its
+messages and results name tenants and variables, never a value, and core's error messages
+leave the host out, since it names the tenant. A server bound to one tenant, and the
+checks of its write server, are still the source's own (ADR-0024).
 
 ## Reference data and generated enums
 
@@ -717,6 +756,7 @@ fragment until the release assembles it.
 | `xippios.core.models` | `UpstreamModel` with `dump_upstream`, `Result`, `ResultMeta` with `published_at_naive`, `ResultCap`, `parse` | alpha |
 | `xippios.core.reference` | packaged CSV/JSON loaders, `PackagedList`, `matches`, `closest`, generated `StrEnum`/`IntEnum` modules | alpha |
 | `xippios.core.pagination` | `paginate_offset` (a page-numbered endpoint maps the offset to its page), `collect` | alpha |
+| `xippios.core.tenants` | `Tenants`, a multi-tenant source's tenants declared in the environment with one client each, and `list_task`, the tool that names them | alpha |
 | `xippios.core.mcp` | tool registration with the argument check and the write server's `confirm` rule, `tool_functions`, result caps, error text, CLI with option hooks and the loopback rule for write and `loopback_only` servers, quiet request log | alpha |
 | `xippios.core.http` | router factory, problem details | alpha |
 | `xippios.core.testing` | live gate, offline run, record (with `max_bytes=`, `array_key=` and `keep=`), the fixture writer and the `sample` mark, replay, scrub of named secrets with a plain verify, `mcp_call`, family check | alpha |

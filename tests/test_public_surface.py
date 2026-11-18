@@ -21,6 +21,8 @@ EXPORTS = {
         "Result", "ResultCap", "ResultMeta", "UpstreamModel", "parse", "parse_decimal",
         "collect", "paginate_offset", "load_json", "load_table", "PackagedList", "matches",
         "closest", "sync", "__version__",
+        # tenants, back from the two sources' copies (ADR-0024, amendment 2026-11-18, (b))
+        "Tenants", "list_task",
     },
     "xippios.core.client": {
         "AsyncClient", "BasicKeyAuth", "BearerAuth", "CachedResponse", "ClientConfig",
