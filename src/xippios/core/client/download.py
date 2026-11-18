@@ -28,7 +28,8 @@ class Downloaded:
     adapters never serve it.
 
     Attributes:
-        path: The file written, ``dest`` as given to ``download``.
+        path: The file written, ``dest`` as given to ``download``, with mode ``0600``,
+            its owner's alone, as ``tempfile.mkstemp`` creates it.
         bytes: Its size in bytes, as written: the body with any ``Content-Encoding``
             undone, a ``.gz`` file served as ``application/gzip`` left compressed.
         content_type: The ``Content-Type`` header as sent, e.g. ``"text/csv;
