@@ -28,16 +28,16 @@
     version=__version__)`, the import of `MCPServer` (line 9) deleted and `ToolSet` and
     `tool_functions` imported beside `build_server` (line 10), `server = build()` (line 38) →
     `server = build_server(build())`, and the entry point as that entry writes it,
-    `serve_tenants(server, build, TENANTS, param="org", noun="organisation",
-    check=check_org)` — `serve_tenants` builds the bound server from the tool set.
+    `serve_tenants(server, build, TENANTS, noun="organisation", check=check_org)` —
+    `serve_tenants` builds the bound server from the tool set.
     `src/xippios/cashctrl/mcp_write.py` (sdk-cashctrl) — after the serve command's entry,
     `build` (lines 27 to 37) → returning `ToolSet(SOURCE, bind_tasks(tool_functions(tasks_write),
     lock), caps=getattr(tasks_write, "MCP_CAPS", None),
     instructions=tenant_instructions(INSTRUCTIONS, lock), version=__version__,
     read_only=False)`, the imports as in `mcp.py` (lines 10 and 11), `server = build()` (line
     40) → `server = build_server(build(), name="xippios-cashctrl-write")`, and the entry
-    point `serve_tenants(server, build, TENANTS, param="org", noun="organisation",
-    check=check_org)` — the bound write server takes its name from `server`, as it does
+    point `serve_tenants(server, build, TENANTS, noun="organisation", check=check_org)` —
+    the bound write server takes its name from `server`, as it does
     today.
     `src/xippios/google/mail/mcp.py` (sdk-google-mail) — after the serve command's entry,
     `build` (lines 35 to 43) → `def build(lock: TenantLock | None = None) -> ToolSet:`
@@ -46,7 +46,7 @@
     bound=BOUND_INSTRUCTIONS), version=__version__, loopback_only=True)`, the imports as in
     sdk-cashctrl's `mcp.py` (lines 11 and 12), `server = build()` (line 46) → `server =
     build_server(build())`, and the entry point `serve_tenants(server, build, TENANTS,
-    param="account", check=check_account)` — the read server is held to loopback by core
+    check=check_account)` — the read server is held to loopback by core
     (ADR-0025, D-a), bound or not.
     `src/xippios/google/mail/mcp_write.py` (sdk-google-mail) — after the serve command's
     entry, `build` (lines 39 to 48) → returning `ToolSet(SOURCE,
@@ -54,7 +54,7 @@
     None), instructions=tenant_instructions(INSTRUCTIONS, lock, bound=BOUND_INSTRUCTIONS),
     version=__version__, read_only=False)`, the imports as in `mcp.py` (lines 15 and 16),
     `server = build()` (line 51) → `server = build_server(build())`, and the entry point
-    `serve_tenants(server, build, TENANTS, param="account", check=check_account)` — as
+    `serve_tenants(server, build, TENANTS, check=check_account)` — as
     above.
     `src/xippios/mcp/packages.py` (xippios-mcp) — `<path>.mcp.server` and `<path>.tasks`
     (`mcp_write` and `tasks_write` for `:write`), `tasks.__all__` and `MCP_CAPS`, lines 135

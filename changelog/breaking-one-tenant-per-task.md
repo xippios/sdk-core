@@ -1,17 +1,21 @@
-- A server bound to one tenant no longer serves a task unbound: `bind_tasks` refuses, with
-  `ValueError` naming the task and the parameter, a task that lacks the lock's parameter,
-  where it returned the task as it was, unless it is the tenant list or its module names it
-  in `NO_TENANT_TASKS`, beside `BULK_TASKS`, as touching no tenant, which is served as it
-  is. The family check gains `test_family_tasks_take_one_tenant`, which holds every task of
-  a source with a `Tenants` registry, with no opt-in, to the tenant's parameter once,
-  required with no default, a `str`, the same two excepted. Conventions §7 states the line
-  for core and for a source's own tasks: one tenant per task, required, names only from the
-  tenant list, nothing shared between tenants.
-  (ADR-0036, §7, https://github.com/xippios/sdk-core/issues/298,
+- A multi-tenant source declares the parameter that names a tenant once, on its registry,
+  `Tenants(..., param="org")`, required, and a server bound to one tenant no longer serves a
+  task unbound: `bind_tasks` refuses, with `ValueError` naming the task and the parameter, a
+  task that lacks it, where it returned the task as it was, unless it is the tenant list or
+  its module names it in `NO_TENANT_TASKS`, beside `BULK_TASKS`, as touching no tenant. The
+  family check gains `test_family_tasks_take_one_tenant`, which holds every task of a source
+  with a `Tenants` registry, with no opt-in, to the registry's `param` once, required with
+  no default, a `str`, the same two excepted, and `serve_tenants` takes its option from the
+  registry and `TenantLock(TENANTS, "acme")` takes the registry, where both took a `param`
+  of their own. Conventions §7 states the line for core and for a source's own tasks: one
+  tenant per task, required, names only from the tenant list, nothing shared between
+  tenants.
+  (ADR-0036, §7, §8, https://github.com/xippios/sdk-core/issues/298,
   https://github.com/xippios/sdk-core/issues/299)
-  - Hand-apply: `src/xippios/<package>/tasks.py` (sdk-cashctrl, sdk-google-mail) — nothing
-    today, and a task added later that touches no tenant is named in `NO_TENANT_TASKS =
-    frozenset({"<task>"})` beside `BULK_TASKS`, in `tasks_write.py` for a write task — each
-    of their 57 tasks takes `org` or `account` once, required, a `str`, and their tenant
-    lists are `list_task`s, while an undeclared task without the tenant makes building the
-    bound server raise `ValueError` and fails the family check.
+  - Hand-apply: `src/xippios/cashctrl/_client.py` (sdk-cashctrl) — `param="org",` after
+    `list_var="CASHCTRL_ORGS",` in the declaration `TENANTS = Tenants(...)` (line 97) —
+    core's `Tenants` requires the parameter that names a tenant, and the family check holds
+    each of the 46 tasks to it, which takes `org` once, required, a `str`.
+    `src/xippios/google/mail/_client.py` (sdk-google-mail) — `param="account",` after
+    `list_var="GOOGLE_ACCOUNTS",` in the declaration `TENANTS = Tenants(...)` (line 104) —
+    as above, for the 11 tasks, which take `account`.

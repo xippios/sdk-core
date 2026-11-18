@@ -474,6 +474,7 @@ from xippios.core import AsyncClient, BasicKeyAuth, ClientConfig, Tenants, list_
 TENANTS = Tenants(
     "example",
     list_var="EXAMPLE_TENANTS",  # EXAMPLE_TENANTS=acme,acme_test
+    param="org",  # every task takes org, the tenant's name
     fields=("SUBDOMAIN", "API_KEY"),  # EXAMPLE_ACME_SUBDOMAIN, EXAMPLE_ACME_API_KEY
     reserved=("demo",),  # declared by EXAMPLE_DEMO_SUBDOMAIN and _API_KEY alone
 )
@@ -500,23 +501,24 @@ its errors name `google-mail`. The list task takes no argument and returns names
 `meta.tenant` `None`, on the read server; `list_task(..., source=...)` names another
 source than the registry's, for a registry that several sources share.
 
-Every other task takes the tenant's name and sets `ResultMeta(tenant=name, ...)`; its
-messages and results name tenants and variables, never a value, and core's error messages
-leave the host out, since it names the tenant. One tenant per call (ADR-0036, decisions 11
-and 13): each task takes exactly one tenant, required, the tenant list returns names only,
-nothing is shared between tenants, and nothing in core works across them. A task that
-touches no tenant, a list that is the same for every tenant say, is declared by name beside
-`BULK_TASKS` in `tasks.py`:
+Every other task takes the tenant's name as the registry's `param`, `org` here, and sets
+`ResultMeta(tenant=name, ...)`; its messages and results name tenants and variables, never
+a value, and core's error messages leave the host out, since it names the tenant. One
+tenant per call (ADR-0036, decisions 11 and 13): each task takes exactly one tenant,
+required, the tenant list returns names only, nothing is shared between tenants, and
+nothing in core works across them. A task that touches no tenant, a list that is the same
+for every tenant say, is declared by name beside `BULK_TASKS` in `tasks.py`:
 
 ```python
 NO_TENANT_TASKS = frozenset({"list_currencies"})  # tasks_write.py declares its own
 ```
 
 A server bound to one tenant serves that tenant alone, and none of its tools takes the
-tenant's name. `bind_tasks(tasks, lock)` binds them to a `TenantLock`, and
-`tenant_instructions` ends the server's instructions with a sentence that names the
-tenant; `serve_tenants` builds the bound server from `--org` and runs it through `main`
-(ADR-0036, ADR-0042). The source's `build(lock)` returns its tool set, as the package
+tenant's name. `bind_tasks(tasks, lock)` binds them to a `TenantLock(TENANTS, "acme")`,
+whose parameter is the registry's, and `tenant_instructions` ends the server's instructions
+with a sentence that names the tenant; `serve_tenants` builds the bound server from
+`--org`, the registry's `param` as an option, and runs it through `main` (ADR-0036,
+ADR-0042). The source's `build(lock)` returns its tool set, as the package
 contract has it, and `serve_tenants` builds the bound server from the tool set, named as
 `server` is (ADR-0026):
 
@@ -547,7 +549,6 @@ def run() -> None:  # xippios-example-mcp --org acme serves acme alone
         server,
         build,
         TENANTS,
-        param="org",
         noun="organisation",
         check=lambda org: TENANTS.field(org, "SUBDOMAIN"),
     )
@@ -878,10 +879,10 @@ write, is synchronous, returns `Result[T]` and has an agent docstring; the READM
 table lists exactly the read and the write tasks; `.copier-answers.yml` names a template
 tag; `pyproject.toml` bounds `xippios-core` with `~=`; and every task, read and write, of a
 source whose `_client`, `tasks` or `tasks_write` module holds a `Tenants` registry takes
-exactly one tenant, its parameter once, required, a `str`, the tenant list and the tasks of
-`NO_TENANT_TASKS` excepted, with no opt-in. The check reads the tenant's parameter from the
-tasks, the name most of them take (`org` for sdk-cashctrl), and reads signatures only, so a
-task that takes one tenant and opens another's client is the review's to find. A write
+exactly one tenant, the parameter its registry declares, `Tenants(..., param="org")`, once,
+required, a `str`, the tenant list and the tasks of `NO_TENANT_TASKS` excepted, with no
+opt-in. The check reads signatures only, so a task that takes one tenant and opens another's
+client is the review's to find. A write
 server is its source's to test, with `await assert_write_tools(write_server, write_tasks,
 source="example", read_server=read_server, router=router)`: a write server, its tools exactly the write
 tasks, each taking `confirm: bool = False` last, and none of them on the read server or

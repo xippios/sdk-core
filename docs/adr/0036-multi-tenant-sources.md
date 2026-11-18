@@ -21,8 +21,9 @@ record, the human's answer of 2026-11-18 (https://github.com/xippios/sdk-core/is
 ## Decision
 
 1. **Tenants come from the environment.** `Tenants(source, *, var_prefix=None, list_var,
-   fields, reserved=(), validate=None, hints=None)`, exported from `xippios.core` out of the
-   module `xippios.core.tenants`, holds a source's scheme. `list_var` lists the tenant names,
+   param, fields, reserved=(), validate=None, hints=None)`, exported from `xippios.core` out
+   of the module `xippios.core.tenants`, holds a source's scheme and `param`, the task
+   parameter that names a tenant (decision 13). `list_var` lists the tenant names,
    comma-separated, each matching `^[a-z0-9_]+$`, read on every call. Each tenant's values
    sit in `<PREFIX>_<NAME>_<FIELD>`, the name upper-cased, the prefix `var_prefix` where the
    source gives one, `GOOGLE` for sdk-google-mail, and otherwise the source upper-cased with
@@ -55,10 +56,11 @@ record, the human's answer of 2026-11-18 (https://github.com/xippios/sdk-core/is
    an agent can form valid calls (conventions §8). Its `source` names `meta.source` where the
    registry's slug is not the source's, for a registry that several sources share. It stays
    on the read server: a write server exposes write tools only.
-7. **The lock binds a server's tools to one tenant.** `TenantLock(param, value, noun=None)`,
-   `bind_tasks(tasks, lock)` and `tenant_instructions(text, lock, *, bound=None)` come from
-   `xippios.core`, out of the module `xippios.core.tenants`. A bound task keeps its
-   `__name__` and awaits the task with `param=value`; its signature, annotations and
+7. **The lock binds a server's tools to one tenant.** `TenantLock(tenants, value,
+   noun=None)`, `bind_tasks(tasks, lock)` and `tenant_instructions(text, lock, *,
+   bound=None)` come from `xippios.core`, out of the module `xippios.core.tenants`. The lock
+   takes the source's registry, and its `param` is the registry's (decision 13). A bound
+   task keeps its `__name__` and awaits the task with `param=value`; its signature, annotations and
    docstring lose `param`, so no tool of a bound server declares the tenant's argument and
    the argument check refuses a call that names it (decision 12). The lock is no
    middleware, takes no `tenant_lock=` parameter and refuses no defaulted tenant parameter.
@@ -74,10 +76,10 @@ record, the human's answer of 2026-11-18 (https://github.com/xippios/sdk-core/is
    `apply_options(namespace, server)` returns the server to run. A `XippiosError` it raises,
    an undeclared tenant or a missing variable, ends the process like an argparse error: the
    message on stderr, exit status 2, nothing served. The bound server is core's:
-   `xippios.core.mcp.serve_tenants(server, build, tenants, *, param, noun=None, check=None)`
-   puts `--<param>` on `main`'s parser through the hooks, checks the named tenant with
-   `tenants.require` and then with the source's `check`, and runs
-   `build(TenantLock(param, name, noun=noun))`; an undeclared tenant or an error of the check
+   `xippios.core.mcp.serve_tenants(server, build, tenants, *, noun=None, check=None)` puts
+   `--<param>`, the registry's `param`, on `main`'s parser through the hooks, checks the
+   named tenant with `tenants.require` and then with the source's `check`, and runs
+   `build(TenantLock(tenants, name, noun=noun))`; an undeclared tenant or an error of the check
    stops the process with exit status 2 before the bound server is built. A multi-tenant
    source's servers are bound so: its entry point runs `serve_tenants`, and its
    `build(lock)` passes its tasks through `bind_tasks` and its instructions through
@@ -123,17 +125,19 @@ record, the human's answer of 2026-11-18 (https://github.com/xippios/sdk-core/is
     point a).
 13. **One tenant per call, in a source's own tasks too.** A multi-tenant source's tasks keep
     the line of decision 11: each task takes exactly one tenant, required, the tenant list
-    returns names only, and nothing is shared between tenants. Core checks it where it can
-    break unseen. `bind_tasks` refuses with `ValueError`, naming the task and the parameter
+    returns names only, and nothing is shared between tenants. The source declares the
+    parameter that names a tenant once, `Tenants(..., param="org")`, required: the family
+    check, the serve command's option and every `TenantLock`, which takes the registry, read
+    it there, so none names another parameter. Core checks the rule where it can break
+    unseen. `bind_tasks` refuses with `ValueError`, naming the task and the parameter
     and binding nothing, a task that lacks the lock's parameter, unless it is the tenant
     list of decision 6 or its module declares it by name as touching no tenant, in
     `NO_TENANT_TASKS`, a frozenset of task names beside `BULK_TASKS` in `tasks.py` or
     `tasks_write.py`; a task so declared is served as it is on a bound server. The family
     check holds every task of a source with a `Tenants` registry, which its `_client`,
-    `tasks` or `tasks_write` module holds, to the rule, with no opt-in: the tenant's
-    parameter once, required with no default, of a type that names one tenant, a `str`, the
-    tenant list and the declared tasks excepted; it reads the tenant's parameter from the
-    tasks, the name most of them take. The lock still binds a defaulted tenant parameter
+    `tasks` or `tasks_write` module holds, to the rule, with no opt-in: the registry's
+    `param` once, required with no default, of a type that names one tenant, a `str`, the
+    tenant list and the declared tasks excepted. The lock still binds a defaulted tenant parameter
     (decision 7); the family check refuses one. Both read signatures, which show neither
     what a task reaches nor what it shares: a task that takes one tenant and opens another's
     client is the review's to find (https://github.com/xippios/sdk-core/issues/302). The
@@ -143,8 +147,9 @@ record, the human's answer of 2026-11-18 (https://github.com/xippios/sdk-core/is
 ## Consequences
 
 - A changed key rebuilds a tenant's client.
-- A multi-tenant source names a task that touches no tenant in `NO_TENANT_TASKS`, or its
-  bound server is not built and its family check fails.
+- A multi-tenant source's registry names its tenant's parameter, which it cannot leave out,
+  and a task that touches no tenant is named in `NO_TENANT_TASKS`, or its bound server is
+  not built and its family check fails.
 - The `mcp` SDK's middleware API is provisional in 2.x and core declares no upper bound for
   it; the argument check's tests through `mcp_call_text` guard it.
 - Core adds no authentication to MCP servers. A write server beyond loopback is the

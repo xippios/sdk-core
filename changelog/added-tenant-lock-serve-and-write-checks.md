@@ -2,17 +2,17 @@
   from core again, out of sdk-cashctrl's and sdk-google-mail's copies: `TenantLock`,
   `bind_tasks` and `tenant_instructions` from `xippios.core`, `serve_tenants` from
   `xippios.core.mcp`, and `assert_write_tools` and `keep_reserved_tenants` from
-  `xippios.core.testing`. No tool of a server that `bind_tasks(tasks, TenantLock("org",
-  "acme"))` binds takes `org`, so a call that names it is refused, and
-  `serve_tenants(server, build, TENANTS, param="org", check=...)` is an entry point's
-  `--org`, which checks the tenant at startup. `await assert_write_tools(...)` checks a
+  `xippios.core.testing`. No tool of a server that `bind_tasks(tasks, TenantLock(TENANTS,
+  "acme"))` binds takes `org`, the registry's `param`, so a call that names it is refused,
+  and `serve_tenants(server, build, TENANTS, check=...)` is an entry point's `--org`, which
+  checks the tenant at startup. `await assert_write_tools(...)` checks a
   write server against its write tasks, `confirm: bool = False` last, and
   `keep_reserved_tenants(TENANTS)` in `tests/conftest.py` leaves the tests the reserved
   tenant alone.
   (ADR-0014, ADR-0024, ADR-0025, §7, §8, https://github.com/xippios/sdk-core/issues/166)
   - Hand-apply: `src/xippios/cashctrl/_org_lock.py` (sdk-cashctrl) — deleted — core's
     `TenantLock`, `bind_tasks` and `tenant_instructions` are this copy: `OrgLock("org",
-    name)` is `TenantLock("org", name, noun="organisation")`, whose sentence reads as
+    name)` is `TenantLock(TENANTS, name, noun="organisation")`, whose sentence reads as
     `lock_sentence`'s did, and `instructions(base, lock)` is `tenant_instructions(base,
     lock)`, the same text.
     `src/xippios/cashctrl/_cli.py` (sdk-cashctrl) — deleted, its subdomain check (line 55)
@@ -28,7 +28,7 @@
     beside `build_server` (line 10) and `TENANTS` and `check_org` beside `SOURCE` (line 14),
     then `OrgLock` (line 27) → `TenantLock`, `instructions(INSTRUCTIONS, lock)` (line 33) →
     `tenant_instructions(INSTRUCTIONS, lock)` with no `bound=`, `serve(server, build)` and
-    its comment (lines 43 to 46) → `serve_tenants(server, build, TENANTS, param="org",
+    its comment (lines 43 to 46) → `serve_tenants(server, build, TENANTS,
     noun="organisation", check=check_org)`, and the docstring's `_cli`, `_org_lock` (line 6)
     → core's `serve_tenants` — the server, its options and its instructions are what they
     were, `INSTRUCTIONS` and then the lock's sentence when bound.
@@ -58,7 +58,8 @@
     404), with `TOOL`, `REQUEST_LOGGERS`, `EchoServers` and `locked` (lines 33, 35, 42 to 68
     and 83 to 84) and the imports they leave unused, the imports of `serve` and of
     `_org_lock` (lines 27 and 29) → `from xippios.core import TenantLock, bind_tasks`,
-    `LOCK` (line 39) → `TenantLock("org", DEMO, noun="organisation")`, `bind(task, LOCK)`
+    `LOCK` (line 39) → `TenantLock(TENANTS, DEMO, noun="organisation")`, `TENANTS` imported
+    from `_client`, `bind(task, LOCK)`
     (lines 107 and 150) → `bind_tasks([task], LOCK)[0]`, the organisation list's test (line
     197) on `mcp.build()` and `mcp.build(LOCK)` for `EchoServers`, and
     `test_a_missing_or_malformed_subdomain_fails_at_startup` (line 330) through `mcp.run()`
@@ -76,7 +77,7 @@
     `assert_write_tools` (lines 171 and 211) → core's — the kit is core's again.
     `src/xippios/google/mail/_account_lock.py` (sdk-google-mail) — deleted — core's
     `TenantLock`, `bind_tasks` and `tenant_instructions` are this copy:
-    `AccountLock("account", name)` is `TenantLock("account", name)`, its noun the
+    `AccountLock("account", name)` is `TenantLock(TENANTS, name)`, its noun the
     parameter's, and `instructions(base, lock, bound=...)` is `tenant_instructions(base,
     lock, bound=...)`, the form core takes where the two copies differ.
     `src/xippios/google/mail/_cli.py` (sdk-google-mail) — deleted, its refresh token check
@@ -101,7 +102,7 @@
     `instructions(INSTRUCTIONS, lock, bound=BOUND_INSTRUCTIONS)` (line 41) →
     `tenant_instructions(INSTRUCTIONS, lock, bound=BOUND_INSTRUCTIONS)`, `serve(server,
     build)` and its comment (lines 51 to 54) → `serve_tenants(server, build, TENANTS,
-    param="account", check=check_account)`, and the docstring's `_cli`, `_account_lock`
+    check=check_account)`, and the docstring's `_cli`, `_account_lock`
     (line 6) → core's `serve_tenants` — the server, its options and its instructions are
     what they were.
     `src/xippios/google/mail/mcp_write.py` (sdk-google-mail) — as in `mcp.py`: the imports
@@ -134,7 +135,8 @@
     `main` judges loopback on the server `apply_options` returns, after the account, the
     imports of `_account_lock` and `_cli` (lines 29 to 36) → `from xippios.core import
     TenantLock, bind_tasks`, `REMOTE_REFUSAL not in err` (line 465) dropped, `LOCK` (line
-    47) → `TenantLock("account", DEMO)`, `bind(task, LOCK)` (lines 117 and 160) →
+    47) → `TenantLock(TENANTS, DEMO)`, `TENANTS` imported from `_client`, `bind(task, LOCK)`
+    (lines 117 and 160) →
     `bind_tasks([task], LOCK)[0]`, `test_the_account_list_shows_the_bound_account_only`
     (line 202) on `mcp.build()` and `mcp.build(LOCK)` for `EchoServers`, and
     `test_a_listed_account_without_its_refresh_token_fails_at_startup` (line 276) through
