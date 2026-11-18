@@ -1,6 +1,6 @@
 # Handover — from planning to Claude Code
 
-Date: 2026-10-20 · Author: Johannes Didaskalu (with Claude) · Refreshed 2026-10-22 with the state after sessions 1 and 2, 2026-10-25 with the state after the core 0.2.0 release PR, 2026-10-26 with core 0.2.1, the release train and the family check (the sections from "Core 0.2.1" on), 2026-10-27 with `sdk-core`'s state line at the core 0.2.1 release PR, and 2026-10-27 at the core 0.3.0 release PR (the State block, the session model, the sections from "Core 0.3.0" on, and notes where 0.3.0 changed an earlier line), 2026-11-13, when the process of the work left this file (the session model, the standing gates, the plan for issue-driven work and the switch of the retired gates) and the documents' own rules stayed, and 2026-11-17 at the core 0.3.2 release PR (the State block's `sdk-core` line).
+Date: 2026-10-20 · Author: Johannes Didaskalu (with Claude) · Refreshed 2026-10-22 with the state after sessions 1 and 2, 2026-10-25 with the state after the core 0.2.0 release PR, 2026-10-26 with core 0.2.1, the release train and the family check (the sections from "Core 0.2.1" on), 2026-10-27 with `sdk-core`'s state line at the core 0.2.1 release PR, and 2026-10-27 at the core 0.3.0 release PR (the State block, the session model, the sections from "Core 0.3.0" on, and notes where 0.3.0 changed an earlier line), 2026-11-13, when the process of the work left this file (the session model, the standing gates, the plan for issue-driven work and the switch of the retired gates) and the documents' own rules stayed, 2026-11-17 at the core 0.3.2 release PR (the State block's `sdk-core` line), and 2026-11-18 at the core 0.4.0 release PR (the State block's `sdk-core` line and the sections from "Core 0.4.0" on).
 
 ## State
 
@@ -17,9 +17,11 @@ set, `pypi` environments with required reviewer `jdidaskalu`; PyPI account `xipp
   family review's core scope, the code of ADR-0019 and ADR-0022, and ADR-0024, since
   2026-10-27, released the same way. 0.3.1 since 2026-11-13, documents only: conventions
   1.22 to 1.27, the index of the 27 decision records and the changelog's fragments. 0.3.2
-  keeps the code of 0.3.0 but for a docstring: the repository's own `.github/` names
-  nothing that stands around it. Its release PR's merge tags `v0.3.2` and waits at `pypi`
-  for the maintainer's approval.
+  since 2026-11-17 keeps the code of 0.3.0 but for a docstring: the repository's own
+  `.github/` names nothing that stands around it. 0.4.0 (below) gives the host xippios-mcp
+  the loopback option, the package contract and the multi-tenant kit, and takes into core
+  what two or more sources kept as copies. Its release PR's merge tags `v0.4.0` and waits
+  at `pypi` for the maintainer's approval.
 - **`sdk-template`**: v0.2.0 tagged 2026-10-25; v0.2.1 and v0.2.2 on 2026-10-27, each
   tagged by its own `release.yml` on its release PR's merge (v0.2.2 renders `gates.yml`
   calling the renamed gates repository, `xippios/sdk-gates`). Template v0.3.0, the
@@ -754,3 +756,54 @@ Then, by the CHANGELOG's Hand-apply list:
 - Its tests: as psd's for the gateway; the 429 test of `get_census_export_series`
   brackets `retry_after` with `CLOCK_SLACK`, since it is read through the client.
 - Item 8: `CLAUDE.md`'s rate-limit row names `pause_cap` and `xippios.core.data_gov`.
+
+## Core 0.4.0
+
+What the host xippios-mcp waits for, the read server's loopback option, the package
+contract and the multi-tenant kit's return, and what two or more sources kept as copies,
+moved into core in one minor with the rules the conventions lacked
+(https://github.com/xippios/sdk-core/issues/240, its scope decided in
+https://github.com/xippios/sdk-core/issues/234). Eighteen steps and two follow-ups, one PR
+each, merged with a merge commit between 2026-11-17 23:48 and 2026-11-18 11:08 UTC, so
+their own commits are on `main` too; follow-up 4.1 merged last, after step 18. Each step
+adds its lettered points to one amendment of 2026-11-18 per record it changes, and the
+conventions keep the version line 1.27 until step 18 raises it to 1.28. The ADR column
+names the records as each step amended them: step 18 restates the fifteen that then
+carried three amendments or a reversal as ADR-0028 to ADR-0042, and each old number leads
+through `docs/adr.md` to its successor.
+
+| Step | sdk-core | What | ADR | Conventions | Merge commit on `main` |
+| --- | --- | --- | --- | --- | --- |
+| 1 | #267 `step/0.4.0-1` | `xippios.core.mcp` exports `register_tasks`, `is_write_server`, `quiet_request_logging` and `tool_functions`; `build_server(..., loopback_only=True)` with `is_loopback_only` and `LOOPBACK_HOSTS`; the `httpx2` and `httpcore2` loggers quieted | ADR-0013, ADR-0025, ADR-0026 amendments | §8, §10 | `1a8ef3894c3ae6c7ea2221b002937c4d773be612` |
+| 2 | #273 `step/0.4.0-2` | an error answer flagged `isError`; an argument a tool does not declare refused; an `Annotated` parameter's metadata kept in both adapters; a route's refused argument as problem details | ADR-0007, ADR-0014, ADR-0026 amendments | §8, §9 | `6192aea379e95a91c533a9873edd288f5e4f5045` |
+| 3 | #277 `step/0.4.0-3` | `Tenants` and `list_task` back in core, in `xippios.core.tenants` | ADR-0014, ADR-0024, ADR-0025 amendments | — | `049b2e61cf6d59cd6807280b3497a07e5b29ab58` |
+| 4 | #284 `step/0.4.0-4` | `TenantLock`, `bind_tasks`, `tenant_instructions`, `serve_tenants`, `assert_write_tools` and `keep_reserved_tenants` back in core | ADR-0014, ADR-0024, ADR-0025 amendments | §7, §8 | `a06cd60f9eb80b60abba62705056710310bfabfa` |
+| 4.1 | #303 `step/0.4.0-4.1` | one tenant per call: `Tenants(..., param=...)` required, `bind_tasks` refusing a task without it but the tenant list and `NO_TENANT_TASKS`, the family check's `test_family_tasks_take_one_tenant` | ADR-0036, decision 13, with decisions 1, 7 and 8; ADR-0014, ADR-0024, ADR-0025 amendments | §7, §8 | `96b16f841add49efe01c4fd32205cc1adcdc0ab3` |
+| 5 | #288 `step/0.4.0-5` | the package contract's types, `EnvVar` in `xippios.core.contract` and `ToolSet` in `xippios.core.mcp.toolset`; `build_server(tool_set)`, `register_tasks(server, tool_set)`, `option_defaults()` | ADR-0026 amendment | §7, §8 | `5276d12f9df68fd84a343ac724ff6aaf9d15364e` |
+| 6 | #266 `step/0.4.0-6` | the cache stores a 200 once `get_answer` decoded it; a miss carries its stored time; the generic `Answer` | ADR-0015 amendment | §4, §6 | `be6ae3a1c5eac90b4fce2359d867a1ae0e0a53ad` |
+| 7 | #275 `step/0.4.0-7` | the client's auth to the base URL's origin only, no quota for `auth=None` or another origin; the gateway's own answers and `NoDataForYear`; a signed link through `scrub_url`; `register_data_name` | ADR-0009, ADR-0015, ADR-0019 amendments | §4, §6, §7, §10 | `f07f7ac4690592a1155cd96d232fed5f4000c2cb` |
+| 8 | #283 `step/0.4.0-8` | `RenewingBearerAuth` and `BearerToken`; the plugin pins every credential a token request reads | ADR-0013, ADR-0025 amendments | §7, §10 | `1d47167ced544fc0a6b63ded8d79fa916149ad27` |
+| 9 | #282 `step/0.4.0-9` | `post_json` and `delete_json`; `decode_csv` of an open text stream; `download` refuses a bad `dest` with `InvalidRequestError` and states the mode `0600` of the file it writes; a sync task hands `SystemExit` back | ADR-0015, ADR-0019 amendments | §6 | `c79582349f289a653564e16b721118a1a0826adc` |
+| 10 | #268 `step/0.4.0-10` | `write_fixture` and `fixture_text` exported, the `sample` mark; `array_key=` and `keep="last"`; the response headers that only identify a request dropped | ADR-0019, ADR-0020, ADR-0024 amendments | §10 | `8e3b9b3d85c2716b9228c87c12afb92e9b9644ec` |
+| 11 | #278 `step/0.4.0-11` | a recording sends once and reads up to `max_read_bytes`; `Scrub` reads the values to scrub from a login's or a refresh's answer; `sent_bodies`; `request_description` | ADR-0005, ADR-0013, ADR-0015, ADR-0019, ADR-0024 amendments | §5, §10 | `dac2d7219150f53edeebe4721c468f8c2582e1a2` |
+| 12 | #265 `step/0.4.0-12` | `cap_result` cuts the rows of a model that holds one list; a cut whose first row alone passes the byte cap names no resume offset | ADR-0016 amendment | §8 | `0a8fbe7de1ebfb547008c5950566e95cbfdab072` |
+| 13 | #285 `step/0.4.0-13` | `UnknownCode`'s text and `closest(cutoff=)`; `nearest`; `render_enums` keeps a camelCase hump; `parse_decimal` gives `None` for NaN and the infinities; an error naming another task names its tool | ADR-0008, ADR-0022 amendments | §5, §8 | `1f378bd52317a1b7d24b13ae6f348f96ce0dfebf` |
+| 14 | #269 `step/0.4.0-14` | six rules of layers, the snapshot and hosts | ADR-0001, ADR-0003, ADR-0008, ADR-0010, ADR-0020 amendments | §2, §3, §4, §6 | `06163c6974bb91b1ae04ae785eddc95f27569651` |
+| 15 | #274 `step/0.4.0-15` | seven rules of release metadata and paging | ADR-0012, ADR-0020, ADR-0022 amendments | §4, §6 | `e8e228ed701dbf29fa4f528ec2da3f49129f47ff` |
+| 15.1 | #296 `step/0.4.0-15.1` | the `meta.endpoint` of a file from the publisher's origin or mirror and of a file named after its dataset; the registry's name | ADR-0010, ADR-0020, ADR-0025 amendments | §4, §6 | `3ae28163941d44c7c555342984e042b71c96b1f4` |
+| 16 | #286 `step/0.4.0-16` | seven rules of refusals, caps and fixtures; the review checklist and the definition of done | ADR-0003, ADR-0007, ADR-0016, ADR-0018, ADR-0020, ADR-0022 amendments | §5, §8, §10 | `d0787db74c2e198febef7fd865447f27c9061433` |
+| 17 | #289 `step/0.4.0-17` | a source's adoption of a core minor takes a minor; what binds the host; the `_TOKEN` suffix; the secret scan skips a cut or sampled body's sha256 line | ADR-0005, ADR-0009, ADR-0018, ADR-0026 amendments | header, §7, §10, §12, §15 | `2ce4f9680bf4e919a40601b2d15c83dd9e696956` |
+| 18 | #297 `step/0.4.0-18` | fifteen records restated as ADR-0028 to ADR-0042; the documents and docstrings cite `ADR-NNNN, decision N` | ADR-0028 to ADR-0042, superseding ADR-0003, ADR-0004, ADR-0005, ADR-0008, ADR-0009, ADR-0010, ADR-0012, ADR-0013, ADR-0014, ADR-0015, ADR-0016, ADR-0018, ADR-0019, ADR-0022, ADR-0024 | 1.28 | `10d56f96b55ad86f21d1ed24a038f89557876869` |
+| Release | `chore/release-0.4.0` | version 0.4.0 and the lock; the CHANGELOG's `[0.4.0]` section, assembled from the fragments, with its 29 Hand-apply notes; `CLAUDE.md`'s layout; this section and "Adopting core 0.4.0" | — | — | — |
+
+Before the release PR, one branch in sdk-google-mail
+(https://github.com/xippios/sdk-google-mail/issues/19) and one in sdk-cashctrl
+(https://github.com/xippios/sdk-cashctrl/issues/61) pin core's `main`, delete what core
+then provides and run their tests, the trial that
+https://github.com/xippios/sdk-core/issues/242 decided; each opens no PR before core's
+tag. The release PR changes only what conventions §12 lets a release PR change. Its merge
+runs `publish.yml`, which tags `v0.4.0` on the merge commit and waits at `pypi` for the
+maintainer's approval; the recovery path is the one under "Core 0.2.1". sdk-template
+0.4.0 follows the tag and renders the package contract
+(https://github.com/xippios/sdk-template/issues/159).
+
