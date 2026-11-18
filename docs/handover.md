@@ -952,8 +952,8 @@ sdk-template 0.4.0 are out.
     listed the check among the deletions;
   - `scripts/refresh_reference.py`: the `class_names[id_field]` line, its dict and its
     argument dropped (https://github.com/xippios/sdk-core/issues/95);
-  - its tests: in `tests/test_org_lock.py` a call that still passes `org` is refused,
-    `org: Not an argument of this tool; it takes note`
+  - its tests: in `tests/test_org_lock.py` the test of a call that still passes `org` goes
+    with the lock's tests, which core holds, and the bound read server refuses `org`
     (https://github.com/xippios/sdk-core/issues/84), and the `xippios-cashctrl: error:`
     assertions name the entry point (https://github.com/xippios/sdk-core/issues/167); in
     `tests/test_tasks_write.py` `sent_body` → `sent_bodies(route)[-1]`
