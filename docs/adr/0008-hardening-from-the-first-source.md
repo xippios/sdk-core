@@ -132,10 +132,13 @@ the review checklist's item 3 state it from 1.28 on.
 refresh scripts). `render_enums` derives a class name from its key where `class_names`
 names none, and it capitalized each part of the key, which lowercased a camelCase hump:
 `attributeId` gave `Attributeid`, so the template's refresh script names each id list's
-class by hand and sdk-comtrade's each of its ten lists'. The default splits each part
-before a hump, an upper-case letter after a lower-case one, and capitalizes each word:
-`attributeId` gives `AttributeId`, `qtyUnitCode` `QtyUnitCode`, and a key without a hump
-the name it had, `state_alpha` and `STATE_ALPHA` `StateAlpha`. It gives every class name
+class by hand and sdk-comtrade's each of its ten lists'. The default splits a part of the
+key that holds a lower-case letter before each hump, an upper-case letter after a
+lower-case letter or a digit, and capitalizes each word: `attributeId` gives
+`AttributeId`, `qtyUnitCode` `QtyUnitCode` and `partner2Code` `Partner2Code`. A part in
+upper case alone has no hump, nor has an upper-case run, so such a key keeps the name it
+had: `state_alpha` and `STATE_ALPHA` give `StateAlpha`, `STATE2ALPHA` `State2alpha` and
+`HSCode` `Hscode`. It gives every class name
 that sdk-comtrade, sdk-usda-esr, sdk-usda-gats, sdk-usda-nass and sdk-usda-psd commit,
 read from their `enums.py` on 2026-11-17, but sdk-usda-nass's two singular names,
 `ProgressStage` and `ConditionCategory`, which stay in its `class_names`, so no class a

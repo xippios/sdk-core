@@ -436,19 +436,25 @@ def _fit(line: str, *codes: str) -> str:
     return f"{line}  # noqa: {', '.join(exempt)}" if exempt else line
 
 
-_HUMP = re.compile(r"(?<=[a-z])(?=[A-Z])")
-"""Where a camelCase key starts a word: before an upper-case letter after a lower-case one."""
+_HUMP = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
+"""Where a camelCase part starts a word: before an upper-case letter after a lower-case
+letter or a digit."""
 
 
 def _class_name(key: str) -> str:
     """The default class name: each word of ``key`` capitalized, a camelCase hump kept.
 
-    ``attributeId`` → ``AttributeId``, ``state_alpha`` and ``STATE_ALPHA`` →
-    ``StateAlpha``: a key splits at each run of characters that are no ASCII letters or
-    digits and before each hump, and every word is capitalized.
+    ``attributeId`` → ``AttributeId``, ``partner2Code`` → ``Partner2Code``, ``state_alpha``
+    and ``STATE_ALPHA`` → ``StateAlpha``: a key splits into parts at each run of characters
+    that are no ASCII letters or digits, a part that holds a lower-case letter splits again
+    before each hump, and every word is capitalized. A part in upper case alone has no hump
+    (``STATE2ALPHA`` → ``State2alpha``), nor has an upper-case run (``HSCode`` →
+    ``Hscode``): such a key keeps the name it had before humps were kept.
     """
-    parts = re.split(r"[^A-Za-z0-9]+", key)
-    return "".join(word.capitalize() for part in parts for word in _HUMP.split(part) if word)
+    words: list[str] = []
+    for part in re.split(r"[^A-Za-z0-9]+", key):
+        words += _HUMP.split(part) if re.search(r"[a-z]", part) else [part]
+    return "".join(word.capitalize() for word in words if word)
 
 
 def _unknown_keys(argument: str, given: Mapping[str, object], lists: Mapping[str, object]) -> None:
