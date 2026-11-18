@@ -362,10 +362,10 @@ from another origin than the base URL's, a link a catalog names, goes without th
 client's credentials (§6): `endpoint` is named as above all the same, `request` holds the
 link as `ResultMeta` writes it, a signature in its query `REDACTED`, and the fixture of
 that download carries no key, neither the placeholder nor a credential header, so a leak
-check counts none in it (ADR-0015, amendment 2026-11-18, point d). A file read from an
-origin or mirror that the publisher runs (§2) is named the same way, and the URL sent,
-the mirror's, is the file's URL in `request`. A download of an operation's answer is no
-file upstream names and keeps the operation's name (sdk-eurostat's `dataQuery`).
+check counts none in it (ADR-0015, amendment 2026-11-18, point d). A download of an
+operation's answer is no file upstream names and keeps the operation's name
+(sdk-eurostat's `dataQuery`). The case of a file read from an origin or mirror that the
+publisher runs (§6) is open under https://github.com/xippios/sdk-core/issues/276.
 
 `request` records what was sent: a parameter the caller left `None` is omitted
 (ADR-0022, rule 3). `ResultMeta` drops a top-level `None` at construction, so a task
@@ -500,11 +500,10 @@ the query can carry a key (ADR-0005).
   cache and one `classify`, whose path checks name both bases. A request to an origin or
   mirror that the publisher runs itself (§2) takes the canonical host's pace, one limiter
   for both hosts where the source sends to both; its `meta.endpoint` names the URL sent,
-  or for a file the file's name, the URL sent then in `meta.request` (§4; ADR-0020,
-  amendment 2026-11-18, point c), and `docs/upstream/` names both hosts
-  (sdk-usda-wasde's USDA CDN origin for `www.usda.gov`). A dependent's own client sends
-  nothing to its dependency's host, which the dependency's limiter alone paces, since a
-  second limiter there would allow up to twice the pace each package meant.
+  and `docs/upstream/` names both hosts (sdk-usda-wasde's USDA CDN origin for
+  `www.usda.gov`). A dependent's own client sends nothing to its dependency's host, which
+  the dependency's limiter alone paces, since a second limiter there would allow up to
+  twice the pace each package meant.
 - Two hooks on `ClientConfig` see what passes through the client (ADR-0015):
   `before_request`, called once per call after the cache lookup and before the rate
   limiter, may wait or raise a taxonomy error, and then nothing is sent; `observe` sees

@@ -115,8 +115,7 @@ released file names that file the same way as its `endpoint` (ADR-0022, decision
 narrative read from a PDF that prints a date but no month label keeps the ESMIS release
 id as `vintage`, which decision 5 allows, as sdk-usda-wasde's `read_report_text` does. A
 download of an operation's answer is no file upstream names and keeps the operation's
-name, as sdk-eurostat's SDMX `dataQuery`, streamed to a file, does. This reads with
-ADR-0010's amendment of this date, point a, whose request to a publisher's own origin or
-mirror names the URL sent: a file read from such a host is named as upstream names it,
-and the URL sent, the mirror's, is the file's URL that decision 5 puts in `meta.request`.
-No source changes. Conventions §4 states it from 1.28 on.
+name, as sdk-eurostat's SDMX `dataQuery`, streamed to a file, does. The case of a file
+read from an origin or mirror that the publisher runs is open under
+https://github.com/xippios/sdk-core/issues/276. No source changes. Conventions §4 states
+it from 1.28 on.
