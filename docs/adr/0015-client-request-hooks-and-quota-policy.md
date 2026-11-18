@@ -308,9 +308,10 @@ https://github.com/xippios/sdk-core/issues/148, found by sdk-cashctrl and sdk-us
 the plan's decision that a recording never retries,
 https://github.com/xippios/coordinate-sdk/blob/main/plans/sdk-core/0.4.0.md). `record`
 and `record_sync` send one request through the client they are given, its
-`before_request` run once and its limiter and `observe` as for any request, and record
-the answer whatever its status: never retried, whatever the client's `RetryPolicy` says,
-and never answered from the cache nor stored in it. Core 0.3.0 removed their `retry=`
+`before_request` run once and its limiter and `observe` as for any request, its auth held
+to the base URL's origin and the request marked as point (d) has it, and record the
+answer whatever its status: never retried, whatever the client's `RetryPolicy` says, and
+never answered from the cache nor stored in it. Core 0.3.0 removed their `retry=`
 and left a recording that must not retry to a client built for it, on
 `RetryPolicy(max_attempts=1)`, which sdk-template's `record-fixture` command told every
 source with a quota to build; a recording now needs none. Point (a)'s "every GET still
