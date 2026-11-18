@@ -70,13 +70,13 @@ It gives a source package the things that should be identical across the family:
 ## Install
 
 ```bash
-uv add "xippios-core~=0.3.0"            # client, models, errors, reference, pagination
-uv add "xippios-core[mcp]~=0.3.0"       # + MCP server helpers (official mcp SDK 2.x)
-uv add "xippios-core[http]~=0.3.0"      # + FastAPI router helpers
-uv add "xippios-core[testing]~=0.3.0"   # + pytest plugin, respx replay, fixture recording
+uv add "xippios-core~=0.4.0"            # client, models, errors, reference, pagination
+uv add "xippios-core[mcp]~=0.4.0"       # + MCP server helpers (official mcp SDK 2.x)
+uv add "xippios-core[http]~=0.4.0"      # + FastAPI router helpers
+uv add "xippios-core[testing]~=0.4.0"   # + pytest plugin, respx replay, fixture recording
 ```
 
-Python 3.12 or later. A source package depends on one core minor, `~=0.3.0`, and each
+Python 3.12 or later. A source package depends on one core minor, `~=0.4.0`, and each
 extra likewise (conventions §12); see the Alpha note under Status.
 
 ## 30-second example
@@ -1035,7 +1035,7 @@ not read back, such as a sample without its size and sha256, and writes nothing.
 
 ## Status
 
-Release 0.3.2, alpha.
+Release 0.4.0, alpha.
 [CHANGELOG.md](https://github.com/xippios/sdk-core/blob/main/CHANGELOG.md) lists what
 changed in each release, and a change's entry waits under
 [changelog/](https://github.com/xippios/sdk-core/blob/main/changelog/README.md) as a
@@ -1058,7 +1058,7 @@ fragment until the release assembles it.
 
 Alpha: while core is 0.x, a new minor version may change the public surface, with no
 backward compatibility across minors; patch releases stay compatible. A source depends
-on one minor (`xippios-core~=0.3.0`) and adopts the next through conventions §15
+on one minor (`xippios-core~=0.4.0`) and adopts the next through conventions §15
 (ADR-0039).
 
 ## Documents
