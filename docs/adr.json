@@ -789,6 +789,20 @@
       "superseded_by": null
     },
     {
+      "id": "ADR-0047",
+      "number": 47,
+      "title": "The adapter's offset for the rest of a cut answer",
+      "path": "docs/adr/0047-the-adapter-s-offset-for-the-rest-of-a-cut-answer.md",
+      "status": "Accepted",
+      "date": "2026-11-21",
+      "decided_by": "https://github.com/xippios/sdk-core/issues/362",
+      "amended": [],
+      "amends": [],
+      "supersedes": [],
+      "other": [],
+      "superseded_by": null
+    },
+    {
       "id": "ADR-0048",
       "number": 48,
       "title": "Core's recorder frame around a source's rewrite step",

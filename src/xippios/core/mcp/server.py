@@ -32,7 +32,7 @@ import typing
 import weakref
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass, field
-from typing import Any, overload
+from typing import Annotated, Any, overload
 
 import pydantic
 from mcp.server.context import CallNext, HandlerResult, ServerMiddleware, ServerRequestContext
@@ -99,6 +99,8 @@ class _ServerRecord:
 
     arguments: dict[str, FuncMetadata] = field(default_factory=dict)
     """Per tool name, the argument model the SDK validates a call against."""
+    added: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    """Per tool name, the arguments the adapter adds to its task's: ``offset`` when paged."""
     checking: ServerMiddleware[Any] | None = None
     """The argument middleware, installed once per server."""
 
@@ -106,6 +108,15 @@ class _ServerRecord:
 _RECORDS: weakref.WeakKeyDictionary[MCPServer, _ServerRecord] = weakref.WeakKeyDictionary()
 _WRITE_SERVERS: weakref.WeakSet[MCPServer] = weakref.WeakSet()
 _LOOPBACK_SERVERS: weakref.WeakSet[MCPServer] = weakref.WeakSet()
+
+
+def _adapter_arguments(server: MCPServer, name: str) -> tuple[str, ...]:
+    """The arguments the adapter adds to the task of the tool ``name``, for the family check.
+
+    ``("offset",)`` for a tool registered with a paged cap (ADR-0047), else none.
+    """
+    record = _RECORDS.get(server)
+    return () if record is None else record.added.get(name, ())
 
 
 def is_write_server(server: MCPServer) -> bool:
@@ -237,6 +248,59 @@ def _check_caps(tasks: list[Callable[..., Any]], caps: Mapping[str, ResultCap]) 
         )
 
 
+_OFFSET = "offset"
+"""The adapter's own argument of a paged tool: the rows of the answer already shown."""
+
+_OFFSET_HELP = {
+    "first": "Rows of the answer already shown, to skip: the note of a cut answer names the "
+    "next offset. 0, the default, starts at the first row.",
+    "last": "Rows of the answer already shown, counted from its last row: the note of a cut "
+    "answer names the next offset, which reaches older rows. 0, the default, starts at the "
+    "last row.",
+}
+"""The description of ``offset`` in a paged tool's input schema, by the cap's ``keep``."""
+
+
+def _offset_problem(fn: Callable[..., Any], cap: ResultCap, *, read_only: bool) -> str | None:
+    """Why ``fn`` cannot have the paged ``cap``, or ``None`` when it can.
+
+    A continuation runs the task again, so a write task, every task of a write server, is
+    never paged: following its note would repeat a confirmed write. ``keep="last"`` alone
+    runs it once and names no call, so a write task may keep the last rows. A task that
+    takes ``offset`` itself would have the adapter's argument shadow its own.
+    """
+    if not cap.paged:
+        return None
+    if not read_only:
+        return (
+            "a paged cap runs the task again for the next rows, so a write task is never "
+            "paged: following its note would repeat a confirmed write; leave the tool unpaged"
+        )
+    if _OFFSET in inspect.signature(fn).parameters:
+        return (
+            "the task takes a parameter offset, which a paged cap adds as the adapter's own "
+            "argument for the rest of a cut answer; rename the task's parameter or leave the "
+            "tool unpaged"
+        )
+    return None
+
+
+def _with_offset(parameters: list[inspect.Parameter], cap: ResultCap) -> list[inspect.Parameter]:
+    """``parameters`` with the adapter's ``offset`` after the task's, keyword-only.
+
+    It goes before a ``**`` parameter, which must come last.
+    """
+    offset = inspect.Parameter(
+        _OFFSET,
+        inspect.Parameter.KEYWORD_ONLY,
+        default=0,
+        annotation=Annotated[int, pydantic.Field(ge=0, description=_OFFSET_HELP[cap.keep])],
+    )
+    if parameters and parameters[-1].kind is inspect.Parameter.VAR_KEYWORD:
+        return [*parameters[:-1], offset, parameters[-1]]
+    return [*parameters, offset]
+
+
 def _as_tool(
     fn: Callable[..., Any], cap: ResultCap
 ) -> Callable[..., Awaitable[str | CallToolResult]]:
@@ -247,6 +311,10 @@ def _as_tool(
     argument model, the input schema and the argument check
     (https://github.com/xippios/sdk-core/issues/68). The tool returns the capped result
     as text, or a ``XippiosError`` as the family's text flagged ``is_error``.
+
+    A paged cap adds ``offset: int = 0``, at least 0, after the task's parameters: the
+    tool takes it off the call, runs the task without it and hands it to ``cap_result``,
+    so it reaches neither the task nor ``meta.request`` (ADR-0047).
     """
     target = as_async(fn)
     hints = typing.get_type_hints(fn, include_extras=True)
@@ -254,13 +322,15 @@ def _as_tool(
     parameters = [
         p.replace(annotation=hints.get(p.name, p.annotation)) for p in signature.parameters.values()
     ]
+    if cap.paged:
+        parameters = _with_offset(parameters, cap)
 
     async def tool(*args: Any, **kwargs: Any) -> str | CallToolResult:
+        offset = kwargs.pop(_OFFSET, 0) if cap.paged else 0
         try:
-            result = await target(*args, **kwargs)
+            return cap_result(await target(*args, **kwargs), cap, offset=offset)
         except XippiosError as exc:
             return _error_answer(exc)
-        return cap_result(result, cap)
 
     functools.update_wrapper(tool, fn)
     tool.__signature__ = signature.replace(  # type: ignore[attr-defined]
@@ -340,9 +410,10 @@ def register_tasks(
 
     With ``read_only=False`` every task must take ``confirm: bool = False`` and return a
     dry-run preview unless it is true (conventions §8); the tasks are checked before any
-    is registered, so a task without it registers nothing. The server is then a write
-    server (``is_write_server``), which ``main`` serves over HTTP on loopback only unless
-    ``--allow-remote`` is passed.
+    is registered, so a task without it registers nothing. No task of it takes a paged cap,
+    since a continuation would run a confirmed write again (ADR-0047). The server is then
+    a write server (``is_write_server``), which ``main`` serves over HTTP on loopback only
+    unless ``--allow-remote`` is passed.
 
     With ``loopback_only=True`` a read server is held to loopback the same way
     (``is_loopback_only``): for one that reaches data no deployment may serve without
@@ -365,7 +436,10 @@ def register_tasks(
             above the default 64 KB is a deliberate choice for that tool, so that an
             agent gets the list whole. Its ``note`` says how to see the rest when the
             cap still cuts. A field the per-tool cap leaves unset takes the family
-            default (200 rows, 65,536 bytes, the default note), not ``cap``'s.
+            default (200 rows, 65,536 bytes, the default note), not ``cap``'s. A paged
+            cap, ``ResultCap(paged=True)``, gives the tool the adapter's own ``offset``
+            for the rest of a cut answer, and ``keep="last"`` shows the last rows first
+            (ADR-0047).
         read_only: Mark the tools read-only. Write tools belong in a separate server.
         loopback_only: Hold the server to loopback (``is_loopback_only``); a write
             server is held whatever this says.
@@ -374,8 +448,10 @@ def register_tasks(
         ValueError: ``read_only`` is ``False`` and a task has no parameter ``confirm``
             annotated ``bool`` with the default ``False``; the message names the tool.
             Or a key of ``caps`` is not the ``__name__`` of one of ``tasks`` that becomes a
-            tool, a task in ``BULK_TASKS`` included; the message names it. Nothing is
-            registered, installed or marked then.
+            tool, a task in ``BULK_TASKS`` included; the message names it. Or a task with
+            a paged cap takes a parameter ``offset`` itself, which the adapter's would
+            shadow, or is a write task, which a continuation would run again; the message
+            names the tool and says so. Nothing is registered, installed or marked then.
         TypeError: A slug without ``tasks``, or a tool set with ``tasks`` or another
             argument; the message names each. Nothing is registered, installed or marked.
     """
@@ -415,6 +491,10 @@ def register_tasks(
                     f"{tool_name(source, fn)}: {problem}; every task of a write server takes "
                     "confirm: bool = False and previews unless it is true (conventions §8)"
                 )
+    for fn in tasks:
+        problem = _offset_problem(fn, caps.get(fn.__name__, cap), read_only=read_only)
+        if problem is not None:
+            raise ValueError(f"{tool_name(source, fn)}: {problem}")
     record = _RECORDS.setdefault(server, _ServerRecord())
     if record.checking is None:
         record.checking = _arguments_middleware(record)
@@ -432,7 +512,8 @@ def register_tasks(
     names: list[str] = []
     for fn in tasks:
         name = tool_name(source, fn)
-        tool = _as_tool(fn, caps.get(fn.__name__, cap))
+        tool_cap = caps.get(fn.__name__, cap)
+        tool = _as_tool(fn, tool_cap)
         server.add_tool(
             tool,
             name=name,
@@ -441,6 +522,7 @@ def register_tasks(
             structured_output=False,
         )
         record.arguments[name] = func_metadata(tool, structured_output=False)
+        record.added[name] = (_OFFSET,) if tool_cap.paged else ()
         names.append(name)
     return names
 

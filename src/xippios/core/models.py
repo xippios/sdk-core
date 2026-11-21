@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
-from typing import Any, Self
+from typing import Any, Literal, Self
 
 import pydantic
 from pydantic import (
@@ -288,20 +288,34 @@ class ResultCap:
             ``"filter by period or by reporter to see the rest"`` for a tool that has
             those filters. ``None`` says ``"narrow the query to see the rest"``, which
             promises no filter the tool may lack.
+        paged: ``True`` gives the tool the adapter's own argument ``offset``, the rows of
+            the answer already shown: the task runs again, the adapter cuts its rows from
+            there, and the note of a cut answer ends with the call for the next rows
+            (ADR-0047). For a read tool whose second run costs little, a packaged table
+            say, never a write tool, which registration refuses; ``False``, the default,
+            leaves the tool and its notes as they are.
+        keep: ``"first"``, the default, keeps the first rows of a cut answer, ``"last"``
+            the last, the newest of a series ordered oldest first; ``offset`` then counts
+            from the last row, so a continuation walks to older rows (ADR-0047).
 
     Raises:
-        ValueError: ``max_rows`` or ``max_bytes`` is below 1, or ``note`` is blank.
+        ValueError: ``max_rows`` or ``max_bytes`` is below 1, ``note`` is blank, or
+            ``keep`` is neither ``"first"`` nor ``"last"``.
     """
 
     max_rows: int = 200
     max_bytes: int = 65_536
     note: str | None = None
+    paged: bool = False
+    keep: Literal["first", "last"] = "first"
 
     def __post_init__(self) -> None:
         if self.max_rows < 1 or self.max_bytes < 1:
             raise ValueError("max_rows and max_bytes must be at least 1")
         if self.note is not None and not self.note.strip():
             raise ValueError("note must say how to see the rest; None keeps the default")
+        if self.keep not in ("first", "last"):
+            raise ValueError(f"keep must be 'first' or 'last', got {self.keep!r}")
 
 
 def _validation_text(exc: pydantic.ValidationError) -> str:
