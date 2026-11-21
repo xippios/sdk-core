@@ -82,7 +82,7 @@ import inspect
 import re
 import tomllib
 import typing
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -128,7 +128,8 @@ _HEADING = re.compile(r" {0,3}(#{1,6})(?:[ \t]+(.*))?$")
 _REFERENCE = re.compile(r" {0,3}\[[^\]]+\]:[ \t]*\S")
 """A link reference definition, which renders as nothing and is no paragraph of a note."""
 _PROBE = re.compile(r"(?:Probe|Observed): (\d{4}-\d{2}-\d{2})(?!\d)")
-_CODE_SPAN = re.compile(r"(?<!`)(`+)(?!`)(.+?)(?<!`)\1(?!`)")
+_CODE_SPAN = re.compile(r"(?<!`)(`+)(?!`)(.+?)(?<!`)\1(?!`)", re.DOTALL)
+"""A code span: a run of backticks, its text, which may hold a line break, and a run as long."""
 _CITED = re.compile(r"(?:tests|docs|src|scripts)/[^\s`]+\.[A-Za-z][A-Za-z0-9]*")
 """A path a code span of ``OBSERVED.md`` cites a file by, from the repository's root."""
 
@@ -634,6 +635,27 @@ def _paragraphs(lines: list[str]) -> list[str]:
     return [" ".join(block.split()) for block in blocks if block.strip()]
 
 
+def _lines(text: str) -> Iterator[tuple[int, str, bool]]:
+    """Each line of a Markdown text: its number, its text and whether a fenced block holds it.
+
+    A fence's own lines belong to its block, and a fence closes on a run of its own
+    character as long as its opening, or longer, with nothing after it.
+
+    Args:
+        text: A Markdown text, ``docs/upstream/OBSERVED.md`` say.
+    """
+    fence = ""
+    for number, line in enumerate(text.splitlines(), start=1):
+        marker = _FENCE.match(line)
+        if fence:
+            if marker and marker.group(1).startswith(fence) and not line[marker.end() :].strip():
+                fence = ""
+            yield number, line, True
+        else:
+            fence = marker.group(1) if marker is not None else ""
+            yield number, line, marker is not None
+
+
 def _observed_notes(text: str) -> list[tuple[str, list[str]]]:
     """The notes of an ``OBSERVED.md``, each ``###`` section's heading and its paragraphs.
 
@@ -647,24 +669,14 @@ def _observed_notes(text: str) -> list[tuple[str, list[str]]]:
     """
     notes: list[tuple[str, list[str]]] = []
     body: list[str] | None = None
-    fence = ""
-    for line in text.splitlines():
-        marker = _FENCE.match(line)
-        heading = _HEADING.match(line)
-        if fence:
-            # A fence closes on a run of its own character as long as its opening, or longer.
-            if marker and marker.group(1).startswith(fence) and not line[marker.end() :].strip():
-                fence = ""
-        elif marker is not None:
-            fence = marker.group(1)
-        elif heading is not None and len(heading.group(1)) <= 3:
+    for _, line, fenced in _lines(text):
+        heading = None if fenced else _HEADING.match(line)
+        if heading is not None and len(heading.group(1)) <= 3:
             body = [] if len(heading.group(1)) == 3 else None
             if body is not None:
                 notes.append(((heading.group(2) or "").strip(), body))
             continue
-        elif _REFERENCE.match(line):
-            continue
-        if body is not None:
+        if body is not None and (fenced or not _REFERENCE.match(line)):
             body.append(line)
     return [(title, _paragraphs(lines)) for title, lines in notes]
 
@@ -700,24 +712,59 @@ def _probe_problems(text: str) -> list[str]:
     return problems
 
 
-def _missing_citations(text: str, root: Path) -> list[str]:
-    """The files that the code spans of an ``OBSERVED.md`` cite and ``root`` lacks.
+def _blocks(text: str) -> list[list[tuple[int, str]]]:
+    """The blocks of a Markdown text that can hold a code span, each line with its number.
+
+    A blank line, a fenced code block and a heading end a paragraph, a heading is a block
+    of its own, and a fenced block holds no code span, so it is none.
+
+    Args:
+        text: A Markdown text, ``docs/upstream/OBSERVED.md`` say.
+    """
+    blocks: list[list[tuple[int, str]]] = [[]]
+    for number, line, fenced in _lines(text):
+        if fenced or not line.strip():
+            blocks.append([])
+        elif _HEADING.match(line):
+            blocks += [[(number, line)], []]
+        else:
+            blocks[-1].append((number, line))
+    return [block for block in blocks if block]
+
+
+def _citations(text: str) -> list[tuple[int, str]]:
+    """Each file a code span of an ``OBSERVED.md`` cites, with the line the span starts on.
 
     A span cites a file when its text starts with ``tests/``, ``docs/``, ``src/`` or
     ``scripts/``, holds no space and ends in an extension, a path from the repository's
-    root; every line of the file is read (conventions §3, ADR-0044).
+    root. Spans are read paragraph by paragraph, since a span may wrap onto the next line
+    of its paragraph (conventions §3, ADR-0044, decision 1).
+
+    Args:
+        text: The text of ``docs/upstream/OBSERVED.md``.
+    """
+    cited: list[tuple[int, str]] = []
+    for block in _blocks(text):
+        joined = "\n".join(line for _, line in block)
+        for span in _CODE_SPAN.finditer(joined):
+            path = span.group(2).strip()
+            if _CITED.fullmatch(path):
+                cited.append((block[joined.count("\n", 0, span.start())][0], path))
+    return cited
+
+
+def _missing_citations(text: str, root: Path) -> list[str]:
+    """The files that the code spans of an ``OBSERVED.md`` cite and ``root`` lacks.
+
+    Each is named by the line its span starts on, as ``_citations`` reads them.
 
     Args:
         text: The text of ``docs/upstream/OBSERVED.md``.
         root: The repository's root.
     """
-    missing: list[str] = []
-    for number, line in enumerate(text.splitlines(), start=1):
-        for span in _CODE_SPAN.finditer(line):
-            path = span.group(2).strip()
-            if _CITED.fullmatch(path) and not (root / path).is_file():
-                missing.append(f"line {number}: {path}")
-    return missing
+    return [
+        f"line {number}: {path}" for number, path in _citations(text) if not (root / path).is_file()
+    ]
 
 
 def test_family_fetched_md_lists_observed_md_in_a_row_of_its_own(

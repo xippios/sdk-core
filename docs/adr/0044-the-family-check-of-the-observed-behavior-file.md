@@ -39,7 +39,9 @@ written from. sdk-usda-esr's last note ends with a link reference definition.
    - `test_family_observed_md_cites_files_that_exist`: every code span of the file whose
      text starts with `tests/`, `docs/`, `src/` or `scripts/`, holds no space and ends in
      an extension names a file that exists, from the repository's root. The rule reads the
-     whole file, the lines above its first note included, as three of the copies do.
+     whole file, the lines above its first note included, as three of the copies do. It
+     reads the spans paragraph by paragraph, since a span may wrap onto the next line, as
+     two of sdk-faostat's do, and a fenced code block holds none.
 2. **What a note is.** A note is a `###` section: it runs from its heading to the next
    heading of level one to three outside a fenced code block, so a `##` heading groups
    notes and is none itself, and a `####` heading stays inside its note. Its paragraphs are
