@@ -291,8 +291,9 @@ class ResultCap:
         paged: ``True`` gives the tool the adapter's own argument ``offset``, the rows of
             the answer already shown: the task runs again, the adapter cuts its rows from
             there, and the note of a cut answer ends with the call for the next rows
-            (ADR-0047). For a tool whose second run costs little, a packaged table say;
-            ``False``, the default, leaves the tool and its notes as they are.
+            (ADR-0047). For a read tool whose second run costs little, a packaged table
+            say, never a write tool, which registration refuses; ``False``, the default,
+            leaves the tool and its notes as they are.
         keep: ``"first"``, the default, keeps the first rows of a cut answer, ``"last"``
             the last, the newest of a series ordered oldest first; ``offset`` then counts
             from the last row, so a continuation walks to older rows (ADR-0047).

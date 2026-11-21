@@ -261,12 +261,22 @@ _OFFSET_HELP = {
 """The description of ``offset`` in a paged tool's input schema, by the cap's ``keep``."""
 
 
-def _offset_problem(fn: Callable[..., Any], cap: ResultCap) -> str | None:
+def _offset_problem(fn: Callable[..., Any], cap: ResultCap, *, read_only: bool) -> str | None:
     """Why ``fn`` cannot have the paged ``cap``, or ``None`` when it can.
 
-    A task that takes ``offset`` itself would have the adapter's argument shadow its own.
+    A continuation runs the task again, so a write task, every task of a write server, is
+    never paged: following its note would repeat a confirmed write. ``keep="last"`` alone
+    runs it once and names no call, so a write task may keep the last rows. A task that
+    takes ``offset`` itself would have the adapter's argument shadow its own.
     """
-    if cap.paged and _OFFSET in inspect.signature(fn).parameters:
+    if not cap.paged:
+        return None
+    if not read_only:
+        return (
+            "a paged cap runs the task again for the next rows, so a write task is never "
+            "paged: following its note would repeat a confirmed write; leave the tool unpaged"
+        )
+    if _OFFSET in inspect.signature(fn).parameters:
         return (
             "the task takes a parameter offset, which a paged cap adds as the adapter's own "
             "argument for the rest of a cut answer; rename the task's parameter or leave the "
@@ -400,9 +410,10 @@ def register_tasks(
 
     With ``read_only=False`` every task must take ``confirm: bool = False`` and return a
     dry-run preview unless it is true (conventions §8); the tasks are checked before any
-    is registered, so a task without it registers nothing. The server is then a write
-    server (``is_write_server``), which ``main`` serves over HTTP on loopback only unless
-    ``--allow-remote`` is passed.
+    is registered, so a task without it registers nothing. No task of it takes a paged cap,
+    since a continuation would run a confirmed write again (ADR-0047). The server is then
+    a write server (``is_write_server``), which ``main`` serves over HTTP on loopback only
+    unless ``--allow-remote`` is passed.
 
     With ``loopback_only=True`` a read server is held to loopback the same way
     (``is_loopback_only``): for one that reaches data no deployment may serve without
@@ -439,8 +450,8 @@ def register_tasks(
             Or a key of ``caps`` is not the ``__name__`` of one of ``tasks`` that becomes a
             tool, a task in ``BULK_TASKS`` included; the message names it. Or a task with
             a paged cap takes a parameter ``offset`` itself, which the adapter's would
-            shadow; the message names the tool and says so. Nothing is registered,
-            installed or marked then.
+            shadow, or is a write task, which a continuation would run again; the message
+            names the tool and says so. Nothing is registered, installed or marked then.
         TypeError: A slug without ``tasks``, or a tool set with ``tasks`` or another
             argument; the message names each. Nothing is registered, installed or marked.
     """
@@ -481,7 +492,7 @@ def register_tasks(
                     "confirm: bool = False and previews unless it is true (conventions §8)"
                 )
     for fn in tasks:
-        problem = _offset_problem(fn, caps.get(fn.__name__, cap))
+        problem = _offset_problem(fn, caps.get(fn.__name__, cap), read_only=read_only)
         if problem is not None:
             raise ValueError(f"{tool_name(source, fn)}: {problem}")
     record = _RECORDS.setdefault(server, _ServerRecord())
