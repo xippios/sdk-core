@@ -56,7 +56,12 @@ human answered its design question on 2026-11-21, prompted in the sdk-core panel
    no row, so that its absence never claims anything. A redirect to another host is never
    followed: it stops the run unless the page is recorded by that status, and then its row
    in `Not fetched` names the host. `OBSERVED.md`, where it exists, has a row whose first
-   cell is the file's name, which the family check matches. The frame takes no rule on a
+   cell is the file's name, which the family check matches. A `Last-Modified` stands in UTC,
+   a date that parses without a zone read as GMT, as every form of an HTTP date is (RFC
+   9110, section 5.6.7), and one that is no HTTP date as sent, in a code span, so that one
+   odd header ends no capture. A file's name stays inside `docs/upstream/`: `FETCHED.md`, an
+   absolute name and a `..` part are refused, whether a page declares the name or a `split`
+   makes it from an answer. The frame takes no rule on a
    publisher's terms for modified text: the conventions settle
    https://github.com/xippios/sdk-core/issues/58 after the port, since a mark in each
    converted file would change its bytes.
@@ -64,7 +69,13 @@ human answered its design question on 2026-11-21, prompted in the sdk-core panel
    whose operation needs them, sdk-faostat's login, are a `Credentials` declaration, its
    variables checked by name before anything is fetched, its login called once right before
    the first sample marked `keyed`, its headers sent on those samples alone, under its base,
-   with no redirect followed and no retry (conventions §3; ADR-0028, decision 7). A file
+   with no redirect followed and no retry (conventions §3; ADR-0028, decision 7). A keyed
+   sample has the base's origin, its scheme, host and port as parsed, as core's client sends
+   its credentials to its base URL's origin alone (ADR-0037, decision 4), and a path under
+   the base's by its segments, so that a base with or without its trailing slash admits the
+   same samples and a host that only shares its text admits none; a base that cannot be
+   compared so, with no host, a user, a query, a fragment or a dot segment, is refused
+   before anything is fetched. A file
    kept as recorded where only noise differs, sdk-eurostat's WADL, is a page marked
    `keep_recorded`, whose recorded file a writing run keeps where this run's content is the
    same after `canonical`; sdk-faostat's samples and sdk-x's document, compared that way in
@@ -94,7 +105,11 @@ human answered its design question on 2026-11-21, prompted in the sdk-core panel
   followed stops the port until the page is recorded by its status.
 - A file split from a page into the top of `docs/upstream/` is not removed when the page no
   longer gives it, since the frame removes stale files in the subdirectories it writes to
-  alone; sdk-cashctrl's port chooses between that and a subdirectory for its entries.
+  alone; sdk-cashctrl's port chooses between that and a subdirectory for its entries. It
+  also gives up its run from a saved copy of its page, `--from-file`, its own User-Agent and
+  its request for the page gzipped, since the frame takes no option of a source's own,
+  writes one User-Agent from the slug and asks for each page as it is; one source needs
+  each, and a second would bring it into the frame (ADR-0023, decision 2).
 - The reference frame (https://github.com/xippios/sdk-core/issues/370) joins as a module of
   this subpackage, and `run` names both frames' entry, so the step that adds it makes `run`
   take either declaration without renaming either.

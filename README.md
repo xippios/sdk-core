@@ -731,7 +731,7 @@ source = render_enums(
 ## The snapshot script's frame
 
 A source's `scripts/refresh_upstream.py`, which snapshots its upstream documentation into
-`docs/upstream/` (conventions \u00a73), declares a `Snapshot` and runs it; `xippios.core.refresh`
+`docs/upstream/` (conventions §3), declares a `Snapshot` and runs it; `xippios.core.refresh`
 does the rest, in the standard library alone (ADR-0046). sdk-template renders this script
 for a new source, which fills the declaration:
 
@@ -827,8 +827,14 @@ it does not recognise:
 | makes a row's note from its answer | `note=lambda row: f"{row.note}; {count} operations"` | sdk-faostat, the FAS sources |
 
 A keyed sample alone sends what `login` returns, once it was called right before the first
-of them; it follows no redirect, is never retried, and the frame prints nothing of it.
-`FETCHED.md` names the login's variables, which must be set before anything is fetched.
+of them; it follows no redirect, is never retried, and the frame prints nothing of it. It
+lies under the credentials' `base`, its origin, scheme, host and port as parsed, as the
+client holds its own credentials (ADR-0037, decision 4), and a path under the base's by
+segments, so `https://api.example.org/v1` and `https://api.example.org/v1/` admit the same
+samples and `https://api.example.org.elsewhere.net/v1/items` none. `FETCHED.md` names the
+login's variables, which must be set before anything is fetched. A `Last-Modified` stands
+in UTC, a date without a zone read as GMT as HTTP has it, and one that is no HTTP date as
+sent, in a code span.
 
 ## MCP server in five lines
 

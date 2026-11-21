@@ -224,7 +224,10 @@ class Credentials:
     Attributes:
         variables: The environment variables the login reads, by name: each must be set
             before anything is fetched, and ``FETCHED.md`` names them, never a value.
-        base: The URL every keyed sample starts with, the only place a credential goes.
+        base: The URL every keyed sample lies under, the only place a credential goes: a
+            sample has its origin, its scheme, host and port as parsed, as core's client
+            holds its own credentials (ADR-0037, decision 4), and a path under its path by
+            segments, so that a trailing slash changes nothing.
         login: Called once, right before the first keyed sample: it logs in, reading the
             variables itself, and returns the headers every keyed sample sends, such as
             ``{"Authorization": f"Bearer {token}"}``. The frame prints, logs and writes
@@ -478,6 +481,49 @@ def _unread(page: Page) -> bool:
     return page.status in (401, 403) or 300 <= page.status < 400
 
 
+_PORTS = {"http": 80, "https": 443}
+"""The schemes a credential may go to, with the port each one means where a URL names none."""
+
+
+def _place(url: str) -> tuple[tuple[str, str, int], tuple[str, ...]] | None:
+    """A URL's origin, its scheme, host and port as parsed, and its path's segments.
+
+    ``None`` for a URL that cannot be compared so: not http or https, with no host, with a
+    user before the host, with a port out of range, or with a ``.`` or ``..`` segment.
+    """
+    parts = urlsplit(url)
+    try:
+        port = parts.port
+    except ValueError:
+        return None
+    scheme = parts.scheme.lower()
+    segments = tuple(segment for segment in parts.path.split("/") if segment)
+    if scheme not in _PORTS or not parts.hostname or "@" in parts.netloc:
+        return None
+    if {".", ".."} & set(segments):
+        return None
+    return (scheme, parts.hostname, port or _PORTS[scheme]), segments
+
+
+def _comparable(base: str) -> bool:
+    """Whether a credentials' base can be compared with a page's URL: no query, no fragment."""
+    parts = urlsplit(base)
+    return _place(base) is not None and not parts.query and not parts.fragment
+
+
+def _under(base: str, url: str) -> bool:
+    """Whether ``url`` has the origin of ``base`` and a path under the base's, by segments.
+
+    Core's client sends its credentials to its base URL's origin alone, its scheme, host and
+    port (ADR-0037, decision 4); a keyed sample is held to the same origin, and to the
+    base's path, so that a base with or without its trailing slash admits the same URLs.
+    """
+    at, within = _place(base), _place(url)
+    if at is None or within is None or within[0] != at[0]:
+        return False
+    return within[1][: len(at[1])] == at[1]
+
+
 def _check_file(url: str, name: str) -> None:
     if name == OBSERVED:
         raise SystemExit(f"{url}: {OBSERVED} is written by hand, never by this script")
@@ -501,11 +547,12 @@ def _check_page(snapshot: Snapshot, page: Page) -> None:
         raise SystemExit(f"{page.url}: a page with a second origin keeps one file, answering 200")
     credentials = snapshot.credentials
     if page.keyed and (
-        credentials is None or not page.sample or not page.url.startswith(credentials.base)
+        credentials is None or not page.sample or not _under(credentials.base, page.url)
     ):
         raise SystemExit(
             f"{page.url}: a keyed page is a sample under the base of the snapshot's "
-            "credentials, the only requests that send one (conventions §3)"
+            "credentials, its origin and the base's path, the only requests that send one "
+            "(conventions §3; ADR-0037, decision 4)"
         )
 
 
@@ -852,9 +899,21 @@ def check_attribution(snapshot: Snapshot, page: Page, response: Response) -> Non
 
 
 def _iso_http_date(value: str | None) -> str:
-    if value is None:
+    """A ``Last-Modified`` in UTC, or as sent in a code span where it is no HTTP date.
+
+    An HTTP date is GMT in every form a recipient reads (RFC 9110, section 5.6.7), so one
+    that parses without a zone, the asctime form or a ``-0000`` zone, is read as UTC. A value
+    that is no date ends no capture: it is written as the server sent it.
+    """
+    if not value:
         return "-"
-    return parsedate_to_datetime(value).astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    try:
+        parsed = parsedate_to_datetime(value)
+    except ValueError:
+        return _code(value)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _cell(value: str) -> str:
@@ -946,8 +1005,9 @@ def _how(snapshot: Snapshot) -> list[str]:
         "Fetched is the UTC time the run started, in ISO 8601 with an explicit Z, the same",
         "for every row. Bytes and sha256 are those of the body as fetched: a converted page's",
         "row holds the HTML page's, an excerpt's the whole document's, a file split from a",
-        "page the page's. Last-Modified is the HTTP header in UTC, and ETag is as sent, in a",
-        "code span, on a row that ends in a comment telling the secret scan it is no key. A",
+        "page the page's. Last-Modified is the HTTP header in UTC, or as sent in a code span",
+        "where it is no HTTP date, and ETag is as sent, in a code span, on a row that ends in",
+        "a comment telling the secret scan it is no key. A",
         "page recorded without a file is `(no file)`, and a body that changes on every",
         "request records no size, sha256 or ETag. A sample is a small answer of the API kept",
         "verbatim under `samples/`, which documents the answer's shape and is no test fixture.",
@@ -1214,6 +1274,12 @@ def run(snapshot: Snapshot, argv: Sequence[str] | None = None) -> int:
     keyless: bool = getattr(args, "keyless", False)
     if not snapshot.pages:
         raise SystemExit("Nothing to fetch: declare the snapshot's pages, the API document's too.")
+    if snapshot.credentials is not None and not _comparable(snapshot.credentials.base):
+        raise SystemExit(
+            f"The base of the snapshot's credentials, {snapshot.credentials.base!r}, cannot be "
+            "compared with a page's URL: give an http or https URL with a host, no user, no "
+            "query, no fragment and no dot segment. Nothing was fetched or written."
+        )
     for page in snapshot.pages:
         _check_page(snapshot, page)
     if snapshot.credentials is not None and not keyless:

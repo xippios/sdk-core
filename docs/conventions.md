@@ -161,7 +161,9 @@ skip it (§8, §9; ADR-0040).
   The frame writes `FETCHED.md` in one form for every source, and the first run of a
   source's ported script rewrites it once (ADR-0046, decision 3). Every ETag in
   `FETCHED.md` stands in a code span, on a row that ends in the secret scan's allowlist
-  mark, hex or not (ADR-0046, decision 4).
+  mark, hex or not (ADR-0046, decision 4). A row's `Last-Modified` stands in UTC, a date
+  without a zone read as GMT as every HTTP date is, and one that is no HTTP date as sent,
+  in a code span (ADR-0046, decision 4).
 - A vendor's documentation is reproduced in the snapshot for reference (ADR-0028,
   decision 4): `FETCHED.md` carries the copyright line as the documentation
   states it (`© 2026 CashCtrl Ltd.`) and the URL the text was fetched from. A vendor's
@@ -218,6 +220,9 @@ skip it (§8, §9; ADR-0040).
   decision 7).
   Such a sample is marked `keyed`, and only a keyed sample sends what the snapshot's
   `Credentials` give, follows no redirect and is never retried (ADR-0046, decision 5).
+  A keyed sample has the origin of the credentials' base, its scheme, host and port as
+  parsed, and a path under the base's by its segments, as the client's credentials go to its
+  base URL's origin alone (ADR-0046, decision 5; ADR-0037, decision 4).
   `FETCHED.md` names the variables a source's login reads, never their values (ADR-0046,
   decision 5).
 - Within-source hygiene is required: dates → `datetime.date`/`datetime`, numbers →
