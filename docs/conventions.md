@@ -494,6 +494,16 @@ message written before any answer exists, such as a quota policy's refusal of a 
 it does not send, names the request's method and path from the request itself (ADR-0030,
 decision 4).
 
+The messages that name their request are those about an answer, core's and the errors that
+a source's `classify` maps, and a refusal of a request already built, as the quota policy's
+is, while two kinds of a source's own messages name none (ADR-0030, decision 4; ADR-0043).
+A refusal that the package makes of the call as given, before any request or after a read
+and before the write, names no request: it names the argument, the record or the tool that
+it refuses and says that nothing was sent (sdk-cashctrl's refusals before a write; ADR-0030,
+decision 4; ADR-0043). The subject of a decoder that reads a body without its response
+names no request either: it names the operation that its caller gives it, as core's `parse`
+names the `endpoint` that a wrapper passes (ADR-0030, decision 4; ADR-0043).
+
 A refusal of a code names what the caller can send in its place: the closest known codes
 (`UnknownCode`), or the refused code's parent and the codes listed under its name, as
 sdk-usda-gats's refusal of a discontinued partner names them. A refusal that lists the
@@ -882,6 +892,23 @@ standalone from the package. A task named in `BULK_TASKS` gets no route:
   Once upstream is recorded giving a documented answer, the recording replaces the test's
   documented body; a documented shape never seen keeps its test where the recorded answer
   takes another shape (sdk-eurostat's `warning`, beside its recorded `error` array).
+
+  Three cases fall between the kinds, each settled as the sources it was decided in settled
+  it (ADR-0028, decision 8; ADR-0043). A recorded answer changed in its status, its content
+  type and its body at once is a new answer composed in a recorded shape, the second kind,
+  which stands only where the snapshot documents it, and not a recording changed in memory,
+  the fourth (sdk-usda-esr, which serves no empty 404 off an exports path since its snapshot
+  documents none, and sdk-cashctrl's status errors, composed in the shape of its recorded 401
+  rather than changed from it; ADR-0043). A value that no route serves as an
+  answer and no `classify` reads, handed to the code under test, is an input of the test and
+  takes no kind, such as a literal given to a model or a scrub, or an exchange given to a
+  recorder's step alone, while an answer that a route serves or that `classify` reads takes
+  a kind (sdk-google-mail's `internalDate` values, sdk-cashctrl's exchanges given to its
+  recorder step; ADR-0043). A recording replayed at its own path for other parameters is the
+  third kind, and where the test says where its body comes from, it names the condition under
+  which upstream answers alike at those parameters, or says that the test asserts only what
+  was sent (sdk-google-mail's refresh answer, which stands for a code exchange's only without
+  `access_type=offline`, sdk-cashctrl's replays at other queries; ADR-0043).
 - A PR deletes a recorded fixture that no test replays after its change and names it in
   its description; a fixture that a test or a document still cites stays
   (sdk-usda-nass's `get_param_values/statisticcat_desc.json`, replayed by nothing once
@@ -1067,6 +1094,10 @@ which §12 bounds to one minor.
   brings its entry as a fragment, a file of its own under `changelog/` that holds the
   entry's bullet, in the form `changelog/README.md` gives; the release PR assembles the
   fragments into its section of `CHANGELOG.md` and deletes them (ADR-0039, decision 6).
+  The release PR assembles each entry as its fragment reads, under the group that the
+  fragment's name gives, and rewords or regroups none: a wrong entry is corrected in its
+  fragment, by a pull request before the release
+  (https://github.com/xippios/sdk-core/issues/355; ADR-0043).
   A repository that keeps no `changelog/` yet, a source before its adoption
   of the template release that brings the folder, adds its entry under
   `## [Unreleased]` of `CHANGELOG.md` instead. A release's section says an internal
@@ -1077,7 +1108,14 @@ which §12 bounds to one minor.
   a source has one, runs before the release. It is a PR of its own, merged before the
   release PR, only when a record changed or `fetched` goes from a bare date to the full
   time (§4); otherwise the run gets no PR of its own and the release PR cites it,
-  "unchanged" meaning the records, not the files (ADR-0039, decision 6). A release PR
+  "unchanged" meaning the records, not the files (ADR-0039, decision 6). A source's release
+  PR cites a green run of `live.yml` on the commit of `main` that it starts from, the nightly
+  run or one dispatch of `live.yml` on `main` (https://github.com/xippios/sdk-core/issues/351,
+  https://github.com/xippios/sdk-core/issues/382; ADR-0043). A run on an earlier commit of
+  `main` is no such run, whatever the merges after it changed, so a release whose base moved
+  after its run waits for the next nightly or one more dispatch
+  (https://github.com/xippios/sdk-core/issues/351,
+  https://github.com/xippios/sdk-core/issues/382; ADR-0043). A release PR
   changes only `pyproject.toml`, `uv.lock`, `CHANGELOG.md`, `README.md`, `CLAUDE.md`,
   `docs/handover.md` and the fragments under `changelog/`, which it deletes. Release =
   the release PR merges on `main` → `publish.yml` tags `vX.Y.Z` from `pyproject.toml` on
@@ -1161,8 +1199,13 @@ a template-only update, with no new core minor, is judged against the items it t
 7. `mypy --strict` covers `scripts/` too (`files = ["src", "tests", "scripts"]`).
 8. The current conventions version is applied (1.22's name rule excepted, §2): every rule
    changed since the version the source last applied holds in the source.
-9. The PR's changelog entry, a fragment under `changelog/` (§12), names the core,
-   template and conventions versions adopted.
+9. The PR's changelog entry, a fragment under `changelog/` (§12), names the core bound, the
+   template's tag and the conventions' version as they stand after the adoption, changed or
+   not, a template-only update's entry included
+   (https://github.com/xippios/sdk-core/issues/355; ADR-0043). The fragment of a source's
+   adoption is `breaking` where the adoption brings a core minor, which §12 makes a breaking
+   change of the source, and `changed` where it brings none
+   (https://github.com/xippios/sdk-core/issues/342; ADR-0043).
 
 Three routes depart from the list (ADR-0039, decision 2):
 
@@ -1182,8 +1225,10 @@ Three routes depart from the list (ADR-0039, decision 2):
 The host `xippios-mcp`, scaffolded by hand from the template's shared files (ADR-0026,
 decision 1), adopts a core minor in an adoption PR of its own without `copier update`,
 judged against items 1, 3, 4, 7, 8 and 9: item 1 raises the bound of `xippios-core` and of
-each of its extras, while its sources keep the `>=` floors of ADR-0026, decision 9, and item
-9's fragment names the core and conventions versions it adopts. Items 2, 5 and 6 have
+each of its extras, while its sources keep the `>=` floors of ADR-0026, decision 9, and
+item 9's fragment names the core bound and the conventions' version as they stand after the
+adoption, changed or not, and no template tag, since no template renders the host
+(https://github.com/xippios/sdk-core/issues/355; ADR-0043). Items 2, 5 and 6 have
 nothing to bind in it. The template changes that the new conventions version needs in the
 files it was scaffolded from are hand-applied and listed file by file in the PR
 description, as on route (3) (ADR-0026, amendment 2026-11-18, point e).
