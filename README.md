@@ -925,8 +925,10 @@ xippios_placeholder_key_envs = ["EXAMPLE_API_KEY"]
   each attempt of a retry included; one that `respx` or a transport of the test's own
   answers was never sent and does not count. A run that built a `Tenants` registry names no
   host, `requests sent by the live run: 42 (hosts not named: tenants declared)`, since a
-  tenant's host names the tenant (ADR-0030, decision 4); a run in which no live test ran
-  prints no such line.
+  tenant's host names the tenant (ADR-0030, decision 4). The line follows every run in which
+  a live test was set up with the gate open, one that skips at its setup included, so a
+  nightly whose live tests all skip, their key unset say, prints `requests sent by the live
+  run: 0`. A run in which no live test was set up with the gate open prints no such line.
 - `replay_fixture("api_get", "corn_2024")` mounts `tests/fixtures/api_get/corn_2024.json`
   on its method, host and path, the directory named after the wrapper function (or the
   task, for an exchange recorded through a task); `match_params=["countOnly"]` makes the

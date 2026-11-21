@@ -70,7 +70,8 @@ class _LiveRequests:
         self.counting = False
         """A live test is set up, running or being torn down, the gate open."""
         self.ran = False
-        """A live test was set up with the gate open: the summary prints the line."""
+        """A live test was set up with the gate open, one that skips at its setup included:
+        the summary prints the line, ``0`` where nothing was sent."""
         self._by_host: Counter[str] = Counter()
         self._lock = threading.Lock()
 
@@ -262,8 +263,10 @@ def pytest_terminal_summary(
     """After a live run, the requests its live tests sent, then what they left of each quota.
 
     The requests by host (``_LiveRequests``), no host where the run built a ``Tenants``
-    (``_tenants_declared``), never a path or a query (sdk-core#335); a run in which no
-    live test was set up with the gate open prints no such line. Then one line per quota
+    (``_tenants_declared``), never a path or a query (sdk-core#335). It follows a run in
+    which a live test was set up with the gate open, one that skips at its setup included,
+    so a run whose live tests all skip prints a count of 0; any other run prints no such
+    line. Then one line per quota
     policy: times, counts and the policy's source only, never a key, a host or a query
     (ADR-0035, decision 7).
     """
