@@ -922,7 +922,11 @@ standalone from the package. A task named in `BULK_TASKS` gets no route:
   chooses; an upstream code inside it is written as upstream writes it
   (`CH_2026_8.json`). A fixture recorded through a task rather than a wrapper, such as a
   download's metadata or a helper's answer, lives under the task's name; file samples
-  keep `tests/fixtures/files/<file_kind>/` as before (ADR-0020). Three further cases
+  keep `tests/fixtures/files/<file_kind>/` as before (ADR-0020). The exchanges of one
+  recording of a task are numbered in the order the task made them, the first as
+  `<case>.json` and the k-th, from the second on, as `<case>_<k>.json`, and a recording
+  that would leave a numbered file of its case beyond its last exchange writes nothing
+  (sdk-google-mail's `search_messages/ok_2.json`; ADR-0057, decision 6). Three further cases
   name their directory as follows (ADR-0028, decision 3). A wrapper
   whose every exchange is recorded through a task has no directory of its own
   (sdk-google-mail's `messages_get`, recorded through `get_message` and
@@ -1061,7 +1065,11 @@ standalone from the package. A task named in `BULK_TASKS` gets no route:
   in `send_once`, `record` and `fixture_from_response`, before anything is written
   (ADR-0048, decision 4). It reads at most `max_read_bytes` of the body,
   32 MiB by default: past it the reading stops, and the recording is refused before
-  anything is written (ADR-0040, decision 5).
+  anything is written (ADR-0040, decision 5). `record_task` records every exchange that a
+  task makes through any client, in order, each sent once, none answered from the cache and
+  each through the frame of the next bullet, and writes all of them or none, but it records
+  no token request inside an auth flow, which keeps a fixture of its own, and refuses a task
+  that downloads, whose body goes to a file unread (ADR-0057).
 - The recorder scrubs in memory and writes once, so nothing unscrubbed touches disk, and
   names the values that must never be written (`xippios.core.testing.Scrub(secrets=...)`),
   or reads those known only from the answer, such as a login's or a refresh's tokens
