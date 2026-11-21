@@ -623,14 +623,37 @@ def test_a_live_run_ends_with_the_requests_it_sent(
     assert "/v1/" not in "".join(lines)
 
 
+SKIPPED_TESTS = """
+import pytest
+
+@pytest.mark.live
+@pytest.mark.skipif(True, reason="the key is not set")
+def test_live():
+    raise AssertionError("never runs")
+
+def test_offline():
+    assert True
+"""
+
+
+@pytest.mark.parametrize(
+    ("tests", "outcomes"),
+    [(TEST_FILE, {"passed": 2}), (SKIPPED_TESTS, {"passed": 1, "skipped": 1})],
+    ids=["sends-nothing", "skips-at-setup"],
+)
 def test_a_live_run_that_sends_nothing_says_so(
-    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+    pytester: pytest.Pytester,
+    monkeypatch: pytest.MonkeyPatch,
+    tests: str,
+    outcomes: dict[str, int],
 ) -> None:
+    # A nightly whose live tests all skip, its key unset say, is green and prints 0, which
+    # no run that is not live prints (finding 1 of sdk-core#358).
     monkeypatch.setenv(LIVE_ENV, "1")
     monkeypatch.setattr(tenants, "_declared", False)
-    pytester.makepyfile(TEST_FILE)
+    pytester.makepyfile(tests)
     result = pytester.runpytest("-p", "xippios.core.testing.plugin", "--strict-markers")
-    result.assert_outcomes(passed=2)
+    result.assert_outcomes(**outcomes)
     assert [line for line in result.outlines if line.startswith(SENT)] == [f"{SENT}: 0"]
 
 
