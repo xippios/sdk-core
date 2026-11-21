@@ -45,7 +45,9 @@ It gives a source package the things that should be identical across the family:
   detected before the call, mapped from upstream's own refusal or made from an answer the
   task cannot serve as asked), all under
   `XippiosError`; `UnknownCode`, an `InvalidRequestError`, refuses a code a packaged
-  list lacks and names the closest known ones.
+  list lacks and names the closest known ones, and `QueryTooLarge`, another, refuses a
+  query over upstream's per-call record limit, which `fetch_counted` raises from
+  upstream's count before the data request.
 - **Result envelope**: every task function returns `Result[T]` with `ResultMeta`
   (source, endpoint, retrieved_at, published_at with published_at_naive for a time
   upstream printed without a zone, vintage, request without the parameters left `None`,
@@ -284,6 +286,58 @@ from xippios.core import NotFoundError, request_description
 
 NotFoundError(f"no data for {request_description(response)}", source="example")
 ```
+
+A task whose upstream counts a query's records on request and serves at most a limit of
+them per call counts first with `fetch_counted`: a count of 0 answers the task's empty
+answer and sends no data request, and a count over the limit raises `QueryTooLarge` before
+the data request (ADR-0053):
+
+```python
+from xippios.core import QueryTooLarge, Result, ResultMeta, fetch_counted
+
+RECORD_LIMIT = 100_000  # the most records upstream serves per call
+NARROW = "Split by period, then by reporter, and count each part with get_counts."
+
+
+async def get_data_async(period: str, reporter: str | None = None) -> Result[list[Record]]:
+    request = {"period": period, "reporter": reporter}
+
+    async def count() -> int:
+        return (await api.get_count(**request)).count  # upstream's count, read as an int
+
+    async def fetch() -> list[Record]:
+        return (await api.get(**request)).data
+
+    rows, total = await fetch_counted(
+        count, fetch, limit=RECORD_LIMIT, empty=[], narrow=NARROW, source="example"
+    )
+    meta = ResultMeta(source="example", endpoint="get", request=request, total=total)
+    return Result(data=rows, meta=meta)
+
+
+def check_slice(codes: list[str], periods: list[str]) -> None:
+    rows = len(codes) * len(periods)  # one row per code and period at most: nothing to count
+    if rows > RECORD_LIMIT:
+        raise QueryTooLarge(
+            rows, limit=RECORD_LIMIT, narrow="Name fewer codes or periods.", bound=True
+        )
+```
+
+`fetch_counted(count, fetch, *, limit, empty, narrow, source=None)` returns the data with
+the count, `(empty, 0)` for a count of 0, so the task sets `meta.total` from the count it
+already paid for. A count equal to the limit fetches, and an error that either request
+raises passes as raised. `count` gives an `int`: a float, a whole one such as `1234.0`
+included, or a `bool` raises `TypeError`, and a negative count `ValueError`, before the data
+request, since a source reads upstream's count into an `int` where it parses the answer, as
+a pydantic `int` field reads `1234.0` and refuses `1234.5`. `QueryTooLarge(count, *, limit,
+narrow, bound=False, source=None)` carries the four fields, and core words its message from
+them, `narrow` last: `query would return 5,006,385 records; upstream serves at most 100,000
+per call. Split by period, ...`; with `bound=True`, for a size read from the arguments, `query
+could return up to 100,008 records, a size read from its arguments with nothing counted or
+sent; ...`; and with a count of `None`, for upstream's own refusal of the query that a
+source's `classify` maps, `upstream refused the query as too large; it serves at most 50,000
+records per call. ...`. A source subclasses it only for an attribute of its own, worded in
+`narrow`, as sdk-usda-nass keeps the `year` that alone is over the limit.
 
 ## Quotas, hooks and keyless calls
 

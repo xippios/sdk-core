@@ -20,6 +20,7 @@ __all__ = [
     "ConfigError",
     "InvalidRequestError",
     "NotFoundError",
+    "QueryTooLarge",
     "RateLimitError",
     "TransportError",
     "UnknownCode",
@@ -227,6 +228,77 @@ class UnknownCode(InvalidRequestError):
         self.list_name = list_name
         self.fetched = fetched
         self.closest = tuple(closest)
+
+
+class QueryTooLarge(InvalidRequestError):
+    """A query over upstream's per-call record limit, refused before its data is fetched.
+
+    Raised by ``fetch_counted`` when upstream's count of the query's records is over the
+    limit, by a task whose arguments bound its rows over the limit, with ``bound=True`` and
+    before any request, and by a source's ``classify`` for upstream's own refusal of a query
+    as too large, with no count (ADR-0053). Core words the message from the fields, in one
+    of three forms with ``narrow`` last, so every source's refusal reads alike::
+
+        query would return 5,006,385 records; upstream serves at most 100,000 per call.
+        query could return up to 100,008 records, a size read from its arguments with
+        nothing counted or sent; upstream serves at most 100,000 per call.
+        upstream refused the query as too large; it serves at most 50,000 records per call.
+
+    A source subclasses it for an attribute of its own and words it in ``narrow``, as
+    sdk-usda-nass keeps the ``year`` that alone is over the limit.
+
+    Args:
+        count: The records the query would return, as upstream counted them, e.g.
+            ``5_006_385``; with ``bound``, the most it could return, read from its
+            arguments; ``None`` where upstream refused the query as too large without a
+            count.
+        limit: The most records upstream serves per call, e.g. ``100_000``.
+        narrow: What narrows the query, the sentences that end the message, e.g.
+            ``"Split by period, then by reporter."``.
+        bound: ``True`` where ``count`` was read from the arguments and nothing counted.
+        source: Source slug, e.g. ``"comtrade"``.
+
+    Attributes:
+        count: As given.
+        limit: As given.
+        narrow: As given.
+        bound: As given.
+
+    Raises:
+        ValueError: ``bound`` is ``True`` and ``count`` is ``None``: a bound is a number.
+    """
+
+    def __init__(
+        self,
+        count: int | None,
+        *,
+        limit: int,
+        narrow: str,
+        bound: bool = False,
+        source: str | None = None,
+    ) -> None:
+        if count is None:
+            if bound:
+                raise ValueError("bound=True needs the count read from the arguments, not None")
+            size = (
+                f"upstream refused the query as too large; it serves at most {limit:,} records "
+                "per call."
+            )
+        elif bound:
+            size = (
+                f"query could return up to {count:,} records, a size read from its arguments "
+                f"with nothing counted or sent; upstream serves at most {limit:,} per call."
+            )
+        else:
+            size = (
+                f"query would return {count:,} records; upstream serves at most {limit:,} per "
+                "call."
+            )
+        super().__init__(f"{size} {narrow}", source=source)
+        self.count = count
+        self.limit = limit
+        self.narrow = narrow
+        self.bound = bound
 
 
 def _refused_arguments(

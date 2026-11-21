@@ -33,6 +33,7 @@ from xippios.core.errors import (
     ConfigError,
     InvalidRequestError,
     NotFoundError,
+    QueryTooLarge,
     RateLimitError,
     TransportError,
     UnknownCode,
@@ -53,7 +54,7 @@ from xippios.core.models import (
     parse,
     parse_decimal,
 )
-from xippios.core.pagination import collect, paginate_offset
+from xippios.core.pagination import collect, fetch_counted, paginate_offset
 from xippios.core.reference import (
     PackagedCodes,
     PackagedList,
@@ -86,6 +87,7 @@ __all__ = [
     "PackagedCodes",
     "PackagedList",
     "QueryKeyAuth",
+    "QueryTooLarge",
     "QuotaPolicy",
     "RateLimit",
     "RateLimitError",
@@ -108,6 +110,7 @@ __all__ = [
     "closest",
     "collect",
     "error_from_response",
+    "fetch_counted",
     "fetch_periods",
     "list_task",
     "load_json",
