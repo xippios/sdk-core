@@ -918,6 +918,31 @@ def test_every_path_a_code_span_cites_is_a_file_from_the_root(tmp_path: Path) ->
     ]
 
 
+WRAPPED = """### A query with no filter is refused
+
+A data query with no filter is refused with HTTP 500 and the plain text body `Please add
+at least one filter.`, as the sample `tests/fixtures/get_data/no_filter.json` holds.
+
+```text
+`tests/fixtures/in_a_fence.json` is text in a fenced block, no code span
+```
+
+Probe: 2026-10-29, `get_data`; sample `tests/fixtures/get_data/no_filter_500.json`.
+"""
+
+
+def test_a_span_that_wraps_onto_the_next_line_hides_no_citation_after_it(tmp_path: Path) -> None:
+    """A span may wrap onto the next line of its paragraph, as two of sdk-faostat's do.
+
+    Read line by line, its closing backtick would pair with the opening one of the next span,
+    and the path after it would go unread. A fenced block holds no code span.
+    """
+    assert family._missing_citations(WRAPPED, tmp_path) == [
+        "line 4: tests/fixtures/get_data/no_filter.json",
+        "line 10: tests/fixtures/get_data/no_filter_500.json",
+    ]
+
+
 def test_the_family_check_holds_a_sources_observed_md(pytester: pytest.Pytester) -> None:
     result = run_family(pytester, OBSERVED_TREE)
     result.assert_outcomes(passed=FAMILY_TESTS)
