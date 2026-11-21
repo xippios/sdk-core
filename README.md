@@ -166,6 +166,54 @@ A release time upstream prints without a zone (FAS: `2026-10-06T08:00:00`) goes 
 release identifier as upstream names it; `ResultMeta` refuses a naive time without the
 flag, the flag without a naive time, and any field it does not define.
 
+A parameter that takes back the `meta.vintage` of an earlier call, to return only what
+changed since, filters with `newer_than`: the source hands its reader of the vintage text,
+`naive_time` for a release time printed without a zone, and the task sets `meta` from the
+whole answer, so an answer with nothing newer still names the newest release (ADR-0052):
+
+```python
+from datetime import datetime
+from functools import partial
+
+from xippios.core import Result, ResultMeta, naive_time, newer_than
+
+read_since = partial(naive_time, source="example")  # refuses a zone and an unreadable text
+
+
+def released(release: Release) -> datetime:
+    return release.released_at  # naive, as upstream printed it
+
+
+async def get_release_dates_async(since: str | None = None) -> Result[list[Release]]:
+    if since is not None:
+        read_since(since)  # refused before the request, never after it
+    releases = await api.get_release_info()  # the whole answer
+    newest = max(releases, key=released, default=None)
+    meta = ResultMeta(
+        source="example",
+        endpoint="GetReleaseInfo",
+        published_at=None if newest is None else newest.released_at,
+        published_at_naive=newest is not None,
+        vintage=None if newest is None else newest.released_at_text,  # the text as printed
+        request={"since": since},
+    )
+    kept = newer_than(since, releases, released=released, read=read_since)
+    return Result(data=kept, meta=meta)
+```
+
+`newer_than(since, items, *, released, read)` keeps the items whose release is strictly later
+than `read(since)`, in upstream's order, an equal release being no newer, and every item for
+`since=None`; an item whose `released` gives `None` is kept, since it cannot be shown to be no
+newer. It reads `since` once, before the first item, and the reader's `InvalidRequestError`
+passes as raised. A release that does not compare with what the reader gave, a month against
+a time or a time with a zone against `naive_time`'s, raises `TypeError` naming both values and
+their types: a fault of the source's code, which mypy does not catch. `naive_time` reads with `datetime.fromisoformat`, a date alone as its
+midnight, and refuses a text with a zone, since the release times it is compared with carry
+none and comparing the two would invent one. A source whose vintage is no time hands its own
+reader, a release month `"2026-09"` read into `(2026, 9)` and compared with each record's
+`(release_year, release_month)`. A `since` that bounds dates or periods beside an `until`,
+both included, is another rule, and this helper does not serve it (conventions §4).
+
 Upstream failures arrive as taxonomy errors, never as raw `httpx` exceptions:
 
 ```python

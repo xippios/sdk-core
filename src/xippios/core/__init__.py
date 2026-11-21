@@ -48,6 +48,8 @@ from xippios.core.models import (
     ResultCap,
     ResultMeta,
     UpstreamModel,
+    naive_time,
+    newer_than,
     parse,
     parse_decimal,
 )
@@ -108,7 +110,9 @@ __all__ = [
     "load_json",
     "load_table",
     "matches",
+    "naive_time",
     "nearest",
+    "newer_than",
     "paginate_offset",
     "parse",
     "parse_decimal",
