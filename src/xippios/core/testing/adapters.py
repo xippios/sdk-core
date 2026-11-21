@@ -3,12 +3,22 @@
 import inspect
 import json
 import re
-from collections.abc import Callable, Iterable
-from typing import Any
+import types
+import typing
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from typing import Any, Literal
 
+import httpx
+import respx
 from pydantic import BaseModel
 
+from xippios.core.client.retry import IDEMPOTENT_METHODS
+from xippios.core.models import Result
+
 __all__ = ["assert_projection", "assert_write_tools", "mcp_call", "mcp_call_text"]
+
+type DryRun = Mapping[str, Mapping[str, Any] | Sequence[Mapping[str, Any]]]
+"""The arguments of the dry run: a write task's name to one call's arguments, or a list."""
 
 
 def assert_projection(projected: BaseModel, source: BaseModel, **overrides: Any) -> None:
@@ -83,8 +93,12 @@ async def assert_write_tools(
     source: str,
     read_server: Any = None,
     router: Any = None,
+    preview_reads: bool = False,
+    dry_run: DryRun | None = None,
+    sent: respx.Router | None = None,
+    is_read: Callable[[httpx.Request], bool] | None = None,
 ) -> None:
-    """Check a write server against its write tasks (conventions §8).
+    """Check a write server against its write tasks, and their previews (conventions §8).
 
     Fails the test, naming the offending tool, unless all of these hold:
 
@@ -104,6 +118,18 @@ async def assert_write_tools(
     ``confirm`` stay. Async: the tools are listed on the test's own loop, so a test calls
     it as ``await assert_write_tools(...)`` under ``@pytest.mark.anyio``.
 
+    The preview is held in two parts, each off by default (ADR-0050). With
+    ``preview_reads=True`` every write task's return annotation is a ``Result`` whose
+    data has exactly one member tagged ``performed: Literal[False]``, the preview, a
+    union's member or a ``type`` alias's, and that member declares ``reads: list[str]``,
+    the operations the preview read. With ``dry_run`` each write tool is called on the
+    write server without ``confirm``, as an agent calls it, once for each set of
+    arguments, and its answer must be the preview, ``performed`` false, that sent no
+    request but a read, with ``reads`` empty exactly when it sent no request at all. The
+    dry run holds ``preview_reads`` too, and every argument set is checked before the
+    first tool is called. A request the router does not answer fails its call with
+    ``respx``'s error.
+
     Args:
         write_server: The ``MCPServer`` behind ``xippios-<source>-mcp-write``, built
             with ``read_only=False``.
@@ -112,9 +138,33 @@ async def assert_write_tools(
         source: Source slug, e.g. ``"cashctrl"``.
         read_server: The source's read server, ``xippios-<source>-mcp-read``, if any.
         router: The source's FastAPI router from ``router_from_tasks``, if any.
+        preview_reads: Hold each write task's annotations to one preview that declares
+            ``reads``.
+        dry_run: The arguments of a call of each write task, without ``confirm``, keyed
+            by the task function's ``__name__``, one mapping or a list of them, e.g.
+            ``{"create_entry": {"org": "demo", "amount": "1.00"}, "update_entry":
+            [{"org": "demo", "id": 52}]}``. Every write task needs one at least.
+        sent: The ``respx`` router the test's routes are mounted on, usually the
+            ``respx_mock`` fixture, whose calls tell what each call of the dry run sent.
+            Required with ``dry_run``.
+        is_read: Whether a request the dry run saw is a read, for an upstream that reads
+            through ``POST`` or a read that sends a token request first; by default a
+            request whose method is ``GET``, ``HEAD`` or ``OPTIONS``, the methods core's
+            retry rule repeats (``IDEMPOTENT_METHODS``, ADR-0011).
+
+    Raises:
+        TypeError: ``dry_run`` without ``sent``, or ``sent`` or ``is_read`` without
+            ``dry_run``.
     """
     from xippios.core.mcp.server import _confirm_problem, is_write_server, tool_name
 
+    if dry_run is not None and sent is None:
+        raise TypeError(
+            "dry_run needs sent=, the respx router the test's routes are mounted on, "
+            "e.g. the respx_mock fixture"
+        )
+    if dry_run is None and (sent is not None or is_read is not None):
+        raise TypeError("sent= and is_read= serve the dry run; pass dry_run= with them")
     assert is_write_server(write_server), (
         "the write server was not registered with read_only=False; the loopback rule depends on it"
     )
@@ -139,6 +189,141 @@ async def assert_write_tools(
                 methods = " ".join(sorted(getattr(route, "methods", None) or ()))
                 served = _serves(route, source, fn)
                 assert not served, f"{name}: a write task has an HTTP route, {methods} {path}"
+    if preview_reads or dry_run is not None:
+        for name, fn in expected.items():
+            problem = _preview_problem(fn)
+            assert problem is None, f"{name}: {problem}"
+    if dry_run is not None and sent is not None:
+        calls = _dry_run_calls(expected, dry_run)
+        for name, arguments in calls:
+            start = len(sent.calls)
+            text = await mcp_call_text(write_server, name, arguments)
+            requests = [call.request for call in sent.calls[start:]]
+            _judge_preview(name, text, requests, is_read or _by_method)
+
+
+def _by_method(request: httpx.Request) -> bool:
+    """The dry run's default read: a method core's retry rule repeats (ADR-0011, decision 2)."""
+    return request.method in IDEMPOTENT_METHODS
+
+
+def _members(data: Any) -> tuple[Any, ...]:
+    """The members of a ``Result``'s data: a union's, through a ``type`` alias, or itself."""
+    if isinstance(data, typing.TypeAliasType):
+        return _members(data.__value__)
+    if typing.get_origin(data) in (typing.Union, types.UnionType):
+        return typing.get_args(data)
+    return (data,)
+
+
+def _is_preview(member: Any) -> bool:
+    """True when ``member`` is a model whose ``performed`` is annotated ``Literal[False]``."""
+    if not (isinstance(member, type) and issubclass(member, BaseModel)):
+        return False
+    field = member.model_fields.get("performed")
+    if field is None or typing.get_origin(field.annotation) is not Literal:
+        return False
+    tags = typing.get_args(field.annotation)
+    return len(tags) == 1 and tags[0] is False
+
+
+def _preview_problem(fn: Callable[..., Any]) -> str | None:
+    """Why ``fn``'s answer holds no preview that declares ``reads``; ``None`` when it does.
+
+    The return annotation is resolved with ``typing.get_type_hints``, through a sync
+    facade's or a bound task's wrapper, and must be a ``Result`` whose data holds exactly
+    one member tagged ``performed: Literal[False]``, which declares ``reads: list[str]``
+    (ADR-0050, decision 4).
+    """
+    returned = typing.get_type_hints(fn).get("return", inspect.signature(fn).return_annotation)
+    if returned is inspect.Signature.empty:
+        return "its return is not annotated; a write task returns a Result that holds its preview"
+    metadata = getattr(returned, "__pydantic_generic_metadata__", None) or {}
+    if metadata.get("origin") is not Result:
+        shown = returned.__name__ if isinstance(returned, type) else repr(returned)
+        return f"returns {shown}, not a Result whose data holds the preview"
+    previews = [member for member in _members(metadata["args"][0]) if _is_preview(member)]
+    if not previews:
+        return "no member of its Result's data is tagged performed: Literal[False], the preview"
+    if len(previews) > 1:
+        names = ", ".join(member.__name__ for member in previews)
+        return (
+            f"{len(previews)} members of its Result's data are tagged performed: "
+            f"Literal[False]: {names}; one is the preview"
+        )
+    (preview,) = previews
+    field = preview.model_fields.get("reads")
+    if field is None or field.annotation != list[str]:
+        return (
+            f"the preview {preview.__name__} declares no reads: list[str], the operations it read"
+        )
+    return None
+
+
+def _dry_run_calls(
+    tools: Mapping[str, Callable[..., Any]], dry_run: DryRun
+) -> list[tuple[str, dict[str, Any]]]:
+    """Each call of the dry run, its tool's name and arguments, in the write tasks' order.
+
+    Every argument set is checked before any tool is called: each write task has one at
+    least, each key names a write task by its ``__name__``, and none passes ``confirm``.
+    """
+    by_task = {fn.__name__: name for name, fn in tools.items()}
+    unknown = sorted(dry_run.keys() - by_task.keys())
+    assert not unknown, (
+        f"dry_run names no write task: {unknown}; a key is the task function's __name__"
+    )
+    missing = sorted(by_task.keys() - dry_run.keys())
+    assert not missing, (
+        f"dry_run gives no arguments for the write tasks {missing}; "
+        "the dry run calls each write tool"
+    )
+    calls: list[tuple[str, dict[str, Any]]] = []
+    for task, name in by_task.items():
+        given = dry_run[task]
+        sets = [given] if isinstance(given, Mapping) else list(given)
+        assert sets, f"{name}: dry_run gives it no arguments"
+        for arguments in sets:
+            assert "confirm" not in arguments, (
+                f"{name}: a dry run calls without confirm; drop it from dry_run"
+            )
+            calls.append((name, dict(arguments)))
+    return calls
+
+
+def _described(requests: Sequence[httpx.Request]) -> str:
+    """The requests as messages name one, method and path: never the host nor the query."""
+    return ", ".join(f"{request.method} {request.url.path}" for request in requests)
+
+
+def _judge_preview(
+    name: str,
+    text: str,
+    requests: Sequence[httpx.Request],
+    is_read: Callable[[httpx.Request], bool],
+) -> None:
+    """Fail the dry run's call of ``name`` unless it answered a preview true to its reads."""
+    writes = [request for request in requests if not is_read(request)]
+    assert not writes, (
+        f"{name}: the preview sent a request that is no read, {_described(writes)}; "
+        "a preview sends no write"
+    )
+    assert not text.startswith("error:"), f"{name}: the dry run answered {text}"
+    try:
+        data = json.loads(text).get("data")
+    except ValueError:
+        raise AssertionError(f"{name}: the dry run's answer is no JSON, the cap cut it") from None
+    performed = data.get("performed") if isinstance(data, dict) else None
+    assert performed is False, (
+        f"{name}: the dry run's answer is no preview, performed is {performed}"
+    )
+    reads = data.get("reads")
+    listed = isinstance(reads, list) and all(isinstance(read, str) for read in reads)
+    assert listed, f"{name}: the preview carries no reads, the list of the operations it read"
+    if requests:
+        assert reads, f"{name}: the preview sent {_described(requests)} and its reads is empty"
+    else:
+        assert not reads, f"{name}: the preview's reads names {reads} and it sent no request"
 
 
 async def _tool_names(server: Any) -> set[str]:
