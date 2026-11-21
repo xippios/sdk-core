@@ -31,7 +31,9 @@ the repository it reviews.
    description.
 3. **Errors** (not the host's): mapped through the taxonomy (conventions §5) and the
    `classify` hook (§6); each shape `classify` maps is documented in `docs/upstream/` or
-   recorded in a fixture that a test passes to it (ADR-0031, decision 2).
+   recorded in a fixture that a test passes to it (ADR-0031, decision 2); a message names
+   its request as §5 says, a refusal the package makes of the call as given and a decoder's
+   subject naming none (ADR-0030, decision 4; ADR-0043).
 4. **Fixtures** (conventions §10; not the host's): recorded, never hand-written; scrubbed;
    free of key patterns and of production tenant names; the fixture files this PR adds or
    changes under 256 KiB, a file it only moves, its content unchanged, being neither, and
@@ -42,7 +44,11 @@ the repository it reviews.
    a file over the cap in the file's own form, its row saying what it keeps (ADR-0020,
    amendment 2026-11-18, point d); a body a test serves where it was not recorded one of
    §10's kinds, saying where it comes from, and its test asserting what the source does
-   with it (ADR-0028, decision 8); a recorded fixture that no test
+   with it (ADR-0028, decision 8), the three cases that §10 settles between the kinds
+   judged as it settles them: a recording changed in its status, content type and body at
+   once of the second kind, a value that no route serves and no `classify` reads an input of
+   the test with no kind, and a recording replayed at its own path for other parameters of
+   the third, naming its condition (ADR-0043); a recorded fixture that no test
    replays after the change, and no test or document cites, deleted and named in the
    description (ADR-0039, decision 8).
 5. **Checks green**: the PR's `ci` check passes; a reviewer who runs the checks runs
@@ -76,14 +82,20 @@ the repository it reviews.
     (ADR-0039, decision 2). The host's adoption PR runs no `copier update` and is
     judged against §15's items 1, 3, 4, 7, 8 and 9, read for the host as §15 reads them,
     and lists the template changes it hand-applies file by file (ADR-0026, amendment
-    2026-11-18, point e).
+    2026-11-18, point e). A source's adoption fragment names the core bound, the template's
+    tag and the conventions' version as they stand after the adoption, changed or not, and
+    is `breaking` where it brings a core minor and `changed` where it brings none
+    (conventions §15, item 9; ADR-0043).
 13. **Release PR** (the version in `pyproject.toml` changed, or for sdk-template the top
     heading of `CHANGELOG.md`): it changes only the files of conventions §12
     (`pyproject.toml`, `uv.lock`, `CHANGELOG.md`, `README.md`, `CLAUDE.md`,
     `docs/handover.md`, and the fragments under `changelog/`, which it deletes); the
     reference-data refresh ran before it, in a PR of its own only when a record changed
     or `fetched` went from a bare date to the full time, otherwise cited by the release
-    PR (conventions §12; ADR-0039, decision 6).
+    PR (conventions §12; ADR-0039, decision 6). It assembles each entry as its fragment
+    reads, under its fragment's group, rewording none, and a source's release PR cites a
+    green run of `live.yml` on the commit of `main` that it starts from, never a run on an
+    earlier commit (conventions §12; ADR-0043).
 14. **Stale sentences**: no sentence in a changed `README.md`, `CLAUDE.md`, docstring or
     document contradicts the state after the change (a version, a count, a file name, a
     rule the PR replaced).
