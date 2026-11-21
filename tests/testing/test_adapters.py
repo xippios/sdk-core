@@ -7,6 +7,7 @@ import httpx
 import pytest
 import respx
 from mcp.client import Client
+from pydantic import Field
 
 from xippios.core import (
     InvalidRequestError,
@@ -473,6 +474,39 @@ async def add_item_twice(name: str, confirm: bool = False) -> Result[ItemPreview
     return Result[ItemPreview | BarePreview](data=preview, meta=_meta("item/create.json"))
 
 
+async def add_item_unannotated(name: str, confirm: bool = False):  # type: ignore[no-untyped-def]
+    """A write task whose return is not annotated."""
+    return _shown(ItemPreview(endpoint="item/create.json", payload={}, reads=[]))
+
+
+async def add_item_long(name: str, confirm: bool = False) -> Result[ItemOutcome]:
+    """A preview past the byte bound of the default cap, which the tool answers cut.
+
+    Args:
+        name: The item's name.
+        confirm: Ignored.
+    """
+    payload = {"name": name, "notes": "x" * 70_000}
+    return _shown(ItemPreview(endpoint="item/create.json", payload=payload, reads=[]))
+
+
+class UnshownPreview(UpstreamModel):
+    """A preview that declares reads and leaves it out of its JSON."""
+
+    performed: Literal[False] = False
+    reads: list[str] = Field(default_factory=list, exclude=True)
+
+
+async def add_item_unshown(name: str, confirm: bool = False) -> Result[UnshownPreview]:
+    """A preview whose answer over MCP carries no reads.
+
+    Args:
+        name: The item's name.
+        confirm: Ignored.
+    """
+    return Result[UnshownPreview](data=UnshownPreview(), meta=_meta("item/create.json"))
+
+
 @pytest.mark.anyio
 async def test_preview_reads_holds_one_preview_that_declares_reads() -> None:
     # Both previews pass, the generic one through the sync facade's annotations too, and so
@@ -507,6 +541,11 @@ async def test_preview_reads_holds_one_preview_that_declares_reads() -> None:
             create_thing,
             r"returns dict\[str, str\], not a Result whose data holds the preview",
             id="no-result",
+        ),
+        pytest.param(
+            add_item_unannotated,
+            r"its return is not annotated; a write task returns a Result that holds its preview",
+            id="not-annotated",
         ),
     ],
 )
@@ -652,6 +691,38 @@ async def test_a_dry_run_fails_a_refused_call_with_its_answer(
             [add_item],
             source="example",
             dry_run={"add_item": {"name": " "}},
+            sent=respx_mock,
+        )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("task", "problem"),
+    [
+        pytest.param(
+            add_item_long,
+            r"the result cap cut the dry run's answer: result is \d+ bytes, over the cap of "
+            r"65536; narrow the query to see the rest",
+            id="cut-by-the-cap",
+        ),
+        pytest.param(
+            add_item_unshown,
+            r"the preview carries no reads, the list of the operations it read",
+            id="reads-not-in-the-answer",
+        ),
+    ],
+)
+async def test_a_dry_run_judges_the_answer_the_tool_gives(
+    respx_mock: respx.MockRouter, task: Callable[..., Any], problem: str
+) -> None:
+    # The dry run reads the tool's text, as an agent does, not the task's model.
+    write = build_server("example", [task], read_only=False)
+    with pytest.raises(AssertionError, match=f"^example_{task.__name__}: {problem}$"):
+        await assert_write_tools(
+            write,
+            [task],
+            source="example",
+            dry_run={task.__name__: {"name": "Corn"}},
             sent=respx_mock,
         )
 
