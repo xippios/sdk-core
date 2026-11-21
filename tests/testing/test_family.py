@@ -1165,11 +1165,75 @@ def test_packaged_lists_without_a_live_test_module_fail_naming_it(tmp_path: Path
     ]
 
 
-def test_a_live_test_module_that_does_not_import_fails_naming_its_error(tmp_path: Path) -> None:
-    broken = DECLARATION.format(live=COMPARED, no_live=EXCUSED) + "\nMISSING_NAME\n"
-    assert live_problems(tmp_path, {**LISTS_TREE, "tests/test_live.py": broken}) == [
-        "- tests/test_live.py does not import: NameError: name 'MISSING_NAME' is not defined"
-    ]
+COLLECTING = "from xippios.core.testing.live import *  # noqa: F403\n"
+UNREAD = "so the family check cannot read its LIVE_LISTS and NO_LIVE_LIST"
+IMPORT_OFFLINE = "make it import offline, as pytest's collection imports it"
+SKIP_INSIDE = (
+    "skip in the tests or the fixtures that need what is missing, pytest.importorskip among "
+    "them, and keep the module's top level importable offline"
+)
+
+
+def broken_at_import(statement: str) -> str:
+    """The declaration with ``statement`` run at the module's top level, after its imports."""
+    module = DECLARATION.format(live=COMPARED, no_live=EXCUSED)
+    return module.replace(COLLECTING, f"{COLLECTING}\nimport pytest\n\n{statement}\n")
+
+
+@pytest.mark.parametrize(
+    ("statement", "problem"),
+    [
+        (
+            "MISSING_NAME",
+            f"tests/test_live.py does not import, {UNREAD} (NameError: name 'MISSING_NAME' is not "
+            f"defined): {IMPORT_OFFLINE}",
+        ),
+        # pytest's outcomes are no Exception: a skip once let the check report skipped.
+        (
+            'pytest.skip("no key in this shell", allow_module_level=True)',
+            f"tests/test_live.py skips at its import, {UNREAD} (Skipped: no key in this shell): "
+            f"{SKIP_INSIDE}",
+        ),
+        (
+            'pytest.importorskip("xippios_no_such_module")',
+            f"tests/test_live.py skips at its import, {UNREAD} (Skipped: could not import "
+            f"'xippios_no_such_module': No module named 'xippios_no_such_module'): {SKIP_INSIDE}",
+        ),
+        (
+            'pytest.fail("not here", pytrace=False)',
+            f"tests/test_live.py does not import, {UNREAD} (Failed: not here): {IMPORT_OFFLINE}",
+        ),
+        (
+            'pytest.xfail("not yet")',
+            f"tests/test_live.py does not import, {UNREAD} (XFailed: not yet): {IMPORT_OFFLINE}",
+        ),
+        (
+            'pytest.exit("stop", returncode=3)',
+            f"tests/test_live.py does not import, {UNREAD} (Exit: stop): {IMPORT_OFFLINE}",
+        ),
+        (
+            "import sys\nsys.exit(2)",
+            f"tests/test_live.py exits at its import, {UNREAD} (SystemExit: 2): remove the exit "
+            "from its top level",
+        ),
+    ],
+    ids=["error", "skip", "importorskip", "fail", "xfail", "pytest-exit", "sys-exit"],
+)
+def test_a_live_test_module_that_does_not_load_fails_saying_why_and_what_to_do(
+    tmp_path: Path, statement: str, problem: str
+) -> None:
+    """Whatever ends the module's import, the check fails: it is never skipped (sdk-core#359)."""
+    files = {**LISTS_TREE, "tests/test_live.py": broken_at_import(statement)}
+    assert live_problems(tmp_path, files) == [f"- {problem}"]
+
+
+def test_an_interrupt_while_the_live_module_loads_stops_the_run(tmp_path: Path) -> None:
+    """A keyboard interrupt is the person's, not the module's: it is not read as a problem."""
+    _write(
+        tmp_path, {**LISTS_TREE, "tests/test_live.py": broken_at_import("raise KeyboardInterrupt")}
+    )
+    with pytest.raises(KeyboardInterrupt):
+        family.test_family_every_packaged_list_is_declared_for_the_live_run(_rooted(tmp_path))
 
 
 def test_a_stale_declaration_fails_where_no_list_is_packaged(tmp_path: Path) -> None:
@@ -1197,3 +1261,9 @@ def test_the_family_check_and_the_live_test_read_one_declaration(
             "*- regions: reference/regions.json stands in neither LIVE_LISTS nor NO_LIVE_LIST*",
         ]
     )
+    # A live module that skips at its import skips its own tests, and the family check fails,
+    # so CI goes red where it stayed green (https://github.com/xippios/sdk-core/issues/359).
+    skipping = broken_at_import('pytest.skip("no key in this shell", allow_module_level=True)')
+    result = run_family(pytester, {**tree, "tests/test_live.py": skipping})
+    result.assert_outcomes(passed=FAMILY_TESTS - 1, failed=1, skipped=1)
+    result.stdout.fnmatch_lines([f"*- tests/test_live.py skips at its import, {UNREAD}*"])
