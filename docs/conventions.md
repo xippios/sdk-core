@@ -335,7 +335,15 @@ and keeps what is strictly later, an equal release being no newer. `meta.vintage
 so an empty answer still carries the marker to store for the next call. Against a naive
 release time, a value with a zone is refused with `InvalidRequestError`, never
 converted, and so is a text the parameter cannot read (ADR-0007; ADR-0041,
-decision 2).
+decision 2). A parameter that takes back a vintage filters with core's `newer_than(since,
+items, released=..., read=...)`, which keeps the items released strictly later than `since`
+as the source's reader of its vintage text reads it, core's `naive_time` for a release time
+printed without a zone, and leaves `meta.vintage` and `meta.published_at` to the task, which
+sets them from the whole answer (ADR-0052). A parameter named `since` means one of two things
+in the family, each its own rule: a vintage taken back, the `meta.vintage` of an earlier call
+after which only what is strictly later is kept, with no `until`, or an inclusive bound on
+dates or periods beside an `until`, as sdk-usda-esmis, sdk-usda-wasde, sdk-faostat and
+sdk-eurostat take it (ADR-0052).
 
 A task that answers from packaged reference data (§3) fills `meta` by ADR-0041, decision 1:
 `retrieved_at` is the time the packaged list was fetched from upstream (the file's
