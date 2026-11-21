@@ -977,6 +977,23 @@ standalone from the package. A task named in `BULK_TASKS` gets no route:
   which upstream answers alike at those parameters, or says that the test asserts only what
   was sent (sdk-google-mail's refresh answer, which stands for a code exchange's only without
   `access_type=offline`, sdk-cashctrl's replays at other queries; ADR-0043).
+
+  A test marks a body of these kinds where it builds it by naming `§10` and the body's kind,
+  `kind 1` to `kind 5` in the order above, in one docstring or one block of comments, usually
+  as `NOT RECORDED: <where the body comes from> (conventions §10, kind 2)` (ADR-0049). A mark
+  reaches the places of the function or class whose docstring holds it, of the statement that
+  it stands on or above, and of every call of a helper whose docstring holds it, while a
+  module's docstring reaches nothing (ADR-0049). A value that is an input of the test says so
+  in the sentence `<the value> is an input of the test, not an answer from <upstream>.` in
+  place of a kind, its words fixed up to the word "test" and its upstream the source's own
+  (ADR-0049). A replay that answers another request than its recording, in its host, its path,
+  its query or its body compared through the recording's redaction, is the third kind, and its
+  test names `kind 3` beside `§10` in its docstring or its class's, in a comment inside it or
+  in the docstring of a helper or fixture that it uses (ADR-0049).
+  `xippios.core.testing.built_answers`, which a source collects with one line in
+  `tests/test_built_answers.py`, fails a place that builds, serves or hands on a body without
+  its mark and names its file and its line, and its census, which runs after every other test
+  of the run, judges the replays of the tests that ran (ADR-0049).
 - A PR deletes a recorded fixture that no test replays after its change and names it in
   its description; a fixture that a test or a document still cites stays
   (sdk-usda-nass's `get_param_values/statisticcat_desc.json`, replayed by nothing once
