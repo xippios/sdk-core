@@ -14,7 +14,7 @@ from functools import partial
 
 import pytest
 
-from xippios.core import InvalidRequestError, ResultMeta, naive_time, newer_than
+from xippios.core import InvalidRequestError, ResultMeta, XippiosError, naive_time, newer_than
 
 SOURCE = "example"
 
@@ -220,6 +220,38 @@ def test_the_newest_release_is_kept_whole_or_not_at_all() -> None:
     latest = [record for record in MONTHS if release_month(record) == newest]
     assert newer_than("2026-09", latest, released=release_month, read=read_month) == latest
     assert newer_than("2026-10", latest, released=release_month, read=read_month) == []
+
+
+def test_a_reader_whose_value_does_not_compare_with_the_release_is_the_sources_fault() -> None:
+    """A month read against releases that are times: no argument the caller could change.
+
+    mypy accepts the pair, so the helper names both values and their types, as a
+    ``TypeError`` of the source's code, never an ``InvalidRequestError`` that would tell the
+    caller to change the request (conventions §5).
+    """
+    with pytest.raises(TypeError) as info:
+        newer_than("2026-09", RELEASES, released=released, read=read_month)
+    message = str(info.value)
+    assert message.startswith(
+        "newer_than compares each release with read(since): released gave "
+        "datetime.datetime(2026, 10, 15, 8, 30), a datetime, and read gave (2026, 9), a tuple, "
+        "which do not compare ("
+    )
+    assert message.endswith(
+        "). Hand it a reader that reads since into the form released gives, naive_time for a "
+        "release time printed without a zone."
+    )
+    assert isinstance(info.value.__cause__, TypeError), "the comparison's own error, chained"
+    assert not isinstance(info.value, XippiosError)
+
+
+def test_an_aware_release_against_core_s_naive_reader_is_the_sources_fault() -> None:
+    aware = Release("0601", "2026-10-22T08:30:00+00:00")
+    with pytest.raises(TypeError, match="which do not compare") as info:
+        newer_than("2026-10-15T08:30:00", [aware], released=released, read=read_since)
+    assert "tzinfo=datetime.timezone.utc), a datetime, and read gave datetime.datetime(" in str(
+        info.value
+    ), "the two times as given, so the missing zone shows"
 
 
 def test_the_sources_refusal_passes_as_the_reader_raised_it() -> None:
