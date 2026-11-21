@@ -31,6 +31,8 @@ EXPORTS = {
         "TenantLock", "bind_tasks", "tenant_instructions",
         # a variable of the package contract (ADR-0026, amendment 2026-11-18, point c)
         "EnvVar",
+        # a packaged list's codes, declared once, and their check (ADR-0045)
+        "PackagedCodes",
     },
     "xippios.core.client": {
         "AsyncClient", "BasicKeyAuth", "BearerAuth", "CachedResponse", "ClientConfig",

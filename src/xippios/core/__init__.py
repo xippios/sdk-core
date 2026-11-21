@@ -53,6 +53,7 @@ from xippios.core.models import (
 )
 from xippios.core.pagination import collect, paginate_offset
 from xippios.core.reference import (
+    PackagedCodes,
     PackagedList,
     closest,
     load_json,
@@ -78,6 +79,7 @@ __all__ = [
     "InvalidRequestError",
     "MemoryCache",
     "NotFoundError",
+    "PackagedCodes",
     "PackagedList",
     "QueryKeyAuth",
     "QuotaPolicy",

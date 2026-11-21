@@ -5,9 +5,11 @@ contents are cached per process; callers get fresh objects on every call.
 
 A packaged list, the records of one upstream operation as the refresh script fetched
 them, is a ``PackagedList``: it loads the file, builds the ``ResultMeta`` of an answer
-from it (ADR-0041), parses its records and writes the file. ``matches`` is the ``search``
-filter of the ``list_*`` tasks; ``closest``, by text, and ``nearest``, by number, find the
-known codes near a value that ``UnknownCode`` refuses.
+from it (ADR-0041), parses its records and writes the file. ``PackagedList.codes``
+declares its code field, its name field and its folding once, a ``PackagedCodes``, whose
+``check`` returns an argument as given or raises ``UnknownCode`` (ADR-0045). ``matches`` is
+the ``search`` filter of the ``list_*`` tasks; ``closest``, by text, and ``nearest``, by
+number, find the known codes near a value that ``UnknownCode`` refuses.
 
 ``render_enums`` writes a source's generated ``enums.py``, ``StrEnum`` for a value list and
 ``IntEnum`` for a list of integer ids and names in one module (conventions §3, ADR-0031):
@@ -24,19 +26,22 @@ import keyword
 import os
 import re
 from collections import Counter
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import UTC, date, datetime, time
+from enum import Enum
 from importlib import resources
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Self, cast
 
 import pydantic
 from pydantic import BaseModel, ConfigDict, TypeAdapter, field_validator
 
-from xippios.core.errors import ValidationError, _raise
+from xippios.core.errors import InvalidRequestError, UnknownCode, ValidationError, _raise
 from xippios.core.models import ResultMeta, _validation_text, parse
 
 __all__ = [
+    "PackagedCodes",
     "PackagedList",
     "closest",
     "enum_member_name",
@@ -240,6 +245,41 @@ class PackagedList(BaseModel):
         """
         return parse(list[model], self.records, source=source, endpoint=self.endpoint)  # type: ignore[valid-type]
 
+    def codes(
+        self,
+        code: str,
+        name: str | None = None,
+        *,
+        fold_case: bool = False,
+        list_name: str | None = None,
+        source: str | None = None,
+    ) -> "PackagedCodes":
+        """The list's codes, declared once, with the check of an argument (ADR-0045).
+
+        A source declares each list it checks once, as a constant of its module or behind
+        ``functools.cache`` where the list is large, and calls ``check`` on it: the index
+        of the codes is built here, once, and kept with the declaration.
+
+        Args:
+            code: The field that holds the code, e.g. ``"commodityCode"``.
+            name: The field that holds the code's name, e.g. ``"commodityName"``;
+                ``None`` for a list of values, each its own name.
+            fold_case: ``True`` to compare without case, for a list of text codes that
+                upstream compares so, as Quick Stats does; ``False`` compares exactly.
+            list_name: The list as a refusal names it, e.g. ``"element_QCL"`` where the
+                file's name says more than its ``param``; ``param`` by default.
+            source: Source slug every refusal carries, e.g. ``"usda-psd"``.
+
+        Raises:
+            ValueError: A record lacks ``code`` or ``name``, a code is neither text nor an
+                integer, the list holds both, a name is not text, or ``fold_case`` is set
+                for integer codes or finds two codes that differ in case alone; the
+                message names the field and the record's position, never the record.
+        """
+        return PackagedCodes(
+            self, code, name, fold_case=fold_case, list_name=list_name, source=source
+        )
+
     def write(self, path: str | os.PathLike[str]) -> None:
         """Write the list to ``path`` as its packaged file, for the refresh script.
 
@@ -256,6 +296,357 @@ class PackagedList(BaseModel):
         payload = written.model_dump(mode="json", exclude={"note"} if self.note is None else None)
         text = json.dumps(payload, indent=2, ensure_ascii=False)
         Path(path).write_text(text + "\n", encoding="utf-8")
+
+
+type _Strategy = Callable[[Any, Mapping[Any, str]], Sequence[tuple[Any, str]]]
+"""A source's own way to the closest codes: the value and the codes to their names in,
+``(code, name)`` pairs out, best first."""
+
+
+class PackagedCodes:
+    """The codes of one packaged list, declared once, and the check of an argument (ADR-0045).
+
+    Made by ``PackagedList.codes``: the codes under the field ``code`` in upstream order,
+    each with its name under the field ``name``, upstream's text as the record holds it, or
+    with its own text where the list has no name field or a record holds no name. The list's
+    type is its codes' own: text or integers, as its records hold them, and a value of the
+    other type is refused, never compared by its text. The index is built once, when the
+    list is declared, and kept with the declaration for the process.
+
+    ``check`` is conventions §5's refusal of a code the packaged list lacks, in one call; the
+    live comparison of a list (https://github.com/xippios/sdk-core/issues/374) and the names
+    of a request's codes in ``meta`` (https://github.com/xippios/sdk-core/issues/375) read
+    the same declaration through ``code``, ``name``, ``packaged``, ``names`` and
+    ``name_of``. Its properties are read-only.
+    """
+
+    __slots__ = (
+        "_code",
+        "_fold_case",
+        "_folded",
+        "_integer",
+        "_list_name",
+        "_name",
+        "_names",
+        "_packaged",
+        "_shown",
+        "_source",
+    )
+
+    def __init__(
+        self,
+        packaged: PackagedList,
+        code: str,
+        name: str | None = None,
+        *,
+        fold_case: bool = False,
+        list_name: str | None = None,
+        source: str | None = None,
+    ) -> None:
+        self._packaged = packaged
+        self._code = code
+        self._name = name
+        self._fold_case = fold_case
+        self._list_name = packaged.param if list_name is None else list_name
+        self._source = source
+        names, folded, integer = _declared(packaged.records, code, name, fold_case, self._list_name)
+        self._names: Mapping[str | int, str] = MappingProxyType(names)
+        self._folded = folded
+        self._integer = integer
+        self._shown: Mapping[str | int, str] | None = None
+
+    def __repr__(self) -> str:
+        return (
+            f"PackagedCodes({self._list_name!r}, code={self._code!r}, name={self._name!r}, "
+            f"fold_case={self._fold_case!r})"
+        )
+
+    @property
+    def packaged(self) -> PackagedList:
+        """The list it was declared from."""
+        return self._packaged
+
+    @property
+    def code(self) -> str:
+        """The field that holds the code, e.g. ``"countryCode"``."""
+        return self._code
+
+    @property
+    def name(self) -> str | None:
+        """The field that holds the name, e.g. ``"countryName"``; ``None`` for a list of values."""
+        return self._name
+
+    @property
+    def fold_case(self) -> bool:
+        """Whether codes are compared without case."""
+        return self._fold_case
+
+    @property
+    def list_name(self) -> str:
+        """The list as a refusal names it: ``list_name`` as declared, else the list's ``param``."""
+        return self._list_name
+
+    @property
+    def source(self) -> str | None:
+        """Source slug every refusal carries, or ``None``."""
+        return self._source
+
+    @property
+    def integer(self) -> bool:
+        """``True`` for a list of integer codes, ``False`` for one of text codes."""
+        return self._integer
+
+    @property
+    def names(self) -> Mapping[str | int, str]:
+        """Each code to its name in upstream order, read-only.
+
+        A code listed twice keeps the name of its first record, and a code without a name,
+        every code of a list of values among them, is named by its own text.
+        """
+        return self._names
+
+    def name_of(self, value: object) -> str | None:
+        """The name of the code ``value`` stands for, compared as ``check`` compares it.
+
+        Args:
+            value: A code as a caller gives it, e.g. ``"va"`` for a folded list, ``401``
+                for integer codes, or an enum member, read by its value.
+
+        Returns:
+            The code's name as ``names`` holds it, e.g. ``"Corn"``, and for a list of
+            values the code as upstream spells it, ``"VA"``; ``None`` when the list lacks
+            the code or ``value`` is of the other type.
+        """
+        found = self._canonical(_plain(value))
+        return None if found is None else self._names[found]
+
+    def __contains__(self, value: object) -> bool:
+        """Whether the list holds ``value``, compared as ``check`` compares it."""
+        return self._canonical(_plain(value)) is not None
+
+    def check[V](
+        self,
+        param: str,
+        value: V,
+        *,
+        hints: Mapping[str, str] | None = None,
+        otherwise: str | None = None,
+        closest: _Strategy | None = None,
+        reason: str | None = None,
+    ) -> V:
+        """``value`` as the caller gave it, or the refusal of a code the list lacks (§5).
+
+        The value is compared with the list's codes as upstream compares them, without case
+        where the list folds it, an enum member by its value, and is returned itself, so
+        the task sends it, and records it in ``meta.request``, as given: under folding the
+        caller's spelling, which upstream compares without case.
+
+        Args:
+            param: The parameter, as the package names it, e.g. ``"country_code"``.
+            value: The value given, e.g. ``"US"`` or ``401``.
+            hints: Values that are no codes, each with the text that explains it in place
+                of the closest codes, e.g. ``{"all": "Omit country_code for every
+                country."}``; read with the value's text stripped and without case, as the
+                table's keys are, before the list's type: a text or an integer the table
+                holds is refused with its text whatever the list's type, so ``"all"``
+                given for integer codes reads its hint.
+            otherwise: The text of a refusal that names no code, e.g. ``"list_regions
+                lists them."``; left out where a code is close.
+            closest: The source's own strategy for the closest codes, a function of the
+                value and the codes to their names that returns ``(code, name)`` pairs,
+                best first, e.g. ISO codes first; each name with its runs of white space
+                collapsed, as a refusal shows it. By default core's ``closest`` for text
+                codes and ``nearest`` for integer codes.
+            reason: Why the package refuses the value rather than asking upstream, e.g.
+                ``"PSD answers unknown codes with an empty result, so the package refuses
+                them."``.
+
+        Returns:
+            ``value``, the very object given.
+
+        Raises:
+            UnknownCode: The list lacks the code; it names the list, its fetch date, the
+                closest codes, or the hint, or ``otherwise``, the reason and the source.
+            InvalidRequestError: ``value`` is not of the list's type and the hint table
+                does not hold it: a text of digits for
+                integer codes names the integer to pass, another text the codes whose name
+                holds it or comes close, an integer for text codes its text or the codes
+                close to it; ``otherwise`` where none is named.
+        """
+        plain = _plain(value)
+        if self._canonical(plain) is not None:
+            return value
+        hint = _hint(plain, hints)
+        if hint is None and not self._typed(plain):
+            raise self._wrong_type(param, plain, otherwise=otherwise, strategy=closest)
+        close: Sequence[tuple[Any, str]] = ()
+        if hint is None:
+            close = self._closest(plain, closest)
+            hint = None if close else otherwise
+        raise UnknownCode(
+            param,
+            cast(str | int, plain),
+            list_name=self._list_name,
+            fetched=self._packaged.fetched,
+            closest=close,
+            hint=hint,
+            reason=reason,
+            source=self._source,
+        )
+
+    def _typed(self, plain: object) -> bool:
+        if isinstance(plain, bool):
+            return False
+        return isinstance(plain, int) if self._integer else isinstance(plain, str)
+
+    def _canonical(self, plain: object) -> str | int | None:
+        """The list's code that ``plain`` stands for, ``None`` for none."""
+        if not self._typed(plain):
+            return None
+        if self._folded is not None:
+            return self._folded.get(cast(str, plain).casefold())
+        return cast(str | int, plain) if plain in self._names else None
+
+    def _shown_names(self) -> Mapping[str | int, str]:
+        """Each code to its name as a refusal shows it, white space collapsed: ESR pads."""
+        if self._shown is None:
+            self._shown = MappingProxyType(
+                {code: " ".join(name.split()) or str(code) for code, name in self._names.items()}
+            )
+        return self._shown
+
+    def _closest(self, plain: Any, strategy: _Strategy | None) -> list[tuple[Any, str]]:
+        shown = self._shown_names()
+        if strategy is not None:
+            return list(strategy(plain, shown))
+        if self._integer:
+            return list(nearest(plain, cast(Mapping[int, str], shown)))
+        return list(closest(plain, cast(Mapping[str, str], shown)))
+
+    def _wrong_type(
+        self, param: str, plain: object, *, otherwise: str | None, strategy: _Strategy | None
+    ) -> InvalidRequestError:
+        """The refusal of a value that is not of the list's type (ADR-0045, decision 4)."""
+        shown = self._shown_names()
+        tail = ""
+        if self._integer and isinstance(plain, str):
+            digits = plain.strip()
+            if digits.isascii() and digits.isdigit():
+                tail = f" Pass it as the integer {int(digits)}."
+            elif named := _by_name(plain, shown):
+                tail = f" By name: {_named(named)}."
+        elif not self._integer and isinstance(plain, int) and not isinstance(plain, bool):
+            text = str(plain)
+            if self._canonical(text) is not None:
+                tail = f" Pass it as the text {text!r}."
+            elif close := self._closest(text, strategy):
+                tail = f" Did you mean {_named(close)}?"
+        if not tail and otherwise:
+            tail = f" {otherwise}"
+        kind = "integer" if self._integer else "text"
+        first = next(iter(shown.items()), None)
+        such = "" if first is None else f", such as {_named([first])}"
+        return InvalidRequestError(
+            f"{plain!r} is not {'an' if self._integer else 'a'} {kind} code: {param} takes the "
+            f"{kind} codes of the packaged {self._list_name} list (fetched "
+            f"{self._packaged.fetched:%Y-%m-%d}){such}.{tail}",
+            source=self._source,
+        )
+
+
+def _plain(value: object) -> object:
+    """``value``, an enum member read by its value."""
+    return value.value if isinstance(value, Enum) else value
+
+
+def _hint(plain: object, hints: Mapping[str, str] | None) -> str | None:
+    """The text ``hints`` holds for ``plain``, read stripped and without case.
+
+    A hint is for a value that is no code, whatever the list's type (ADR-0045, decision 3):
+    ``"all"`` for integer codes, or ``0`` for text codes by its text ``"0"``. A value that
+    is neither text nor an integer reads none.
+    """
+    if not hints or isinstance(plain, bool) or not isinstance(plain, str | int):
+        return None
+    table = {key.strip().casefold(): text for key, text in hints.items()}
+    return table.get(str(plain).strip().casefold())
+
+
+def _named(pairs: Iterable[tuple[Any, str]]) -> str:
+    """Codes as ``UnknownCode`` names them: ``0410000 (Wheat)``, a code named by itself once."""
+    return ", ".join(str(code) if name == str(code) else f"{code} ({name})" for code, name in pairs)
+
+
+def _by_name(text: str, shown: Mapping[str | int, str]) -> list[tuple[str | int, str]]:
+    """Up to three codes whose name holds ``text``, then those whose name comes close.
+
+    Case and runs of white space are ignored, so ``"wheat"`` names ``104 (Wheat - White)``,
+    and ``"Flaxsed"`` names ``1001 (Flaxseed)`` by ``difflib``.
+    """
+    wanted = " ".join(text.split()).casefold()
+    if not wanted:
+        return []
+    found = [code for code, name in shown.items() if wanted in name.casefold()]
+    by_name: dict[str, str | int] = {}
+    for code, name in shown.items():
+        by_name.setdefault(name.casefold(), code)
+    found += [
+        by_name[name]
+        for name in difflib.get_close_matches(wanted, list(by_name), n=3)
+        if by_name[name] not in found
+    ]
+    return [(code, shown[code]) for code in found[:3]]
+
+
+def _declared(
+    records: Sequence[Mapping[str, Any]],
+    code: str,
+    name: str | None,
+    fold_case: bool,
+    list_name: str,
+) -> tuple[dict[str | int, str], dict[str, str] | None, bool]:
+    """The codes to their names, the folded codes to the codes, and whether codes are integers.
+
+    Raises:
+        ValueError: As ``PackagedList.codes`` documents; the message opens with
+            ``list_name`` and names the field and the record's position.
+    """
+    names: dict[str | int, str] = {}
+    folded: dict[str, tuple[int, str]] = {}
+    kinds: set[type] = set()
+    for position, record in enumerate(records):
+        for field in (code, name):
+            if field is not None and field not in record:
+                raise ValueError(f"{list_name}: record {position} has no field {field!r}")
+        value = record[code]
+        if isinstance(value, bool) or not isinstance(value, str | int):
+            raise ValueError(
+                f"{list_name}: record {position}: field {code!r} is neither text nor an integer"
+            )
+        kinds.add(str if isinstance(value, str) else int)
+        label = None if name is None else record[name]
+        if label is not None and not isinstance(label, str):
+            raise ValueError(f"{list_name}: record {position}: field {name!r} is not text")
+        names.setdefault(value, label or str(value))
+        if fold_case and isinstance(value, str):
+            first = folded.setdefault(value.casefold(), (position, value))
+            if first[1] != value:
+                raise ValueError(
+                    f"{list_name}: records {first[0]} and {position} hold one code in two "
+                    f"cases: {value!r}"
+                )
+    if len(kinds) > 1:
+        raise ValueError(
+            f"{list_name}: field {code!r} holds integers and text; a list's codes are one or "
+            "the other"
+        )
+    integer = kinds == {int}
+    if fold_case and integer:
+        raise ValueError(
+            f"{list_name}: fold_case compares text; the codes of field {code!r} are integers"
+        )
+    index = {key: original for key, (_, original) in folded.items()} if fold_case else None
+    return names, index, integer
 
 
 def matches(search: str | None, *fields: object) -> bool:

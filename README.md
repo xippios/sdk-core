@@ -585,7 +585,7 @@ The refresh script writes it; the tasks read it:
 ```python
 from datetime import UTC, datetime
 
-from xippios.core import PackagedList, Result, UnknownCode, closest, matches
+from xippios.core import PackagedList, Result, matches
 
 # scripts/refresh_reference.py: the records as upstream named them, the time of the fetch
 records = [record.dump_upstream() for record in commodities]  # from the api/ wrapper
@@ -595,6 +595,11 @@ PackagedList(
 
 
 # tasks.py
+COMMODITIES = PackagedList.load("xippios.example", "commodities").codes(
+    "commodityCode", "commodityName", source="example"
+)  # declared once: the index of the codes is built here and kept for the process
+
+
 async def list_commodities_async(search: str | None = None) -> Result[list[Commodity]]:
     """List the commodities with their codes, the values commodity_code takes.
 
@@ -608,19 +613,12 @@ async def list_commodities_async(search: str | None = None) -> Result[list[Commo
     return Result(data=kept, meta=packaged.meta("example", request={"search": search}))
 
 
-def validate_commodity_code(code: str) -> str:
-    packaged = PackagedList.load("xippios.example", "commodities")
-    codes = {r["commodityCode"]: r["commodityName"] for r in packaged.records}
-    if code not in codes:
-        raise UnknownCode(
-            "commodity_code",
-            code,
-            list_name="commodities",
-            fetched=packaged.fetched,
-            closest=closest(code, codes),  # "wheat" -> [("0410000", "Wheat")]
-            source="example",
-        )
-    return code
+def validate_commodity_code(commodity_code: str) -> str:
+    return COMMODITIES.check(  # the value as given, or UnknownCode
+        "commodity_code",
+        commodity_code,  # "wheat": "... Did you mean 0410000 (Wheat)? Example answers ..."
+        reason="Example answers unknown codes with an empty result, so the package refuses them.",
+    )
 ```
 
 The answer's `meta` follows ADR-0041, decision 1: `endpoint` is the upstream operation the list came
@@ -634,6 +632,43 @@ records of one field named by the upstream parameter (`[{"state_alpha": "AK"}, .
 code since. `closest` matches a code by its text and its name, with a `cutoff=` below
 0.6 for short codes, and `nearest(value, codes)` names the integer codes nearest by
 number.
+
+`PackagedList.codes(code, name=None, *, fold_case=False, list_name=None, source=None)`
+declares once which field holds a list's code, which its name and whether upstream compares
+it without case, and the `PackagedCodes` it returns checks an argument in one call, conventions
+§5's refusal of an unknown code (ADR-0045). `check` returns the value itself, so the task sends
+it, and records it in `meta.request`, as the caller gave it: under `fold_case=True` the
+caller's spelling, which upstream compares without case. A list's codes are text or integers,
+as its records hold them, and a value of the other type is refused with `InvalidRequestError`,
+never compared by its text: `"104"` for integer codes reads `Pass it as the integer 104.`, and
+a name names the codes by name.
+
+```python
+STATES = PackagedList.load("xippios.example", "state_alpha").codes(
+    "state_alpha", fold_case=True, source="example"
+)  # a list of values: each value its own name
+STATES.check("state_alpha", "va")  # "va", as given: upstream compares without case
+COUNTRIES.check(
+    "country_code",
+    country_code,
+    hints={"all": "Omit country_code for every country."},  # in place of the closest codes
+    otherwise="list_countries lists them.",  # the text when no code is close
+    closest=iso_codes_first,  # the source's own strategy: (value, names) -> [(code, name)]
+    reason="Example answers unknown codes with an empty result, so the package refuses them.",
+)
+```
+
+A hint is read with the value stripped and without case, and before the list's type, so
+`"all"` given for integer codes reads its hint. By default the closest codes are
+`closest`'s for text codes and `nearest`'s for integer codes, and a strategy reads each name
+with its runs of white space collapsed, as the refusal shows it. `list_name="element_QCL"`
+names the list where its file says more than its `param`. The declaration builds its index
+once and loads its file where the source makes it, so a large list is declared behind
+`functools.cache`, and a record without the code or the name field, codes of both types, or
+codes that differ in case alone in a folded list are refused there with `ValueError`.
+`names` maps each code to its name in upstream order, `name_of(value)` and `value in codes`
+compare as the check does, and `code`, `name` and `packaged` give the fields and the list, for
+a task's own reading of the list.
 
 Other code lists are read with `load_json` or `load_table` (`load_csv`, which
 `load_table` calls for a CSV file, stays in `xippios.core.reference`). The refresh

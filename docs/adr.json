@@ -716,6 +716,20 @@
       ],
       "other": [],
       "superseded_by": null
+    },
+    {
+      "id": "ADR-0045",
+      "number": 45,
+      "title": "One check of an argument against a packaged list",
+      "path": "docs/adr/0045-one-check-of-an-argument-against-a-packaged-list.md",
+      "status": "Accepted",
+      "date": "2026-11-21",
+      "decided_by": "https://github.com/xippios/sdk-core/issues/361",
+      "amended": [],
+      "amends": [],
+      "supersedes": [],
+      "other": [],
+      "superseded_by": null
     }
   ]
 }
