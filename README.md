@@ -1133,7 +1133,10 @@ xippios_placeholder_key_envs = ["EXAMPLE_API_KEY"]
   `json=` or `data=` (a form) send a body, recorded with its content type. The recording
   goes through the source's client, its base URL, auth, rate limit and hooks, and sends
   once: never retried, whatever its `RetryPolicy` says, and never answered from the cache,
-  so a 429 or a 5xx is recorded as it came and spends no second request. It reads at
+  so a 429 or a 5xx is recorded as it came and spends no second request. An answer of a
+  1xx or a 3xx status is no final answer of its operation and is refused, nothing written,
+  the message naming the status and what to record instead, the URL a redirect's
+  `Location` names (ADR-0048, decision 4). It reads at
   most `max_read_bytes` of the body (32 MiB by default, `None` for no bound): past it,
   the reading stops and the recording raises, naming the method, the path and the bound,
   and nothing is written. `max_bytes=80_000`
@@ -1189,12 +1192,67 @@ record_sync(
 
 The fixture is scrubbed in memory, verified and written once: if a named value or one
 `response_secrets` read is still in the URL, a header value or a text body, nothing is
-written and the error says where, never what. A form a value takes that differs from it (percent-encoded, behind a JSON
-escape), or a tenant's host, the source rewrites itself, on the `Fixture` that
-`fixture_from_response` returns, and writes the file with `write_fixture(fixture, path)`,
-laid out as `record` writes it; `fixture_text(fixture)` gives that text. A body that is
-not UTF-8 text cannot be scrubbed and is refused unless `Scrub(allow_binary=True)` stores
-it base64, flagged.
+written and the error says where, never what. A body that is not UTF-8 text cannot be
+scrubbed and is refused unless `Scrub(allow_binary=True)` stores it base64, flagged.
+
+What a source replaces beyond those values, a field by key, a form a value takes that
+differs from it (percent-encoded, behind a JSON escape) or a tenant's host, its own
+rewrite step replaces, and the recorder runs it: a function of the scrubbed `Fixture` that
+returns it rewritten with the values it replaced, and raises `ValueError` to refuse
+(ADR-0048):
+
+```python
+import json
+
+from xippios.core.testing import Fixture, Scrub, fixture_path, record_sync
+
+
+def rewrite(fixture: Fixture) -> tuple[Fixture, list[str]]:
+    """Every user's description replaced by key; the values replaced returned."""
+    body = json.loads(fixture.response.body)
+    replaced = []
+    for user in body.get("data", []):
+        if isinstance(user.get("description"), str):
+            replaced.append(user["description"])
+            user["description"] = "[description rewritten]"
+    response = fixture.response.model_copy(update={"body": json.dumps(body)})
+    return fixture.model_copy(update={"response": response}), replaced
+
+
+record_sync(
+    client,
+    "/users/by",
+    fixture_path(FIXTURES, "get_users_by_usernames", "two"),
+    params={"usernames": "USDA,FAO"},
+    scrub=Scrub(secrets=[key]),
+    rewrite=rewrite,
+)
+```
+
+The order is fixed: the scrub, the step, the check, the one write. The check searches the
+URL, every header value, both bodies and every key and string of a body that is JSON for
+each value the step returned, as given, `REDACTED` masked first, and for the scrub's values
+again; a value left anywhere refuses the write, the error naming the place (`response body`,
+`request URL`, `response header 'x-echo'`), never the value. An empty value is passed over.
+An encoded form is the step's to return, or to look for itself: core searches each value as
+given. `fixture_from_response(response, scrub=..., rewrite=...)` runs the same refusal,
+scrub, step and check on one exchange and writes nothing, so a source that records several
+exchanges checks them all before it writes one with `write_fixture(fixture, path)`, laid out
+as `record` writes it; `fixture_text(fixture)` gives that text.
+
+A source that needs the answer itself, the bytes it cuts a sample from or a write's answer
+it reports, sends the recording's one request with `send_once` (or `send_once_sync`): sent
+as `record` sends it, once, never from the cache, through the source's own client, and
+returned as it came, a 4xx or a 5xx included, nothing written. A 1xx or a 3xx is refused
+there too. No recorder builds a client for one attempt:
+
+```python
+from xippios.core.testing import Scrub, fixture_from_response, send_once_sync, write_fixture
+
+response = send_once_sync(client, "/order/create.json", method="POST", data=form)
+print(response.json().get("insertId"))  # the record to delete after the recording
+write_fixture(fixture_from_response(response, scrub=Scrub(secrets=[key])), path)
+```
 
 A download's replay fixture may carry as its body the sample its parser tests read, so
 the download replays that file. It is marked `sample`, with the whole file's size and

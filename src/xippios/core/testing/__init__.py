@@ -3,10 +3,11 @@
 Five things live here: the pytest plugin, which gates live tests and keeps the run
 offline (no network for the session; no rate-limit wait and a placeholder key in every
 test not marked live; ADR-0035); fixture recording, one request sent once and read up
-to a bound, with secrets scrubbed in memory and verified before the write (``Scrub``),
-a large answer cut on request (``max_bytes=``, ADR-0040), and the writer with which a
-source's own recorder step writes a fixture it rewrote (``write_fixture``,
-``fixture_text``; ADR-0042); fixture replay through ``respx``, with what was sent and
+to a bound, a final answer only, with secrets scrubbed in memory and verified before the
+write (``Scrub``), a large answer cut on request (``max_bytes=``, ADR-0040), a source's
+own rewrite step run and checked before the write (``rewrite=``), the one send without
+the write (``send_once``) and the writer (``write_fixture``, ``fixture_text``;
+ADR-0048); fixture replay through ``respx``, with what was sent and
 recorded as plain values (``sent_urls``, ``sent_query``, ``sent_bodies``,
 ``recorded_query``, ``response_from_fixture``);
 helpers for adapters (``mcp_call``, ``mcp_call_text``, ``assert_write_tools`` for a write
@@ -53,7 +54,7 @@ from xippios.core.testing.fixtures import (
     response_from_fixture,
     write_fixture,
 )
-from xippios.core.testing.record import record, record_sync
+from xippios.core.testing.record import record, record_sync, send_once, send_once_sync
 from xippios.core.testing.replay import ReplayFixture, sent_bodies, sent_query, sent_urls
 from xippios.core.testing.scrub import REDACTED, Scrub
 
@@ -78,6 +79,8 @@ __all__ = [
     "record_sync",
     "recorded_query",
     "response_from_fixture",
+    "send_once",
+    "send_once_sync",
     "sent_bodies",
     "sent_query",
     "sent_urls",

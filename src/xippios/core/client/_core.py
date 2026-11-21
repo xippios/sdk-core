@@ -354,8 +354,9 @@ class AsyncClient:
     ) -> httpx.Response:
         """The recorder's request: sent once, its answer returned whatever its status.
 
-        ``xippios.core.testing.record`` sends through it, so a recording is one live
-        exchange (ADR-0037, decision 6): never retried, whatever
+        ``xippios.core.testing.send_once`` sends through it, and ``record`` through that,
+        which refuses an answer of a 1xx or a 3xx status (ADR-0048, decision 4), so a
+        recording is one live exchange (ADR-0037, decision 6): never retried, whatever
         ``config.retry`` says, and never answered from the cache nor stored in it.
         ``before_request`` runs once and the limiter paces the request, as for
         ``request``, and ``observe`` sees the answer; ``classify`` is not asked, since

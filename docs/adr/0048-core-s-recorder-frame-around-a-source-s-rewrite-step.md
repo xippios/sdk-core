@@ -100,9 +100,10 @@ value and the write.
   its refusal of another 2xx and of a binary file at those paths stays its own. sdk-x and
   sdk-google-mail no longer write a 1xx or 3xx.
 - sdk-x masks its placeholders before its check, and core masks `REDACTED` alone: a replaced value
-  found only inside a placeholder the step wrote (`text` inside `[text rewritten]`) refuses the
-  write in core where sdk-x writes it today. Such a recording is narrowed, or the step leaves the
-  value out of what it returns.
+  found only inside a placeholder the step wrote (`rewritten` inside `[name rewritten]`) refuses
+  the write in core where sdk-x writes it today. A word of a placeholder that is also a key of
+  the body (`text`, `name`) is refused by both, since sdk-x searches the keys too. Such a
+  recording is narrowed, or the step leaves the value out of what it returns.
 - A recording that ends in a redirect names the redirect's status, and the source records the
   request that upstream answers itself.
 
