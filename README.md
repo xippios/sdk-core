@@ -896,30 +896,39 @@ offset=200`. The call with `offset=200` answers `showing rows 201 to 400 of 500`
 and its note, and `continue with offset=400`, and the last page is its count alone,
 `showing rows 401 to 500 of 500`. A page cut short by the byte bound names the right next
 offset, a row that alone passes the bound is passed with `continue past it with
-offset=<offset + 1>`, and an offset past the end answers no row and says so. `offset` reaches neither the task nor
-`meta.request`, and every page carries its note, so an answer without one is whole.
-`ResultCap(keep="last")` keeps the newest rows of a series ordered oldest first, in the
-task's order, and its `offset` counts from the last row, so the continuation walks to older
-rows; without `paged` it answers the newest rows and the note alone.
+offset=<offset + 1>`, and an offset past the end answers no row and says so. `offset`
+reaches neither the task nor `meta.request`, and every page carries its note, so an answer
+without one is whole. `ResultCap(keep="last")` keeps the newest rows of a series ordered
+oldest first, in the task's order, and its `offset` counts from the last row, so the
+continuation walks to older rows; without `paged` it answers the newest rows and the note
+alone.
 
 ```python
 MCP_CAPS: Mapping[str, ResultCap] = {
     "list_publications": ResultCap(paged=True),  # a packaged table: a second run is free
-    "get_series": ResultCap(paged=True, keep="last", note="pass since to see later periods"),
+    # A series of 500 periods, oldest first, answers its newest 200 with the note
+    # "showing rows 301 to 500 of 500 (cap: 200 rows or 65536 bytes); narrow the query to
+    # see the rest; continue with offset=200", and offset=200 answers rows 101 to 300.
+    "get_series": ResultCap(paged=True, keep="last"),
 }
 ```
 
-A continuation runs the task again, so a source pages a tool where that second run costs
-little: a packaged table (sdk-usda-esmis's `list_publications`), an answer the response
-cache holds (sdk-faostat and sdk-eurostat, for 300 seconds) or one request (sdk-usda-esr's
-`get_exports` for every country). It leaves a tool unpaged where a second run is dear:
-sdk-usda-nass's `get_data` split by year spends up to 41 keyed calls, sdk-usda-esr's
-`get_weekly_series` one request per market year, up to 11, of the 1,000 an hour its key
-shares, and each page of sdk-x's post tools is billed per post. Such a series can still
-keep its newest rows unpaged. Rows can change between two runs, so a continuation of a live
-list can repeat or skip a row. A task that pages with its own `start` keeps its `resume with
-start=` note and stays unpaged, and `register_tasks` refuses a paged cap, with `ValueError`
-naming the tool, for a task that takes a parameter `offset` itself. A tool without
+A continuation runs the task again, so a source pages a read tool where that second run
+costs little: a packaged table (sdk-usda-esmis's `list_publications`), an answer the
+response cache holds (sdk-faostat and sdk-eurostat, for 300 seconds) or one request
+(sdk-usda-esr's `get_exports` for every country). It leaves a tool unpaged where a second
+run is dear: sdk-usda-nass's `get_data` split by year spends up to 41 keyed calls,
+sdk-usda-esr's `get_weekly_series` one request per market year, up to 11, of the 1,000 an
+hour its key shares, and each page of sdk-x's post tools is billed per post. Such a series
+can still keep its newest rows unpaged. The second run draws on the same quota as the
+first: on a multi-tenant source the tenant's own, on a key that several packages share the
+key's, and on a metered upstream the bill, so a source counts a continuation there as one
+more call at that price. Rows can change between two runs, so a continuation of a live list
+can repeat or skip a row. A task that pages with its own `start` keeps its `resume with
+start=` note and stays unpaged. `register_tasks` refuses a paged cap, with `ValueError`
+naming the tool, for a task that takes a parameter `offset` itself and for every task of a
+write server, since a continuation would run a confirmed write again; a write task may keep
+its last rows, `ResultCap(keep="last")` alone, which runs it once. A tool without
 `paged=True` declares no `offset`, and its notes read as before.
 
 `tool_functions(tasks)` gives the functions of `tasks.__all__` that become tools, those in

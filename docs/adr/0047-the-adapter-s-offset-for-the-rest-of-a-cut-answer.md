@@ -36,7 +36,12 @@ it, and the response cache answers it in sdk-faostat and sdk-eurostat alone, wit
    a billed page. A task that records its own `start` keeps the note it has and is left unpaged.
    A task that takes a parameter `offset` itself is refused a paged cap at registration, with
    `ValueError` naming the tool and saying that the adapter's argument would shadow it, before
-   anything is registered.
+   anything is registered. A write task is never paged: a continuation runs the task again,
+   so following the note of a paged write tool would repeat a confirmed write, and
+   `register_tasks(read_only=False)` refuses a paged cap for every task of a write server
+   with `ValueError` naming the tool and saying so, before anything is registered or marked.
+   A write task may keep the last rows, `ResultCap(keep="last")` alone, since that runs it
+   once and its note names no call that runs it again.
 3. **The note of a paged tool names the next call.** Its first page reads as ADR-0038, decision 3,
    writes it and ends `; continue with offset=<offset + shown>`, `shown` counted after both
    bounds, so a page that the byte bound cuts short still names the right next offset. A later
@@ -68,17 +73,22 @@ it, and the response cache answers it in sdk-faostat and sdk-eurostat alone, wit
    to the cap and the notes of a paged or a last-rows cap, and changes no text that ADR-0038
    writes for a cap that has neither.
 
-Each part has two consumers (ADR-0023, decision 2). A paged tool: sdk-usda-esr's `get_exports`
-and `get_weekly_series`, sdk-usda-esmis's `list_publications` on its packaged table, and the
-tools sdk-comtrade, sdk-faostat, sdk-usda-gats, sdk-usda-nass and sdk-usda-psd name in their rows
-of https://github.com/xippios/sdk-core/issues/314. The last rows: sdk-eurostat's `get_series`
-(https://github.com/xippios/sdk-core/issues/71) and sdk-usda-esr's `get_weekly_series`.
+Each part has two consumers (ADR-0023, decision 2). A paged tool, one whose second run costs
+little: sdk-usda-esmis's `list_publications` on its packaged table, sdk-usda-nass's
+`list_param_values`, nine of its lists packaged and the rest one keyed call, sdk-usda-esr's `get_exports` for every country,
+one request, and the list tools of sdk-faostat and sdk-eurostat, whose answers the response
+cache holds. The last rows: sdk-eurostat's `get_series`
+(https://github.com/xippios/sdk-core/issues/71) and sdk-usda-esr's `get_exports` for every
+country, paged, and its `get_weekly_series`, unpaged, since a second run of the series spends
+one request per market year.
 
 ## Consequences
 
 - A continuation runs the task again: it costs upstream again unless a packaged table or the
   response cache answers it, and where upstream changed between the two runs a row can repeat or
-  be skipped. The source weighs that when it opts a tool in.
+  be skipped. The source weighs that when it opts a tool in. On a multi-tenant source the second
+  run spends the tenant's own quota, on a shared key the key's, and on a metered upstream it is
+  billed again.
 - A source takes the fields in its patch, an entry in its `MCP_CAPS` for each tool whose answer is
   cut, and shortens a cap's note that only worked around the cut.
 - What a paged cap does not reach stays as ADR-0038 has it: a model with two lists, an answer

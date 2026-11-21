@@ -798,7 +798,9 @@ with sdk-template 0.4.0, which renders it (ADR-0026, amendment 2026-11-18, point
   second run is dear, many upstream requests or a billed page (ADR-0047, decision 2). A
   task that records its own `start` stays unpaged and keeps its note, and a task that takes
   a parameter named `offset` is refused a paged cap at registration (ADR-0047, decision 2).
-  Where one row alone passes the byte bound, the note of a paged tool says to continue past
+  A write task is never paged: a continuation runs the task again and would repeat a
+  confirmed write, so `register_tasks(read_only=False)` refuses a paged cap for every task
+  of a write server (ADR-0047, decision 2). Where one row alone passes the byte bound, the note of a paged tool says to continue past
   that row with `offset=<offset + 1>` (ADR-0047, decision 3). A tool whose answer is a
   series ordered oldest first keeps its newest rows with `ResultCap(keep="last")`, and the
   `offset` of such a paged tool counts from the last row, so a continuation walks to older

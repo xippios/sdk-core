@@ -3,8 +3,8 @@
   next rows, `continue with offset=200`. `ResultCap(keep="last")` keeps the newest rows of a
   series ordered oldest first, and its `offset` counts from the last row, so a continuation
   walks to older rows. Both default to what every cap does today, a tool without them
-  declares no `offset` and writes its notes as before, and a task that takes `offset` itself
-  is refused a paged cap.
+  declares no `offset` and writes its notes as before, and a write task or a task that takes
+  `offset` itself is refused a paged cap.
   (ADR-0047, §8, https://github.com/xippios/sdk-core/issues/314)
   - Hand-apply: `src/xippios/cashctrl/tasks.py` (sdk-cashctrl) — `paged=True` in `MCP_CAPS`
     for `list_accounts`, `list_cost_centers`, `list_custom_fields` and the other lists that
@@ -29,18 +29,20 @@
     `list_publications`, which reads the packaged table, the three tools that take `page`
     left as they are — all 2,008 rows of one agency are reachable
     (https://github.com/xippios/sdk-usda-esmis/issues/34).
-    `src/xippios/usda/esr/tasks.py` (sdk-usda-esr) — `keep="last"` for `get_exports` without
-    a country and for `get_weekly_series`, paged where a second run costs little by the
-    README's rule — the newest weeks come first
+    `src/xippios/usda/esr/tasks.py` (sdk-usda-esr) — `paged=True, keep="last"` for
+    `get_exports`, whose every-country answer is one request, and `keep="last"` alone for
+    `get_weekly_series`, which stays unpaged since a second run spends one request per market
+    year, up to 11 — the newest weeks come first
     (https://github.com/xippios/sdk-usda-esr/issues/28).
     `src/xippios/usda/gats/tasks.py` (sdk-usda-gats) — `paged=True` for the sixteen cut tools
     its issue counts, `get_census_exports` among them, and `keep="last"` for the three series
     tools — each continuation downloads the answer again, since no data answer is cached
     (https://github.com/xippios/sdk-usda-gats/issues/32).
-    `src/xippios/usda/nass/tasks.py` (sdk-usda-nass) — `paged=True` for `get_data`,
-    `get_county_yield`, `get_county_production`, `get_census_farms` and `list_param_values`
-    where a second run costs little, each docstring stating the keyed calls a continuation
-    spends — a cut census reaches its last county
+    `src/xippios/usda/nass/tasks.py` (sdk-usda-nass) — `paged=True` for `list_param_values`,
+    nine of whose lists are packaged and the rest one keyed call, `get_data` left unpaged,
+    whose second run split by year spends up to 41 keyed calls that are never cached, and
+    `get_county_yield`, `get_county_production` and `get_census_farms` paged only where one
+    run is one keyed call — a list past 1,000 values reaches its last value
     (https://github.com/xippios/sdk-usda-nass/issues/55).
     `src/xippios/usda/psd/tasks.py` (sdk-usda-psd) — `paged=True` for `get_latest_release`,
     `get_data`, `get_release_dates` and `get_time_series`, and `keep="last"` for the two
