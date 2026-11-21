@@ -316,6 +316,33 @@ def test_a_fixture_that_builds_passes_it_to_the_tests_that_take_it() -> None:
     assert [place.text for place in places] == ["takes the fixture served"]
 
 
+def test_a_method_that_takes_the_fixture_is_a_place_as_a_function_is() -> None:
+    source = '''
+    import httpx
+    import pytest
+
+    @pytest.fixture
+    def page():
+        return httpx.Response(200, json={"rows": []})
+
+    def test_marked(page):
+        """The empty page is composed (conventions §10, kind 2)."""
+
+    class TestPages:
+        def test_unmarked(self, page):
+            pass
+    '''
+    places = built_answers.uncovered(clean(source), "tests/test_x.py")
+    assert [(place.line, place.scope, place.text) for place in places] == [
+        (at(source, "def test_unmarked"), "TestPages.test_unmarked", "takes the fixture page")
+    ]
+    marked = source.replace(
+        "class TestPages:\n",
+        'class TestPages:\n        """Pages composed (conventions §10, kind 2)."""\n\n',
+    )
+    assert lines(marked) == [], "the class's docstring reaches its method"
+
+
 # --- the input of a test ---
 
 INPUT = "is an input of the test, not an answer from Example."
@@ -841,6 +868,35 @@ def test_the_census_compares_a_form_body(pytester: pytest.Pytester) -> None:
     result = run_tree(pytester, {**files, "tests/test_tasks.py": tasks.replace("NAME", "Wheat")})
     assert outcome(result, CENSUS) == "failed"
     assert "test_save: a replay answered another body" in message(result, CENSUS)
+
+
+def test_the_census_judges_each_call_by_the_recording_mounted_before_it(
+    pytester: pytest.Pytester,
+) -> None:
+    # respx gives back the route it holds for an equal pattern, so the second recording's
+    # route is the first's: each call is judged by the recording that answered it.
+    corn_2023 = {
+        **RECORDED,
+        "request": {"method": "GET", "url": f"{SERIES}?key=REDACTED&year=2023"},
+    }
+    tasks = """
+    import httpx
+
+    SERIES = "https://api.example.test/v1/series"
+
+
+    def test_two_years_in_turn(replay_fixture):
+        replay_fixture("series", "corn")
+        httpx.get(SERIES, params={"year": "2024", "key": "placeholder"})
+        replay_fixture("series", "corn_2023")
+        httpx.get(SERIES, params={"year": "SECOND", "key": "placeholder"})
+    """
+    files = {"tests/fixtures/series/corn_2023.json": json.dumps(corn_2023)}
+    result = run_tree(pytester, {**files, "tests/test_tasks.py": tasks.replace("SECOND", "2023")})
+    assert outcome(result, CENSUS) == "passed", "each call is the request its recording holds"
+    result = run_tree(pytester, {**files, "tests/test_tasks.py": tasks.replace("SECOND", "2024")})
+    assert outcome(result, CENSUS) == "failed", "2023's recording answered a request for 2024"
+    assert "test_two_years_in_turn: a replay answered another query" in message(result, CENSUS)
 
 
 def test_the_census_runs_after_every_test_it_judges(pytester: pytest.Pytester) -> None:
