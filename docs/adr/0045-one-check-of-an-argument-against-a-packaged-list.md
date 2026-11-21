@@ -85,5 +85,6 @@ a list.
   it by its text, and an integer given for text codes where sdk-usda-nass compared its text,
   once each source takes the check.
 - A list filter that answers an empty list for a value the list lacks (`list_countries` of
-  sdk-usda-esr, sdk-usda-psd and sdk-usda-gats) is not settled by the check, and stays open
-  under https://github.com/xippios/sdk-core/issues/313.
+  sdk-usda-esr, sdk-usda-psd and sdk-usda-gats) is not settled by the check: the conventions
+  state no rule for it, which https://github.com/xippios/sdk-core/issues/313 names and leaves
+  to a decision of its own.
