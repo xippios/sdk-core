@@ -274,7 +274,11 @@ skip it (§8, §9; ADR-0040).
   docstring naming its list and fetch date. The whole generated module, docstrings
   included, is ASCII-only and passes `ruff check` and `ruff format --check` as committed,
   after the refresh script's `ruff format && ruff check --fix` (ADR-0031,
-  decision 6).
+  decision 6). A source's `scripts/refresh_reference.py` declares its packaged lists to
+  core's frame, one `Listed` of `xippios.core.refresh` per list with its fetch, its enum and
+  its origin, and calls `run(lists, package=...)`, which fetches every list before it writes
+  one and then writes the packaged files, the provenance rows of `reference/README.md` and
+  `enums.py` (ADR-0051).
 
 ## 4. Result envelope and metadata
 

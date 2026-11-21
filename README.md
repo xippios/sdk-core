@@ -884,6 +884,104 @@ login's variables, which must be set before anything is fetched. A `Last-Modifie
 in UTC, a date without a zone read as GMT as HTTP has it, and one that is no HTTP date as
 sent, in a code span.
 
+## The reference refresh script's frame
+
+A source's `scripts/refresh_reference.py`, which packages its lists under `reference/` and
+renders `enums.py` from them (conventions §3), declares one `Listed` per list and runs them;
+`xippios.core.refresh` does the rest (ADR-0051). sdk-template renders this script for a new
+source, which fills the declarations:
+
+```python
+"""Refresh the packaged reference data from upstream (``/refresh-reference-data``).
+
+The source declares its lists below, one ``Listed`` each, with the wrapper in ``api/`` that
+fetches it, never a task that answers from the package; core's frame,
+``xippios.core.refresh``, fetches every list before it writes one, sends each request once
+and counts it, and writes ``reference/<name>.json``, the rows of ``reference/README.md`` and
+``enums.py``. Run from the repository's root, with what the lists' endpoints need in the
+environment::
+
+    uv run python scripts/refresh_reference.py                     # fetch every list
+    uv run python scripts/refresh_reference.py --only commodities  # one list, the rest kept
+    uv run python scripts/refresh_reference.py --render-only       # no request, no key
+"""
+
+from xippios.core.refresh import Enumeration, Listed, run
+
+from xippios.example import api
+from xippios.example._client import client
+
+QUOTA_HEADER = "x-ratelimit-remaining"
+"""The header in which upstream reports the requests left in its quota, or ``None``."""
+
+LISTS = (
+    # A list of values, packaged as records of one field named by the list: a StrEnum.
+    Listed(
+        "state_alpha",
+        lambda: api.get_param_values("state_alpha"),
+        endpoint="get_param_values",
+        enum=Enumeration(),
+        origin="`GET /api/get_param_values?param=state_alpha`",
+    ),
+    # A list of integer ids and names, packaged as upstream's records: an IntEnum.
+    Listed(
+        "unitsOfMeasure",
+        api.get_units_of_measure,
+        endpoint="GetUnitsOfMeasure",
+        enum=Enumeration(ids="unitId", names="unitDescription"),
+    ),
+    # A table, packaged as upstream's records, with no enum.
+    Listed("commodities", api.get_commodities, endpoint="GetCommodities"),
+)
+"""The packaged lists, in the order of their enums in ``enums.py``."""
+
+if __name__ == "__main__":
+    raise SystemExit(
+        run(LISTS, package="xippios.example", client=client, quota_header=QUOTA_HEADER)
+    )
+```
+
+`run` is the one entry of both frames: given a `Snapshot` it is the snapshot frame's, as the
+section above has it, and given the lists it takes the package's import path, whose
+directory it writes into and which must lie in the directory the script runs in, and the
+client the fetches go through. It fetches every list before it writes one, through that
+client with one attempt per request for the run, so a 5xx or a 429 spends no second call of
+upstream's quota, and prints the requests it sent and the quota left in `quota_header`, a
+failed run's too, a request that ended in a transport error counted as sent. A fetch answers
+values, which become records of one field named by the list's `param`, its name by default;
+records, a model's by `dump_upstream` and a mapping as it is; or a finished `PackagedList`,
+written as built. Values and records are stamped `fetched` when their fetch returned; a
+finished list carries its own moment, the wrapper's `retrieved_at`, its first request or the
+time its file was complete, and must name the `param` and `endpoint` its `Listed` declares,
+where it declares them.
+
+Each list is written to `reference/<name>.json` by `PackagedList.write`. The provenance
+table of `reference/README.md`, under `| File | Origin | Fetched |` or the FAS sources'
+`| File | Origin | Fetched (UTC) | Records |`, has each list's row rewritten where it stands,
+its Origin the `origin` text, the text a function of the written list returns, or the
+endpoint in a code span; a row of a file no list declares, such as `columns.csv`, is kept,
+the template's `(none yet)` is dropped, and a new list's row follows the others. `enums.py`
+is one `render_enums` call in the order the lists are declared, a `StrEnum` of a list's
+values, or of the field `Enumeration(values=...)` names, and an `IntEnum` of
+`Enumeration(ids=..., names=...)`, each with its `key`, `class_name` and `member_names`,
+which a function of the values may make, then formatted with `ruff format` and
+`ruff check --fix`; where no list declares an enum, `enums.py` is left alone. The rows and the
+module are made before the first file is written, so a run that fails, on a fetch or a
+render, writes nothing. `--only LIST [LIST ...]` fetches those lists alone and keeps every
+other list's file, and `--render-only` writes the rows and `enums.py` from the packaged files
+alone, without a request or a key, as an adoption does after a core release changes the
+renderer.
+
+What a script writes beside its lists goes in two hooks of `run`, which `--render-only`
+calls neither of: `before`, called once the command line and the declarations are checked
+and before the first request, for what can stop the run before it spends one, as
+sdk-usda-nass parses the column table that its `columns.csv` is rebuilt from; and `after`,
+called after the last write with the lists the run fetched by name, for sdk-eurostat's index
+and test samples, sdk-usda-nass's `columns.csv` and sdk-usda-wasde's manifest. The frame
+takes no option of a source's own: a script that keeps one, sdk-eurostat's `--samples` or
+sdk-usda-wasde's `--keep` and `--from`, reads it before the call and passes the rest as
+`argv`.
+
 ## MCP server in five lines
 
 ```python
