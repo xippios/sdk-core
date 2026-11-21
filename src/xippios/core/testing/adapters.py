@@ -309,10 +309,9 @@ def _judge_preview(
         "a preview sends no write"
     )
     assert not text.startswith("error:"), f"{name}: the dry run answered {text}"
-    try:
-        data = json.loads(text).get("data")
-    except ValueError:
-        raise AssertionError(f"{name}: the dry run's answer is no JSON, the cap cut it") from None
+    answer = json.loads(text)
+    assert "data" in answer, f"{name}: the result cap cut the dry run's answer: {answer['note']}"
+    data = answer["data"]
     performed = data.get("performed") if isinstance(data, dict) else None
     assert performed is False, (
         f"{name}: the dry run's answer is no preview, performed is {performed}"
