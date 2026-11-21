@@ -27,7 +27,8 @@ check finds the package, ``tests/fixtures/`` left out, with ``ast`` and its comm
 - a recording served at another URL: ``replay_fixture``, ``replay`` or ``mount_fixture``
   given ``url=``;
 - a call of a helper, a class or a fixture of the same module that holds a place no mark
-  covers, a test that takes such a fixture included.
+  covers, a test that takes such a fixture included, a test class's method as a top-level
+  test.
 
 A recording replayed at its own operation's path is no place: the census judges it.
 
@@ -308,14 +309,21 @@ class _Module:
             return from_httpx and not self.handed(node)
         return False
 
+    def takes_fixtures(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+        """Whether pytest hands ``node`` fixtures: a top-level function, or a class's method.
+
+        A test class's test is such a method, as is a fixture that a class defines.
+        """
+        return node in self.tree.body or isinstance(self.parent.get(node), ast.ClassDef)
+
     def calls_of(self, helpers: set[str]) -> dict[ast.AST, str]:
-        """Each call of a helper outside it, and each top-level function taking it as a fixture."""
+        """Each call of a helper outside it, and each function taking it as a fixture."""
         sites: dict[ast.AST, str] = {}
         for node in ast.walk(self.tree):
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
                 if node.func.id in helpers and self.holder(node) != node.func.id:
                     sites[node] = node.func.id
-            elif isinstance(node, _FUNCTIONS) and node in self.tree.body:
+            elif isinstance(node, _FUNCTIONS) and self.takes_fixtures(node):
                 for arg in (*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs):
                     if arg.arg in helpers and isinstance(self.defs.get(arg.arg), _FUNCTIONS):
                         sites[node] = arg.arg
@@ -369,7 +377,8 @@ def uncovered(
     places = []
     for node in unmarked:
         if isinstance(node, _FUNCTIONS):
-            scope, text = node.name, f"takes the fixture {sites[node]}"
+            classes = [scope.name for scope in reversed(module.named(node))]
+            scope, text = ".".join([*classes, node.name]), f"takes the fixture {sites[node]}"
         elif module.outermost(node) in judged_at_calls:
             continue  # inside a helper: judged where the helper is called
         else:
@@ -620,7 +629,9 @@ class _Census:
 
     It listens only in a run that collects the census test. Each test's mounts are kept from
     its setup, by ``mount_fixture``, and judged before its fixtures are torn down, while the
-    routes still hold their calls; the last fixture mounted on a route is the one it serves.
+    routes still hold their calls. respx gives back the route it holds for an equal pattern,
+    so a route may serve several recordings in turn: each call is judged by the recording
+    mounted last before it.
     """
 
     def __init__(self, root: Path) -> None:
@@ -659,15 +670,19 @@ class _Census:
     def pytest_unconfigure(self) -> None:
         _replay._mounted = None
 
-    def judge(self, item: pytest.Item, mounted: list[tuple[Fixture, respx.Route]]) -> None:
+    def judge(self, item: pytest.Item, mounted: list[tuple[Fixture, respx.Route, int]]) -> None:
         """Keep ``item`` with what its replays answered of another request, if any."""
-        served = {id(route): (fixture, route) for fixture, route in mounted}
-        differs = {
-            part
-            for fixture, route in served.values()
-            for call in route.calls
-            for part in _another_request(fixture, call.request)
-        }
+        routes: dict[int, respx.Route] = {}
+        mounts: dict[int, list[tuple[int, Fixture]]] = {}
+        for fixture, route, before in mounted:
+            routes[id(route)] = route
+            mounts.setdefault(id(route), []).append((before, fixture))
+        differs: set[str] = set()
+        for key, route in routes.items():
+            for index, call in enumerate(route.calls):
+                serving = [fixture for before, fixture in mounts[key] if before <= index]
+                if serving:  # a call before the first mount was no recording's
+                    differs.update(_another_request(serving[-1], call.request))
         if differs:
             names = (*_classes(item), getattr(item, "originalname", item.name))
             test = (_module_name(self.root, item.path), names)
