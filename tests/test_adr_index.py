@@ -10,8 +10,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 INDEX = ROOT / "docs" / "adr.md"
+SCRIPT = ROOT / "scripts" / "adr_index.py"
 RECORD = re.compile(r"^(\d{4})-.+\.md$")
 
 
@@ -20,8 +23,12 @@ def record_lines() -> list[str]:
 
 
 def test_the_index_is_the_one_the_script_writes_from_the_records() -> None:
+    # The sdist ships tests/ and docs/ but not scripts/. In a checkout, the organization's
+    # check adr-index runs the same --check, so this skip leaves the repository held.
+    if not SCRIPT.is_file():
+        pytest.skip("the sdist ships no scripts/, so there is no script to check the index with")
     run = subprocess.run(
-        [sys.executable, "-I", "scripts/adr_index.py", "--check"],
+        [sys.executable, "-I", str(SCRIPT), "--check"],
         cwd=ROOT,
         capture_output=True,
         text=True,
