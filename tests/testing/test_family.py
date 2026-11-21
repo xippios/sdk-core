@@ -1,6 +1,7 @@
 """The family check, run by pytester against a source package laid out as the template does."""
 
 import importlib
+import json
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -123,7 +124,7 @@ SOURCE: dict[str, str] = {
     "tests/test_family.py": "from xippios.core.testing.family import *  # noqa: F403\n",
 }
 
-FAMILY_TESTS = 14
+FAMILY_TESTS = 15
 
 
 def run_family(
@@ -981,3 +982,218 @@ def test_the_family_check_holds_a_sources_observed_md(pytester: pytest.Pytester)
         ["*- The layout of the yearly file: its last paragraph opens 'From*"]
     )
     result.stdout.fnmatch_lines([f"*- line 14: {cited}*"])
+
+
+# The declaration of the packaged lists for the live run (ADR-0055, sdk-core#319).
+
+REFERENCE = "src/xippios/example/reference"
+
+
+def packaged(param: str, code: str, *codes: str) -> str:
+    """A packaged list's file: ``codes`` as records of the one field ``code``."""
+    records = [{code: value} for value in codes]
+    return json.dumps(
+        {
+            "param": param,
+            "endpoint": f"get_{param}",
+            "fetched": "2026-11-20T09:00:00Z",
+            "records": records,
+        }
+    )
+
+
+LISTS_TREE: dict[str, str | None] = {
+    f"{REFERENCE}/countries.json": packaged("countries", "countryCode", "US", "BR"),
+    f"{REFERENCE}/regions.json": packaged("regions", "regionCode", "R01"),
+    # sdk-eurostat's index of its lists holds no records: no packaged list
+    f"{REFERENCE}/lists.json": json.dumps({"fetched": "2026-11-20T09:00:00Z", "lists": []}),
+    f"{REFERENCE}/README.md": "# Reference data\n",
+}
+
+DECLARATION = '''"""Live tests: the packaged lists of xippios.example."""
+
+from pathlib import Path
+
+from xippios.core import PackagedList
+from xippios.core.testing.live import *  # noqa: F403
+
+REFERENCE = Path(__file__).parents[1] / "src" / "xippios" / "example" / "reference"
+
+
+def codes(name, code):
+    text = (REFERENCE / f"{{name}}.json").read_text(encoding="utf-8")
+    return PackagedList.model_validate_json(text).codes(code)
+
+
+def fetch():
+    raise AssertionError("the family check fetches nothing")
+
+
+LIVE_LISTS = {{{live}}}
+NO_LIVE_LIST = {{{no_live}}}
+'''
+
+COMPARED = '"countries": (codes("countries", "countryCode"), fetch)'
+EXCUSED = '"regions": "Upstream serves no list of regions; its specification gives them."'
+
+
+def declared(live: str = COMPARED, no_live: str = EXCUSED) -> dict[str, str | None]:
+    return {"tests/test_live.py": DECLARATION.format(live=live, no_live=no_live)}
+
+
+LIVE_INTRO = (
+    "every packaged list under reference/ stands in LIVE_LISTS of tests/test_live.py, compared "
+    "with the list upstream serves now, or in its NO_LIVE_LIST with the reason it is not "
+    "(conventions §10, ADR-0055):"
+)
+
+
+def live_problems(root: Path, files: dict[str, str | None]) -> list[str]:
+    """The lines the check fails with for a source of ``files`` at ``root``, none on a pass."""
+    _write(root, files)
+    try:
+        family.test_family_every_packaged_list_is_declared_for_the_live_run(_rooted(root))
+    except pytest.fail.Exception as failed:
+        lines, pytrace = str(failed).splitlines(), failed.pytrace
+    else:
+        return []
+    assert not pytrace, "the failure shows no frame"
+    assert lines[0] == LIVE_INTRO
+    return lines[1:]
+
+
+def test_a_source_without_packaged_lists_or_a_declaration_passes(tmp_path: Path) -> None:
+    assert live_problems(tmp_path, {f"{REFERENCE}/README.md": "# Reference data\n"}) == []
+
+
+def test_a_source_that_declares_every_packaged_list_passes(tmp_path: Path) -> None:
+    assert live_problems(tmp_path, {**LISTS_TREE, **declared()}) == []
+
+
+def test_a_packaged_list_in_neither_declaration_fails_naming_it_and_both(tmp_path: Path) -> None:
+    assert live_problems(tmp_path, {**LISTS_TREE, **declared(no_live="")}) == [
+        "- regions: reference/regions.json stands in neither LIVE_LISTS nor NO_LIVE_LIST"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("live", "no_live", "problems"),
+    [
+        (
+            f'{COMPARED}, "partners": (codes("countries", "countryCode"), fetch)',
+            EXCUSED,
+            ["- partners: LIVE_LISTS names no packaged list, no reference/partners.json"],
+        ),
+        (
+            COMPARED,
+            f'{EXCUSED}, "units": "No endpoint."',
+            ["- units: NO_LIVE_LIST names no packaged list, no reference/units.json"],
+        ),
+        (
+            f'{COMPARED}, "regions": (codes("regions", "regionCode"), fetch)',
+            EXCUSED,
+            ["- regions: stands in both LIVE_LISTS and NO_LIVE_LIST"],
+        ),
+        (
+            COMPARED,
+            '"regions": " "',
+            ["- regions: NO_LIVE_LIST gives no reason, a text that says why it is not compared"],
+        ),
+        (
+            COMPARED,
+            '"regions": None',
+            ["- regions: NO_LIVE_LIST gives no reason, a text that says why it is not compared"],
+        ),
+        (
+            '"countries": (fetch, codes("countries", "countryCode"))',
+            EXCUSED,
+            [
+                "- countries: LIVE_LISTS holds no pair of its PackagedCodes and the function that "
+                "fetches it now"
+            ],
+        ),
+        (
+            '"countries": codes("countries", "countryCode")',
+            EXCUSED,
+            [
+                "- countries: LIVE_LISTS holds no pair of its PackagedCodes and the function that "
+                "fetches it now"
+            ],
+        ),
+        (
+            '"countries": (codes("regions", "regionCode"), fetch)',
+            EXCUSED,
+            [
+                "- countries: LIVE_LISTS holds the codes of another list than "
+                "reference/countries.json"
+            ],
+        ),
+    ],
+    ids=[
+        "stale-live",
+        "stale-no-live",
+        "in-both",
+        "blank-reason",
+        "no-reason",
+        "pair-reversed",
+        "no-pair",
+        "another-list",
+    ],
+)
+def test_a_declaration_that_the_files_do_not_bear_out_fails_naming_the_entry(
+    tmp_path: Path, live: str, no_live: str, problems: list[str]
+) -> None:
+    """A stale entry fails as an undeclared list does: no declaration passes silently."""
+    assert live_problems(tmp_path, {**LISTS_TREE, **declared(live, no_live)}) == problems
+
+
+def test_declarations_that_are_no_mappings_fail_naming_them(tmp_path: Path) -> None:
+    broken = DECLARATION.format(live=COMPARED, no_live=EXCUSED).replace(
+        "NO_LIVE_LIST = {" + EXCUSED + "}", 'NO_LIVE_LIST = ["regions"]'
+    )
+    assert live_problems(tmp_path, {**LISTS_TREE, "tests/test_live.py": broken}) == [
+        "- NO_LIVE_LIST is a list, not a mapping by the lists' names",
+        "- regions: reference/regions.json stands in neither LIVE_LISTS nor NO_LIVE_LIST",
+    ]
+
+
+def test_packaged_lists_without_a_live_test_module_fail_naming_it(tmp_path: Path) -> None:
+    assert live_problems(tmp_path, LISTS_TREE) == [
+        "- tests/test_live.py, which declares LIVE_LISTS and NO_LIVE_LIST, is missing",
+        "- countries: reference/countries.json stands in neither LIVE_LISTS nor NO_LIVE_LIST",
+        "- regions: reference/regions.json stands in neither LIVE_LISTS nor NO_LIVE_LIST",
+    ]
+
+
+def test_a_live_test_module_that_does_not_import_fails_naming_its_error(tmp_path: Path) -> None:
+    broken = DECLARATION.format(live=COMPARED, no_live=EXCUSED) + "\nMISSING_NAME\n"
+    assert live_problems(tmp_path, {**LISTS_TREE, "tests/test_live.py": broken}) == [
+        "- tests/test_live.py does not import: NameError: name 'MISSING_NAME' is not defined"
+    ]
+
+
+def test_a_stale_declaration_fails_where_no_list_is_packaged(tmp_path: Path) -> None:
+    assert live_problems(tmp_path, declared(live="", no_live=EXCUSED)) == [
+        "- regions: NO_LIVE_LIST names no packaged list, no reference/regions.json"
+    ]
+
+
+def test_the_family_check_and_the_live_test_read_one_declaration(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Under --import-mode=importlib, as the sources run, the two modules reach one declaration."""
+    monkeypatch.delenv("XIPPIOS_LIVE_TESTS", raising=False)
+    importlib_mode = PYPROJECT.replace(
+        '"-p no:cacheprovider"', '"-p no:cacheprovider --import-mode=importlib"'
+    )
+    tree: dict[str, str | None] = {**LISTS_TREE, **declared(), "pyproject.toml": importlib_mode}
+    result = run_family(pytester, tree)
+    result.assert_outcomes(passed=FAMILY_TESTS, skipped=1)  # the gate is closed
+    result = run_family(pytester, {**tree, **declared(no_live="")})
+    result.assert_outcomes(passed=FAMILY_TESTS - 1, failed=1, skipped=1)
+    result.stdout.fnmatch_lines(
+        [
+            f"*{LIVE_INTRO}*",
+            "*- regions: reference/regions.json stands in neither LIVE_LISTS nor NO_LIVE_LIST*",
+        ]
+    )
