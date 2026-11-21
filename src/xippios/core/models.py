@@ -354,6 +354,10 @@ def newer_than[T, K: _Ordered](
     Raises:
         InvalidRequestError: As ``read`` raises it, for a ``since`` it cannot read, whether
             the answer holds items or none.
+        TypeError: A release does not compare with what ``read`` gave, a month against a
+            time or a time with a zone against ``naive_time``'s: a fault of the source's code,
+            not of the caller's argument, so no taxonomy error (conventions §5). The message
+            names both values and their types. mypy accepts such a pair.
     """
     if since is None:
         return list(items)
@@ -361,9 +365,22 @@ def newer_than[T, K: _Ordered](
     kept: list[T] = []
     for item in items:
         release = released(item)
-        if release is None or release > after:
+        if release is None or _later(release, after):
             kept.append(item)
     return kept
+
+
+def _later[K: _Ordered](release: K, after: K) -> bool:
+    """``release > after``, or a ``TypeError`` that names both where they do not compare."""
+    try:
+        return release > after
+    except TypeError as exc:
+        raise TypeError(
+            f"newer_than compares each release with read(since): released gave {release!r}, a "
+            f"{type(release).__name__}, and read gave {after!r}, a {type(after).__name__}, "
+            f"which do not compare ({exc}). Hand it a reader that reads since into the form "
+            "released gives, naive_time for a release time printed without a zone."
+        ) from exc
 
 
 class Result[T](BaseModel):

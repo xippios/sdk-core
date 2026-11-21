@@ -205,7 +205,9 @@ async def get_release_dates_async(since: str | None = None) -> Result[list[Relea
 than `read(since)`, in upstream's order, an equal release being no newer, and every item for
 `since=None`; an item whose `released` gives `None` is kept, since it cannot be shown to be no
 newer. It reads `since` once, before the first item, and the reader's `InvalidRequestError`
-passes as raised. `naive_time` reads with `datetime.fromisoformat`, a date alone as its
+passes as raised. A release that does not compare with what the reader gave, a month against
+a time or a time with a zone against `naive_time`'s, raises `TypeError` naming both values and
+their types: a fault of the source's code, which mypy does not catch. `naive_time` reads with `datetime.fromisoformat`, a date alone as its
 midnight, and refuses a text with a zone, since the release times it is compared with carry
 none and comparing the two would invent one. A source whose vintage is no time hands its own
 reader, a release month `"2026-09"` read into `(2026, 9)` and compared with each record's

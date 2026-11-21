@@ -29,7 +29,7 @@ them takes back a vintage.
 This record stands beside ADR-0041, decision 2, and changes none of its rule: that decision
 keeps the rule, and this record gives it its code and names the other `since`. A change to the
 rule is ADR-0041's, a change to the helper this record's. Decisions 1 to 3 are the answer of
-https://github.com/xippios/sdk-core/issues/371, and decisions 4 and 5 are those of the pull
+https://github.com/xippios/sdk-core/issues/371, and decisions 4 to 6 are those of the pull
 request that built the helper.
 
 ## Decision
@@ -61,6 +61,12 @@ request that built the helper.
    request, and the helper reads it again on the answer. The reader raises
    `InvalidRequestError`, the class that both copies raise, so a source's tests of the refusal
    keep their class.
+6. **A reader whose value does not compare with the releases is the source's fault.** A month
+   read against releases that are times, or a time with a zone against `naive_time`'s, is no
+   argument the caller can change, so it raises no taxonomy error, whose `InvalidRequestError`
+   tells the caller to change the request (conventions §5). The helper raises `TypeError`, as
+   core does for a fault of a source's code, naming both values and their types and chaining
+   the comparison's own error. mypy accepts such a pair, since it infers the bound for the two.
 
 ## Consequences
 
@@ -71,7 +77,9 @@ request that built the helper.
   https://github.com/xippios/sdk-usda-psd/issues/33.
 - sdk-usda-psd's `get_release_dates` sets no `meta.vintage`, so its empty answer carries no
   marker. That is sdk-usda-psd's own to decide, and this record builds nothing for it.
-- `naive_time` has one caller today, sdk-usda-esr, and ships with the helper because the
-  refusal of a zone is the family's rule, worded once.
+- `naive_time` has one caller today, sdk-usda-esr, and none of the three reasons of ADR-0023,
+  decision 3, admits it. It is the exception to that decision that the maintainer's answer to
+  https://github.com/xippios/sdk-core/issues/371, part 1, makes: core ships the reader of a
+  naive time with the helper.
 - The walk of a list bounded by `since` stays out, with one consumer
   (https://github.com/xippios/sdk-core/issues/149).

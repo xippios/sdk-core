@@ -4,7 +4,8 @@
   midnight, which refuses a zone and an unreadable text with `InvalidRequestError`. The task
   still sets `meta.vintage` and `meta.published_at` from the whole answer and reads `since`
   before its request. An item without a release time is kept, since it cannot be shown to be
-  no newer.
+  no newer, and a release that does not compare with what the reader gave raises `TypeError`
+  naming both, a fault of the source's code.
   (ADR-0052, §4, https://github.com/xippios/sdk-core/issues/318)
   - Hand-apply: `src/xippios/usda/esr/tasks.py` (sdk-usda-esr) — `_since` and `_SINCE_EXAMPLE`
     → `read_since = partial(naive_time, source=SOURCE)`, called on `since` before the
