@@ -41,6 +41,7 @@ records in `docs/adr/`. A record changes, and this file follows when the script 
 - <a id="0051"></a>[ADR-0051](adr/0051-the-reference-refresh-script-s-frame-in-core.md): The reference refresh script's frame in core · Accepted · 2026-11-22
 - <a id="0052"></a>[ADR-0052](adr/0052-one-filter-for-a-vintage-taken-back.md): One filter for a vintage taken back · Accepted · 2026-11-21
 - <a id="0055"></a>[ADR-0055](adr/0055-one-live-comparison-of-a-packaged-list.md): One live comparison of a packaged list · Accepted · 2026-11-21
+- <a id="0057"></a>[ADR-0057](adr/0057-the-recording-of-every-exchange-of-a-task.md): The recording of every exchange of a task · Accepted · 2026-11-22
 
 The superseded records follow, kept as written: the record that each status names holds its decision now.
 
