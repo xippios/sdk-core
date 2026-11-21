@@ -28,6 +28,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
+from xippios.core import refresh
 from xippios.core.refresh import (
     Credentials,
     NotFetched,
@@ -40,8 +42,6 @@ from xippios.core.refresh import (
     run,
     upstream,
 )
-
-from xippios.core import refresh
 
 BASE = "https://docs.example.org"
 API = "https://api.example.org/v1"
