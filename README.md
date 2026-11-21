@@ -926,6 +926,39 @@ the router. A source whose adapters drop a task, or whose README table is stale,
 before a reviewer looks. The package under test is the one `tasks.py` under
 `src/xippios/`, or the ini option `xippios_package`.
 
+A source that keeps `docs/upstream/OBSERVED.md`, its notes of what upstream does but never
+documents, is held to three rules of conventions §3, one test each (ADR-0044):
+
+- `FETCHED.md` lists the file in a row of its own: a table row whose first cell is
+  `OBSERVED.md`, whose last cell says that it is written by hand and whose cells between
+  are `-`, at any width.
+- Every note is a `###` section whose last paragraph opens with `Probe: <date>` or
+  `Observed: <date>`, an ISO date right after the label, and the file holds one note at
+  least. A `##` heading groups notes, and a link reference definition at a note's end is
+  dropped before its last paragraph is judged.
+- Every file that a code span of the file cites exists, from the repository's root: a span
+  whose text starts with `tests/`, `docs/`, `src/` or `scripts/`, holds no space and ends
+  in an extension, so `docs/upstream/samples/series.json` is held and `openapi/spec.json`
+  or `GET /v1/series.json` is not.
+
+```markdown
+## Series
+
+### A year without data answers HTTP 404
+
+The series endpoint answers a year without data with HTTP 404 and an empty body.
+
+Probe: 2026-11-20, `GET /v1/series`; sample `tests/fixtures/get_series/empty.json`.
+```
+
+```markdown
+| OBSERVED.md | - | - | written by hand: what upstream does but never documents; not fetched or checked |
+```
+
+A source without the file passes all three. The rules fail at once from core 0.4.1 on.
+That no dated note of what upstream answered stands outside the file stays the source's
+own test and the review's.
+
 ```toml
 # pyproject.toml: the variables that hold the placeholder key in offline tests
 [tool.pytest.ini_options]
