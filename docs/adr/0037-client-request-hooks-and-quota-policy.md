@@ -1,7 +1,6 @@
 # ADR-0037: Client request hooks and a quota policy
 
-Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under
-https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0015
+Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0015 · Amended 2026-11-21 by https://github.com/xippios/sdk-core/issues/364
 
 ## Context
 
@@ -179,3 +178,12 @@ Conventions §4, §6, §10 and §15, the definition of done's Adoption PR block,
 the docstrings of `AsyncClient`, `ClientConfig`, `QuotaPolicy`, `send_with_retries`,
 `RenewingBearerAuth`, `xippios.core.data_gov`, the testing plugin and `record` state its
 decisions from 1.28 on.
+
+## Amendment 2026-11-21
+
+ADR-0048, decisions 3, 4 and 6 (https://github.com/xippios/sdk-core/issues/364), amends
+decision 6. A recording keeps a final answer whatever its status, a 4xx or a 5xx included, and
+refuses an answer of a 1xx or a 3xx status, which is no final answer of its operation, on every
+path. No recorder keeps a client built for one attempt: `rewrite=` runs a source's step inside
+`record`, and `send_once` sends a recording's one request, as `record` sends it, for a source that
+needs the answer itself. The rest of decision 6 stands.

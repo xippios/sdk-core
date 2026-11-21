@@ -1,7 +1,6 @@
 # ADR-0042: The recorder extras stay the source's, and the multi-tenant kit returns to core
 
-Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under
-https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0024
+Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0024 · Amended 2026-11-21 by https://github.com/xippios/sdk-core/issues/364
 
 ## Context
 
@@ -98,3 +97,14 @@ Conventions §1, §3, §7, §8, §10 and §15, the definition of done's Adoption
 README and the docstrings of `xippios.core.tenants`, `xippios.core.testing`,
 `keep_reserved_tenants`, the family check, the fixtures and `Scrub` state its decisions from
 1.28 on.
+
+## Amendment 2026-11-21
+
+ADR-0048 (https://github.com/xippios/sdk-core/issues/364) supersedes decision 4 and decision 6
+for the recorder. Core's recorder runs a source's rewrite step, passed as `rewrite=` to `record`
+and `fixture_from_response`, checks that no value it replaced survives and writes once, and its
+one send is public, `send_once`. Decision 6 stands for the kit's return in 0.4.0. Decisions 1, 2,
+3 and 5 stand as written, with one change to decision 1's list of what left core: the search of a
+JSON body's decoded strings returns for the values a rewrite step replaced (ADR-0048, decision 2),
+while `Scrub(host=...)`, `Scrub(rewrite=...)`, the percent-encoded matching and the host check stay
+out. Decision 3's plain verify is the rule by which ADR-0048 checks a step's values.

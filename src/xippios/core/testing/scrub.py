@@ -10,7 +10,8 @@ say, is written as sent, and replay can match it.
 here as well. A ``Scrub`` adds what only the source knows: the secret values themselves,
 named before the request or read from its answer, such as a login's tokens. What a
 source rewrites beyond them, a tenant's host or a field by key, it rewrites in its own
-recorder step on the ``Fixture`` before the write (ADR-0042).
+step on the ``Fixture``, which the recorder runs after the scrub and checks before the
+write (``rewrite=``; ADR-0048, decisions 1 and 2).
 """
 
 import base64

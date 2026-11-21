@@ -629,7 +629,12 @@
       "status": "Accepted",
       "date": "2026-11-18",
       "decided_by": "the record it supersedes, restated under https://github.com/xippios/coordinate-core/issues/757",
-      "amended": [],
+      "amended": [
+        {
+          "date": "2026-11-21",
+          "by": "https://github.com/xippios/sdk-core/issues/364"
+        }
+      ],
       "amends": [],
       "supersedes": [
         "ADR-0015"
@@ -709,7 +714,12 @@
       "status": "Accepted",
       "date": "2026-11-18",
       "decided_by": "the record it supersedes, restated under https://github.com/xippios/coordinate-core/issues/757",
-      "amended": [],
+      "amended": [
+        {
+          "date": "2026-11-21",
+          "by": "https://github.com/xippios/sdk-core/issues/364"
+        }
+      ],
       "amends": [],
       "supersedes": [
         "ADR-0024"
@@ -772,6 +782,20 @@
       "status": "Accepted",
       "date": "2026-11-21",
       "decided_by": "https://github.com/xippios/sdk-core/issues/363",
+      "amended": [],
+      "amends": [],
+      "supersedes": [],
+      "other": [],
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-0048",
+      "number": 48,
+      "title": "Core's recorder frame around a source's rewrite step",
+      "path": "docs/adr/0048-core-s-recorder-frame-around-a-source-s-rewrite-step.md",
+      "status": "Accepted",
+      "date": "2026-11-21",
+      "decided_by": "https://github.com/xippios/sdk-core/issues/364",
       "amended": [],
       "amends": [],
       "supersedes": [],

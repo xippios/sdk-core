@@ -253,7 +253,8 @@ skip it (§8, §9; ADR-0040).
   only in the sense of the projection rule above (ADR-0028, decision 1). The
   endpoint wrappers' read models stay faithful and carry them. Fixtures never carry their
   values: the recording names them in `Scrub(secrets=...)` or rewrites them by key in
-  its own recorder step, on the `Fixture` before the write (ADR-0017, ADR-0042).
+  its own rewrite step, which the recorder runs on the `Fixture` before the write
+  (ADR-0017, ADR-0048).
 - **No cross-source normalization.** A USDA `marketing_year` stays a USDA concept.
   Mapping between sources is business logic and lives outside this family.
 - Reference data (commodity codes, country codes, report calendars) ships inside the
@@ -987,10 +988,14 @@ standalone from the package. A task named in `BULK_TASKS` gets no route:
   as plain values: `sent_urls` and `sent_query` the URLs, `sent_bodies` the bodies, a
   JSON body decoded and a form as a mapping of its fields, each with credentials redacted
   by the rule of §4 (ADR-0035, decision 9).
-- The recorder sends one request through the source's client and records the answer
-  whatever its status: never retried, whatever the client's `RetryPolicy` says, and never
-  answered from the cache, so a recording spends one request and needs no client of its
-  own (ADR-0037, decision 6). It reads at most `max_read_bytes` of the body,
+- The recorder sends one request through the source's client: never retried, whatever the
+  client's `RetryPolicy` says, and never answered from the cache, so a recording spends one
+  request and needs no client of its own (ADR-0037, decision 6), and a source that needs the
+  answer itself sends it with `send_once`, which writes nothing (ADR-0048, decision 3). The
+  recorder keeps a final answer whatever its status, a 4xx or a 5xx included, and refuses an
+  answer of a 1xx or a 3xx status, which is no final answer of its operation, on every path,
+  in `send_once`, `record` and `fixture_from_response`, before anything is written
+  (ADR-0048, decision 4). It reads at most `max_read_bytes` of the body,
   32 MiB by default: past it the reading stops, and the recording is refused before
   anything is written (ADR-0040, decision 5).
 - The recorder scrubs in memory and writes once, so nothing unscrubbed touches disk, and
@@ -1000,10 +1005,17 @@ standalone from the package. A task named in `BULK_TASKS` gets no route:
   given. The scrubbed exchange is verified before the write: a named or read value still
   present as given in the URL, a header value or a text body refuses it, the error
   naming where, never the value. The verify is a backstop, with the fixture grep of
-  the definition of done; a form the source's values take that differs from them
-  (percent-encoded, behind a JSON escape), or a tenant's host to replace, the source
-  rewrites in its own recorder step, on the `Fixture`, and writes it with core's
-  `write_fixture`, laid out as the recorder writes it (ADR-0042, decision 4).
+  the definition of done. What the source replaces beyond those values, a field by key,
+  a form its values take that differs from them (percent-encoded, behind a JSON escape)
+  or a tenant's host, it replaces in its own rewrite step, which the recorder runs:
+  passed as `rewrite=` to `record` or `fixture_from_response`, the step takes the
+  scrubbed `Fixture`, returns it rewritten with the values it replaced, and raises
+  `ValueError` to refuse. The order is the scrub, the step, the check, the write: a value
+  the step returned still present as given in the URL, a header value, a body or a
+  string decoded from a JSON body, `REDACTED` masked first, refuses the write, the error
+  naming where, never the value; an encoded form is the step's to return or to look for
+  (ADR-0048, decisions 1 and 2). A source that writes the fixture itself writes it with
+  `write_fixture`, laid out as the recorder writes it.
   A body that is not UTF-8 text cannot be scrubbed and is refused unless the recording
   flags it (`allow_binary=True`, stored base64 with `body_base64`). The recorder drops
   the response headers that only identify a request (`x-request-id`, `x-amz-cf-id`,

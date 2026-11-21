@@ -49,6 +49,8 @@ EXPORTS = {
         "sent_bodies",
         # the write server's check and the demo-only strip (ADR-0042, decision 1)
         "assert_write_tools", "keep_reserved_tenants",
+        # the recorder's one send, without the write (ADR-0048, decision 3)
+        "send_once", "send_once_sync",
     },
     "xippios.core.mcp": {
         "ResultCap", "build_parser", "build_server", "cap_result", "error_to_text", "main",

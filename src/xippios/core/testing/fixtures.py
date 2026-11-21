@@ -15,15 +15,18 @@ cut itself, marked ``sample`` with the same three fields (ADR-0020, decision 6, 
 amended). A fixture neither cut nor a sample is written without those fields, as
 fixtures were before them, and every fixture written before them loads.
 
-``write_fixture`` writes a ``Fixture`` as ``record`` writes it, so a source that rewrites
-one before the write lays it out as core does (ADR-0042, decision 4).
+A source's rewrite step runs inside ``fixture_from_response`` (``rewrite=``), between the
+scrub and the check that none of the values it replaced survives (ADR-0048, decisions 1 and
+2), and an answer that is no final answer of its operation, a 1xx or a 3xx, is refused
+before anything is kept (decision 4). ``write_fixture`` writes a ``Fixture`` as ``record``
+writes it, so a source that writes the fixture itself lays it out as core does.
 """
 
 import base64
 import hashlib
 import json
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal, Self
@@ -32,8 +35,9 @@ import httpx
 from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 
 from xippios.core.client.cache import strip_wire_headers
+from xippios.core.errors import request_description
 from xippios.core.models import utcnow
-from xippios.core.redaction import scrub_url
+from xippios.core.redaction import REDACTED, scrub_url
 from xippios.core.testing.scrub import Scrub, _Scrubber
 
 __all__ = [
@@ -204,6 +208,11 @@ def fixture_path(root: Path, endpoint: str, case: str) -> Path:
     return root / endpoint / f"{case}.json"
 
 
+Rewrite = Callable[[Fixture], tuple[Fixture, Iterable[str]]]
+"""A source's rewrite step: the scrubbed ``Fixture`` in, the fixture rewritten and the values
+it replaced out (ADR-0048, decision 1)."""
+
+
 def fixture_from_response(
     response: httpx.Response,
     *,
@@ -211,18 +220,30 @@ def fixture_from_response(
     max_bytes: int | None = None,
     array_key: str | None = None,
     keep: Literal["first", "last"] = "first",
+    rewrite: Rewrite | None = None,
 ) -> Fixture:
     """Build a scrubbed ``Fixture`` in memory from a fully read ``httpx.Response``.
 
-    Credentials are always scrubbed (``scrub_url``, ``scrub_headers``), and the headers
-    that only identify a request are dropped (``REQUEST_ID_HEADERS``). ``scrub`` adds
-    the secret values, those it names and those its ``response_secrets`` reads from
-    ``response``, and decides about a binary body; ``None`` is ``Scrub()``: nothing
-    else replaced, a binary body refused. With secret values, the result is verified
-    before it is returned: a secret value still present as given in the URL, a header
-    value or a text body refuses the exchange (conventions §10). A source that rewrites
-    more, a tenant's host or a field by key, does it on the returned ``Fixture`` and
-    writes it with ``write_fixture`` (ADR-0042).
+    An answer of a 1xx or a 3xx status is no final answer of its operation and is refused
+    first, whatever sent it (ADR-0048, decision 4). Credentials are always scrubbed
+    (``scrub_url``, ``scrub_headers``), and the headers that only identify a request are
+    dropped (``REQUEST_ID_HEADERS``). ``scrub`` adds the secret values, those it names and
+    those its ``response_secrets`` reads from ``response``, and decides about a binary
+    body; ``None`` is ``Scrub()``: nothing else replaced, a binary body refused. With
+    secret values, the result is verified before it is returned: a secret value still
+    present as given in the URL, a header value or a text body refuses the exchange
+    (conventions §10).
+
+    ``rewrite`` is the source's own step, for what it replaces beyond the secret values, a
+    tenant's host or a field by key: it runs on the scrubbed ``Fixture`` and returns it
+    rewritten with the values it replaced, and the result is checked before it is
+    returned. The URL, every header value kept, both bodies and, for a body that is JSON,
+    every key and string decoded from it are searched for each value it returned, as
+    given, ``REDACTED`` masked first, and for the secret values again; a hit refuses the
+    exchange, the message naming where, never the value (ADR-0048, decision 2). The order
+    is fixed: the scrub, the step, the check, and the write that ``record`` or the caller
+    makes, so a source that writes several files checks each exchange before it writes
+    any.
 
     ``max_bytes`` cuts a response body larger than it before the scrub, which then runs
     on what is kept, as the verify does (ADR-0040, decision 5; conventions §10):
@@ -266,19 +287,28 @@ def fixture_from_response(
             ``"data"`` for ``{"data": [...]}``. ``None`` cuts a body that is an array.
         keep: ``"first"`` keeps an array's first whole elements, ``"last"`` its last,
             for a list ordered oldest first.
+        rewrite: The source's step, e.g. ``lambda fixture: (rewritten, [value, ...])``,
+            which raises ``ValueError`` to refuse the exchange; an empty value it returns
+            is passed over, since nothing of it can survive. ``None`` rewrites nothing.
 
     Raises:
         ValueError: ``max_bytes`` below 1, ``keep`` neither ``"first"`` nor ``"last"``,
-            or ``array_key`` or ``keep="last"`` without ``max_bytes``; the request or
-            response body is not UTF-8 text and ``scrub`` does not set
-            ``allow_binary``; ``scrub.response_secrets`` returned an empty value; a
-            secret value survived the scrub (the message names where, never the value);
-            or ``max_bytes`` cannot cut this body (the message, starting ``max_bytes:``,
-            names the format and what to record instead).
+            or ``array_key`` or ``keep="last"`` without ``max_bytes``; an answer of a 1xx
+            or a 3xx status (the message names the method, the path and the status, and
+            what to record instead); the request or response body is not UTF-8 text and
+            ``scrub`` does not set ``allow_binary``; ``scrub.response_secrets`` returned
+            an empty value; a secret value survived the scrub or came back with the step,
+            or a value the step replaced survived it (the message names where, never the
+            value); the step's own refusal; or ``max_bytes`` cannot cut this body (the
+            message, starting ``max_bytes:``, names the format and what to record
+            instead).
         TypeError: ``scrub.response_secrets`` returned one string, or a value that is no
-            string.
+            string; ``rewrite`` is no function, or it returned no pair of a ``Fixture``
+            and its values, one string for its values, or a value that is no string.
     """
     _check_cut(max_bytes, array_key, keep)
+    _check_rewrite(rewrite)
+    _refuse_interim(response)
     request = response.request
     scrubber = _Scrubber(scrub if scrub is not None else Scrub(), response)
     request_body: str | None = None
@@ -305,6 +335,18 @@ def fixture_from_response(
             **cut,
         ),
     )
+    _verify(scrubber, fixture)
+    if rewrite is None:
+        return fixture
+    rewritten, replaced = _run(rewrite, fixture)
+    _verify(scrubber, rewritten)
+    _check_survivors(rewritten, replaced)
+    return rewritten
+
+
+def _verify(scrubber: _Scrubber, fixture: Fixture) -> None:
+    """The scrub's verify on ``fixture``: no secret value left in it as given."""
+    __tracebackhide__ = True  # pytest would print the arguments: the refused text
     kept = fixture.request.content_type
     scrubber.verify(
         fixture.request.url,
@@ -313,7 +355,148 @@ def fixture_from_response(
         fixture.response.headers,
         None if fixture.response.body_base64 else fixture.response.body,
     )
-    return fixture
+
+
+def _check_rewrite(rewrite: object) -> None:
+    """Refuse a ``rewrite=`` that is no function, before anything is sent.
+
+    Raises:
+        TypeError: ``rewrite`` is neither ``None`` nor callable.
+    """
+    if rewrite is not None and not callable(rewrite):
+        raise TypeError(
+            "rewrite is a function of the scrubbed Fixture that returns it rewritten and the "
+            "values it replaced, e.g. lambda fixture: (rewritten, [value])"
+        )
+
+
+def _run(rewrite: Rewrite, fixture: Fixture) -> tuple[Fixture, tuple[str, ...]]:
+    """The step's fixture and its values, the empty ones left out; no message names a value.
+
+    Raises:
+        TypeError: The step returned no pair of a ``Fixture`` and its values, one string
+            for its values, or a value that is no string.
+    """
+    result: Any = rewrite(fixture)  # checked below, whatever it returned
+    if not (isinstance(result, tuple) and len(result) == 2 and isinstance(result[0], Fixture)):
+        raise TypeError(
+            "rewrite returns the fixture and the values it replaced, (fixture, [value, ...]), "
+            "and this step returned something else"
+        )
+    rewritten, read = result
+    if isinstance(read, str):
+        raise TypeError(
+            "rewrite returns the values it replaced as a sequence, e.g. [value], not one string"
+        )
+    values: tuple[Any, ...] = tuple(read)
+    if any(not isinstance(value, str) for value in values):
+        raise TypeError("rewrite returns text values; one it returned is no string")
+    return rewritten, tuple(value for value in values if value)
+
+
+def _strings(node: object) -> Iterator[str]:
+    """Every key and string of a decoded JSON value, outermost first."""
+    if isinstance(node, str):
+        yield node
+    elif isinstance(node, dict):
+        for key, value in node.items():
+            yield str(key)
+            yield from _strings(value)
+    elif isinstance(node, list):
+        for item in node:
+            yield from _strings(item)
+
+
+def _decoded_strings(body: str) -> list[str]:
+    """Every key and string of ``body`` decoded as JSON, a byte order mark allowed.
+
+    ``[]`` for a body that is not JSON.
+    """
+    try:
+        decoded = json.loads(body.removeprefix("﻿"))
+    except ValueError:
+        return []
+    return list(_strings(decoded))
+
+
+def _check_survivors(fixture: Fixture, values: Sequence[str]) -> None:
+    """Refuse a rewritten ``fixture`` that still holds one of ``values``, as given.
+
+    The request URL, the request's content type, every response header value, both bodies
+    as text and every key and string decoded from a body that is JSON are searched, a
+    plain substring in the letter case given, ``REDACTED`` masked first; a body stored
+    base64 is not searched, since nothing in it was scrubbed (ADR-0048, decision 2).
+
+    Raises:
+        ValueError: A value survives; the message names the place, never the value.
+    """
+    __tracebackhide__ = True  # pytest would print the arguments: the refused text
+    if not values:
+        return
+    request, response = fixture.request, fixture.response
+    places = [("request URL", request.url)]
+    if request.content_type is not None:
+        places.append(("request header 'content-type'", request.content_type))
+    places += [(f"response header {name!r}", value) for name, value in response.headers]
+    for location, body, is_base64 in (
+        ("request body", request.body, request.body_base64),
+        ("response body", response.body, response.body_base64),
+    ):
+        if body is not None and not is_base64:
+            places.append((location, body))
+            decoded = _decoded_strings(body)
+            places += [(f"{location}, a decoded JSON string", text) for text in decoded]
+    for location, text in places:
+        masked = text.replace(REDACTED, "\0")
+        if any(value in masked for value in values):
+            raise ValueError(
+                f"the rewritten fixture still holds a value the rewrite step replaced, in the "
+                f"{location}; nothing is written"
+            )
+
+
+_FINAL = (
+    "no final answer of its operation: the recorder keeps a final answer only, a 2xx, a 4xx "
+    "or a 5xx, and writes nothing (ADR-0048)"
+)
+_SAFE = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
+def _refuse_interim(response: httpx.Response) -> None:
+    """Refuse an answer of a 1xx or a 3xx status, which is no final answer of its operation.
+
+    The recorder's one rule for every path, ``send_once``, ``record`` and
+    ``fixture_from_response`` (ADR-0048, decision 4). The message names the method, the path
+    and the status, never a header's value, and says what to record instead.
+
+    Raises:
+        ValueError: The status is a 1xx or a 3xx.
+    """
+    status = response.status_code
+    if 100 <= status < 200:
+        instead = (
+            "an interim answer comes before the final one, so record a request that upstream "
+            "answers with a final status, without an Expect or an Upgrade header"
+        )
+    elif status == 304:
+        instead = (
+            "record the request without the condition that a 304 answers (If-None-Match, "
+            "If-Modified-Since)"
+        )
+    elif 300 <= status < 400:
+        instead = (
+            "record the request that upstream answers itself, at the URL that its Location "
+            "header names"
+        )
+    else:
+        return
+    phrase = f" {response.reason_phrase}" if response.reason_phrase else ""
+    sent = ""
+    if response.request.method not in _SAFE:
+        sent = "; the request was sent, so a write may have been applied"
+    raise ValueError(
+        f"{request_description(response)} answered HTTP {status}{phrase}, {_FINAL}; {instead}{sent}"
+    )
 
 
 _SAMPLE = (
@@ -550,8 +733,8 @@ def fixture_text(fixture: Fixture) -> str:
     measures this text against the 256 KiB cap or compares it with the file it has.
 
     Args:
-        fixture: The exchange, e.g. from ``fixture_from_response``, rewritten with
-            ``model_copy`` (ADR-0042, decision 4).
+        fixture: The exchange, e.g. from ``fixture_from_response``, rewritten by its
+            ``rewrite=`` step (ADR-0048, decision 1) or with ``model_copy``.
 
     Raises:
         ValueError: ``load_fixture`` would not read the text back, as when a
@@ -583,10 +766,11 @@ def write_fixture(fixture: Fixture, path: Path) -> Fixture:
     """Write ``fixture`` to ``path`` as ``record`` writes it, creating directories; ``fixture``.
 
     The text is ``fixture_text(fixture)``, written once; a refusal writes nothing. A source
-    that rewrites values on the ``Fixture`` that ``fixture_from_response`` returns, a
-    tenant's host or a field by key, or that replaces a download's body with its sample,
-    writes the result with it (ADR-0042, decision 4), e.g.
-    ``write_fixture(fixture.model_copy(update={"response": rewritten}), path)``.
+    that writes a fixture itself writes it with it: the ``Fixture`` that
+    ``fixture_from_response`` returns, its ``rewrite=`` step run and checked, for an answer
+    sent with ``send_once`` (ADR-0048, decisions 1 and 3), or one whose download body the
+    source replaced with its sample, e.g.
+    ``write_fixture(fixture.model_copy(update={"response": sampled}), path)``.
 
     Args:
         fixture: The exchange to write.
