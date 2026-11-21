@@ -873,6 +873,20 @@
       "superseded_by": null
     },
     {
+      "id": "ADR-0053",
+      "number": 53,
+      "title": "One count before a query over upstream's limit",
+      "path": "docs/adr/0053-one-count-before-a-query-over-upstream-s-limit.md",
+      "status": "Accepted",
+      "date": "2026-11-22",
+      "decided_by": "https://github.com/xippios/sdk-core/issues/372",
+      "amended": [],
+      "amends": [],
+      "supersedes": [],
+      "other": [],
+      "superseded_by": null
+    },
+    {
       "id": "ADR-0054",
       "number": 54,
       "title": "One helper for a series over periods",
