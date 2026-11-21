@@ -60,7 +60,19 @@ than one fails every test here, naming the option. The repository's files (``REA
   definitions dropped, opens with ``Probe: <date>`` or ``Observed: <date>``, an ISO date
   (``Probe: 2026-11-20, ...``). Every code span of the file whose text starts with
   ``tests/``, ``docs/``, ``src/`` or ``scripts/``, holds no space and ends in an extension
-  names a file that exists, from the repository's root.
+  names a file that exists, from the repository's root;
+- every packaged list of the package, a ``reference/<name>.json`` that holds ``param``,
+  ``endpoint``, ``fetched`` and ``records``, stands in ``LIVE_LISTS`` of
+  ``tests/test_live.py``, which the nightly run compares with the list upstream serves now,
+  or in its ``NO_LIVE_LIST`` with the reason it is not (conventions §10, ADR-0055;
+  ``xippios.core.testing.live``). An entry that names no packaged list fails, so a stale
+  declaration does not pass, and so do a list in both, an entry of ``NO_LIVE_LIST`` without
+  its reason and an entry of ``LIVE_LISTS`` that is no pair of a ``PackagedCodes`` declared
+  from its file and a function. The check loads ``tests/test_live.py`` by its path from the
+  root, since under ``--import-mode=importlib`` no test module stands on an import path, and
+  a source with no packaged list and no declaration passes. A module that does not import,
+  or skips, fails or exits at its import, fails the check, which is never skipped: a test
+  that needs an optional dependency or a key skips in itself or in its fixture.
 
 A write server is its source's to test: the family check reads ``tasks_write`` for the
 task checks and the status table only (ADR-0042).
@@ -80,16 +92,19 @@ under its new path (ADR-0040). The cap binds a source from its 0.3.0 adoption
 import importlib
 import importlib.util
 import inspect
+import json
 import re
+import sys
 import tomllib
 import typing
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+import pydantic
 import pytest
 from packaging.requirements import InvalidRequirement, Requirement
 from packaging.utils import canonicalize_name
@@ -97,13 +112,16 @@ from packaging.version import Version
 
 from xippios.core._tasks import touches_no_tenant
 from xippios.core.models import Result
+from xippios.core.reference import PackagedCodes, PackagedList
 from xippios.core.tenants import Tenants, _lists_tenants
+from xippios.core.testing.live import _LIVE, _NO_LIVE, _NO_PAIR, _a, _is_entry
 from xippios.core.testing.plugin import PACKAGE_INI
 
 __all__ = [
     "family_source",
     "test_family_copier_answers_name_a_template_tag",
     "test_family_core_is_bound_to_one_minor",
+    "test_family_every_packaged_list_is_declared_for_the_live_run",
     "test_family_fetched_md_lists_observed_md_in_a_row_of_its_own",
     "test_family_http_router_routes_the_tasks",
     "test_family_mcp_server_registers_the_tasks",
@@ -831,3 +849,182 @@ def test_family_observed_md_cites_files_that_exist(family_source: FamilySource) 
         f"{_OBSERVED} cites files that do not exist, from the repository's root "
         "(conventions §3, ADR-0044):",
     )
+
+
+_LIVE_TESTS = "tests/test_live.py"
+"""The module that collects the live comparison and declares the packaged lists (ADR-0055)."""
+_LIST_KEYS = frozenset({"param", "endpoint", "fetched", "records"})
+"""The keys a packaged list's file holds, which ``PackagedList`` requires."""
+_LIVE_INTRO = (
+    f"every packaged list under reference/ stands in {_LIVE} of {_LIVE_TESTS}, compared with the "
+    f"list upstream serves now, or in its {_NO_LIVE} with the reason it is not (conventions §10, "
+    "ADR-0055):"
+)
+
+
+def _packaged_lists(package_dir: Path) -> dict[str, Path]:
+    """The package's packaged lists by name, each ``reference/<name>.json`` that holds one.
+
+    A file is a packaged list when it holds a JSON object with the keys ``PackagedList``
+    requires, ``param``, ``endpoint``, ``fetched`` and ``records``; any other file under
+    ``reference/``, a table's CSV or an index of the lists such as sdk-eurostat's
+    ``lists.json``, is none.
+
+    Args:
+        package_dir: The package's directory, ``FamilySource.package_dir``.
+    """
+    found: dict[str, Path] = {}
+    for path in sorted((package_dir / "reference").glob("*.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(data, dict) and data.keys() >= _LIST_KEYS:
+            found[path.stem] = path
+    return found
+
+
+def _live_tests(root: Path) -> ModuleType | None:
+    """The repository's ``tests/test_live.py``, run as a module of its own; ``None`` without it.
+
+    Loaded by its path from the root, as the check reads ``README.md`` there, since under
+    ``--import-mode=importlib``, which the sources use, no test module stands on an import
+    path (ADR-0055, decision 2). It runs offline, as pytest's collection runs it.
+
+    Args:
+        root: The repository's root, ``FamilySource.root``.
+
+    Raises:
+        BaseException: What ends the module's run: an error, pytest's skip, fail or exit, or a
+            ``SystemExit``; ``_unloaded`` says which.
+    """
+    path = root / _LIVE_TESTS
+    if not path.is_file():
+        return None
+    spec = importlib.util.spec_from_file_location("_xippios_family_test_live", path)
+    if spec is None or spec.loader is None:  # pragma: no cover - a .py path always has both
+        raise ImportError(f"{_LIVE_TESTS} cannot be loaded")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module  # a dataclass or a model of the module looks itself up
+    spec.loader.exec_module(module)
+    return module
+
+
+def _unloaded(exc: BaseException) -> str:
+    """Why ``tests/test_live.py`` gave the check no declaration, and what the source does.
+
+    pytest's skip and fail are no ``Exception``, and neither is an exit: each ends the
+    module's run before its declarations stand, so each fails the check, which is never
+    skipped (https://github.com/xippios/sdk-core/issues/359, part 4). A module that skips
+    for a reason of its own, a missing optional dependency or key, skips in the tests or the
+    fixtures that need it, and its top level, where the declarations stand, imports offline.
+
+    Args:
+        exc: What ended the module's run.
+    """
+    unread = f"so the family check cannot read its {_LIVE} and {_NO_LIVE}"
+    what = f"({type(exc).__name__}: {exc})"
+    if isinstance(exc, pytest.skip.Exception):
+        return (
+            f"{_LIVE_TESTS} skips at its import, {unread} {what}: skip in the tests or the "
+            "fixtures that need what is missing, pytest.importorskip among them, and keep the "
+            "module's top level importable offline"
+        )
+    if isinstance(exc, SystemExit):
+        return (
+            f"{_LIVE_TESTS} exits at its import, {unread} {what}: remove the exit from its top "
+            "level"
+        )
+    return (
+        f"{_LIVE_TESTS} does not import, {unread} {what}: make it import offline, as pytest's "
+        "collection imports it"
+    )
+
+
+def _declaration(module: ModuleType, name: str, problems: list[str]) -> dict[str, object]:
+    """The module's declaration ``name`` by list name; one that is no mapping adds its problem."""
+    declared = getattr(module, name, {})
+    if not isinstance(declared, Mapping):
+        kind = _a(type(declared).__name__)
+        problems.append(f"{name} is {kind}, not a mapping by the lists' names")
+        return {}
+    return {str(key): entry for key, entry in declared.items()}
+
+
+def _declared_from(codes: PackagedCodes, path: Path) -> bool:
+    """Whether ``codes`` was declared from the packaged list that the file ``path`` holds."""
+    try:
+        return codes.packaged == PackagedList.model_validate_json(path.read_text(encoding="utf-8"))
+    except pydantic.ValidationError:
+        return False
+
+
+def _list_problems(
+    name: str, path: Path | None, live: dict[str, object], excused: dict[str, object]
+) -> list[str]:
+    """What fails the declaration of the list ``name``, whose file is ``path`` or none."""
+    held = {_LIVE: name in live, _NO_LIVE: name in excused}
+    problems: list[str] = []
+    if path is None:
+        problems += [
+            f"{where} names no packaged list, no reference/{name}.json"
+            for where, holds in held.items()
+            if holds
+        ]
+    elif not any(held.values()):
+        problems.append(f"reference/{name}.json stands in neither {_LIVE} nor {_NO_LIVE}")
+    if all(held.values()):
+        problems.append(f"stands in both {_LIVE} and {_NO_LIVE}")
+    reason = excused.get(name)
+    if held[_NO_LIVE] and not (isinstance(reason, str) and reason.strip()):
+        problems.append(f"{_NO_LIVE} gives no reason, a text that says why it is not compared")
+    entry = live.get(name)
+    if held[_LIVE] and not _is_entry(entry):
+        problems.append(_NO_PAIR)
+    elif _is_entry(entry) and path is not None and not _declared_from(entry[0], path):
+        problems.append(f"{_LIVE} holds the codes of another list than reference/{name}.json")
+    return problems
+
+
+def _live_declaration_problems(family: FamilySource) -> list[str]:
+    """What fails the rule that every packaged list stands in one declaration (ADR-0055)."""
+    packaged = _packaged_lists(family.package_dir)
+    try:
+        module = _live_tests(family.root)
+    except KeyboardInterrupt:  # the person's, not the module's
+        raise
+    except BaseException as exc:  # an error, a skip, a fail or an exit: none skips the check
+        return [_unloaded(exc)]
+    problems: list[str] = []
+    live: dict[str, object] = {}
+    excused: dict[str, object] = {}
+    if module is not None:
+        live = _declaration(module, _LIVE, problems)
+        excused = _declaration(module, _NO_LIVE, problems)
+    elif packaged:
+        problems.append(f"{_LIVE_TESTS}, which declares {_LIVE} and {_NO_LIVE}, is missing")
+    for name in sorted(packaged.keys() | live.keys() | excused.keys()):
+        problems += [
+            f"{name}: {problem}"
+            for problem in _list_problems(name, packaged.get(name), live, excused)
+        ]
+    return problems
+
+
+def test_family_every_packaged_list_is_declared_for_the_live_run(
+    family_source: FamilySource,
+) -> None:
+    """Every packaged list stands in ``LIVE_LISTS`` or ``NO_LIVE_LIST`` (conventions §10).
+
+    ``tests/test_live.py`` declares in ``LIVE_LISTS`` each packaged list that the nightly run
+    compares with the list upstream serves now, with its ``PackagedCodes`` and the function
+    that fetches it, and in ``NO_LIVE_LIST`` each one it does not compare, with the reason
+    (ADR-0055). An entry that names no packaged list fails too, so a stale declaration does
+    not pass, and so do a list in both, an entry without its reason and one that is no pair
+    of a ``PackagedCodes`` declared from its file and a function. A source with no packaged
+    list and no declaration passes. A ``tests/test_live.py`` that skips, fails or exits at its
+    import fails the check as one that does not import does, naming why and what to do, since
+    no new family check of core 0.4.1 is skipped or warns first
+    (https://github.com/xippios/sdk-core/issues/359, part 4).
+    """
+    _fail(_live_declaration_problems(family_source), _LIVE_INTRO)

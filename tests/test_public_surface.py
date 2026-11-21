@@ -53,6 +53,8 @@ EXPORTS = {
         "assert_write_tools", "keep_reserved_tenants",
         # the recorder's one send, without the write (ADR-0048, decision 3)
         "send_once", "send_once_sync",
+        # the nightly comparison of a packaged list with upstream's (ADR-0055)
+        "assert_list_current",
     },
     "xippios.core.mcp": {
         "ResultCap", "build_parser", "build_server", "cap_result", "error_to_text", "main",

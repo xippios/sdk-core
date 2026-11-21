@@ -1,4 +1,4 @@
-"""The sentences of `docs/conventions.md` that the cases of ADR-0043 stand on.
+"""The sentences of `docs/conventions.md` that the cases of ADR-0043 stand on, and ADR-0055's.
 
 The organization's release check quotes the conventions from sdk-core's `main`, and a finding
 blocks only where it quotes the sentence that a change breaks
@@ -159,6 +159,37 @@ def test_each_rule_is_one_sentence_that_cites_its_record(
     rule = sentence(section(number), phrase)
     for name in (RECORD, *names):
         assert name in rule, f"§{number}: {rule!r} does not name {name!r}"
+
+
+LIVE_LISTS_RULES = [
+    # §10, the paragraph on live tests: the nightly comparison of a packaged list
+    # (https://github.com/xippios/sdk-core/issues/374).
+    pytest.param(
+        "A live comparison of a public reference list may name in the log the codes",
+        ("gone, new or changed", "never a record's other fields"),
+        id="s10-codes-in-the-log",
+    ),
+    pytest.param(
+        "A source declares in `tests/test_live.py`",
+        ("`LIVE_LISTS`", "`NO_LIVE_LIST` with the reason", "stands in neither"),
+        id="s10-the-declaration",
+    ),
+    pytest.param(
+        "A code gone from upstream's list, a code new in it and a code whose record changed each "
+        "fail the nightly run",
+        ("the list's declared code in any order",),
+        id="s10-what-fails-the-run",
+    ),
+]
+
+
+@pytest.mark.parametrize(("phrase", "names"), LIVE_LISTS_RULES)
+def test_each_rule_of_the_live_comparison_is_one_sentence_that_cites_adr_0055(
+    phrase: str, names: tuple[str, ...]
+) -> None:
+    rule = sentence(section(10), phrase)
+    for name in ("ADR-0055", *names):
+        assert name in rule, f"§10: {rule!r} does not name {name!r}"
 
 
 @pytest.mark.parametrize(

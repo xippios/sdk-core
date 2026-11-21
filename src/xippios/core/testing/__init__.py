@@ -14,7 +14,10 @@ helpers for adapters (``mcp_call``, ``mcp_call_text``, ``assert_write_tools`` fo
 server), for times read around a call (``assert_time_between``) and for a multi-tenant
 source's environment (``keep_reserved_tenants``); and the family conformance check,
 ``xippios.core.testing.family``, which a source collects by importing it into
-``tests/test_family.py`` and which is not imported here.
+``tests/test_family.py`` and which is not imported here. The nightly comparison of a
+packaged list with the list upstream serves now, ``xippios.core.testing.live``, a source
+collects the same way into ``tests/test_live.py``, beside its ``LIVE_LISTS`` and
+``NO_LIVE_LIST``; its assertion, ``assert_list_current``, is exported here (ADR-0055).
 Enable the plugin in a repo's ``tests/conftest.py``::
 
     pytest_plugins = ["xippios.core.testing.plugin"]
@@ -54,6 +57,7 @@ from xippios.core.testing.fixtures import (
     response_from_fixture,
     write_fixture,
 )
+from xippios.core.testing.live import assert_list_current
 from xippios.core.testing.record import record, record_sync, send_once, send_once_sync
 from xippios.core.testing.replay import ReplayFixture, sent_bodies, sent_query, sent_urls
 from xippios.core.testing.scrub import REDACTED, Scrub
@@ -65,6 +69,7 @@ __all__ = [
     "FixtureResponse",
     "ReplayFixture",
     "Scrub",
+    "assert_list_current",
     "assert_projection",
     "assert_time_between",
     "assert_write_tools",

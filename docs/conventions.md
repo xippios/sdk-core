@@ -1062,7 +1062,16 @@ standalone from the package. A task named in `BULK_TASKS` gets no route:
   run takes `--tb=short --assert=plain`, since the log of a public repository is public:
   the first keeps a failing test's frame arguments out of it, a raw upstream payload among
   them, and the second the values a failed `assert` compares. A live test asserts on
-  shapes and counts, never on a raw payload (ADR-0032, decision 6).
+  shapes and counts, never on a raw payload (ADR-0032, decision 6). A live comparison of a
+  public reference list may name in the log the codes that are gone, new or changed, and never
+  a record's other fields (ADR-0055). A source declares in `tests/test_live.py`, which collects
+  core's comparison with one line (`from xippios.core.testing.live import *  # noqa: F403`),
+  each packaged list that its nightly run compares with the list upstream serves now, in
+  `LIVE_LISTS` with the list's `PackagedCodes` and the function that fetches it, and each one
+  that it does not compare, in `NO_LIVE_LIST` with the reason, and the family check fails a
+  packaged list that stands in neither (ADR-0055). A code gone from upstream's list, a code new
+  in it and a code whose record changed each fail the nightly run, the records compared by the
+  list's declared code in any order (ADR-0055).
 - The pytest plugin (`pytest_plugins = ["xippios.core.testing.plugin"]`) keeps the
   default run offline and free of real keys (ADR-0035):
   - No network, from `pytest_configure` on: while test modules are collected, in a
