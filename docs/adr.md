@@ -30,6 +30,7 @@ records in `docs/adr/`. A record changes, and this file follows when the script 
 - <a id="0040"></a>[ADR-0040](adr/0040-bulk-downloads-and-non-json-payloads.md): Bulk downloads and non-JSON payloads in core · Accepted · 2026-11-18
 - <a id="0041"></a>[ADR-0041](adr/0041-packaged-answers-and-release-times.md): Packaged answers and release times in `ResultMeta` · Accepted · 2026-11-18
 - <a id="0042"></a>[ADR-0042](adr/0042-the-recorder-extras-stay-the-sources.md): The recorder extras stay the source's, and the multi-tenant kit returns to core · Accepted · 2026-11-18
+- <a id="0044"></a>[ADR-0044](adr/0044-the-family-check-of-the-observed-behavior-file.md): The family check of the observed-behavior file · Accepted · 2026-11-21
 - <a id="0045"></a>[ADR-0045](adr/0045-one-check-of-an-argument-against-a-packaged-list.md): One check of an argument against a packaged list · Accepted · 2026-11-21
 
 The superseded records follow, kept as written: the record that each status names holds its decision now.

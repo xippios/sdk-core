@@ -718,6 +718,20 @@
       "superseded_by": null
     },
     {
+      "id": "ADR-0044",
+      "number": 44,
+      "title": "The family check of the observed-behavior file",
+      "path": "docs/adr/0044-the-family-check-of-the-observed-behavior-file.md",
+      "status": "Accepted",
+      "date": "2026-11-21",
+      "decided_by": "https://github.com/xippios/sdk-core/issues/359",
+      "amended": [],
+      "amends": [],
+      "supersedes": [],
+      "other": [],
+      "superseded_by": null
+    },
+    {
       "id": "ADR-0045",
       "number": 45,
       "title": "One check of an argument against a packaged list",
