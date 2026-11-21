@@ -153,6 +153,30 @@ def test_a_value_the_hint_table_lacks_names_the_closest_codes() -> None:
         countries().check("country_code", "Brasil", hints=COUNTRY_HINTS)
 
 
+def test_a_hint_is_read_before_the_lists_type() -> None:
+    # A hint is for a value that is no code, and a text given for integer codes is one
+    # (https://github.com/xippios/sdk-core/issues/361, parts 2 and 3).
+    hints = {"all": "Omit commodity_code for every commodity."}
+    with pytest.raises(UnknownCode) as info:
+        commodities().check("commodity_code", "all", hints=hints)
+    assert str(info.value) == (
+        "'all' is not a commodity_code in the packaged commodities list (fetched 2026-10-23). "
+        "Omit commodity_code for every commodity. If upstream added it since, the packaged "
+        "list is out of date."
+    )
+    assert info.value.closest == ()
+    with pytest.raises(UnknownCode) as world:  # an integer for text codes, by its text
+        countries().check("reporter_code", 0, hints={"0": "0 (World) is a partner code only."})
+    assert "(fetched 2026-10-23). 0 (World) is a partner code only. If" in str(world.value)
+
+
+def test_a_hint_is_read_for_text_and_integers_alone() -> None:
+    with pytest.raises(InvalidRequestError) as info:
+        commodities().check("commodity_code", None, hints={"none": "never shown"})
+    assert not isinstance(info.value, UnknownCode)
+    assert "never shown" not in str(info.value)
+
+
 def test_a_digit_text_for_a_list_of_integer_codes_is_refused_with_the_integer_to_pass() -> None:
     with pytest.raises(InvalidRequestError) as info:
         commodities().check("commodity_code", "104")
