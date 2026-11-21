@@ -728,6 +728,114 @@ source = render_enums(
 )
 ```
 
+## The snapshot script's frame
+
+A source's `scripts/refresh_upstream.py`, which snapshots its upstream documentation into
+`docs/upstream/` (conventions §3), declares a `Snapshot` and runs it; `xippios.core.refresh`
+does the rest, in the standard library alone (ADR-0046). sdk-template renders this script
+for a new source, which fills the declaration:
+
+```python
+"""Refresh the upstream documentation snapshot in ``docs/upstream/`` (``/refresh-upstream``).
+
+The source fills the declaration below and says here what it captures; core's frame,
+``xippios.core.refresh``, fetches, checks the attribution, writes ``FETCHED.md`` and the
+files, and compares with ``--check``. Run from the repository's root::
+
+    uv run scripts/refresh_upstream.py            # fetch, then write the snapshot
+    uv run scripts/refresh_upstream.py --check    # fetch and compare; write nothing
+"""
+
+from pathlib import Path
+
+from xippios.core.refresh import NotFetched, Page, Response, Row, Snapshot, Statement, run
+
+ROOT = Path(__file__).resolve().parents[1]
+DOCS_URL = "https://docs.example.org/api"
+SPEC_URL = "https://api.example.org/openapi.json"
+"""The machine-readable API document the documentation names, kept verbatim."""
+TERMS_URL = "https://example.org/legal/terms"
+
+
+def reduce(page: Page, response: Response) -> bytes:
+    """The content a page's file is written with: the body as fetched by default.
+
+    An HTML page becomes Markdown through the source's converter, its own dependency,
+    such as markdownify in its dev group, a table with merged cells kept as HTML.
+    """
+    return response.body
+
+
+def linked(row: Row) -> tuple[Page, ...]:
+    """The pages whose URL a row's page gives, captured right after it: none here."""
+    return ()
+
+
+SNAPSHOT = Snapshot(
+    name="Example",
+    slug="example",
+    pages=(
+        Page(DOCS_URL, "pages/api.md", note="converted to Markdown"),
+        Page(SPEC_URL, "openapi/openapi.json", note="SPEC_URL, verbatim"),
+        Page(TERMS_URL, "pages/terms.md", terms=True, note="converted to Markdown"),
+        Page(f"{DOCS_URL}/v1/items?limit=2", "samples/items.json", sample=True),
+        Page(f"{DOCS_URL}/admin", status=302, note="a login on another host"),
+    ),
+    attribution=(
+        Statement("\N{COPYRIGHT SIGN} 2026 Example Ltd.", DOCS_URL, "the footer"),
+        Statement("Terms of Use", TERMS_URL, "the terms page's title"),
+    ),
+    not_fetched=(NotFetched("https://example.org/feed.xml", "a feed, no documentation"),),
+    vocabulary=(),
+    capture="The API page is server-rendered HTML, converted to Markdown.",
+    out=ROOT / "docs/upstream",
+    reduce=reduce,
+    linked=linked,
+)
+
+if __name__ == "__main__":
+    raise SystemExit(run(SNAPSHOT))
+```
+
+The script carries no `# /// script` block: it runs in the project's environment, where
+`xippios-core` and the converter of the source's dev group are installed. `run` fetches
+every page before it writes one, one request at a time, `pause` seconds apart (2 by
+default), each retried once after a network error or a 5xx, and follows no redirect to
+another host: such a page stops the run unless it is recorded by that status, and then
+`FETCHED.md` lists it under `Not fetched` with the host. The run stops, before writing,
+when a page states a copyright, a licence or terms of use that `attribution` does not
+record, or no longer prints one it records; `vocabulary` names words that state none.
+`FETCHED.md` is written whole, in one form for every source: the time of the run, the
+attribution, one row per file with the size and sha256 of the body as fetched, each ETag
+in a code span on a row that ends in the secret scan's allowlist mark, a row for
+`OBSERVED.md` where it exists, and the table `Not fetched` under its heading, empty or not.
+`--check` exits 1 when a file differs from what upstream serves, compared after
+`canonical`, or when `FETCHED.md` would change in more than its rows' measures.
+
+Beside `reduce`, `canonical` and `linked`, a snapshot declares the hooks for what some
+sources do beyond that, and every hook stops the run with `changed(url, what)` on a page
+it does not recognise:
+
+| The source does | The declaration takes | As in |
+| --- | --- | --- |
+| sends credentials on a sample whose operation needs them | `credentials=Credentials(variables, base, login)` and `Page(..., sample=True, keyed=True)`; `--keyless` fetches the rest | sdk-faostat |
+| keeps a file as recorded where only its order moved | `Page(..., keep_recorded=True)` with `canonical` | sdk-eurostat's WADL |
+| makes several files from one page | `Page(url, split=True)` and `split=lambda page, response: {name: content}` | sdk-cashctrl |
+| keeps a page from the publisher's second origin after a 403 | `Page(url, file, origin=second_url)` | sdk-usda-wasde |
+| waits out a 429 before the one retry | `quota_wait=lambda headers: seconds` | sdk-eurostat |
+| writes a section of its own in `FETCHED.md` | `sections=lambda rows: [Section(heading, text)]` | sdk-comtrade |
+| makes a row's note from its answer | `note=lambda row: f"{row.note}; {count} operations"` | sdk-faostat, the FAS sources |
+
+A keyed sample alone sends what `login` returns, once it was called right before the first
+of them; it follows no redirect, is never retried, and the frame prints nothing of it. It
+lies under the credentials' `base`, its origin, scheme, host and port as parsed, as the
+client holds its own credentials (ADR-0037, decision 4), and a path under the base's by
+segments, so `https://api.example.org/v1` and `https://api.example.org/v1/` admit the same
+samples and `https://api.example.org.elsewhere.net/v1/items` none. `FETCHED.md` names the
+login's variables, which must be set before anything is fetched. A `Last-Modified` stands
+in UTC, a date without a zone read as GMT as HTTP has it, and one that is no HTTP date as
+sent, in a code span.
+
 ## MCP server in five lines
 
 ```python

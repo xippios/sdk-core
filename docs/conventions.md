@@ -146,11 +146,24 @@ skip it (§8, §9; ADR-0040).
   `docs/upstream/` with a `FETCHED.md` recording the UTC time and the URL of the fetch.
   The snapshot is the reference for the agent; refresh it deliberately, by PR, and diff
   it.
+  A source's `scripts/refresh_upstream.py` declares its snapshot to core's frame, a
+  `Snapshot` of `xippios.core.refresh` with its pages, its attribution and its hooks, and
+  calls `run(snapshot)` (ADR-0046, decision 2). The fetch, the attribution check,
+  `FETCHED.md`, the write and `--check` are the frame's, and no hook of a source replaces
+  them (ADR-0046, decision 2). A converter that a source's hooks use is the source's own
+  dependency, never core's (ADR-0046, decision 1). Every file the snapshot holds but
+  `FETCHED.md` is written as the source's hooks make it (ADR-0046, decision 3).
 - `Fetched` in `FETCHED.md` is the UTC time of the run in ISO 8601 with an explicit `Z`
   (`2026-10-24T09:15:00Z`), never a local date or time. A table that a Markdown pipe
   table cannot hold, one with merged cells (`rowspan`, `colspan`) or with a table nested
   in it, is kept as its HTML in the Markdown snapshot, and one line in `FETCHED.md` says
   so (ADR-0028, decision 4).
+  The frame writes `FETCHED.md` in one form for every source, and the first run of a
+  source's ported script rewrites it once (ADR-0046, decision 3). Every ETag in
+  `FETCHED.md` stands in a code span, on a row that ends in the secret scan's allowlist
+  mark, hex or not (ADR-0046, decision 4). A row's `Last-Modified` stands in UTC, a date
+  without a zone read as GMT as every HTTP date is, and one that is no HTTP date as sent,
+  in a code span (ADR-0046, decision 4).
 - A vendor's documentation is reproduced in the snapshot for reference (ADR-0028,
   decision 4): `FETCHED.md` carries the copyright line as the documentation
   states it (`© 2026 CashCtrl Ltd.`) and the URL the text was fetched from. A vendor's
@@ -195,12 +208,23 @@ skip it (§8, §9; ADR-0040).
   and imitates no browser, the page's row records the status and the host it redirects
   to, and the public pages that state the same facts are the snapshot's statement of the
   subject (ADR-0028, decision 6).
+  `FETCHED.md` carries the table `Not fetched` under its heading even when the table has no
+  row (ADR-0046, decision 4). A page that redirects to another host stops the run unless
+  the snapshot records it by that status, and then its row in `Not fetched` names the host
+  (ADR-0046, decision 4).
 - A small answer of the API, kept verbatim under `docs/upstream/samples/`, documents the
   answer's shape and is not a test fixture: its row in `FETCHED.md`'s file table gives
   the URL it was requested from and says that it is a sample. A sample whose operation
   needs the source's credentials is requested with them; only the samples' requests send
   a credential, and neither a credential nor a token is written (ADR-0028,
   decision 7).
+  Such a sample is marked `keyed`, and only a keyed sample sends what the snapshot's
+  `Credentials` give, follows no redirect and is never retried (ADR-0046, decision 5).
+  A keyed sample has the origin of the credentials' base, its scheme, host and port as
+  parsed, and a path under the base's by its segments, as the client's credentials go to its
+  base URL's origin alone (ADR-0046, decision 5; ADR-0037, decision 4).
+  `FETCHED.md` names the variables a source's login reads, never their values (ADR-0046,
+  decision 5).
 - Within-source hygiene is required: dates → `datetime.date`/`datetime`, numbers →
   `int`/`Decimal`/`float` as appropriate, upstream enums → `StrEnum`, pagination
   resolved, errors typed. An upstream enum of integer ids becomes an `IntEnum` instead,

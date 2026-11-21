@@ -763,6 +763,20 @@
       "supersedes": [],
       "other": [],
       "superseded_by": null
+    },
+    {
+      "id": "ADR-0046",
+      "number": 46,
+      "title": "The snapshot script's frame in core",
+      "path": "docs/adr/0046-the-snapshot-script-s-frame-in-core.md",
+      "status": "Accepted",
+      "date": "2026-11-21",
+      "decided_by": "https://github.com/xippios/sdk-core/issues/363",
+      "amended": [],
+      "amends": [],
+      "supersedes": [],
+      "other": [],
+      "superseded_by": null
     }
   ]
 }
