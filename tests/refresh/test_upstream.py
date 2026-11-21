@@ -985,3 +985,45 @@ def test_a_rows_note_is_made_from_its_answer(site: Site, out: Path) -> None:
     with pytest.raises(SystemExit, match=r"openapi\.json changed: no paths"):
         go(snapshot)
     assert fetched(out) == before
+
+
+# --- the README's short script -----------------------------------------------------------
+
+
+def test_the_readmes_short_script_runs_on_the_frame(site: Site, out: Path) -> None:
+    """The short script that sdk-template renders, as the README's section on the frame
+    holds it, declares a snapshot that the frame runs and checks as it stands."""
+    readme = (ROOT / "README.md").read_text()
+    section = readme.split("## The snapshot script's frame\n", 1)[1]
+    script = section.split("```python\n", 1)[1].split("```\n", 1)[0]
+    namespace: dict[str, Any] = {"__name__": "refresh_upstream", "__file__": str(out / "x.py")}
+    exec(compile(script, "README.md", "exec"), namespace)
+    snapshot: Snapshot = namespace["SNAPSHOT"]
+    docs = "https://docs.example.org/api"
+    site.routes[docs] = (
+        200,
+        {"Content-Type": "text/html"},
+        b"<footer>&copy; 2026 Example Ltd.</footer>",
+    )
+    site.routes["https://api.example.org/openapi.json"] = (
+        200,
+        {"Content-Type": "application/json"},
+        b"{}",
+    )
+    site.routes["https://example.org/legal/terms"] = (
+        200,
+        {"Content-Type": "text/html"},
+        b"<h1>Terms of Use</h1>",
+    )
+    site.routes[f"{docs}/v1/items?limit=2"] = (200, {"Content-Type": "application/json"}, b"[]")
+    site.routes[f"{docs}/admin"] = (302, {"Location": "https://login.example.net/"}, b"")
+    local = Snapshot(**{**vars(snapshot), "out": out, "pause": 0.0})
+    assert go(local) == 0
+    assert sorted(path.name for path in out.rglob("*.*")) == [
+        "FETCHED.md",
+        "api.md",
+        "items.json",
+        "openapi.json",
+        "terms.md",
+    ]
+    assert go(local, "--check") == 0
