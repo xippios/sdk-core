@@ -260,13 +260,13 @@ PREVIEW_RULES = [
     pytest.param(
         "fails a write task unless its `Result`'s data has exactly one member tagged "
         "`performed: Literal[False]`",
-        ("`preview_reads=True`", "declares `reads`", "ADR-0050, decision 4"),
+        ("preview_reads=True)`", "declares `reads`", "ADR-0050, decision 4"),
         id="s8-the-check-of-the-annotations",
     ),
     pytest.param(
         "calls each write tool without `confirm`",
         (
-            "`dry_run=",
+            "dry_run=...",
             "no request but a read",
             "`is_read`",
             "`reads` is empty exactly when it sent no request",
@@ -296,7 +296,7 @@ def test_the_review_checklist_judges_a_write_task_s_preview_by_its_record() -> N
     for name in (
         "**Write tools**",
         "whether its preview reads first and what the read costs",
-        "`preview_reads=True`",
+        "preview_reads=True)`",
         "conventions §8",
         PREVIEW_RECORD,
     ):

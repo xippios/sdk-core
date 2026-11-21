@@ -990,6 +990,22 @@ refused. Request URLs are not logged: `build_server` and `main` set the `httpx`,
 because a URL can carry an API key or a tenant host; httpx2 is the `mcp` SDK's own HTTP
 client.
 
+A write tool's preview, its answer while `confirm` is false, sends no write and shows the
+action as the confirmed call would send it, by upstream's names (ADR-0050). Whether it
+reads first, the record an update would change say, is the write task's choice, and its
+docstring says whether its preview reads and what that read costs. The preview's model
+carries `reads`, the operations the preview read, each named as `meta.endpoint` names an
+operation, `[]` when it read nothing, beside the tag that tells it from the confirmed
+answer:
+
+```python
+class WritePreview(UpstreamModel):
+    performed: Literal[False] = False  # the tag: nothing was written
+    endpoint: str                      # the write the confirmed call sends, "thing/update.json"
+    payload: dict[str, str]            # what it would send, as upstream would receive it
+    reads: list[str]                   # ["thing/read.json"] for the update, [] for a create
+```
+
 A host that builds its servers itself, such as xippios-mcp, imports what `build_server`
 and `main` use from `xippios.core.mcp`: `register_tasks` with `read_only` and
 `loopback_only`, `tool_functions`, `quiet_request_logging` after each `MCPServer` it
@@ -1125,6 +1141,45 @@ tasks, each taking `confirm: bool = False` last, and none of them on the read se
 the router. A source whose adapters drop a task, or whose README table is stale, fails CI
 before a reviewer looks. The package under test is the one `tasks.py` under
 `src/xippios/`, or the ini option `xippios_package`.
+
+`assert_write_tools` holds the preview of each write task too, in two parts, each off by
+default (ADR-0050):
+
+- `preview_reads=True` reads the annotations: each write task returns a `Result` whose data
+  has exactly one member tagged `performed: Literal[False]`, the preview, and that member
+  declares `reads: list[str]`.
+- `dry_run=`, the arguments of a call of each write task keyed by the task's name, one
+  mapping or a list of them, with `sent=`, the `respx` router the test's routes are mounted
+  on, calls each tool of the write server without `confirm`, as an agent does. It fails a
+  call unless the answer is the preview, no request but a read was sent and `reads` is empty
+  exactly when no request was, and names the tool and each request by its method and path. A
+  read is a `GET`, `HEAD` or `OPTIONS` request, the methods core's retry rule repeats, unless
+  `is_read=`, a function of the `httpx.Request`, says otherwise, for an upstream that reads
+  through `POST` or a read that sends a token request first.
+
+A source switches `preview_reads` on in its patch on core 0.4.1, with the field, and the dry
+run where its tests serve what its previews read:
+
+```python
+@pytest.mark.anyio
+async def test_the_write_server(
+    respx_mock: respx.MockRouter, replay_fixture: ReplayFixture
+) -> None:
+    replay_fixture("thing_read", "ok")  # what update_thing's preview reads
+    await assert_write_tools(
+        write_server,
+        write_tasks,
+        source="example",
+        read_server=read_server,
+        router=router,
+        preview_reads=True,
+        dry_run={
+            "create_thing": {"name": "Corn"},  # reads nothing: reads == []
+            "update_thing": {"thing_id": 4, "name": "Wheat"},  # reads == ["thing/read.json"]
+        },
+        sent=respx_mock,
+    )
+```
 
 A source that keeps `docs/upstream/OBSERVED.md`, its notes of what upstream does but never
 documents, is held to three rules of conventions §3, one test each (ADR-0044):

@@ -117,6 +117,13 @@ the repository it reviews.
     (conventions §7; ADR-0036, decisions 3, 11 and 13). `bind_tasks` and the family check
     read signatures, so the review judges what a task reaches inside, a task that takes one
     tenant and opens another's client say (https://github.com/xippios/sdk-core/issues/302).
+18. **Write tools** (a source with a write server, from its patch on core 0.4.1): each write
+    task's docstring says whether its preview reads first and what the read costs, its
+    preview sends no write and carries `reads`, the operations it read, `[]` for none, and the
+    source's tests hold it with `assert_write_tools(..., preview_reads=True)`, the dry run of
+    each tool (`dry_run=`) at the source's choice (conventions §8; ADR-0050). The check
+    compares `reads` with the requests sent and reads no docstring, so what a docstring says
+    of the read and its cost is the review's to judge.
 
 ## Report
 
