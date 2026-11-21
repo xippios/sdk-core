@@ -1,6 +1,6 @@
 """Test support shared by every source repo (conventions §10).
 
-Five things live here: the pytest plugin, which gates live tests and keeps the run
+Six things live here: the pytest plugin, which gates live tests and keeps the run
 offline (no network for the session; no rate-limit wait and a placeholder key in every
 test not marked live; ADR-0035); fixture recording, one request sent once and read up
 to a bound, a final answer only, with secrets scrubbed in memory and verified before the
@@ -12,12 +12,15 @@ recorded as plain values (``sent_urls``, ``sent_query``, ``sent_bodies``,
 ``recorded_query``, ``response_from_fixture``);
 helpers for adapters (``mcp_call``, ``mcp_call_text``, ``assert_write_tools`` for a write
 server), for times read around a call (``assert_time_between``) and for a multi-tenant
-source's environment (``keep_reserved_tenants``); and the family conformance check,
+source's environment (``keep_reserved_tenants``); the family conformance check,
 ``xippios.core.testing.family``, which a source collects by importing it into
-``tests/test_family.py`` and which is not imported here. The nightly comparison of a
-packaged list with the list upstream serves now, ``xippios.core.testing.live``, a source
-collects the same way into ``tests/test_live.py``, beside its ``LIVE_LISTS`` and
-``NO_LIVE_LIST``; its assertion, ``assert_list_current``, is exported here (ADR-0055).
+``tests/test_family.py``; and the check of a built answer's mark,
+``xippios.core.testing.built_answers``, collected likewise into
+``tests/test_built_answers.py`` (ADR-0049). Neither check is imported here. The nightly
+comparison of a packaged list with the list upstream serves now,
+``xippios.core.testing.live``, a source collects the same way into ``tests/test_live.py``,
+beside its ``LIVE_LISTS`` and ``NO_LIVE_LIST``; its assertion, ``assert_list_current``, is
+exported here (ADR-0055).
 Enable the plugin in a repo's ``tests/conftest.py``::
 
     pytest_plugins = ["xippios.core.testing.plugin"]
