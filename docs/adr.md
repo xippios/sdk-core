@@ -37,6 +37,7 @@ records in `docs/adr/`. A record changes, and this file follows when the script 
 - <a id="0047"></a>[ADR-0047](adr/0047-the-adapter-s-offset-for-the-rest-of-a-cut-answer.md): The adapter's offset for the rest of a cut answer · Accepted · 2026-11-21
 - <a id="0048"></a>[ADR-0048](adr/0048-core-s-recorder-frame-around-a-source-s-rewrite-step.md): Core's recorder frame around a source's rewrite step · Accepted · 2026-11-21
 - <a id="0052"></a>[ADR-0052](adr/0052-one-filter-for-a-vintage-taken-back.md): One filter for a vintage taken back · Accepted · 2026-11-21
+- <a id="0055"></a>[ADR-0055](adr/0055-one-live-comparison-of-a-packaged-list.md): One live comparison of a packaged list · Accepted · 2026-11-21
 
 The superseded records follow, kept as written: the record that each status names holds its decision now.
 

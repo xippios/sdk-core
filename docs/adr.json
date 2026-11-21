@@ -829,6 +829,20 @@
       "supersedes": [],
       "other": [],
       "superseded_by": null
+    },
+    {
+      "id": "ADR-0055",
+      "number": 55,
+      "title": "One live comparison of a packaged list",
+      "path": "docs/adr/0055-one-live-comparison-of-a-packaged-list.md",
+      "status": "Accepted",
+      "date": "2026-11-21",
+      "decided_by": "https://github.com/xippios/sdk-core/issues/374",
+      "amended": [],
+      "amends": [],
+      "supersedes": [],
+      "other": [],
+      "superseded_by": null
     }
   ]
 }
