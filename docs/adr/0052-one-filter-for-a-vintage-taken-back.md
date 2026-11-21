@@ -1,0 +1,77 @@
+# ADR-0052: One filter for a vintage taken back
+
+Status: Accepted · Date: 2026-11-21 · Decided by https://github.com/xippios/sdk-core/issues/371
+
+## Context
+
+ADR-0041, decision 2, and conventions §4 state the rule of a parameter that takes back the
+`meta.vintage` of an earlier call: the text as `vintage` wrote it, what is strictly later kept,
+an equal release being no newer, `meta.vintage` and `meta.published_at` those of the whole
+upstream answer, and a zone against a naive release time and a text the parameter cannot read
+refused with `InvalidRequestError`. Core gives the rule no code, and two sources carry it
+(https://github.com/xippios/sdk-core/issues/318), each reading `since` before its request:
+
+- sdk-usda-esr's `get_release_dates` reads a release time printed without a zone with
+  `datetime.fromisoformat`, a date alone as its midnight, refuses a zone, and compares times
+  (`_since` and the filter in `src/xippios/usda/esr/tasks.py`).
+- sdk-usda-psd reads a release month, `YYYY-MM`, by a pattern into `(year, month)`
+  (`validate_since` in `src/xippios/usda/psd/params.py`), which no time parser takes, and uses
+  it twice in `tasks.py`: as a filter of the records in `get_release_dates`, and as all or
+  nothing on the newest release in `get_latest_release`.
+
+A comparison of the texts is right for the fixed-width month and wrong for a time, where a
+fraction of a second and a date beside its midnight sort wrongly and a zone goes unseen, and one
+parser in core fits only one of the two. Eleven tasks of four sources take another `since`: an
+inclusive bound on dates or periods beside an `until`, which sdk-usda-esmis filters by,
+sdk-usda-wasde takes through it, and sdk-faostat and sdk-eurostat send upstream, and none of
+them takes back a vintage.
+
+This record stands beside ADR-0041, decision 2, and changes none of its rule: that decision
+keeps the rule, and this record gives it its code and names the other `since`. A change to the
+rule is ADR-0041's, a change to the helper this record's. Decisions 1 to 3 are the answer of
+https://github.com/xippios/sdk-core/issues/371, and decisions 4 and 5 are those of the pull
+request that built the helper.
+
+## Decision
+
+1. **The source hands its reader of the vintage text, and core compares strictly.**
+   `newer_than(since, items, *, released, read)`, exported from `xippios.core`, returns the
+   items whose release, `released(item)`, is strictly later than `read(since)`, in their order,
+   and every item when `since` is `None`. `read` is the source's reader of its vintage text,
+   which raises `InvalidRequestError` for a text it cannot read. The helper reads `since` once,
+   before any item, so an empty answer refuses an unreadable text as a full one does, and lets
+   the reader's error pass as it is. Core ships one reader, `naive_time(text, *, source=None)`,
+   for a release time printed without a zone: it reads with `datetime.fromisoformat`, a date
+   alone as its midnight, and refuses with `InvalidRequestError` a text that is no ISO date and
+   time and one that carries a zone, since the release times it is compared with carry none and
+   the comparison would invent one (ADR-0028). sdk-usda-psd hands its own reader of a month.
+2. **A filter only, beside `vintage`.** The helper returns the kept items and nothing else. It
+   lives in `xippios.core.models`, beside `ResultMeta`, and the task sets `meta.vintage` and
+   `meta.published_at` from the whole upstream answer, so an answer with nothing newer still
+   names the newest release, the marker to store for the next call.
+3. **No `until`.** The inclusive bound on dates or periods with `until` is another rule, which
+   one package filters by, so ADR-0023, decision 2, admits no helper for it. Conventions §4 name
+   the two meanings of `since` in one sentence, and the eleven tasks change nothing.
+4. **An item without a release time is kept.** Where `released` returns `None`, the item cannot
+   be shown to be no newer than `since`, and a filter that dropped it would hide it from every
+   later call, which the caller cannot tell from no change. Keeping it costs the caller a repeat,
+   dropping it a change. The helper reads no release time that upstream did not give (ADR-0028).
+5. **A task refuses an unreadable `since` before its request.** A bad argument is detected
+   before the call (conventions §5), so a task calls its reader on `since` before it sends the
+   request, and the helper reads it again on the answer. The reader raises
+   `InvalidRequestError`, the class that both copies raise, so a source's tests of the refusal
+   keep their class.
+
+## Consequences
+
+- sdk-usda-esr's `_since` and filter reduce to `naive_time` and the call, and its refusal takes
+  core's wording, its class unchanged. sdk-usda-psd's two filters reduce to the call with its
+  `validate_since`, whose wording stays. Each deletes its copy in its patch, by
+  https://github.com/xippios/sdk-usda-esr/issues/31 and
+  https://github.com/xippios/sdk-usda-psd/issues/33.
+- sdk-usda-psd's `get_release_dates` sets no `meta.vintage`, so its empty answer carries no
+  marker. That is sdk-usda-psd's own to decide, and this record builds nothing for it.
+- `naive_time` has one caller today, sdk-usda-esr, and ships with the helper because the
+  refusal of a zone is the family's rule, worded once.
+- The walk of a list bounded by `since` stays out, with one consumer
+  (https://github.com/xippios/sdk-core/issues/149).

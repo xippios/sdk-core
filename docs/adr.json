@@ -815,6 +815,20 @@
       "supersedes": [],
       "other": [],
       "superseded_by": null
+    },
+    {
+      "id": "ADR-0052",
+      "number": 52,
+      "title": "One filter for a vintage taken back",
+      "path": "docs/adr/0052-one-filter-for-a-vintage-taken-back.md",
+      "status": "Accepted",
+      "date": "2026-11-21",
+      "decided_by": "https://github.com/xippios/sdk-core/issues/371",
+      "amended": [],
+      "amends": [],
+      "supersedes": [],
+      "other": [],
+      "superseded_by": null
     }
   ]
 }
