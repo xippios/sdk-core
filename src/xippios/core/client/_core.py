@@ -3,6 +3,7 @@
 import asyncio
 import codecs
 import contextlib
+import contextvars
 import csv
 import inspect
 import io
@@ -22,7 +23,7 @@ from typing import IO, Any, Final, Self, cast, final, overload
 import httpx
 
 from xippios.core.client.cache import CachedResponse, cache_key, strip_wire_headers
-from xippios.core.client.config import ClientConfig
+from xippios.core.client.config import ClientConfig, RetryPolicy
 from xippios.core.client.download import (
     Downloaded,
     content_disposition_filename,
@@ -66,6 +67,77 @@ _CLIENT_AUTH: Final = _ClientAuth()
 
 _HTTPX_DEFAULT: Final[object] = httpx.USE_CLIENT_DEFAULT
 """httpx's own spelling of the default, outside the annotation: treated as ``_CLIENT_AUTH``."""
+
+
+@final
+class _Collector:
+    """The answers a recorded task's clients read, in the order they arrived (ADR-0057).
+
+    ``answers`` holds each answer read whole; ``download`` the number of the exchange and the
+    request, ``GET <path>``, of the first download refused while collecting; ``closed`` is set
+    once the recording ended, so a task that outlives it hands nothing over.
+    """
+
+    __slots__ = ("answers", "closed", "download")
+
+    def __init__(self) -> None:
+        self.answers: list[httpx.Response] = []
+        self.download: tuple[int, str] | None = None
+        self.closed = False
+
+
+_COLLECTOR: Final[contextvars.ContextVar[_Collector | None]] = contextvars.ContextVar(
+    "xippios_core_collector", default=None
+)
+"""The collector of the running context: a recording's, ``None`` outside one."""
+
+_ONE_ATTEMPT: Final = RetryPolicy(max_attempts=1)
+"""The policy of every request while a task is recorded: one attempt, never retried."""
+
+
+def _collector() -> _Collector | None:
+    """The open collector of the running context, or ``None`` outside a recording."""
+    collector = _COLLECTOR.get()
+    return None if collector is None or collector.closed else collector
+
+
+@contextlib.contextmanager
+def _collecting() -> Iterator[_Collector]:
+    """Collect what every ``AsyncClient`` of the running context reads, until the block ends.
+
+    ``xippios.core.testing.record_task`` records a task inside it (ADR-0057). Meanwhile each
+    client hands every answer it read whole to the collector, in the order the answers
+    arrived, the answers of ``request``, its helpers and ``send_once`` alike; sends each
+    request once, whatever its ``RetryPolicy`` says; and neither reads nor fills the response
+    cache. Its ``before_request``, limiter and ``observe`` run as for any request. A download
+    is refused before it is sent, since its success streams its body to a file unread, and
+    the refusal is kept in ``download``. A token request inside an auth flow, and an answer
+    an auth flow handles before it sends the request again, never reach the collector: httpx
+    answers them inside the flow.
+
+    The collector is held in a context variable, so it reaches the code that runs in the
+    block's context and the tasks started from it, which inherit it, and nothing else: a
+    request of another task is never collected, and two recordings at once never mix. On
+    leaving the block, whatever it raised, the collector is closed and the context's is
+    restored, so the client sends, retries and caches as before, a task that outlives the
+    block included.
+
+    Raises:
+        RuntimeError: The block would open inside another one's context; nothing is
+            collected.
+    """
+    if _collector() is not None:
+        raise RuntimeError(
+            "a task is recorded inside another recording, whose collector would miss its "
+            "exchanges: record one task at a time"
+        )
+    collector = _Collector()
+    token = _COLLECTOR.set(collector)
+    try:
+        yield collector
+    finally:
+        collector.closed = True
+        _COLLECTOR.reset(token)
 
 
 def _origin(url: httpx.URL) -> tuple[str, str, int | None]:
@@ -120,6 +192,12 @@ class AsyncClient:
     the base URL's origin and ``"other"`` for any other. ``QuotaPolicy`` skips a request
     marked ``"none"`` or ``"other"``, and the api.data.gov gateway's ``classify`` reads no
     answer marked ``"other"``.
+
+    While ``xippios.core.testing.record_task`` records a task, every client the task's
+    context reaches hands each answer it read whole to the recording, in the order the
+    answers arrived, sends each request once whatever ``config.retry`` says, neither reads
+    nor fills the cache, and refuses a download before it is sent (ADR-0057). Outside a
+    recording nothing of this applies.
 
     Args:
         config: Base URL, timeouts, retry policy, rate limit, cache and headers.
@@ -273,8 +351,11 @@ class AsyncClient:
         probe = pool.build_request(method, path, params=params)
         # A call with credentials of its own may get another answer: no cache for it. Any
         # explicit auth counts, also a form httpx accepts beyond the annotation (a tuple).
+        # A recorded task's request neither reads nor fills it (ADR-0057).
         reach = self._reach(auth)
-        key = None if reach.auth == "own" else self._cache_key_for(probe)
+        collector = _collector()
+        uncached = reach.auth == "own" or collector is not None
+        key = None if uncached else self._cache_key_for(probe)
         if key is not None and self.config.cache is not None:
             cached = self.config.cache.get(key)
             if cached is not None:
@@ -300,12 +381,14 @@ class AsyncClient:
             response = await pool.send(request, auth=reach.mark(request))
             if observe is not None:
                 observe(response)
+            if collector is not None:
+                collector.answers.append(response)
             return response
 
         classify = None if self.config.classify is None else _ClassifyOnce(self.config.classify)
         response = await send_with_retries(
             send,
-            policy=self.config.retry,
+            policy=self.config.retry if collector is None else _ONE_ATTEMPT,
             method=method,
             source=self.source,
             sleep=self._sleep,
@@ -431,6 +514,9 @@ class AsyncClient:
         )
         if observe is not None:
             observe(response)
+        collector = _collector()
+        if collector is not None:
+            collector.answers.append(response)
         return response
 
     async def get(
@@ -648,14 +734,30 @@ class AsyncClient:
             The ``Downloaded`` file: path, size, content type, file name, ``ETag``,
             ``Last-Modified`` and when it was complete.
 
+        While a task is recorded (``xippios.core.testing.record_task``), a download is
+        refused before anything is sent: its success's body goes to the file unread, and no
+        fixture of the task could keep it (ADR-0057).
+
         Raises:
             InvalidRequestError: ``dest`` is a directory, or its directory does not
                 exist, a bad argument (conventions §5); nothing is sent, the hooks
                 included.
+            ValueError: A task is being recorded; nothing is sent, the message naming the
+                method and the path.
             XippiosError: The taxonomy error for the answer (``classify`` first, then the
                 status), ``UpstreamError`` for a 1xx or 3xx, ``TransportError`` for a
                 transport failure that is not retried; ``dest`` is untouched.
         """
+        collector = _collector()
+        if collector is not None:
+            described = f"GET {self._pool().build_request('GET', url).url.path}"
+            if collector.download is None:
+                collector.download = (len(collector.answers) + 1, described)
+            raise ValueError(
+                f"{described}: a download is refused while a task is recorded, before it is "
+                "sent: its body goes to a file unread, which no fixture of the task keeps "
+                "(ADR-0057)"
+            )
         target = Path(dest)
         if target.is_dir():
             raise InvalidRequestError(

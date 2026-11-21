@@ -10,17 +10,21 @@ exchange is scrubbed in memory, rewritten by the source's own step where it pass
 checked and written once (``Scrub``, ``rewrite=``; ADR-0048). ``send_once`` is that one
 request without the write, for a source that needs the answer itself; an answer of a 1xx
 or a 3xx status, no final answer of its operation, is refused on every path.
+``record_task`` records every exchange that a task makes, each through the same frame,
+all of them written or none (ADR-0057).
 """
 
-from collections.abc import Mapping
+import inspect
+import re
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, Final, Literal
 
 import httpx
 
-from xippios.core._loop import sync
+from xippios.core._loop import as_async, sync
 from xippios.core.client import AsyncClient
-from xippios.core.client._core import _CLIENT_AUTH, Params, _ClientAuth
+from xippios.core.client._core import _CLIENT_AUTH, Params, _ClientAuth, _collecting
 from xippios.core.testing.fixtures import (
     Fixture,
     Rewrite,
@@ -28,11 +32,21 @@ from xippios.core.testing.fixtures import (
     _check_rewrite,
     _refuse_interim,
     fixture_from_response,
+    fixture_path,
+    fixture_text,
     write_fixture,
 )
 from xippios.core.testing.scrub import Scrub
 
-__all__ = ["MAX_READ_BYTES", "record", "record_sync", "send_once", "send_once_sync"]
+__all__ = [
+    "MAX_READ_BYTES",
+    "record",
+    "record_sync",
+    "record_task",
+    "record_task_sync",
+    "send_once",
+    "send_once_sync",
+]
 
 MAX_READ_BYTES: Final = 32 * 1024 * 1024
 """The most bytes of a body a recording reads by default, 32 MiB.
@@ -224,3 +238,202 @@ async def record(
 
 
 record_sync = sync(record)
+
+
+_OWN_KEYWORDS: Final = ("fixtures", "case", "scrub", "rewrite")
+"""The keywords ``record_task`` takes as its own, which a task's keyword would clash with."""
+_KEYWORD_KINDS: Final = (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+_SENT = "every request of the task was sent, so a write among them may have been applied"
+
+
+async def record_task(
+    task: Callable[..., Any],
+    /,
+    *args: Any,
+    fixtures: Path,
+    case: str,
+    scrub: Scrub | None = None,
+    rewrite: Rewrite | None = None,
+    **kwargs: Any,
+) -> list[Fixture]:
+    """Run ``task`` live and write every exchange it makes, in order, under its name.
+
+    The task runs as the MCP adapter awaits it, a sync facade through its async twin, with
+    ``args`` and ``kwargs``, and every ``AsyncClient`` it reaches, from a registry, a module
+    or one it builds, hands each answer it read whole to the recording, in the order the
+    answers arrived. Meanwhile each request is sent once, whatever the client's
+    ``RetryPolicy`` says, and the response cache is neither read nor filled; the client's
+    base URL, auth, rate limit, ``before_request`` and ``observe`` apply as for any request
+    (ADR-0057, decision 2). The recording is a context of the running task: a task the
+    recorded one starts is recorded with it, a request of another task never is, and two
+    recordings at once never mix. A task whose requests run at once is recorded in the
+    order its answers arrived, which may change from one recording to the next.
+
+    What a recording does not see: a token request that runs inside an auth flow, and the
+    answer after which an auth flow sends a request again, both answered inside httpx's
+    flow, so a login's or a refresh's exchange keeps a fixture of its own (conventions
+    §10); and a download's success, whose body goes to a file unread, so a download is
+    refused before it is sent, and the recording with it (decision 3). A task's answers are
+    read whole, as its client reads them: ``max_read_bytes`` bounds none of them.
+
+    Each answer passes the frame of ``record``: the refusal of a 1xx or a 3xx, the scrub,
+    the ``rewrite`` step and the check that no value it replaced survives, through
+    ``fixture_from_response`` (ADR-0048), and its text is built in memory. Only once every
+    exchange passed is anything written: the first at ``fixture_path(fixtures, <task>,
+    case)``, ``<task>`` the task's name without ``_async``, and the k-th, from the second
+    on, at ``<case>_<k>.json`` beside it (decision 6). A refusal of any exchange, a task
+    that raises and a task that sends no request write nothing. Every request of the task
+    was sent by then: a write among them may have been applied.
+
+    Args:
+        task: The task, e.g. ``tasks.search_messages`` or ``tasks.search_messages_async``;
+            positional only, so a keyword of the task named ``task`` reaches it.
+        *args: The task's positional arguments, e.g. a tenant.
+        fixtures: The fixtures directory, e.g. ``Path("tests/fixtures")``.
+        case: The case of the first exchange, e.g. ``"ok"``: ``ok.json``, ``ok_2.json``...
+        scrub: What to remove besides credentials, as for ``record``; ``None`` is
+            ``Scrub()``.
+        rewrite: The source's step, run on each exchange, as for ``record``; ``None``
+            rewrites nothing.
+        **kwargs: The task's keyword arguments, e.g. ``q="newer_than:1y"``.
+
+    Returns:
+        The fixtures written, in the order of the exchanges.
+
+    Raises:
+        TypeError: ``rewrite`` is no function; the task has no name; or it takes
+            ``fixtures``, ``case``, ``scrub`` or ``rewrite`` by keyword, which this function
+            takes as its own: the message names the clash, and the task does not run. After
+            the task: a ``TypeError`` of the frame for an exchange, named as below.
+        RuntimeError: A task is recorded inside another recording; the task does not run.
+        ValueError: The task downloaded, the message naming the exchange's number and the
+            request; it sent no request; a refusal of the frame for an exchange, the message
+            naming the exchange's number, its file and the place within the fixture, never a
+            value; or a numbered file of the case stands beyond the last exchange, as when a
+            task is recorded again with fewer exchanges, the message naming each: delete it
+            in the pull request, or record under another case. Nothing is written.
+        Exception: What the task raised, as it came; nothing is written.
+    """
+    _check_rewrite(rewrite)
+    name = _task_name(task)
+    target = as_async(task)
+    _refuse_clash(target, name)
+    with _collecting() as collector:
+        try:
+            await target(*args, **kwargs)
+        except Exception:
+            if collector.download is None:
+                raise
+            raise ValueError(_download_refusal(name, *collector.download)) from None
+        if collector.download is not None:
+            raise ValueError(_download_refusal(name, *collector.download))
+    answers = collector.answers
+    if not answers:
+        raise ValueError(
+            f"the task {name} sent no request through a client, so there is nothing to "
+            "record; nothing is written"
+        )
+    count = len(answers)
+    built: list[tuple[Path, Fixture, str]] = []
+    for number, response in enumerate(answers, start=1):
+        path = fixture_path(fixtures, name, case if number == 1 else f"{case}_{number}")
+        try:
+            fixture = fixture_from_response(response, scrub=scrub, rewrite=rewrite)
+            text = fixture_text(fixture)
+        except ValueError as exc:
+            raise ValueError(_exchange_refusal(name, number, count, path, exc)) from None
+        except TypeError as exc:
+            raise TypeError(_exchange_refusal(name, number, count, path, exc)) from None
+        built.append((path, fixture, text))
+    _refuse_stale(fixtures / name, name, case, count)
+    for path, _, text in built:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+    return [fixture for _, fixture, _ in built]
+
+
+record_task_sync = sync(record_task)
+
+
+def _task_name(task: Callable[..., Any]) -> str:
+    """The task's name without ``_async``: the directory of its fixtures (conventions §10).
+
+    Raises:
+        TypeError: The task has no name.
+    """
+    name = getattr(task, "__name__", None)
+    if not isinstance(name, str) or not name:
+        raise TypeError(
+            "record_task writes a task's fixtures under the task's name, and this task has "
+            "no __name__: give it one with functools.update_wrapper, or wrap it in an "
+            "async def"
+        )
+    return name.removesuffix("_async")
+
+
+def _refuse_clash(task: Callable[..., Any], name: str) -> None:
+    """Refuse a task that takes one of ``_OWN_KEYWORDS`` by keyword, before it runs.
+
+    Raises:
+        TypeError: The message names each clash.
+    """
+    try:
+        parameters = inspect.signature(task).parameters.values()
+    except (TypeError, ValueError):  # no signature to read: nothing to clash with
+        return
+    clashes = [p.name for p in parameters if p.name in _OWN_KEYWORDS and p.kind in _KEYWORD_KINDS]
+    if clashes:
+        keywords = "its own keyword" if len(clashes) == 1 else "keywords of its own"
+        raise TypeError(
+            f"the task {name} takes {', '.join(clashes)}, which record_task takes as {keywords}, "
+            "so the task's could not be passed: record it through a function of your own that "
+            "takes them under other names; the task does not run (ADR-0057)"
+        )
+
+
+def _exchange_refusal(name: str, number: int, count: int, path: Path, exc: Exception) -> str:
+    """The message of a refused exchange: its number, its file and the frame's reason."""
+    return (
+        f"the task {name}: exchange {number} of {count} ({name}/{path.name}) is refused, and "
+        f"no fixture of the task is written: {exc}; {_SENT} (ADR-0057)"
+    )
+
+
+def _download_refusal(name: str, number: int, described: str) -> str:
+    """The message of a task that downloaded: the exchange's number and the request."""
+    return (
+        f"the task {name}: exchange {number}, {described}, is a download, refused before it "
+        "was sent, since its body goes to a file unread and no fixture of the task keeps it; "
+        "nothing is written, and the requests before it were sent, so a write among them may "
+        "have been applied: record such a task's exchanges one by one with record or "
+        "send_once, and its download with its sample (ADR-0057)"
+    )
+
+
+def _refuse_stale(directory: Path, name: str, case: str, count: int) -> None:
+    """Refuse while a numbered file of ``case`` stands beyond the ``count`` exchanges.
+
+    ``<case>_<k>.json`` with ``k`` above ``count``, as a recording with more exchanges left
+    it. The recorder deletes no fixture: the pull request does, and names it (conventions
+    §10, ADR-0039, decision 8), and a case of its own may carry such a name.
+
+    Raises:
+        ValueError: The message names each such file; nothing is written.
+    """
+    if not directory.is_dir():
+        return
+    numbered = re.compile(rf"{re.escape(case)}_([1-9][0-9]*)\.json")
+    stale = sorted(
+        (int(match.group(1)), entry.name)
+        for entry in directory.iterdir()
+        if (match := numbered.fullmatch(entry.name)) and int(match.group(1)) > count
+    )
+    if stale:
+        files = ", ".join(f"{name}/{file}" for _, file in stale)
+        raise ValueError(
+            f"the task {name} made {count} exchange{'s' if count != 1 else ''}, and {files} "
+            f"stand{'s' if len(stale) == 1 else ''} beyond, numbered as an exchange of the case "
+            f"{case!r}; nothing is written, and {_SENT}: delete what a recording with more "
+            "exchanges left, in a pull request that names it (conventions §10), or record under "
+            "another case (ADR-0057)"
+        )

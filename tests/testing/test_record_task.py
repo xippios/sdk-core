@@ -68,7 +68,7 @@ async def calls_async(count: int) -> None:
 
 
 PATHS = ["/v1/series", "/v1/series/corn/meta", "/v1/series/corn/data"]
-ANSWERS = [{"ids": ["corn"]}, {"unit": "t"}, {"values": [1, 2]}]
+ANSWERS: list[dict[str, Any]] = [{"ids": ["corn"]}, {"unit": "t"}, {"values": [1, 2]}]
 
 
 def _serve(respx_mock: respx.MockRouter, **extra: Any) -> list[respx.Route]:
