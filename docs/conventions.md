@@ -405,6 +405,18 @@ https://github.com/xippios/sdk-core/issues/238):
   keyed calls, a first count and two calls a year; sdk-usda-gats's 24 months: 24
   requests).
 
+A task states the ceiling of a period series with core's `Ceiling(most, unit=..., mcp=...,
+option=...)`, whose `check` refuses a range over the ceiling in force with
+`InvalidRequestError` before the first request, naming the range, the ceiling and its unit
+and, where the MCP server's ceiling is lower, the option that raises it, which the ceiling's
+`add_options` and `apply_options` give the tool set as its option hooks (ADR-0054). A task
+sends the requests of a period series with core's `fetch_periods(periods, fetch, skip=...)`,
+one after another in the order given, a period whose fetch raises one of `skip` passed over,
+and assembles the periods it returns with their answers itself, the vintage included
+(ADR-0054). When a request of a period series after the first fails, `fetch_periods` returns
+nothing and raises the error the fetch raised, its class and attributes kept, its message
+naming the periods fetched before it by their count, the first and the last (ADR-0054).
+
 A task that reads a file (§2) sets `endpoint` to the file's name as upstream names it,
 which may change with each release and carry a revision's suffix (`wasde1026.xml` and
 `wasde0626v2.xml` as ESMIS catalogs them), `vintage` to the release identifier (an ESMIS
