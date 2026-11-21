@@ -325,4 +325,4 @@ def test_result_cap_pages_nothing_and_keeps_the_first_rows_by_default() -> None:
     assert (ResultCap().paged, ResultCap().keep) == (False, "first")
     assert ResultCap(paged=True, keep="last") == ResultCap(keep="last", paged=True)
     with pytest.raises(TypeError):
-        ResultCap(200)  # type: ignore[misc]  # keyword-only, so a field's place is free
+        ResultCap(200)  # type: ignore[call-arg]  # keyword-only, so a field's place is free

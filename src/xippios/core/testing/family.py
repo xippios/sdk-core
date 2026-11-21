@@ -23,8 +23,9 @@ than one fails every test here, naming the option. The repository's files (``REA
 - the namespace levels above the package (``xippios/``, ``xippios/usda/``) hold no
   ``__init__.py``, and the package ships ``py.typed`` and a ``__version__`` (ADR-0006);
 - ``mcp.py``'s ``server`` registers exactly ``tasks.__all__`` minus
-  ``getattr(tasks, "BULK_TASKS", frozenset())``, each tool taking its task's parameters
-  and described by its docstring (conventions §8, ADR-0040);
+  ``getattr(tasks, "BULK_TASKS", frozenset())``, each tool taking its task's parameters,
+  a paged tool the adapter's ``offset`` beside them (ADR-0047), and described by its
+  docstring (conventions §8, ADR-0040);
 - ``http.py``'s ``router`` routes the same tasks at ``/<source>/<task>``, ``GET`` when
   every parameter is a scalar and ``POST`` otherwise (conventions §9, ADR-0007);
 - every task, read and write, is a synchronous function returning ``Result[T]``
@@ -279,11 +280,12 @@ def test_family_package_has_a_version(family_source: FamilySource) -> None:
 def test_family_mcp_server_registers_the_tasks(family_source: FamilySource) -> None:
     """``mcp.server`` has exactly one tool per task in ``tasks.__all__`` minus ``BULK_TASKS``.
 
-    Each tool takes its task's parameters and carries its docstring (conventions §8,
-    ADR-0040).
+    Each tool takes its task's parameters, and a paged tool the adapter's ``offset`` beside
+    them (ADR-0047), and carries its docstring (conventions §8, ADR-0040).
     """
     from xippios.core._loop import run
     from xippios.core.mcp import tool_name
+    from xippios.core.mcp.server import _adapter_arguments
 
     server = importlib.import_module(f"{family_source.import_path}.mcp").server
     tools = {tool.name: tool for tool in run(server.list_tools())}
@@ -300,9 +302,11 @@ def test_family_mcp_server_registers_the_tasks(family_source: FamilySource) -> N
         if tool not in tools:
             continue
         listed = set(tools[tool].input_schema.get("properties", {}))
-        if listed != set(_parameters(fn)):
+        added = _adapter_arguments(server, tool)
+        if listed != set(_parameters(fn)) | set(added):
+            besides = f" and its paged cap adds {', '.join(added)}" if added else ""
             problems.append(
-                f"{tool} takes {sorted(listed)}, {name} takes {sorted(_parameters(fn))}"
+                f"{tool} takes {sorted(listed)}, {name} takes {sorted(_parameters(fn))}{besides}"
             )
         if not tools[tool].description:
             problems.append(f"{tool} has no description: write {name}'s docstring")
