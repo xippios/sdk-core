@@ -718,6 +718,20 @@
       "superseded_by": null
     },
     {
+      "id": "ADR-0043",
+      "number": 43,
+      "title": "The cases that the reviews of the sources' adoptions settled",
+      "path": "docs/adr/0043-the-cases-that-the-reviews-of-the-sources-adoptions-settled.md",
+      "status": "Accepted",
+      "date": "2026-11-21",
+      "decided_by": "https://github.com/xippios/sdk-core/issues/355",
+      "amended": [],
+      "amends": [],
+      "supersedes": [],
+      "other": [],
+      "superseded_by": null
+    },
+    {
       "id": "ADR-0044",
       "number": 44,
       "title": "The family check of the observed-behavior file",
