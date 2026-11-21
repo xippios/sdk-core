@@ -36,6 +36,7 @@ records in `docs/adr/`. A record changes, and this file follows when the script 
 - <a id="0046"></a>[ADR-0046](adr/0046-the-snapshot-script-s-frame-in-core.md): The snapshot script's frame in core · Accepted · 2026-11-21
 - <a id="0047"></a>[ADR-0047](adr/0047-the-adapter-s-offset-for-the-rest-of-a-cut-answer.md): The adapter's offset for the rest of a cut answer · Accepted · 2026-11-21
 - <a id="0048"></a>[ADR-0048](adr/0048-core-s-recorder-frame-around-a-source-s-rewrite-step.md): Core's recorder frame around a source's rewrite step · Accepted · 2026-11-21
+- <a id="0049"></a>[ADR-0049](adr/0049-the-mark-of-a-built-answer-and-its-check.md): The mark of a built answer and its check · Accepted · 2026-11-21
 - <a id="0050"></a>[ADR-0050](adr/0050-what-a-write-task-s-preview-shows.md): What a write task's preview shows · Accepted · 2026-11-21
 - <a id="0052"></a>[ADR-0052](adr/0052-one-filter-for-a-vintage-taken-back.md): One filter for a vintage taken back · Accepted · 2026-11-21
 - <a id="0055"></a>[ADR-0055](adr/0055-one-live-comparison-of-a-packaged-list.md): One live comparison of a packaged list · Accepted · 2026-11-21
