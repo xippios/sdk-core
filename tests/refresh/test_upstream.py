@@ -13,6 +13,7 @@ import http.client
 import io
 import json
 import mimetypes
+import os
 import re
 import shutil
 import subprocess
@@ -21,8 +22,8 @@ import time
 import urllib.error
 import urllib.request
 import urllib.response
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Iterator, Mapping, Sequence
+from dataclasses import dataclass, field, replace
 from email.message import Message
 from pathlib import Path
 from typing import Any
@@ -806,6 +807,123 @@ def test_a_keyed_page_is_a_sample_under_the_credentials_base(site: Site, out: Pa
         with pytest.raises(SystemExit, match="keyed"):
             go(declare(out, page, credentials=given), "--keyless" if given else "--check")
     assert not site.requests
+
+
+def test_the_credentials_go_to_the_origin_of_their_base_alone(
+    site: Site, out: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Finding 4 of the review of #386, the client's rule for its own credentials (ADR-0037,
+    decision 4): a keyed sample has the base's scheme, host and port as parsed, a default
+    port written or not, and a path under the base's by its segments, with or without the
+    base's slash. A look-alike host that shares the base's text, another port, another
+    scheme, a user before the host, a path that only shares the base's text and a dot
+    segment are refused before any request, and so is a base that cannot be compared so."""
+    monkeypatch.setenv("EXAMPLE_ACCOUNT", "someone")
+    monkeypatch.setenv("EXAMPLE_LOGIN", "placeholder")
+    calls: list[int] = []
+
+    def keyed(base: str, url: str) -> Snapshot:
+        page = Page(url, "samples/items.json", sample=True, keyed=True)
+        return declare(out, page, credentials=replace(login_counter(site, calls), base=base))
+
+    refused = [
+        ("https://api.example.org", "https://api.example.org.elsewhere.net/v1/items"),
+        ("https://api.example.org/v1", "https://api.example.org/v10/items"),
+        ("https://api.example.org/v1/", "https://api.example.org:8443/v1/items"),
+        ("https://api.example.org/v1/", "http://api.example.org/v1/items"),
+        ("https://api.example.org/v1/", "https://api.example.org@elsewhere.net/v1/items"),
+        ("https://api.example.org/v1/", "https://api.example.org/v1/../admin"),
+    ]
+    for base, url in refused:
+        with pytest.raises(SystemExit, match="a keyed page is a sample under the base"):
+            go(keyed(base, url))
+    uncomparable = [
+        "api.example.org/v1",
+        "https:///v1",
+        "ftp://api.example.org/v1",
+        "https://api.example.org/v1?scope=all",
+        "https://api.example.org/v1/#items",
+        "https://api.example.org:99999/v1",
+        "https://api.example.org/v1/..",
+    ]
+    for base in uncomparable:
+        with pytest.raises(SystemExit, match="cannot be compared"):
+            go(keyed(base, f"{API}/items"))
+    assert not site.requests
+    assert not calls
+    accepted = [
+        ("https://api.example.org/v1", f"{API}/items"),
+        ("https://API.example.org:443/v1/", f"{API}/items"),
+        (f"{API}/", "https://api.example.org:443/v1/items"),
+    ]
+    for base, url in accepted:
+        site.routes[url] = (200, {"Content-Type": "application/json"}, b'{"items": []}')
+        assert go(keyed(base, url)) == 0
+    assert [request.get_header("X-session") for request in site.requests] == [
+        "session-of-the-login"
+    ] * 3
+
+
+@pytest.mark.parametrize("name", ["../a.md", "/a.md", "pages/../../a.md", "FETCHED.md"])
+def test_a_file_name_stays_inside_the_snapshot(site: Site, out: Path, name: str) -> None:
+    """Finding 3 of the review of #386: the one guard between the names a ``split`` makes
+    from upstream's answer and a write outside ``docs/upstream/`` refuses ``FETCHED.md``, an
+    absolute name and a ``..`` part, from a split and from a declared page alike, before
+    anything is written."""
+    url = site.page("index.html", "<p>A</p>")
+
+    def split(page: Page, response: Response) -> dict[str, bytes]:
+        return {"pages/a.md": b"a", name: b"x"}
+
+    with pytest.raises(SystemExit, match="is no file of the snapshot's own"):
+        go(declare(out, Page(url, split=True), split=split))
+    with pytest.raises(SystemExit, match="is no file of the snapshot's own"):
+        go(declare(out, Page(url, name)))
+    assert not out.exists(), "nothing written"
+    assert not (out.parent / "a.md").exists()
+
+
+@pytest.fixture
+def east_of_utc() -> Iterator[None]:
+    """The process's local time one hour east of UTC, where a date read as local shifts."""
+    before = os.environ.get("TZ")
+    os.environ["TZ"] = "TEST-1"
+    time.tzset()
+    yield
+    if before is None:
+        del os.environ["TZ"]
+    else:
+        os.environ["TZ"] = before
+    time.tzset()
+
+
+@pytest.mark.usefixtures("east_of_utc")
+def test_last_modified_stands_in_utc_or_as_sent(site: Site, out: Path) -> None:
+    """Finding 1 of the review of #386: an HTTP date is GMT in every form a recipient reads
+    (RFC 9110, section 5.6.7), the asctime form and a ``-0000`` zone included, so the frame
+    writes it in UTC whatever the machine's zone; a Last-Modified that is no HTTP date is
+    written as sent, in a code span, and the capture goes on."""
+    dates = {
+        "a": "Mon Nov 16 10:00:00 2026",
+        "b": "Mon, 16 Nov 2026 10:00:00 -0000",
+        "c": "Mon, 16 Nov 2026 11:00:00 +0100",
+        "d": "Mon, 16 Nov 2026 10:00:00 GMT",
+        "e": "0",
+        "f": "yesterday | noon",
+    }
+    pages = [
+        Page(site.page(f"{name}.html", f"<p>{name}</p>", {"Last-Modified": date}), f"p/{name}.html")
+        for name, date in dates.items()
+    ]
+    snapshot = declare(out, *pages)
+    assert go(snapshot) == 0
+    text = fetched(out)
+    for name in "abcd":
+        assert cells(file_row(text, f"p/{name}.html"))[7] == "2026-11-16T10:00:00Z", name
+    assert cells(file_row(text, "p/e.html"))[7] == "`0`"
+    assert cells(file_row(text, "p/f.html"))[7] == r"`yesterday \| noon`"
+    assert (out / "p/e.html").read_bytes() == b"<p>e</p>"
+    assert go(snapshot, "--check") == 0
 
 
 def test_a_file_kept_as_recorded_where_only_noise_moved(
