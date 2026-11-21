@@ -1001,9 +1001,9 @@ answer:
 ```python
 class WritePreview(UpstreamModel):
     performed: Literal[False] = False  # the tag: nothing was written
-    endpoint: str                      # the write the confirmed call sends, "thing/update.json"
-    payload: dict[str, str]            # what it would send, as upstream would receive it
-    reads: list[str]                   # ["thing/read.json"] for the update, [] for a create
+    endpoint: str  # the write the confirmed call sends, "thing/update.json"
+    payload: dict[str, str]  # what it would send, as upstream would receive it
+    reads: list[str]  # ["thing/read.json"] for the update, [] for a create
 ```
 
 A host that builds its servers itself, such as xippios-mcp, imports what `build_server`
