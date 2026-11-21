@@ -70,7 +70,9 @@ than one fails every test here, naming the option. The repository's files (``REA
   its reason and an entry of ``LIVE_LISTS`` that is no pair of a ``PackagedCodes`` declared
   from its file and a function. The check loads ``tests/test_live.py`` by its path from the
   root, since under ``--import-mode=importlib`` no test module stands on an import path, and
-  a source with no packaged list and no declaration passes.
+  a source with no packaged list and no declaration passes. A module that does not import,
+  or skips, fails or exits at its import, fails the check, which is never skipped: a test
+  that needs an optional dependency or a key skips in itself or in its fixture.
 
 A write server is its source's to test: the family check reads ``tasks_write`` for the
 task checks and the status table only (ADR-0042).
@@ -893,7 +895,8 @@ def _live_tests(root: Path) -> ModuleType | None:
         root: The repository's root, ``FamilySource.root``.
 
     Raises:
-        Exception: What the module raises while it runs.
+        BaseException: What ends the module's run: an error, pytest's skip, fail or exit, or a
+            ``SystemExit``; ``_unloaded`` says which.
     """
     path = root / _LIVE_TESTS
     if not path.is_file():
@@ -905,6 +908,37 @@ def _live_tests(root: Path) -> ModuleType | None:
     sys.modules[spec.name] = module  # a dataclass or a model of the module looks itself up
     spec.loader.exec_module(module)
     return module
+
+
+def _unloaded(exc: BaseException) -> str:
+    """Why ``tests/test_live.py`` gave the check no declaration, and what the source does.
+
+    pytest's skip and fail are no ``Exception``, and neither is an exit: each ends the
+    module's run before its declarations stand, so each fails the check, which is never
+    skipped (https://github.com/xippios/sdk-core/issues/359, part 4). A module that skips
+    for a reason of its own, a missing optional dependency or key, skips in the tests or the
+    fixtures that need it, and its top level, where the declarations stand, imports offline.
+
+    Args:
+        exc: What ended the module's run.
+    """
+    unread = f"so the family check cannot read its {_LIVE} and {_NO_LIVE}"
+    what = f"({type(exc).__name__}: {exc})"
+    if isinstance(exc, pytest.skip.Exception):
+        return (
+            f"{_LIVE_TESTS} skips at its import, {unread} {what}: skip in the tests or the "
+            "fixtures that need what is missing, pytest.importorskip among them, and keep the "
+            "module's top level importable offline"
+        )
+    if isinstance(exc, SystemExit):
+        return (
+            f"{_LIVE_TESTS} exits at its import, {unread} {what}: remove the exit from its top "
+            "level"
+        )
+    return (
+        f"{_LIVE_TESTS} does not import, {unread} {what}: make it import offline, as pytest's "
+        "collection imports it"
+    )
 
 
 def _declaration(module: ModuleType, name: str, problems: list[str]) -> dict[str, object]:
@@ -957,8 +991,10 @@ def _live_declaration_problems(family: FamilySource) -> list[str]:
     packaged = _packaged_lists(family.package_dir)
     try:
         module = _live_tests(family.root)
-    except Exception as exc:  # the module's own error, named for the source to fix
-        return [f"{_LIVE_TESTS} does not import: {type(exc).__name__}: {exc}"]
+    except KeyboardInterrupt:  # the person's, not the module's
+        raise
+    except BaseException as exc:  # an error, a skip, a fail or an exit: none skips the check
+        return [_unloaded(exc)]
     problems: list[str] = []
     live: dict[str, object] = {}
     excused: dict[str, object] = {}
@@ -986,6 +1022,9 @@ def test_family_every_packaged_list_is_declared_for_the_live_run(
     (ADR-0055). An entry that names no packaged list fails too, so a stale declaration does
     not pass, and so do a list in both, an entry without its reason and one that is no pair
     of a ``PackagedCodes`` declared from its file and a function. A source with no packaged
-    list and no declaration passes.
+    list and no declaration passes. A ``tests/test_live.py`` that skips, fails or exits at its
+    import fails the check as one that does not import does, naming why and what to do, since
+    no new family check of core 0.4.1 is skipped or warns first
+    (https://github.com/xippios/sdk-core/issues/359, part 4).
     """
     _fail(_live_declaration_problems(family_source), _LIVE_INTRO)

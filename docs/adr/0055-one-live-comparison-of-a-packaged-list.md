@@ -45,7 +45,11 @@ list needs a clause of its own.
    and `records`, in neither declaration. It fails an entry that names no packaged list, so a
    stale declaration does not pass, a list in both, an entry of `NO_LIVE_LIST` without a reason,
    and an entry of `LIVE_LISTS` that is no pair of a `PackagedCodes` declared from that file and
-   a function. A source with no packaged list and no declaration passes. The check fails at once
+   a function. A source with no packaged list and no declaration passes. A `tests/test_live.py`
+   that does not import, or that skips, fails or exits at its import, fails the check, naming
+   why and what to do, since pytest's outcomes and an exit are no `Exception` and would
+   otherwise skip it: a live test that needs an optional dependency or a key skips in itself
+   or in its fixture, so the module's top level imports offline. The check fails at once
    from core 0.4.1 on, with no release that warns first, as every new family check of 0.4.1 does
    (https://github.com/xippios/sdk-core/issues/359, part 4).
 4. **What a fetch returns.** The function takes no argument and returns the list upstream

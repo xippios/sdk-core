@@ -1206,7 +1206,11 @@ The family check fails at once a packaged list, a `reference/<name>.json` that h
 that names no packaged list, a list in both, an entry of `NO_LIVE_LIST` without its reason
 and an entry of `LIVE_LISTS` that is no pair of a `PackagedCodes` declared from its file and
 a function. It reads `tests/test_live.py` by its path from the root, and a source with no
-packaged list and no declaration passes. A source whose fetch is a fixture of its own calls
+packaged list and no declaration passes. A `tests/test_live.py` that does not import, or that
+skips, fails or exits at its import, fails the check, which is never skipped: a live test
+that needs an optional dependency or a key skips in itself or in its fixture,
+`pytest.importorskip` among them, so that the module's top level, where the declarations
+stand, imports offline. A source whose fetch is a fixture of its own calls
 the assertion underneath in its own test, `assert_list_current(codes, current)`, with
 `packaged=` the packaged records read as it reads the current ones where its records name
 the release they came from, and gives that test as the list's reason in `NO_LIVE_LIST`.
