@@ -71,15 +71,15 @@ async def collect[T](items: AsyncIterable[T], *, limit: int | None = None) -> li
     return out
 
 
-async def fetch_counted[T](
+async def fetch_counted[T, E](
     count: Callable[[], Awaitable[int]],
     fetch: Callable[[], Awaitable[T]],
     *,
     limit: int,
-    empty: T,
+    empty: E,
     narrow: str,
     source: str | None = None,
-) -> tuple[T, int]:
+) -> tuple[T | E, int]:
     """Count a query's records, then fetch them only when upstream serves them in one call.
 
     For an upstream that counts a query's records on request and serves at most ``limit`` of
@@ -115,7 +115,9 @@ async def fetch_counted[T](
         source: Source slug the refusal carries, e.g. ``"comtrade"``.
 
     Returns:
-        The data and the count, and ``(empty, 0)`` for a count of 0.
+        The data and the count, and ``(empty, 0)`` for a count of 0. ``empty`` is typed apart
+        from the data, so ``empty=[]`` beside a ``fetch`` of ``list[Record]`` gives
+        ``list[Record]`` under mypy, which one type for both would infer as ``list[Never]``.
 
     Raises:
         QueryTooLarge: The count is over ``limit``; the data was not requested.

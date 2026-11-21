@@ -325,7 +325,8 @@ def check_slice(codes: list[str], periods: list[str]) -> None:
 
 `fetch_counted(count, fetch, *, limit, empty, narrow, source=None)` returns the data with
 the count, `(empty, 0)` for a count of 0, so the task sets `meta.total` from the count it
-already paid for. A count equal to the limit fetches, and an error that either request
+already paid for, and `empty=[]` beside a fetch of `list[Record]` types as `list[Record]`
+under mypy. A count equal to the limit fetches, and an error that either request
 raises passes as raised. `count` gives an `int`: a float, a whole one such as `1234.0`
 included, or a `bool` raises `TypeError`, and a negative count `ValueError`, before the data
 request, since a source reads upstream's count into an `int` where it parses the answer, as

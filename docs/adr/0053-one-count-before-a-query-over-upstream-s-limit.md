@@ -58,7 +58,10 @@ Decisions 1 to 3 are the answer of https://github.com/xippios/sdk-core/issues/37
 4. **The runner returns the data with the count.** `fetch_counted` returns `(data, count)`, and
    `(empty, 0)` for a count of 0, so the task sets `meta.total` from the count it already paid
    for: the count is upstream's count of the records matching the request, which `meta.total`
-   holds (ADR-0034; conventions §4). sdk-usda-nass sets it today, and sdk-comtrade may.
+   holds (ADR-0034; conventions §4). sdk-usda-nass sets it today, and sdk-comtrade may. The
+   pair is typed `tuple[T | E, int]`, `empty` apart from what `fetch` returns, since the runner
+   returns `empty` itself: with one type for both, mypy infers `list[Never]` from `empty=[]` and
+   refuses a `fetch` of `list[Record]`, and apart it gives `list[Record]`.
 5. **It lives in `xippios.core.pagination`.** The runner drives upstream's requests for one
    bounded answer, as `paginate_offset` with `max_items` and `collect` do, and `pagination`
    stands above `errors`, so it imports `QueryTooLarge` downward (ADR-0029, decisions 1 and 2).

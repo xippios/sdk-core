@@ -291,8 +291,7 @@ class QueryTooLarge(InvalidRequestError):
             )
         else:
             size = (
-                f"query would return {count:,} records; upstream serves at most {limit:,} per "
-                "call."
+                f"query would return {count:,} records; upstream serves at most {limit:,} per call."
             )
         super().__init__(f"{size} {narrow}", source=source)
         self.count = count
