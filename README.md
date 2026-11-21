@@ -917,6 +917,16 @@ xippios_placeholder_key_envs = ["EXAMPLE_API_KEY"]
   After a live run the summary prints each quota policy's last reading, `quota after the
   live run: usda-psd: 986 of 1000 requests left as of ...`. ADR-0035 states the edges of
   these guarantees.
+- After a live run the summary prints, above the quota lines, the requests that its live
+  tests sent, by host, `requests sent by the live run: 15 (api.example.org: 12,
+  files.example.org: 3)`, so a release PR reads its count of live calls from the log of
+  each run and adds up the runs. Every request that a live test hands to httpcore's pools,
+  from its setup to its teardown, counts once, answered or not, each hop of a redirect and
+  each attempt of a retry included; one that `respx` or a transport of the test's own
+  answers was never sent and does not count. A run that built a `Tenants` registry names no
+  host, `requests sent by the live run: 42 (hosts not named: tenants declared)`, since a
+  tenant's host names the tenant (ADR-0030, decision 4); a run in which no live test ran
+  prints no such line.
 - `replay_fixture("api_get", "corn_2024")` mounts `tests/fixtures/api_get/corn_2024.json`
   on its method, host and path, the directory named after the wrapper function (or the
   task, for an exchange recorded through a task); `match_params=["countOnly"]` makes the
