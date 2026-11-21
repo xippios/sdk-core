@@ -1159,6 +1159,58 @@ A source without the file passes all three. The rules fail at once from core 0.4
 That no dated note of what upstream answered stands outside the file stays the source's
 own test and the review's.
 
+The nightly run compares each packaged list with the list upstream serves now, in core's
+test, which `tests/test_live.py` collects with one line beside its declaration of the lists
+(conventions §10, ADR-0055):
+
+```python
+# tests/test_live.py
+from xippios.core.testing.live import *  # noqa: F403
+
+from xippios.example import api
+from xippios.example.params import COMMODITIES, COUNTRIES, PARTNERS  # PackagedList.codes(...)
+
+
+async def partner_areas() -> list[dict[str, object]]:
+    return (await api.reference_rows("partnerAreas.json")).payload  # upstream's records
+
+
+LIVE_LISTS = {  # each packaged list compared, by its file reference/<name>.json
+    "commodities": (COMMODITIES, api.get_commodities),  # a wrapper's UpstreamModel records
+    "countries": (COUNTRIES, api.get_countries),
+    "partnerAreas": (PARTNERS, partner_areas),
+}
+NO_LIVE_LIST = {  # each packaged list not compared, with the reason
+    "progress_stages": "Derived from a year of weekly rows: no endpoint serves the list.",
+}
+```
+
+`test_packaged_list_is_current[commodities]` runs once per entry of `LIVE_LISTS`, marked
+`live`, so an offline run sends nothing. An entry is the list's `PackagedCodes`
+(`PackagedList.codes`, above), whose `code` is the field the records are compared by, and
+the function that fetches the list now. It takes no argument and returns, or awaits, the
+records under upstream's field names, mappings or `UpstreamModel` instances, or the bare
+codes, text or integers, which are compared by code alone. A code gone from upstream's list,
+a code new in it and a code whose record changed fail the run, in any order of the list, and
+the failure names the codes, the first 20 of each kind, and never a record:
+
+```text
+packaged list countries (fetched 2026-10-23) differs from the list upstream serves now: 1 gone, 1 new, 1 changed of 3 packaged codes, 3 served; refresh it (conventions §10, ADR-0055):
+- gone: 'BR'
+- new: 'AR'
+- changed: 'US'
+```
+
+The family check fails at once a packaged list, a `reference/<name>.json` that holds
+`param`, `endpoint`, `fetched` and `records`, that stands in neither declaration, an entry
+that names no packaged list, a list in both, an entry of `NO_LIVE_LIST` without its reason
+and an entry of `LIVE_LISTS` that is no pair of a `PackagedCodes` declared from its file and
+a function. It reads `tests/test_live.py` by its path from the root, and a source with no
+packaged list and no declaration passes. A source whose fetch is a fixture of its own calls
+the assertion underneath in its own test, `assert_list_current(codes, current)`, with
+`packaged=` the packaged records read as it reads the current ones where its records name
+the release they came from, and gives that test as the list's reason in `NO_LIVE_LIST`.
+
 ```toml
 # pyproject.toml: the variables that hold the placeholder key in offline tests
 [tool.pytest.ini_options]
