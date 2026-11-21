@@ -7,6 +7,7 @@ can be quoted alone, citing its record, and the review checklist's item that jud
 the record too. A later edit that splits a rule or drops its citation fails here.
 """
 
+import json
 import re
 from pathlib import Path
 
@@ -15,7 +16,13 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 CONVENTIONS = ROOT / "docs" / "conventions.md"
 CHECKLIST = ROOT / "docs" / "review-checklist.md"
+DONE = ROOT / "docs" / "definition-of-done.md"
+INDEX = ROOT / "docs" / "adr.json"
 RECORD = "ADR-0043"
+QUESTIONS = (
+    "https://github.com/xippios/sdk-core/issues/355",  # the versions of an entry, no rewording
+    "https://github.com/xippios/sdk-core/issues/382",  # the live run on the release's base
+)
 
 
 def flat(text: str) -> str:
@@ -76,7 +83,8 @@ RULES = [
         10,
         "changed in its status, its content type and its body at once is a new answer composed "
         "in a recorded shape, the second kind",
-        ("the fourth", "sdk-usda-esr", "sdk-cashctrl"),
+        # sdk-usda-esr's example is the body it refused (decision 2 of sdk-usda-esr#55).
+        ("the fourth", "serves no empty 404 off an exports path", "sdk-cashctrl"),
         id="s10-a-recording-changed-three-ways",
     ),
     pytest.param(
@@ -91,7 +99,8 @@ RULES = [
         ("names the condition under which upstream answers", "sdk-google-mail", "sdk-cashctrl"),
         id="s10-a-recording-at-its-own-path",
     ),
-    # §12: the release's pull request and its entries (sdk-core#355), its live run (sdk-core#351).
+    # §12: the release's pull request and its entries (sdk-core#355), its live run (sdk-core#351,
+    # decided by the human in sdk-core#382).
     pytest.param(
         12,
         "assembles each entry as its fragment reads",
@@ -101,13 +110,20 @@ RULES = [
     pytest.param(
         12,
         "cites a green run of `live.yml` on the commit of `main` that it starts from",
-        ("the nightly run or one dispatch", "https://github.com/xippios/sdk-core/issues/351"),
+        (
+            "the nightly run or one dispatch",
+            "https://github.com/xippios/sdk-core/issues/351",
+            "https://github.com/xippios/sdk-core/issues/382",
+        ),
         id="s12-the-live-run-a-release-cites",
     ),
     pytest.param(
         12,
         "A run on an earlier commit of `main` is no such run, whatever the merges after it changed",
-        ("https://github.com/xippios/sdk-core/issues/351",),
+        (
+            "https://github.com/xippios/sdk-core/issues/351",
+            "https://github.com/xippios/sdk-core/issues/382",
+        ),
         id="s12-an-older-live-run",
     ),
     # §15, item 9: the versions an adoption's entry names (sdk-core#355) and its group
@@ -124,6 +140,14 @@ RULES = [
         "is `breaking` where the adoption brings a core minor",
         ("`changed` where it brings none", "https://github.com/xippios/sdk-core/issues/342"),
         id="s15-the-group-of-an-adoption-s-fragment",
+    ),
+    # §15, the host: item 9 read for a package that no template renders (sdk-core#355).
+    pytest.param(
+        15,
+        "item 9's fragment names the core bound and the conventions' version as they stand after "
+        "the adoption, changed or not",
+        ("no template", "https://github.com/xippios/sdk-core/issues/355"),
+        id="s15-the-versions-of-the-host-s-entry",
     ),
 ]
 
@@ -150,3 +174,28 @@ def test_the_review_checklist_judges_each_rule_by_its_record(number: int, phrase
     item = checklist_item(number)
     assert phrase in item, f"item {number} does not say {phrase!r}"
     assert RECORD in item, f"item {number} does not cite {RECORD}"
+
+
+def test_the_definition_of_done_words_an_adoption_s_fragment_as_item_9_does() -> None:
+    # The line of the Adoption PR block, which "the versions adopted" made a second reading of
+    # item 9 (https://github.com/xippios/sdk-core/issues/347).
+    block = DONE.read_text(encoding="utf-8").split("## Adoption PR", 1)[1].split("\n## ", 1)[0]
+    lines = [flat(line) for line in block.splitlines() if "changelog fragment" in line]
+    assert len(lines) == 1, "the Adoption PR block has one line on the changelog fragment"
+    for name in (
+        "the core bound, the template's tag and the conventions' version as they stand after "
+        "the adoption, changed or not",
+        "`breaking` where the adoption brings a core minor",
+        "`changed` where it brings none",
+        "§15 item 9",
+        RECORD,
+    ):
+        assert name in lines[0], f"{lines[0]!r} does not name {name!r}"
+
+
+def test_both_questions_keep_the_record() -> None:
+    # `coordinate decision show <question>` finds a record by its decider and its amendments.
+    records = json.loads(INDEX.read_text(encoding="utf-8"))["records"]
+    found = next(r for r in records if r["id"] == RECORD)
+    kept = [found["decided_by"], *(entry["by"] for entry in found["amended"])]
+    assert kept == list(QUESTIONS)
