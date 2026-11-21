@@ -509,13 +509,24 @@ XippiosError
 └── InvalidRequestError  the request as given cannot be served: a bad argument or a
     │                    documented refusal, detected before the call, by upstream's
     │                    own refusal of the query or from its answer (ADR-0007)
-    └── UnknownCode      a code the packaged list lacks, refused before the call
-                         (ADR-0041)
+    ├── UnknownCode      a code the packaged list lacks, refused before the call
+    │                    (ADR-0041)
+    └── QueryTooLarge    a query over upstream's per-call record limit, refused
+                         before its data request or by upstream (ADR-0053)
 ```
 
 Source packages subclass only when upstream has a distinct, documented failure mode;
-a refusal the package makes itself, such as a query over a documented record limit or
-an unknown filter name, subclasses `InvalidRequestError`. A code the packaged list lacks,
+a refusal the package makes itself, such as an unknown filter name, subclasses
+`InvalidRequestError`. A query over upstream's per-call record limit is refused with core's `QueryTooLarge`, an `InvalidRequestError`
+that carries the count, `None` where upstream refused the query without one, the limit,
+what narrows the query and whether the count is a bound read from the arguments, and
+whose message core words from them, so a source subclasses it only for an attribute of
+its own (ADR-0053). A task whose upstream counts a query's records on request counts
+before it fetches with core's `fetch_counted(count, fetch, *, limit, empty, narrow)`,
+which answers a count of 0 with the task's empty answer and no data request, refuses a
+count over the limit with `QueryTooLarge` before the data request and returns the data
+with the count, which the task sets as `meta.total` (ADR-0053).
+A code the packaged list lacks,
 where upstream answers an unknown code with an empty result, is refused before the call
 with core's `UnknownCode`, naming the list, its fetch date and the closest known codes
 (`xippios.core.closest`, `xippios.core.nearest` for integer codes nearest by number, or a
