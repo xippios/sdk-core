@@ -53,14 +53,18 @@ a list.
    refusal, by its value.
 3. **Hints are a table, and one text for when no code is close.** `hints` maps a value that is
    no code to its text, read with the value's text stripped and without case, and a value it
-   holds is refused with that text in place of the closest codes. `otherwise` is the text of a
+   holds is refused with that text in place of the closest codes. The table is read before the
+   list's type, since a text given for integer codes is a value that is no code: `"all"` for
+   integer codes reads its hint, and so does `0` for text codes by its text `"0"`, while a value
+   that is neither text nor an integer reads none. `otherwise` is the text of a
    refusal that names no code. `closest` takes a strategy of the source's own, a function of
    the value and the list's codes to their names that returns `(code, name)` pairs, best first;
    by default core's `closest` serves text codes and `nearest` integer codes. A strategy, core's
    or the source's, reads each name with its runs of white space collapsed, as a refusal shows
    it, so ESR's padded names read `CANADA`.
 4. **The list's type decides.** A list's codes are text or integers, as its records hold them.
-   A value of the other type is refused with `InvalidRequestError`, never compared by its text:
+   A value of the other type that the hint table does not hold is refused with
+   `InvalidRequestError`, never compared by its text:
    a text of digits given for integer codes names the integer to pass (`Pass it as the integer
    104.`), another text the codes whose name holds it or comes close to it (`By name: 104
    (Wheat - White).`), and an integer given for text codes its text (`Pass it as the text
@@ -84,7 +88,10 @@ a list.
 - A text given for integer codes is now refused where sdk-usda-psd and sdk-usda-gats compared
   it by its text, and an integer given for text codes where sdk-usda-nass compared its text,
   once each source takes the check.
-- A list filter that answers an empty list for a value the list lacks (`list_countries` of
-  sdk-usda-esr, sdk-usda-psd and sdk-usda-gats) is not settled by the check: the conventions
-  state no rule for it, which https://github.com/xippios/sdk-core/issues/313 names and leaves
-  to a decision of its own.
+- The check does not settle a list filter that answers an empty list for a value the list
+  lacks. The three such filters are the sources' own rows, each of which refuses the value
+  through this check in its patch: `list_countries(region_id=...)` in
+  https://github.com/xippios/sdk-usda-esr/issues/27, `list_countries(region_code=...)` in
+  https://github.com/xippios/sdk-usda-psd/issues/30, and `list_countries(region_code=...)`
+  and `list_commodities(product_type=...)` in https://github.com/xippios/sdk-usda-gats/issues/31.
+  The conventions state no rule for a list filter, and these rows do not ask for one.

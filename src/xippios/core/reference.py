@@ -447,7 +447,9 @@ class PackagedCodes:
             hints: Values that are no codes, each with the text that explains it in place
                 of the closest codes, e.g. ``{"all": "Omit country_code for every
                 country."}``; read with the value's text stripped and without case, as the
-                table's keys are.
+                table's keys are, before the list's type: a text or an integer the table
+                holds is refused with its text whatever the list's type, so ``"all"``
+                given for integer codes reads its hint.
             otherwise: The text of a refusal that names no code, e.g. ``"list_regions
                 lists them."``; left out where a code is close.
             closest: The source's own strategy for the closest codes, a function of the
@@ -465,18 +467,18 @@ class PackagedCodes:
         Raises:
             UnknownCode: The list lacks the code; it names the list, its fetch date, the
                 closest codes, or the hint, or ``otherwise``, the reason and the source.
-            InvalidRequestError: ``value`` is not of the list's type: a text of digits for
+            InvalidRequestError: ``value`` is not of the list's type and the hint table
+                does not hold it: a text of digits for
                 integer codes names the integer to pass, another text the codes whose name
                 holds it or comes close, an integer for text codes its text or the codes
                 close to it; ``otherwise`` where none is named.
         """
         plain = _plain(value)
-        if not self._typed(plain):
-            raise self._wrong_type(param, plain, otherwise=otherwise, strategy=closest)
         if self._canonical(plain) is not None:
             return value
-        table = {key.strip().casefold(): text for key, text in (hints or {}).items()}
-        hint = table.get(str(plain).strip().casefold())
+        hint = _hint(plain, hints)
+        if hint is None and not self._typed(plain):
+            raise self._wrong_type(param, plain, otherwise=otherwise, strategy=closest)
         close: Sequence[tuple[Any, str]] = ()
         if hint is None:
             close = self._closest(plain, closest)
@@ -555,6 +557,19 @@ class PackagedCodes:
 def _plain(value: object) -> object:
     """``value``, an enum member read by its value."""
     return value.value if isinstance(value, Enum) else value
+
+
+def _hint(plain: object, hints: Mapping[str, str] | None) -> str | None:
+    """The text ``hints`` holds for ``plain``, read stripped and without case.
+
+    A hint is for a value that is no code, whatever the list's type (ADR-0045, decision 3):
+    ``"all"`` for integer codes, or ``0`` for text codes by its text ``"0"``. A value that
+    is neither text nor an integer reads none.
+    """
+    if not hints or isinstance(plain, bool) or not isinstance(plain, str | int):
+        return None
+    table = {key.strip().casefold(): text for key, text in hints.items()}
+    return table.get(str(plain).strip().casefold())
 
 
 def _named(pairs: Iterable[tuple[Any, str]]) -> str:

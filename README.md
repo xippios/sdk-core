@@ -658,7 +658,8 @@ COUNTRIES.check(
 )
 ```
 
-A hint is read with the value stripped and without case. By default the closest codes are
+A hint is read with the value stripped and without case, and before the list's type, so
+`"all"` given for integer codes reads its hint. By default the closest codes are
 `closest`'s for text codes and `nearest`'s for integer codes, and a strategy reads each name
 with its runs of white space collapsed, as the refusal shows it. `list_name="element_QCL"`
 names the list where its file says more than its `param`. The declaration builds its index
