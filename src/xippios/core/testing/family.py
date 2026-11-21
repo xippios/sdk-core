@@ -49,7 +49,17 @@ than one fails every test here, naming the option. The repository's files (``REA
   and ``NO_TENANT_TASKS`` names tasks of that module's ``__all__`` alone (conventions §7;
   ADR-0036, decision 13). A source with no ``Tenants`` registry passes. The check reads
   signatures: what a task reaches inside is the review's
-  (https://github.com/xippios/sdk-core/issues/302).
+  (https://github.com/xippios/sdk-core/issues/302);
+- a source that keeps ``docs/upstream/OBSERVED.md``, the notes of what it observed of
+  upstream, is held to three rules of it, one test each, and a source without the file
+  passes all three (conventions §3, ADR-0044). ``FETCHED.md`` lists the file in a row of
+  its own: a table row whose first cell is ``OBSERVED.md``, whose last cell says that it is
+  written by hand and whose cells between, at any width, are ``-``. The file holds one note
+  at least, a ``###`` section, and the last paragraph of every note, its link reference
+  definitions dropped, opens with ``Probe: <date>`` or ``Observed: <date>``, an ISO date
+  (``Probe: 2026-11-20, ...``). Every code span of the file whose text starts with
+  ``tests/``, ``docs/``, ``src/`` or ``scripts/``, holds no space and ends in an extension
+  names a file that exists, from the repository's root.
 
 A write server is its source's to test: the family check reads ``tasks_write`` for the
 task checks and the status table only (ADR-0042).
@@ -72,8 +82,9 @@ import inspect
 import re
 import tomllib
 import typing
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -92,9 +103,12 @@ __all__ = [
     "family_source",
     "test_family_copier_answers_name_a_template_tag",
     "test_family_core_is_bound_to_one_minor",
+    "test_family_fetched_md_lists_observed_md_in_a_row_of_its_own",
     "test_family_http_router_routes_the_tasks",
     "test_family_mcp_server_registers_the_tasks",
     "test_family_namespace_levels_are_empty",
+    "test_family_observed_md_cites_files_that_exist",
+    "test_family_observed_notes_end_with_their_probe_and_date",
     "test_family_package_has_a_version",
     "test_family_package_ships_py_typed",
     "test_family_readme_status_table_lists_the_tasks",
@@ -107,6 +121,17 @@ _TAG = re.compile(r"v\d+\.\d+\.\d+")
 _CELL_SPLIT = re.compile(r"(?<!\\)\|")
 _SPAN = re.compile(r"`([^`]+)`")
 _TASK_SPAN = re.compile(r"(?:tasks(?:_write)?\.)?([A-Za-z_]\w*)(?:\(.*\))?")
+_OBSERVED = "docs/upstream/OBSERVED.md"
+_FETCHED = "docs/upstream/FETCHED.md"
+_FENCE = re.compile(r" {0,3}(`{3,}|~{3,})")
+_HEADING = re.compile(r" {0,3}(#{1,6})(?:[ \t]+(.*))?$")
+_REFERENCE = re.compile(r" {0,3}\[[^\]]+\]:[ \t]*\S")
+"""A link reference definition, which renders as nothing and is no paragraph of a note."""
+_PROBE = re.compile(r"(?:Probe|Observed): (\d{4}-\d{2}-\d{2})(?!\d)")
+_CODE_SPAN = re.compile(r"(?<!`)(`+)(?!`)(.+?)(?<!`)\1(?!`)", re.DOTALL)
+"""A code span: a run of backticks, its text, which may hold a line break, and a run as long."""
+_CITED = re.compile(r"(?:tests|docs|src|scripts)/[^\s`]+\.[A-Za-z][A-Za-z0-9]*")
+"""A path a code span of ``OBSERVED.md`` cites a file by, from the repository's root."""
 
 
 @dataclass(frozen=True)
@@ -571,3 +596,234 @@ def test_family_core_is_bound_to_one_minor(family_source: FamilySource) -> None:
     if len(bounds) > 1:
         problems.append(f"core and its extras name different bounds: {sorted(bounds)}")
     _fail(problems, "pyproject.toml must bound xippios-core to one minor:")
+
+
+def _observed_text(family: FamilySource) -> str | None:
+    """The source's ``docs/upstream/OBSERVED.md``, or ``None`` for a source without one."""
+    path = family.root / _OBSERVED
+    return path.read_text(encoding="utf-8") if path.is_file() else None
+
+
+def _lists_observed(fetched: str) -> bool:
+    """Whether a ``FETCHED.md`` lists ``OBSERVED.md`` in a row of its own that says so.
+
+    The row is a table row whose first cell is ``OBSERVED.md``, whose last cell says that
+    the file is written by hand and whose cells between, if any, are ``-``, since nothing
+    fetched it. It is told by these three and never by its width: the sources' tables are
+    four, six and nine cells wide (ADR-0044, decision 1).
+
+    Args:
+        fetched: The text of ``docs/upstream/FETCHED.md``.
+    """
+    for line in fetched.splitlines():
+        if not line.lstrip().startswith("|"):
+            continue
+        cells = _cells(line)
+        if (
+            len(cells) >= 2
+            and cells[0] == "OBSERVED.md"
+            and all(cell == "-" for cell in cells[1:-1])
+            and "written by hand" in cells[-1].lower()
+        ):
+            return True
+    return False
+
+
+def _paragraphs(lines: list[str]) -> list[str]:
+    """The blocks of ``lines`` between blank lines, each one's lines joined by a space."""
+    blocks = re.split(r"\n[ \t]*\n", "\n".join(lines))
+    return [" ".join(block.split()) for block in blocks if block.strip()]
+
+
+def _lines(text: str) -> Iterator[tuple[int, str, bool]]:
+    """Each line of a Markdown text: its number, its text and whether a fenced block holds it.
+
+    A fence's own lines belong to its block, and a fence closes on a run of its own
+    character as long as its opening, or longer, with nothing after it.
+
+    Args:
+        text: A Markdown text, ``docs/upstream/OBSERVED.md`` say.
+    """
+    fence = ""
+    for number, line in enumerate(text.splitlines(), start=1):
+        marker = _FENCE.match(line)
+        if fence:
+            if marker and marker.group(1).startswith(fence) and not line[marker.end() :].strip():
+                fence = ""
+            yield number, line, True
+        else:
+            fence = marker.group(1) if marker is not None else ""
+            yield number, line, marker is not None
+
+
+def _observed_notes(text: str) -> list[tuple[str, list[str]]]:
+    """The notes of an ``OBSERVED.md``, each ``###`` section's heading and its paragraphs.
+
+    A note runs from its ``###`` heading to the next heading of level one to three outside
+    a fenced code block: a ``##`` heading groups notes and is none itself, and a ``####``
+    heading stays inside its note. Link reference definitions are dropped, since they
+    render as nothing, and two notes of one heading are two notes (ADR-0044, decision 2).
+
+    Args:
+        text: The text of ``docs/upstream/OBSERVED.md``.
+    """
+    notes: list[tuple[str, list[str]]] = []
+    body: list[str] | None = None
+    for _, line, fenced in _lines(text):
+        heading = None if fenced else _HEADING.match(line)
+        if heading is not None and len(heading.group(1)) <= 3:
+            body = [] if len(heading.group(1)) == 3 else None
+            if body is not None:
+                notes.append(((heading.group(2) or "").strip(), body))
+            continue
+        if body is not None and (fenced or not _REFERENCE.match(line)):
+            body.append(line)
+    return [(title, _paragraphs(lines)) for title, lines in notes]
+
+
+def _probe_problems(text: str) -> list[str]:
+    """What fails the rule that every note ends with its probe and its date.
+
+    The last paragraph of each note opens with ``Probe: `` or ``Observed: `` and an ISO
+    date, ``YYYY-MM-DD``, right after the label, and the file holds one note at least
+    (conventions §3, ADR-0044).
+
+    Args:
+        text: The text of ``docs/upstream/OBSERVED.md``.
+    """
+    notes = _observed_notes(text)
+    if not notes:
+        return ["the file holds no note"]
+    problems: list[str] = []
+    for heading, paragraphs in notes:
+        if not paragraphs:
+            problems.append(f"{heading}: no paragraph")
+            continue
+        last = paragraphs[-1]
+        label = _PROBE.match(last)
+        if label is None:
+            opening = last if len(last) <= 40 else f"{last[:40]}..."
+            problems.append(f"{heading}: its last paragraph opens {opening!r}")
+            continue
+        try:
+            date.fromisoformat(label.group(1))
+        except ValueError:
+            problems.append(f"{heading}: {label.group(1)} is no date")
+    return problems
+
+
+def _blocks(text: str) -> list[list[tuple[int, str]]]:
+    """The blocks of a Markdown text that can hold a code span, each line with its number.
+
+    A blank line, a fenced code block and a heading end a paragraph, a heading is a block
+    of its own, and a fenced block holds no code span, so it is none.
+
+    Args:
+        text: A Markdown text, ``docs/upstream/OBSERVED.md`` say.
+    """
+    blocks: list[list[tuple[int, str]]] = [[]]
+    for number, line, fenced in _lines(text):
+        if fenced or not line.strip():
+            blocks.append([])
+        elif _HEADING.match(line):
+            blocks += [[(number, line)], []]
+        else:
+            blocks[-1].append((number, line))
+    return [block for block in blocks if block]
+
+
+def _citations(text: str) -> list[tuple[int, str]]:
+    """Each file a code span of an ``OBSERVED.md`` cites, with the line the span starts on.
+
+    A span cites a file when its text starts with ``tests/``, ``docs/``, ``src/`` or
+    ``scripts/``, holds no space and ends in an extension, a path from the repository's
+    root. Spans are read paragraph by paragraph, since a span may wrap onto the next line
+    of its paragraph (conventions §3, ADR-0044, decision 1).
+
+    Args:
+        text: The text of ``docs/upstream/OBSERVED.md``.
+    """
+    cited: list[tuple[int, str]] = []
+    for block in _blocks(text):
+        joined = "\n".join(line for _, line in block)
+        for span in _CODE_SPAN.finditer(joined):
+            path = span.group(2).strip()
+            if _CITED.fullmatch(path):
+                cited.append((block[joined.count("\n", 0, span.start())][0], path))
+    return cited
+
+
+def _missing_citations(text: str, root: Path) -> list[str]:
+    """The files that the code spans of an ``OBSERVED.md`` cite and ``root`` lacks.
+
+    Each is named by the line its span starts on, as ``_citations`` reads them.
+
+    Args:
+        text: The text of ``docs/upstream/OBSERVED.md``.
+        root: The repository's root.
+    """
+    return [
+        f"line {number}: {path}" for number, path in _citations(text) if not (root / path).is_file()
+    ]
+
+
+def test_family_fetched_md_lists_observed_md_in_a_row_of_its_own(
+    family_source: FamilySource,
+) -> None:
+    """``FETCHED.md`` lists ``OBSERVED.md`` in a row of its own that says so (conventions §3).
+
+    A table row whose first cell is ``OBSERVED.md``, whose last cell says that it is written
+    by hand and whose cells between are ``-``, at any width (ADR-0044). A source without
+    ``docs/upstream/OBSERVED.md`` passes.
+    """
+    if _observed_text(family_source) is None:
+        return
+    fetched = family_source.root / _FETCHED
+    if not fetched.is_file():
+        pytest.fail(
+            f"{_FETCHED} is missing: it lists OBSERVED.md in a row of its own "
+            "(conventions §3, ADR-0044)",
+            pytrace=False,
+        )
+    if not _lists_observed(fetched.read_text(encoding="utf-8")):
+        pytest.fail(
+            f"{_FETCHED} lists OBSERVED.md in no row of its own: write a row of its table "
+            "whose first cell is OBSERVED.md, whose last cell says that it is written by hand "
+            "and whose cells between are - (conventions §3, ADR-0044)",
+            pytrace=False,
+        )
+
+
+def test_family_observed_notes_end_with_their_probe_and_date(family_source: FamilySource) -> None:
+    """Every note of ``OBSERVED.md`` ends with its probe and its date (conventions §3).
+
+    A note is a ``###`` section, and its last paragraph opens with ``Probe: <date>`` or
+    ``Observed: <date>``, an ISO date; the file holds one note at least (ADR-0044). A source
+    without ``docs/upstream/OBSERVED.md`` passes.
+    """
+    text = _observed_text(family_source)
+    if text is None:
+        return
+    _fail(
+        _probe_problems(text),
+        f"{_OBSERVED}: every note, a ### section, ends with a paragraph that opens with "
+        "'Probe: <date>' or 'Observed: <date>', the date as YYYY-MM-DD (conventions §3, "
+        "ADR-0044):",
+    )
+
+
+def test_family_observed_md_cites_files_that_exist(family_source: FamilySource) -> None:
+    """Every file that ``OBSERVED.md`` cites exists (conventions §3).
+
+    A code span whose text starts with ``tests/``, ``docs/``, ``src/`` or ``scripts/``,
+    holds no space and ends in an extension cites a file from the repository's root
+    (ADR-0044). A source without ``docs/upstream/OBSERVED.md`` passes.
+    """
+    text = _observed_text(family_source)
+    if text is None:
+        return
+    _fail(
+        _missing_citations(text, family_source.root),
+        f"{_OBSERVED} cites files that do not exist, from the repository's root "
+        "(conventions §3, ADR-0044):",
+    )

@@ -171,6 +171,22 @@ skip it (§8, §9; ADR-0040).
   from, with their ids or URLs, bytes and sha256. A parameter or a default traceable to a
   note there is traceable to `docs/upstream/`. A source that keeps such notes elsewhere,
   in its README or its capture script, moves them into the file with its next refresh.
+  A note of `OBSERVED.md` is a `###` section, and its last paragraph opens with
+  `Probe: <date>` or `Observed: <date>`, an ISO 8601 date right after the label, as
+  `Probe: 2026-11-20, ...` does (ADR-0044, decision 2). The family check fails a source
+  whose `FETCHED.md` lists its `OBSERVED.md` in no table row whose first cell is
+  `OBSERVED.md`, whose last cell says that the file is written by hand and whose cells
+  between are `-`, at any width (ADR-0044, decision 1). The family check fails a source
+  whose `OBSERVED.md` holds no note, or a note whose last paragraph, its link reference
+  definitions dropped, does not open with its label and an ISO date (ADR-0044,
+  decision 1). The family check fails a source whose `OBSERVED.md` cites a file that does
+  not exist: a code span whose text starts with `tests/`, `docs/`, `src/` or `scripts/`,
+  holds no space and ends in an extension cites a file from the repository's root
+  (ADR-0044, decision 1). A source that keeps no `OBSERVED.md` passes the family check's
+  rules of the file (ADR-0044, decision 1). The family check holds these rules from core
+  0.4.1 on, with no release that warns first (ADR-0044, decision 4). That no dated note of
+  what upstream answered stands outside `OBSERVED.md` is the source's own test and the
+  review's, not the family check's (ADR-0044, decision 3).
 - A page that the documentation links and the snapshot deliberately does not request,
   such as a feed, a third-party specification (cited, not snapshotted), an API answer or
   a page that is not API documentation, has a row with its reason in a table of

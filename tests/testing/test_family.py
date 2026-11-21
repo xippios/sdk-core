@@ -123,7 +123,7 @@ SOURCE: dict[str, str] = {
     "tests/test_family.py": "from xippios.core.testing.family import *  # noqa: F403\n",
 }
 
-FAMILY_TESTS = 11
+FAMILY_TESTS = 14
 
 
 def run_family(
@@ -680,3 +680,283 @@ def test_a_declared_name_outside_all_fails_and_one_tenant_checks_nothing(
         "__all__"
     ]
     _tenant_family(tenant_forms, ["get_one", "get_each", "list_regions"], multi_tenant=False)
+
+
+# The notes of observed behavior (conventions §3, ADR-0044). OBSERVED_MD meets the three
+# rules once the files it cites exist: its notes are the three ### sections, the fenced
+# "## ..." line and the #### heading stay inside the second, the same heading under two
+# groups is two notes, and the last note ends with its probe once its link reference
+# definition, which renders as nothing, is dropped. Its preamble's other spans cite no file.
+OBSERVED_MD = """# What Example does but never documents
+
+Notes, written by hand, on what the Example API does that no page of the snapshot states
+(conventions §3). A sample is named by its path, ``tests/fixtures/get_series/corn.json``,
+and the seed script, `scripts/seed.py --discovery`, the folder `tests/fixtures/` and the
+request `GET /v1/series.json` cite no file.
+
+## Series
+
+### A year without data answers HTTP 404
+
+The series endpoint answers a year without data with HTTP 404 and an empty body.
+
+Probe: 2026-11-20, `GET /v1/series`; sample `tests/fixtures/get_series/empty.json`.
+
+### The layout of the yearly file
+
+The file is laid out as the release's `series2026.xml` shows, against the snapshot's
+`openapi/spec.json`:
+
+```text
+## a line of the file, not a heading
+```
+
+#### Columns
+
+The columns are named as upstream prints them.
+
+Observed: 2026-10-28, in `docs/upstream/samples/series.json`.
+
+## Refusals
+
+### A year without data answers HTTP 404
+
+The same heading under another group is a note of its own.
+
+Probe: 2026-11-21, `GET /v1/series` with a year of letters, its answer not kept; see the
+[record][1].
+
+[1]: https://example.org/record
+"""
+
+HAND = "written by hand: what upstream does but never documents; not fetched or checked"
+
+FETCHED_MD = """# Fetched
+
+| File | URL | Fetched | Note |
+| --- | --- | --- | --- |
+| index.md | https://example.org/docs/ | 2026-11-20T09:00:00Z | the guide |
+{row}
+"""
+
+OBSERVED_TREE: dict[str, str | None] = {
+    "docs/upstream/OBSERVED.md": OBSERVED_MD,
+    "docs/upstream/FETCHED.md": FETCHED_MD.format(row=f"| OBSERVED.md | - | - | {HAND} |"),
+    "tests/fixtures/get_series/corn.json": "{}\n",
+    "tests/fixtures/get_series/empty.json": "{}\n",
+    "docs/upstream/samples/series.json": "{}\n",
+}
+
+OBSERVED_INTRO = (
+    "docs/upstream/OBSERVED.md: every note, a ### section, ends with a paragraph that opens "
+    "with 'Probe: <date>' or 'Observed: <date>', the date as YYYY-MM-DD (conventions §3, "
+    "ADR-0044):"
+)
+
+
+def _rooted(root: Path) -> FamilySource:
+    """A source at ``root``, for the checks that read the repository's files alone."""
+    package = ModuleType("xippios.example")
+    package.__file__ = str(root / "src" / "xippios" / "example" / "__init__.py")
+    return FamilySource(
+        root=root,
+        import_path="xippios.example",
+        package=package,
+        source="example",
+        tasks=ModuleType("xippios.example.tasks"),
+        tasks_write=None,
+    )
+
+
+def _write(root: Path, files: dict[str, str | None]) -> None:
+    for path, content in files.items():
+        if content is not None:
+            (root / path).parent.mkdir(parents=True, exist_ok=True)
+            (root / path).write_text(content, encoding="utf-8")
+
+
+def test_a_source_without_observed_md_passes_the_three_rules(tmp_path: Path) -> None:
+    source = _rooted(tmp_path)
+    family.test_family_fetched_md_lists_observed_md_in_a_row_of_its_own(source)
+    family.test_family_observed_notes_end_with_their_probe_and_date(source)
+    family.test_family_observed_md_cites_files_that_exist(source)
+
+
+def test_a_source_that_keeps_observed_md_passes_the_three_rules_it_meets(tmp_path: Path) -> None:
+    _write(tmp_path, OBSERVED_TREE)
+    source = _rooted(tmp_path)
+    family.test_family_fetched_md_lists_observed_md_in_a_row_of_its_own(source)
+    family.test_family_observed_notes_end_with_their_probe_and_date(source)
+    family.test_family_observed_md_cites_files_that_exist(source)
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        f"| OBSERVED.md | - | - | {HAND} |",  # sdk-cashctrl's four cells
+        f"| OBSERVED.md | - | - | - | - | {HAND} |",  # the six of sdk-eurostat's script
+        f"| OBSERVED.md | - | - | - | - | - | - | - | {HAND} |",  # the nine of four sources
+        "| OBSERVED.md | Written by hand, never fetched |",
+    ],
+)
+def test_the_row_of_observed_md_is_told_by_its_cells_at_any_width(row: str) -> None:
+    assert family._lists_observed(FETCHED_MD.format(row=row))
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        "",  # sdk-eurostat's FETCHED.md on 2026-11-21: the file kept, its row not written
+        f"| OBSERVED.md | https://example.org/observed | - | {HAND} |",
+        "| OBSERVED.md | - | - | the notes on what upstream does but never documents |",
+        f"| docs/upstream/OBSERVED.md | - | - | {HAND} |",
+        f"| OBSERVED.md, index.md | - | - | {HAND} |",
+        f"Nothing here is edited by hand but `OBSERVED.md`, {HAND}.",
+    ],
+)
+def test_a_row_that_was_fetched_names_another_file_or_no_hand_is_none(row: str) -> None:
+    assert not family._lists_observed(FETCHED_MD.format(row=row))
+
+
+def test_a_fetched_md_without_the_row_fails_naming_the_row(tmp_path: Path) -> None:
+    _write(tmp_path, {**OBSERVED_TREE, "docs/upstream/FETCHED.md": FETCHED_MD.format(row="")})
+    with pytest.raises(pytest.fail.Exception) as failed:
+        family.test_family_fetched_md_lists_observed_md_in_a_row_of_its_own(_rooted(tmp_path))
+    assert str(failed.value) == (
+        "docs/upstream/FETCHED.md lists OBSERVED.md in no row of its own: write a row of its "
+        "table whose first cell is OBSERVED.md, whose last cell says that it is written by "
+        "hand and whose cells between are - (conventions §3, ADR-0044)"
+    )
+    (tmp_path / "docs" / "upstream" / "FETCHED.md").unlink()
+    with pytest.raises(pytest.fail.Exception, match=r"^docs/upstream/FETCHED\.md is missing"):
+        family.test_family_fetched_md_lists_observed_md_in_a_row_of_its_own(_rooted(tmp_path))
+
+
+def test_the_notes_are_the_h3_sections_each_judged_by_its_last_paragraph() -> None:
+    notes = family._observed_notes(OBSERVED_MD)
+    assert [heading for heading, _ in notes] == [
+        "A year without data answers HTTP 404",
+        "The layout of the yearly file",
+        "A year without data answers HTTP 404",
+    ]
+    assert [paragraphs[-1].split(",")[0] for _, paragraphs in notes] == [
+        "Probe: 2026-11-20",
+        "Observed: 2026-10-28",
+        "Probe: 2026-11-21",
+    ]
+    assert notes[1][1][1:4] == [
+        "```text ## a line of the file, not a heading ```",
+        "#### Columns",
+        "The columns are named as upstream prints them.",
+    ]
+    assert family._probe_problems(OBSERVED_MD) == []
+
+
+NOTE = "# Notes\n\n## Group\n\n### A note\n\nWhat upstream does.\n\n{last}\n"
+
+
+@pytest.mark.parametrize(
+    ("last", "problem"),
+    [
+        (
+            "Probe: 2026-11-20.\n\nThe package reads it as None.",
+            "A note: its last paragraph opens 'The package reads it as None.'",
+        ),
+        (
+            "Probe: on 2026-11-20, `GET /v1/series`.",
+            "A note: its last paragraph opens 'Probe: on 2026-11-20, `GET /v1/series`.'",
+        ),
+        (
+            "Probe: `GET /v1/series`, sample\n`tests/fixtures/get_series/empty.json`.",
+            "A note: its last paragraph opens 'Probe: `GET /v1/series`, sample `tests/f...'",
+        ),
+        ("Seen: 2026-11-20.", "A note: its last paragraph opens 'Seen: 2026-11-20.'"),
+        ("probe: 2026-11-20.", "A note: its last paragraph opens 'probe: 2026-11-20.'"),
+        ("Probe: 20261120.", "A note: its last paragraph opens 'Probe: 20261120.'"),
+        ("Probe: 2026-13-01, `GET /v1/series`.", "A note: 2026-13-01 is no date"),
+    ],
+)
+def test_a_note_whose_last_paragraph_is_no_dated_probe_fails(last: str, problem: str) -> None:
+    assert family._probe_problems(NOTE.format(last=last)) == [problem]
+
+
+def test_a_file_without_notes_or_with_an_empty_note_fails() -> None:
+    ungrouped = "# Notes\n\n## Series\n\nProbe: 2026-11-20, a probe under no note.\n"
+    assert family._probe_problems(ungrouped) == ["the file holds no note"]
+    empty = "### A note\n\n### Another\n\nProbe: 2026-11-20.\n"
+    assert family._probe_problems(empty) == ["A note: no paragraph"]
+
+
+def test_a_failing_note_fails_beside_one_of_the_same_heading(tmp_path: Path) -> None:
+    """The first of two notes of one heading fails: a note keyed by its heading would pass."""
+    broken = OBSERVED_MD.replace("Probe: 2026-11-20, ", "Seen on 2026-11-20, ")
+    _write(tmp_path, {**OBSERVED_TREE, "docs/upstream/OBSERVED.md": broken})
+    with pytest.raises(pytest.fail.Exception) as failed:
+        family.test_family_observed_notes_end_with_their_probe_and_date(_rooted(tmp_path))
+    assert str(failed.value).splitlines() == [
+        OBSERVED_INTRO,
+        "- A year without data answers HTTP 404: its last paragraph opens 'Seen on "
+        "2026-11-20, `GET /v1/series`; sa...'",
+    ]
+
+
+def test_every_path_a_code_span_cites_is_a_file_from_the_root(tmp_path: Path) -> None:
+    assert family._missing_citations(OBSERVED_MD, tmp_path) == [
+        "line 4: tests/fixtures/get_series/corn.json",
+        "line 14: tests/fixtures/get_series/empty.json",
+        "line 29: docs/upstream/samples/series.json",
+    ]
+    _write(tmp_path, OBSERVED_TREE)
+    assert family._missing_citations(OBSERVED_MD, tmp_path) == []
+    (tmp_path / "tests" / "fixtures" / "get_series" / "empty.json").unlink()
+    with pytest.raises(pytest.fail.Exception) as failed:
+        family.test_family_observed_md_cites_files_that_exist(_rooted(tmp_path))
+    assert str(failed.value).splitlines() == [
+        "docs/upstream/OBSERVED.md cites files that do not exist, from the repository's root "
+        "(conventions §3, ADR-0044):",
+        "- line 14: tests/fixtures/get_series/empty.json",
+    ]
+
+
+WRAPPED = """### A query with no filter is refused
+
+A data query with no filter is refused with HTTP 500 and the plain text body `Please add
+at least one filter.`, as the sample `tests/fixtures/get_data/no_filter.json` holds.
+
+```text
+`tests/fixtures/in_a_fence.json` is text in a fenced block, no code span
+```
+
+Probe: 2026-10-29, `get_data`; sample `tests/fixtures/get_data/no_filter_500.json`.
+"""
+
+
+def test_a_span_that_wraps_onto_the_next_line_hides_no_citation_after_it(tmp_path: Path) -> None:
+    """A span may wrap onto the next line of its paragraph, as two of sdk-faostat's do.
+
+    Read line by line, its closing backtick would pair with the opening one of the next span,
+    and the path after it would go unread. A fenced block holds no code span.
+    """
+    assert family._missing_citations(WRAPPED, tmp_path) == [
+        "line 4: tests/fixtures/get_data/no_filter.json",
+        "line 10: tests/fixtures/get_data/no_filter_500.json",
+    ]
+
+
+def test_the_family_check_holds_a_sources_observed_md(pytester: pytest.Pytester) -> None:
+    result = run_family(pytester, OBSERVED_TREE)
+    result.assert_outcomes(passed=FAMILY_TESTS)
+    cited = "tests/fixtures/get_series/empty.json"
+    (pytester.path / cited).unlink()
+    broken: dict[str, str | None] = {
+        "docs/upstream/FETCHED.md": FETCHED_MD.format(row=""),
+        "docs/upstream/OBSERVED.md": OBSERVED_MD.replace("Observed: 2026-10-28, in", "From"),
+        cited: None,
+    }
+    result = run_family(pytester, {**OBSERVED_TREE, **broken})
+    result.assert_outcomes(passed=FAMILY_TESTS - 3, failed=3)
+    result.stdout.fnmatch_lines(["*docs/upstream/FETCHED.md lists OBSERVED.md in no row of its*"])
+    result.stdout.fnmatch_lines(
+        ["*- The layout of the yearly file: its last paragraph opens 'From*"]
+    )
+    result.stdout.fnmatch_lines([f"*- line 14: {cited}*"])
