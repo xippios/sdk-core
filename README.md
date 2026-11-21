@@ -887,6 +887,41 @@ deployment may serve without authentication, a mailbox say, is held the same way
 answers for both kinds. The usage line names the entry point that runs, and the help of
 `--allow-remote` and the refusal name the server's kind.
 
+A tool whose cut answer a caller continues takes a paged cap, `ResultCap(paged=True)`
+(ADR-0047): the adapter gives it its own argument `offset: int = 0`, the rows of the answer
+already shown, runs the task again without it and cuts the task's rows from there. A cut
+answer of 500 rows shows 200 and its note ends with the call for the next ones, `showing 200
+of 500 rows (cap: 200 rows or 65536 bytes); narrow the query to see the rest; continue with
+offset=200`. The call with `offset=200` answers `showing rows 201 to 400 of 500`, the cap
+and its note, and `continue with offset=400`, and the last page is its count alone,
+`showing rows 401 to 500 of 500`. A page cut short by the byte bound names the right next
+offset, a row that alone passes the bound is passed with `continue past it with
+offset=<offset + 1>`, and an offset past the end answers no row and says so. `offset` reaches neither the task nor
+`meta.request`, and every page carries its note, so an answer without one is whole.
+`ResultCap(keep="last")` keeps the newest rows of a series ordered oldest first, in the
+task's order, and its `offset` counts from the last row, so the continuation walks to older
+rows; without `paged` it answers the newest rows and the note alone.
+
+```python
+MCP_CAPS: Mapping[str, ResultCap] = {
+    "list_publications": ResultCap(paged=True),  # a packaged table: a second run is free
+    "get_series": ResultCap(paged=True, keep="last", note="pass since to see later periods"),
+}
+```
+
+A continuation runs the task again, so a source pages a tool where that second run costs
+little: a packaged table (sdk-usda-esmis's `list_publications`), an answer the response
+cache holds (sdk-faostat and sdk-eurostat, for 300 seconds) or one request (sdk-usda-esr's
+`get_exports` for every country). It leaves a tool unpaged where a second run is dear:
+sdk-usda-nass's `get_data` split by year spends up to 41 keyed calls, sdk-usda-esr's
+`get_weekly_series` one request per market year, up to 11, of the 1,000 an hour its key
+shares, and each page of sdk-x's post tools is billed per post. Such a series can still
+keep its newest rows unpaged. Rows can change between two runs, so a continuation of a live
+list can repeat or skip a row. A task that pages with its own `start` keeps its `resume with
+start=` note and stays unpaged, and `register_tasks` refuses a paged cap, with `ValueError`
+naming the tool, for a task that takes a parameter `offset` itself. A tool without
+`paged=True` declares no `offset`, and its notes read as before.
+
 `tool_functions(tasks)` gives the functions of `tasks.__all__` that become tools, those in
 its `BULK_TASKS` left out, read from the module it is given; it refuses an entry whose
 function carries another `__name__`, since a task's name is its entry in `__all__` for its
