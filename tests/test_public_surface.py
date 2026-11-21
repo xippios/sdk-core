@@ -35,6 +35,8 @@ EXPORTS = {
         "EnvVar",
         # a packaged list's codes, declared once, and their check (ADR-0045)
         "PackagedCodes",
+        # the ceiling of a period series and its requests in order (ADR-0054)
+        "Ceiling", "fetch_periods",
     },
     "xippios.core.client": {
         "AsyncClient", "BasicKeyAuth", "BearerAuth", "CachedResponse", "ClientConfig",
