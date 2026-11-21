@@ -695,3 +695,144 @@ def test_quiet_request_logging_is_idempotent() -> None:
     assert [lg.level for lg in loggers] == [logging.WARNING] * len(REQUEST_LOGGERS)
     assert [(lg.handlers, lg.propagate, lg.disabled) for lg in loggers] == before
     assert (logging.getLogger().level, logging.getLogger().handlers) == root_before
+
+
+# The rest of a cut answer: a paged cap gives the tool the adapter's own offset
+# (https://github.com/xippios/sdk-core/issues/314, decided in sdk-core#362).
+
+
+def list_weeks_factory(runs: list[dict[str, Any]]) -> Callable[..., Result[list[int]]]:
+    def list_weeks(year: int = 2024) -> Result[list[int]]:
+        """List the 500 weeks of a series, oldest first.
+
+        Args:
+            year: Marketing year, e.g. ``2024``.
+        """
+        runs.append({"year": year})
+        meta = ResultMeta(source="example", endpoint="weeks", request={"year": year})
+        return Result[list[int]](data=list(range(500)), meta=meta)
+
+    return list_weeks
+
+
+def paged() -> dict[str, ResultCap]:
+    return {"list_weeks": ResultCap(paged=True)}
+
+
+@pytest.mark.anyio
+async def test_a_paged_tool_answers_200_of_500_and_the_call_its_note_names_the_next_200() -> None:
+    runs: list[dict[str, Any]] = []
+    server = build_server("example", [list_weeks_factory(runs)], caps=paged())
+    first = await mcp_call(server, "example_list_weeks", {"year": 2024})
+    assert first["data"] == list(range(200))
+    assert first["note"] == (
+        "showing 200 of 500 rows (cap: 200 rows or 65536 bytes); narrow the query to see the "
+        "rest; continue with offset=200"
+    )
+    second = await mcp_call(server, "example_list_weeks", {"year": 2024, "offset": 200})
+    assert second["data"] == list(range(200, 400))
+    assert second["note"].endswith("; continue with offset=400")
+    assert second["meta"]["request"] == {"year": 2024}, "offset is the adapter's, not the task's"
+    assert runs == [{"year": 2024}, {"year": 2024}], "the task runs again, without offset"
+
+
+@pytest.mark.anyio
+async def test_a_paged_tool_that_keeps_the_last_rows_walks_to_older_ones() -> None:
+    caps = {"list_weeks": ResultCap(paged=True, keep="last")}
+    server = build_server("example", [list_weeks_factory([])], caps=caps)
+    newest = await mcp_call(server, "example_list_weeks", {})
+    assert newest["data"] == list(range(300, 500))
+    assert newest["note"].endswith("; continue with offset=200")
+    older = await mcp_call(server, "example_list_weeks", {"offset": 200})
+    assert older["data"] == list(range(100, 300))
+
+
+@pytest.mark.anyio
+async def test_a_paged_tool_declares_offset_and_an_unpaged_one_does_not() -> None:
+    server = build_server("example", [list_weeks_factory([]), get_series], caps=paged())
+    tools = {tool.name: tool for tool in await server.list_tools()}
+    weeks = tools["example_list_weeks"].input_schema
+    assert list(weeks["properties"]) == ["year", "offset"]
+    assert weeks["properties"]["offset"] == {
+        "default": 0,
+        "description": "Rows of the answer already shown, to skip: the note of a cut answer "
+        "names the next offset. 0, the default, starts at the first row.",
+        "minimum": 0,
+        "title": "Offset",
+        "type": "integer",
+    }
+    assert "required" not in weeks
+    series = tools["example_get_series"].input_schema
+    assert list(series["properties"]) == ["series_id", "year"]
+    text = await mcp_call_text(server, "example_get_series", {"series_id": "CORN", "offset": 200})
+    assert text == (
+        "error: InvalidRequestError: offset: Not an argument of this tool; it takes series_id, year"
+    ), "the unpaged tool's refusal reads as before"
+
+
+@pytest.mark.anyio
+async def test_a_cap_that_keeps_the_last_rows_describes_offset_from_the_last_row() -> None:
+    caps = {"list_weeks": ResultCap(paged=True, keep="last")}
+    server = build_server("example", [list_weeks_factory([])], caps=caps)
+    (tool,) = await server.list_tools()
+    assert tool.input_schema["properties"]["offset"]["description"] == (
+        "Rows of the answer already shown, counted from its last row: the note of a cut "
+        "answer names the next offset, which reaches older rows. 0, the default, starts at "
+        "the last row."
+    )
+
+
+@pytest.mark.anyio
+async def test_a_negative_offset_is_refused_before_the_task_runs() -> None:
+    runs: list[dict[str, Any]] = []
+    server = build_server("example", [list_weeks_factory(runs)], caps=paged())
+    text = await mcp_call_text(server, "example_list_weeks", {"offset": -1})
+    assert text == "error: InvalidRequestError: offset: Input should be greater than or equal to 0"
+    assert runs == []
+
+
+async def get_summary_async() -> Result[dict[str, int]]:
+    """Summarise the series in one record."""
+    meta = ResultMeta(source="example", endpoint="summary")
+    return Result[dict[str, int]](data={"weeks": 500}, meta=meta)
+
+
+get_summary = sync(get_summary_async)
+
+
+@pytest.mark.anyio
+async def test_a_paged_tool_whose_answer_holds_no_rows_refuses_an_offset() -> None:
+    server = build_server("example", [get_summary], caps={"get_summary": ResultCap(paged=True)})
+    assert (await mcp_call(server, "example_get_summary", {}))["data"] == {"weeks": 500}
+    text = await mcp_call_text(server, "example_get_summary", {"offset": 5})
+    assert text == (
+        "error: InvalidRequestError: offset: this answer holds no list of rows to continue; "
+        "call the tool without offset"
+    )
+
+
+def list_pages(offset: int = 0) -> Result[list[int]]:
+    """List rows from an upstream offset of the task's own.
+
+    Args:
+        offset: Upstream's offset, e.g. ``100``.
+    """
+    return Result[list[int]](data=[offset], meta=ResultMeta(source="example", endpoint="pages"))
+
+
+@pytest.mark.anyio
+async def test_a_task_that_takes_offset_itself_is_refused_a_paged_cap() -> None:
+    caps = {"list_pages": ResultCap(paged=True)}
+    why = (
+        r"^example_list_pages: the task takes a parameter offset, which a paged cap adds as "
+        r"the adapter's own argument for the rest of a cut answer; rename the task's "
+        r"parameter or leave the tool unpaged$"
+    )
+    with pytest.raises(ValueError, match=why):
+        build_server("example", [list_weeks_factory([]), list_pages], caps=caps)
+    server = build_server("example", [])
+    with pytest.raises(ValueError, match=why):
+        register_tasks(server, "example", [list_pages], cap=ResultCap(paged=True))
+    assert await server.list_tools() == [], "checked before anything is registered"
+    unpaged = build_server("example", [list_pages])
+    assert (await mcp_call(unpaged, "example_list_pages", {"offset": 7}))["data"] == [7]

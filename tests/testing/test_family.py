@@ -188,6 +188,27 @@ def test_an_adapter_that_drops_a_task_fails_naming_it(pytester: pytest.Pytester)
     )
 
 
+def test_a_paged_tool_takes_its_tasks_parameters_and_the_adapters_offset(
+    pytester: pytest.Pytester,
+) -> None:
+    # sdk-core#362: offset is the adapter's argument, which the task never takes.
+    paged = SOURCE["src/xippios/example/mcp.py"].replace(
+        f"{SERVED})", f"{SERVED}, caps={{'get_series': ResultCap(paged=True)}})"
+    )
+    paged = "from xippios.core import ResultCap\n" + paged
+    result = run_family(pytester, {"src/xippios/example/mcp.py": paged})
+    result.assert_outcomes(passed=FAMILY_TESTS)
+    # A task that takes offset itself cannot be paged: the server refuses it as it is built.
+    own = TASKS.replace("(series_id: str, year: int = 2024)", "(series_id: str, offset: int = 0)")
+    result = run_family(
+        pytester, {"src/xippios/example/mcp.py": paged, "src/xippios/example/tasks.py": own}
+    )
+    result.assert_outcomes(passed=FAMILY_TESTS - 1, failed=1)
+    result.stdout.fnmatch_lines(
+        ["*example_get_series: the task takes a parameter offset, which a paged cap adds*"]
+    )
+
+
 def test_a_stale_status_table_fails_naming_both_sides(pytester: pytest.Pytester) -> None:
     stale = README.replace("`list_regions()`", "`list_old_regions()`")
     result = run_family(pytester, {"README.md": stale})

@@ -1,6 +1,11 @@
 import json
+import re
 from datetime import UTC, datetime
+from typing import Any, Literal
 
+import pytest
+
+from xippios.core.errors import InvalidRequestError
 from xippios.core.mcp import cap_result
 from xippios.core.models import Result, ResultCap, ResultMeta, UpstreamModel
 
@@ -339,3 +344,214 @@ def test_a_model_whose_first_row_alone_passes_the_cap_shows_no_row_and_says_so()
         "showing 0 of 2 rows (cap: 200 rows or 1000 bytes); the row at offset 7 alone "
         "exceeds the byte cap; narrow the query to see the rest"
     )
+
+
+# The notes an unpaged cap writes, as main read them at 0.4.0. Sources pin them under
+# xippios-core~=0.4.0 (sdk-usda-esr's every-country note, sdk-google-mail's start notes), so
+# a paged cap, sdk-core#362, leaves each byte as it is.
+GET_THREAD = "read a long message alone with google_mail_get_message"
+COUNTRY = "pass country_code, e.g. 1220 (Canada), for one destination's weeks, up to 54 rows"
+
+
+@pytest.mark.parametrize(
+    ("result", "cap", "note"),
+    [
+        (envelope(500), ResultCap(),
+         "showing 200 of 500 rows (cap: 200 rows or 65536 bytes); narrow the query to see the "
+         "rest"),
+        (envelope(498), ResultCap(note=COUNTRY),
+         f"showing 200 of 498 rows (cap: 200 rows or 65536 bytes); {COUNTRY}"),
+        (envelope(3, request={"start": 4}), ResultCap(max_rows=2, note=GET_THREAD),
+         f"showing 2 of 3 rows (cap: 2 rows or 65536 bytes); {GET_THREAD}; resume with start=6"),
+        (Result[list[str]](data=["x" * 70_000] * 2, meta=envelope(0, request={"start": 0}).meta),
+         ResultCap(note=GET_THREAD),
+         "showing 0 of 2 rows (cap: 200 rows or 65536 bytes); the row at offset 0 alone exceeds "
+         f"the byte cap; {GET_THREAD}"),
+        (["x" * 3000, "y"], ResultCap(max_bytes=1000),
+         "showing 0 of 2 rows (cap: 200 rows or 1000 bytes); the first row alone exceeds the "
+         "byte cap; narrow the query to see the rest"),
+        ([1, 2, 3], ResultCap(max_bytes=10),
+         "showing 0 of 3 rows (cap: 200 rows or 10 bytes); narrow the query to see the rest"),
+        ({"blob": "x" * 500}, ResultCap(max_bytes=100),
+         "result is 511 bytes, over the cap of 100; narrow the query to see the rest"),
+    ],
+)  # fmt: skip
+def test_an_unpaged_note_reads_as_on_main_byte_for_byte(
+    result: object, cap: ResultCap, note: str
+) -> None:
+    assert json.loads(cap_result(result, cap))["note"] == note
+    assert "offset=" not in note
+
+
+def _n(payload: dict[str, Any]) -> list[int]:
+    return [row["n"] for row in payload["data"]]
+
+
+def test_a_paged_cut_names_the_call_for_the_next_rows_and_that_call_answers_them() -> None:
+    # https://github.com/xippios/sdk-core/issues/314: a tool of 500 rows answers 200.
+    first = json.loads(cap_result(envelope(500), ResultCap(paged=True)))
+    assert _n(first) == list(range(200))
+    assert first["note"] == (
+        "showing 200 of 500 rows (cap: 200 rows or 65536 bytes); narrow the query to see the "
+        "rest; continue with offset=200"
+    )
+    second = json.loads(cap_result(envelope(500), ResultCap(paged=True), offset=200))
+    assert _n(second) == list(range(200, 400))
+    assert second["note"] == (
+        "showing rows 201 to 400 of 500 (cap: 200 rows or 65536 bytes); narrow the query to "
+        "see the rest; continue with offset=400"
+    )
+    last = json.loads(cap_result(envelope(500), ResultCap(paged=True), offset=400))
+    assert _n(last) == list(range(400, 500))
+    assert last["note"] == "showing rows 401 to 500 of 500", "a page says so, the last one too"
+    assert first["meta"] == second["meta"] == last["meta"], "meta stays the task's"
+
+
+def test_a_paged_answer_that_fits_is_whole_and_carries_no_note() -> None:
+    assert cap_result(envelope(5), ResultCap(paged=True)) == cap_result(envelope(5))
+    assert "note" not in json.loads(cap_result(envelope(5), ResultCap(paged=True)))
+    assert json.loads(cap_result(envelope(5), ResultCap(paged=True), offset=3))["note"] == (
+        "showing rows 4 to 5 of 5"
+    )
+
+
+def test_a_cap_that_keeps_the_last_rows_answers_the_newest_and_walks_to_older() -> None:
+    # sdk-usda-esr's weekly series run oldest first: the newest 200 come first.
+    cap = ResultCap(paged=True, keep="last")
+    newest = json.loads(cap_result(envelope(500), cap))
+    assert _n(newest) == list(range(300, 500)), "the newest rows, in the task's order"
+    assert newest["note"] == (
+        "showing rows 301 to 500 of 500 (cap: 200 rows or 65536 bytes); narrow the query to "
+        "see the rest; continue with offset=200"
+    )
+    older = json.loads(cap_result(envelope(500), cap, offset=200))
+    assert _n(older) == list(range(100, 300))
+    assert older["note"].endswith("; continue with offset=400")
+    oldest = json.loads(cap_result(envelope(500), cap, offset=400))
+    assert _n(oldest) == list(range(100))
+    assert oldest["note"] == "showing rows 1 to 100 of 500"
+
+
+def test_an_unpaged_cap_that_keeps_the_last_rows_names_them_and_no_continuation() -> None:
+    payload = json.loads(cap_result(envelope(500, request={"start": 0}), ResultCap(keep="last")))
+    assert _n(payload) == list(range(300, 500))
+    assert payload["note"] == (
+        "showing rows 301 to 500 of 500 (cap: 200 rows or 65536 bytes); narrow the query to "
+        "see the rest"
+    ), "start + shown would name rows after the kept end, so no resume either"
+
+
+def _walk(result: object, cap: ResultCap) -> list[dict[str, Any]]:
+    """Every page of ``result``, by the offset each note names, checking each page's bound."""
+    pages: list[dict[str, Any]] = []
+    offset = 0
+    while True:
+        text = cap_result(result, cap, offset=offset)
+        assert _utf8(text) <= cap.max_bytes
+        pages.append(json.loads(text))
+        found = re.search(r"; continue with offset=(\d+)$", pages[-1].get("note", ""))
+        if found is None:
+            return pages
+        assert int(found[1]) > offset
+        offset = int(found[1])
+
+
+@pytest.mark.parametrize("keep", ["first", "last"])
+def test_the_byte_bound_cuts_a_page_short_and_the_next_offset_is_still_right(
+    keep: Literal["first", "last"],
+) -> None:
+    cap = ResultCap(paged=True, keep=keep, max_bytes=2000)
+    pages = _walk(envelope(500), cap)
+    assert all(len(page["data"]) < 200 for page in pages), "the byte bound cuts first"
+    assert len(pages) > 10
+    rows = [_n(page) for page in pages]
+    walked = [n for page in (rows if keep == "first" else rows[::-1]) for n in page]
+    assert walked == list(range(500)), "no row repeated, none skipped"
+
+
+def test_a_paged_model_keeps_its_other_fields_on_every_page() -> None:
+    cap = ResultCap(paged=True, max_bytes=2000)
+    pages = _walk(page(300), cap)
+    assert len(pages) > 2
+    assert [row["n"] for p in pages for row in p["data"]["rows"]] == list(range(300))
+    assert {(p["data"]["requested"], p["data"]["count"]) for p in pages} == {
+        ("2026-10-28 16:14:25.593", 300)
+    }
+    # Within the byte cap a model's page holds every row the offset leaves, past the row
+    # bound, as a whole model does.
+    rest = json.loads(cap_result(page(300), ResultCap(paged=True), offset=50))
+    assert [row["n"] for row in rest["data"]["rows"]] == list(range(50, 300))
+    assert rest["note"] == "showing rows 51 to 300 of 300"
+
+
+def test_a_row_alone_over_the_byte_bound_is_passed_by_offset_plus_one() -> None:
+    rows = ["a", "x" * 3000, "b", "c"]
+    cap = ResultCap(paged=True, max_bytes=1000)
+    assert json.loads(cap_result(rows, cap)) == {
+        "data": ["a"],
+        "note": "showing 1 of 4 rows (cap: 200 rows or 1000 bytes); narrow the query to see "
+        "the rest; continue with offset=1",
+    }
+    assert json.loads(cap_result(rows, cap, offset=1)) == {
+        "data": [],
+        "note": "showing 0 of 4 rows (cap: 200 rows or 1000 bytes); row 2 alone exceeds the "
+        "byte cap; narrow the query to see the rest; continue past it with offset=2",
+    }
+    assert json.loads(cap_result(rows, cap, offset=2)) == {
+        "data": ["b", "c"],
+        "note": "showing rows 3 to 4 of 4",
+    }
+
+
+def test_a_long_first_or_newest_row_is_passed_and_a_long_last_one_ends_the_walk() -> None:
+    cap = ResultCap(paged=True, max_bytes=1000)
+    assert json.loads(cap_result(["x" * 3000, "b"], cap))["note"] == (
+        "showing 0 of 2 rows (cap: 200 rows or 1000 bytes); the first row alone exceeds the "
+        "byte cap; narrow the query to see the rest; continue past it with offset=1"
+    )
+    newest = ResultCap(paged=True, keep="last", max_bytes=1000)
+    assert json.loads(cap_result(["a", "b", "x" * 3000], newest))["note"] == (
+        "showing 0 of 3 rows (cap: 200 rows or 1000 bytes); row 3 alone exceeds the byte cap; "
+        "narrow the query to see the rest; continue past it with offset=1"
+    )
+    assert json.loads(cap_result(["a", "b", "x" * 3000], newest, offset=1))["data"] == ["a", "b"]
+    assert json.loads(cap_result(["a", "x" * 3000], cap, offset=1))["note"] == (
+        "showing 0 of 2 rows (cap: 200 rows or 1000 bytes); row 2 alone exceeds the byte cap; "
+        "narrow the query to see the rest"
+    ), "no row is past it, so no continuation"
+
+
+def test_a_paged_note_never_names_the_tasks_own_start() -> None:
+    payload = json.loads(cap_result(envelope(500, request={"start": 100}), ResultCap(paged=True)))
+    assert payload["note"].endswith("narrow the query to see the rest; continue with offset=200")
+    assert "start" not in payload["note"]
+
+
+@pytest.mark.parametrize("keep", ["first", "last"])
+def test_an_offset_past_the_end_answers_no_row_and_says_so(
+    keep: Literal["first", "last"],
+) -> None:
+    cap = ResultCap(paged=True, keep=keep)
+    for offset in (500, 501, 10_000):
+        payload = json.loads(cap_result(envelope(500), cap, offset=offset))
+        assert payload["data"] == []
+        assert payload["note"] == f"showing 0 of 500 rows; offset {offset} leaves no row to show"
+    empty = json.loads(cap_result(envelope(0), cap, offset=3))
+    assert (empty["data"], empty["note"]) == (
+        [],
+        "showing 0 of 0 rows; offset 3 leaves no row to show",
+    )
+
+
+def test_an_offset_is_refused_below_zero_and_without_a_paged_cap() -> None:
+    with pytest.raises(ValueError, match=r"^offset must not be negative, got -1$"):
+        cap_result(envelope(5), ResultCap(paged=True), offset=-1)
+    with pytest.raises(ValueError, match=r"^offset needs a paged cap, ResultCap\(paged=True\)$"):
+        cap_result(envelope(5), ResultCap(), offset=1)
+    assert cap_result(envelope(5), ResultCap(), offset=0) == cap_result(envelope(5))
+
+
+def test_an_offset_on_an_answer_without_rows_is_refused() -> None:
+    assert json.loads(cap_result({"a": 1}, ResultCap(paged=True))) == {"a": 1}
+    with pytest.raises(InvalidRequestError, match=r"^offset: this answer holds no list of rows"):
+        cap_result({"a": 1}, ResultCap(paged=True), offset=1)

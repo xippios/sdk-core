@@ -310,6 +310,7 @@ def test_computed_decimal_fields_serialise_as_json_numbers() -> None:
         ({"max_bytes": 0}, "max_rows and max_bytes must be at least 1"),
         ({"note": ""}, "note must say how to see the rest"),
         ({"note": "   "}, "note must say how to see the rest"),
+        ({"keep": "newest"}, "keep must be 'first' or 'last', got 'newest'"),
     ],
 )
 def test_result_cap_refuses_an_empty_bound_or_a_blank_note(
@@ -317,3 +318,11 @@ def test_result_cap_refuses_an_empty_bound_or_a_blank_note(
 ) -> None:
     with pytest.raises(ValueError, match=match):
         ResultCap(**arguments)  # type: ignore[arg-type]
+
+
+def test_result_cap_pages_nothing_and_keeps_the_first_rows_by_default() -> None:
+    # The fields of sdk-core#362 are additive: every cap of today stays as it is.
+    assert (ResultCap().paged, ResultCap().keep) == (False, "first")
+    assert ResultCap(paged=True, keep="last") == ResultCap(keep="last", paged=True)
+    with pytest.raises(TypeError):
+        ResultCap(200)  # type: ignore[misc]  # keyword-only, so a field's place is free
