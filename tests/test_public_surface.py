@@ -55,6 +55,8 @@ EXPORTS = {
         "send_once", "send_once_sync",
         # the nightly comparison of a packaged list with upstream's (ADR-0055)
         "assert_list_current",
+        # the recording of every exchange of a task (ADR-0057)
+        "record_task", "record_task_sync",
     },
     "xippios.core.mcp": {
         "ResultCap", "build_parser", "build_server", "cap_result", "error_to_text", "main",
