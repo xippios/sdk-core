@@ -62,6 +62,11 @@ EXPORTS = {
         "ToolSet",
     },
     "xippios.core.http": {"is_scalar", "router_from_tasks", "status_for"},
+    # the snapshot script's frame and what its hooks take (ADR-0046)
+    "xippios.core.refresh": {
+        "Credentials", "NotFetched", "Page", "Response", "Row", "Section", "Snapshot",
+        "Statement", "changed", "decode", "dump_json", "load_json", "run",
+    },
 }  # fmt: skip
 
 
@@ -93,6 +98,7 @@ def test_optional_adapters_are_not_imported_eagerly() -> None:
     assert "xippios.core.models" in out
     for adapter in ("xippios.core.mcp", "xippios.core.http", "xippios.core.testing"):
         assert adapter not in out
+    assert "xippios.core.refresh" not in out, "a source's scripts import the frame themselves"
 
 
 def test_namespace_package_has_no_init_file() -> None:
