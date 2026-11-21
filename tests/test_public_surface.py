@@ -23,6 +23,8 @@ EXPORTS = {
         "Result", "ResultCap", "ResultMeta", "UpstreamModel", "parse", "parse_decimal",
         "collect", "paginate_offset", "load_json", "load_table", "PackagedList", "matches",
         "closest", "sync", "__version__",
+        # the filter of a vintage taken back and core's reader of a naive time (ADR-0052)
+        "newer_than", "naive_time",
         # the nearest-integer strategy of two sources (https://github.com/xippios/sdk-core/issues/107)
         "nearest",
         # tenants, back from the two sources' copies (ADR-0042, decision 1)
