@@ -1,9 +1,10 @@
 """Result envelope, release metadata and the base for upstream payload models (conventions §4)."""
 
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
-from typing import Any, Literal, Self
+from typing import Any, Literal, Protocol, Self
 
 import pydantic
 from pydantic import (
@@ -19,7 +20,7 @@ from pydantic import (
 )
 from pydantic.fields import FieldInfo
 
-from xippios.core.errors import ValidationError, _raise
+from xippios.core.errors import InvalidRequestError, ValidationError, _raise
 from xippios.core.redaction import REDACTED, redact_credentials
 
 __all__ = [
@@ -28,6 +29,8 @@ __all__ = [
     "ResultCap",
     "ResultMeta",
     "UpstreamModel",
+    "naive_time",
+    "newer_than",
     "parse",
     "parse_decimal",
     "utcnow",
@@ -258,6 +261,109 @@ class ResultMeta(BaseModel):
         if value is not None and value < 0:
             raise ValueError("total must not be negative")
         return value
+
+
+class _Ordered(Protocol):
+    """A release that ``>`` compares: a ``datetime``, or a ``(year, month)`` tuple say."""
+
+    def __gt__(self, other: Any, /) -> bool: ...
+
+
+_NAIVE_EXAMPLE = "2026-10-06T08:00:00"
+"""The example a refusal of ``naive_time`` shows: a release time printed without a zone."""
+
+
+def naive_time(text: str, *, source: str | None = None) -> datetime:
+    """A ``since`` read as a release time that upstream prints without a zone.
+
+    Core's reader of the vintage text for ``newer_than`` (ADR-0052), where ``meta.vintage``
+    holds the release time as upstream printed it (ADR-0041, decision 2). It reads with
+    ``datetime.fromisoformat``, so ``"2026-10-22T08:30:42.67"`` is that wall-clock time and a
+    date alone, ``"2026-10-22"``, its midnight. A source binds its slug once,
+    ``read_since = functools.partial(naive_time, source="example")``.
+
+    Args:
+        text: The ``meta.vintage`` text of an earlier call, e.g. ``"2026-10-22T08:30:42.67"``.
+        source: Source slug, which the refusal carries.
+
+    Returns:
+        The naive ``datetime`` the text names.
+
+    Raises:
+        InvalidRequestError: ``text`` is not an ISO date and time, or it carries a time zone:
+            the release times it is compared with carry none, and comparing the two would
+            invent one (ADR-0028), so it is refused, never converted.
+    """
+    parsed = None
+    if isinstance(text, str):
+        try:
+            parsed = datetime.fromisoformat(text)
+        except ValueError:
+            parsed = None
+    if parsed is not None and parsed.tzinfo is None:
+        return parsed
+    reason = (
+        "it carries a time zone: the release times it is compared with carry none, and "
+        "comparing the two would invent one"
+        if parsed is not None
+        else "it is not an ISO date and time"
+    )
+    raise InvalidRequestError(
+        "since must be the meta.vintage text of an earlier call, an ISO date and time without "
+        f"a time zone such as {_NAIVE_EXAMPLE!r}; got {text!r}, and {reason}.",
+        source=source,
+    )
+
+
+def newer_than[T, K: _Ordered](
+    since: str | None,
+    items: Iterable[T],
+    *,
+    released: Callable[[T], K | None],
+    read: Callable[[str], K],
+) -> list[T]:
+    """The items released strictly later than ``since``, a vintage taken back (ADR-0052).
+
+    The filter of a parameter that takes the ``meta.vintage`` of an earlier call to return
+    only what changed since (conventions §4; ADR-0041, decision 2). ``read`` reads the text
+    as the source's ``vintage`` wrote it, and ``released`` gives each item's release in the
+    same form, so the two compare: ``naive_time`` and a ``datetime`` for a release time
+    printed without a zone, or a source's own reader, a release month into ``(year,
+    month)`` say. An equal release is no newer.
+
+    It filters and nothing else: the task sets ``meta.vintage`` and ``meta.published_at``
+    from the whole upstream answer, so an answer with nothing newer still names the newest
+    release, the marker to store for the next call. The task also calls ``read`` on
+    ``since`` before its request, so an unreadable text is refused before the call
+    (conventions §5).
+
+    Args:
+        since: The ``meta.vintage`` text of an earlier call, as the caller gave it, e.g.
+            ``"2026-10-22T08:30:42.67"``; ``None`` keeps every item.
+        items: The items of the whole answer, in upstream's order; any iterable, read once.
+        released: An item's release, or ``None`` where upstream gives the item none. Such an
+            item is kept: it cannot be shown to be no newer, and dropping it would hide it
+            from every later call.
+        read: The source's reader of ``since``, which raises ``InvalidRequestError`` for a
+            text it cannot read; called once, before the first item, and never for ``None``.
+
+    Returns:
+        A new list of the items released strictly later than ``since`` or without a release,
+        in their order; every item when ``since`` is ``None``.
+
+    Raises:
+        InvalidRequestError: As ``read`` raises it, for a ``since`` it cannot read, whether
+            the answer holds items or none.
+    """
+    if since is None:
+        return list(items)
+    after = read(since)
+    kept: list[T] = []
+    for item in items:
+        release = released(item)
+        if release is None or release > after:
+            kept.append(item)
+    return kept
 
 
 class Result[T](BaseModel):
