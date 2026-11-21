@@ -34,6 +34,7 @@ records in `docs/adr/`. A record changes, and this file follows when the script 
 - <a id="0044"></a>[ADR-0044](adr/0044-the-family-check-of-the-observed-behavior-file.md): The family check of the observed-behavior file · Accepted · 2026-11-21
 - <a id="0045"></a>[ADR-0045](adr/0045-one-check-of-an-argument-against-a-packaged-list.md): One check of an argument against a packaged list · Accepted · 2026-11-21
 - <a id="0046"></a>[ADR-0046](adr/0046-the-snapshot-script-s-frame-in-core.md): The snapshot script's frame in core · Accepted · 2026-11-21
+- <a id="0047"></a>[ADR-0047](adr/0047-the-adapter-s-offset-for-the-rest-of-a-cut-answer.md): The adapter's offset for the rest of a cut answer · Accepted · 2026-11-21
 - <a id="0048"></a>[ADR-0048](adr/0048-core-s-recorder-frame-around-a-source-s-rewrite-step.md): Core's recorder frame around a source's rewrite step · Accepted · 2026-11-21
 
 The superseded records follow, kept as written: the record that each status names holds its decision now.
