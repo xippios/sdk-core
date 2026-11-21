@@ -4,6 +4,7 @@ from pathlib import Path
 import httpcore
 import pytest
 
+from xippios.core import tenants
 from xippios.core.client import QuotaPolicy
 from xippios.core.client.auth import EnvKeyAuth, RenewingBearerAuth
 from xippios.core.client.ratelimit import TokenBucket
@@ -515,6 +516,176 @@ def test_a_live_run_ends_with_the_quota_left(
         )
         assert "tenant" not in result.stdout.str()
         assert "SECRET" not in result.stdout.str()
+
+
+SENT = "requests sent by the live run"
+IN_MEMORY = """
+import httpcore
+import httpx
+import pytest
+
+OK = [b"HTTP/1.1 200 OK\\r\\n", b"Content-Length: 0\\r\\n", b"Connection: close\\r\\n", b"\\r\\n"]
+MOVED = [
+    b"HTTP/1.1 302 Found\\r\\n",
+    b"Location: https://files.example.test/a.csv\\r\\n",
+    b"Content-Length: 0\\r\\n",
+    b"Connection: close\\r\\n",
+    b"\\r\\n",
+]
+
+
+@pytest.fixture(autouse=True)
+def answered_in_memory(monkeypatch):
+    # httpcore's mock streams stand in for the network: a request reaches the pool, and no
+    # socket is opened. old.example.test redirects; every other host answers 200. A proxy
+    # that the shell names would take the first answer as its tunnel's.
+    for name in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"):
+        monkeypatch.delenv(name, raising=False)
+        monkeypatch.delenv(name.lower(), raising=False)
+
+    def connect(self, host, *port_and_options, **options):
+        return httpcore.MockStream(list(MOVED if host == "old.example.test" else OK))
+
+    async def connect_async(self, host, *port_and_options, **options):
+        return httpcore.AsyncMockStream(list(MOVED if host == "old.example.test" else OK))
+
+    monkeypatch.setattr(httpcore.SyncBackend, "connect_tcp", connect)
+    monkeypatch.setattr(httpcore.AnyIOBackend, "connect_tcp", connect_async)
+"""
+COUNT_TESTS = (
+    IN_MEMORY
+    + """
+
+from xippios.core.client import AsyncClient, ClientConfig
+
+
+@pytest.mark.live
+def test_a_live_test_sends_and_follows_a_redirect():
+    assert httpx.get("https://api.example.test/v1/series?api_key=SECRET").status_code == 200
+    moved = httpx.get("https://old.example.test/v1/a.csv", follow_redirects=True)
+    assert (moved.status_code, len(moved.history)) == (200, 1)
+
+
+@pytest.mark.live
+@pytest.mark.anyio
+async def test_a_live_test_sends_through_the_family_client():
+    config = ClientConfig(source="example", version="1", base_url="https://api.example.test")
+    client = AsyncClient(config)
+    assert (await client.request("GET", "/v1/series")).status_code == 200
+    await client.aclose()
+
+
+@pytest.mark.live
+def test_a_replayed_request_is_not_sent(replay_fixture):
+    replay_fixture("ep", "case")
+    assert httpx.get("https://h.test/p").json() == {"a": 1}
+
+
+def test_an_offline_test_sends_nothing(replay_fixture):
+    replay_fixture("ep", "case")
+    assert httpx.get("https://h.test/p").json() == {"a": 1}
+"""
+)
+
+
+@pytest.mark.parametrize(
+    ("gate", "options", "outcomes", "lines"),
+    [
+        (
+            "1",
+            (),
+            {"passed": 4},
+            [f"{SENT}: 4 (api.example.test: 2, files.example.test: 1, old.example.test: 1)"],
+        ),
+        ("0", (), {"passed": 1, "skipped": 3}, []),
+        ("1", ("-m", "not live"), {"passed": 1, "deselected": 3}, []),
+    ],
+    ids=["live", "gate-closed", "live-deselected"],
+)
+def test_a_live_run_ends_with_the_requests_it_sent(
+    pytester: pytest.Pytester,
+    monkeypatch: pytest.MonkeyPatch,
+    gate: str,
+    options: tuple[str, ...],
+    outcomes: dict[str, int],
+    lines: list[str],
+) -> None:
+    # sdk-core#335: a release PR reads its count of live calls from the log of the run.
+    # Each hop of a redirect is a request; a replayed one never left the process.
+    monkeypatch.setenv(LIVE_ENV, gate)
+    monkeypatch.setattr(tenants, "_declared", False)  # no registry but the inner run's
+    write_ep_case(pytester)
+    pytester.makepyfile(COUNT_TESTS)
+    result = pytester.runpytest("-p", "xippios.core.testing.plugin", "--strict-markers", *options)
+    result.assert_outcomes(**outcomes)
+    assert [line for line in result.outlines if line.startswith(SENT)] == lines
+    assert "SECRET" not in result.stdout.str()
+    assert "/v1/" not in "".join(lines)
+
+
+SKIPPED_TESTS = """
+import pytest
+
+@pytest.mark.live
+@pytest.mark.skipif(True, reason="the key is not set")
+def test_live():
+    raise AssertionError("never runs")
+
+def test_offline():
+    assert True
+"""
+
+
+@pytest.mark.parametrize(
+    ("tests", "outcomes"),
+    [(TEST_FILE, {"passed": 2}), (SKIPPED_TESTS, {"passed": 1, "skipped": 1})],
+    ids=["sends-nothing", "skips-at-setup"],
+)
+def test_a_live_run_that_sends_nothing_says_so(
+    pytester: pytest.Pytester,
+    monkeypatch: pytest.MonkeyPatch,
+    tests: str,
+    outcomes: dict[str, int],
+) -> None:
+    # A nightly whose live tests all skip, its key unset say, is green and prints 0, which
+    # no run that is not live prints (finding 1 of sdk-core#358).
+    monkeypatch.setenv(LIVE_ENV, "1")
+    monkeypatch.setattr(tenants, "_declared", False)
+    pytester.makepyfile(tests)
+    result = pytester.runpytest("-p", "xippios.core.testing.plugin", "--strict-markers")
+    result.assert_outcomes(**outcomes)
+    assert [line for line in result.outlines if line.startswith(SENT)] == [f"{SENT}: 0"]
+
+
+TENANT_COUNT_TESTS = (
+    IN_MEMORY
+    + """
+
+from xippios.core.tenants import Tenants
+
+TENANTS = Tenants("example", list_var="EXAMPLE_TENANTS", param="org", fields=["SUBDOMAIN"])
+
+
+@pytest.mark.live
+def test_a_live_test_sends_to_a_tenant_host():
+    assert httpx.get("https://acme.example.test/api/v1/account").status_code == 200
+"""
+)
+
+
+def test_a_run_that_declares_tenants_names_no_host(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # ADR-0030, decision 4: a multi-tenant source's host names its tenant, and the plugin
+    # cannot tell a tenant's host from another, so a run that builds a registry names none.
+    monkeypatch.setenv(LIVE_ENV, "1")
+    monkeypatch.setattr(tenants, "_declared", False)
+    pytester.makepyfile(TENANT_COUNT_TESTS)
+    result = pytester.runpytest("-p", "xippios.core.testing.plugin", "--strict-markers")
+    result.assert_outcomes(passed=1)
+    printed = [line for line in result.outlines if line.startswith(SENT)]
+    assert printed == [f"{SENT}: 1 (hosts not named: tenants declared)"]
+    assert "acme" not in result.stdout.str()
 
 
 PLACEHOLDER_TESTS = """

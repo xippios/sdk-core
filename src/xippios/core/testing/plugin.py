@@ -7,6 +7,8 @@ ADR-0035 decides each guarantee and lists its edges; ``pytest_plugins =
 import asyncio
 import logging
 import os
+import threading
+from collections import Counter
 from collections.abc import Awaitable, Callable, Generator, Iterable, Iterator
 from pathlib import Path
 from typing import Any
@@ -20,6 +22,7 @@ from xippios.core.client.auth import EnvKeyAuth, RenewingBearerAuth
 from xippios.core.client.cache import _clear_every_cache
 from xippios.core.client.quota import QuotaPolicy, _every_policy, _reset_every_policy
 from xippios.core.client.ratelimit import TokenBucket
+from xippios.core.tenants import _tenants_declared
 from xippios.core.testing.fixtures import fixture_path
 from xippios.core.testing.replay import ReplayFixture, replay
 
@@ -55,14 +58,56 @@ def _refused(method: str, path: str) -> RuntimeError:
     )
 
 
+class _LiveRequests:
+    """The requests that live tests handed to httpcore's pools, by host, for the summary.
+
+    Counted from a live test's setup to its teardown, the gate open, answered or not: every
+    hop of a redirect and every attempt of a retry is one. A request that ``respx`` or a
+    transport of the test's own answers never reaches a pool and is not counted.
+    """
+
+    def __init__(self) -> None:
+        self.counting = False
+        """A live test is set up, running or being torn down, the gate open."""
+        self.ran = False
+        """A live test was set up with the gate open, one that skips at its setup included:
+        the summary prints the line, ``0`` where nothing was sent."""
+        self._by_host: Counter[str] = Counter()
+        self._lock = threading.Lock()
+
+    def count(self, request: httpcore.Request) -> None:
+        """Count ``request`` under its host while a live test runs."""
+        if self.counting:
+            host = request.url.host.decode("ascii", "replace")
+            with self._lock:
+                self._by_host[host] += 1
+
+    def line(self, *, name_hosts: bool) -> str:
+        """``requests sent by the live run: <n>``, then each host with its count, by name.
+
+        Without ``name_hosts`` no host is named: a run that built a ``Tenants`` may have
+        sent to a tenant's host, which names the tenant (ADR-0030, decision 4).
+        """
+        total = sum(self._by_host.values())
+        line = f"requests sent by the live run: {total}"
+        if not total:
+            return line
+        if not name_hosts:
+            return f"{line} (hosts not named: tenants declared)"
+        hosts = ", ".join(f"{host}: {sent}" for host, sent in sorted(self._by_host.items()))
+        return f"{line} ({hosts})"
+
+
 class _NetworkGuard:
     """httpcore's connection pools, patched once to refuse the network for the session.
 
-    ADR-0035, decision 1: the two pool methods, nothing of httpx's.
+    ADR-0035, decision 1: the two pool methods, nothing of httpx's. What a live test sends
+    through them is counted in ``live``.
     """
 
     def __init__(self) -> None:
         self.refusing = True
+        self.live = _LiveRequests()
         self._saved: list[tuple[type[Any], str, Any]] = []
 
     def install(self) -> None:
@@ -111,6 +156,7 @@ def _pool_guard(guard: _NetworkGuard, original: _PoolSend) -> _PoolSend:
         __tracebackhide__ = True
         if guard.refusing:
             raise _refused(request.method.decode("ascii", "replace"), _target_path(request))
+        guard.live.count(request)
         return original(self, request)
 
     return handle_request
@@ -123,6 +169,7 @@ def _pool_guard_async(guard: _NetworkGuard, original: _AsyncPoolSend) -> _AsyncP
         __tracebackhide__ = True
         if guard.refusing:
             raise _refused(request.method.decode("ascii", "replace"), _target_path(request))
+        guard.live.count(request)
         return await original(self, request)
 
     return handle_async_request
@@ -169,12 +216,16 @@ def pytest_unconfigure(config: pytest.Config) -> None:
 def pytest_runtest_setup(item: pytest.Item) -> Generator[None, None, None]:
     """Refuse or lift for this test before its fixtures: lifted when marked ``network`` or ``live``.
 
-    The state is set for every test, not left over from the previous teardown.
+    The state is set for every test, not left over from the previous teardown. A ``live``
+    test with the gate open has its requests counted from here on.
     """
     guard = item.config.stash.get(_GUARD, None)
     if guard is not None:
         marked = any(item.get_closest_marker(name) is not None for name in ("network", "live"))
         guard.refusing = not marked
+        live = live_enabled() and item.get_closest_marker("live") is not None
+        guard.live.counting = live
+        guard.live.ran = guard.live.ran or live
     return (yield)
 
 
@@ -182,7 +233,7 @@ def pytest_runtest_setup(item: pytest.Item) -> Generator[None, None, None]:
 def pytest_runtest_teardown(
     item: pytest.Item, nextitem: pytest.Item | None
 ) -> Generator[None, None, None]:
-    """Refuse the network again once the test's fixtures are torn down.
+    """Refuse the network again, and stop counting, once the test's fixtures are torn down.
 
     After a ``live`` test that ran, keep every quota policy's reading for the summary.
     """
@@ -192,6 +243,7 @@ def pytest_runtest_teardown(
         guard = item.config.stash.get(_GUARD, None)
         if guard is not None:
             guard.refusing = True
+            guard.live.counting = False
         if live_enabled() and item.get_closest_marker("live") is not None:
             _keep_quota_left(item.config)
 
@@ -208,11 +260,19 @@ def _keep_quota_left(config: pytest.Config) -> None:
 def pytest_terminal_summary(
     terminalreporter: pytest.TerminalReporter, exitstatus: int, config: pytest.Config
 ) -> None:
-    """After a live run, one line per quota policy: what the live tests left of the quota.
+    """After a live run, the requests its live tests sent, then what they left of each quota.
 
-    Times, counts and the policy's source only, never a key, a host or a query
+    The requests by host (``_LiveRequests``), no host where the run built a ``Tenants``
+    (``_tenants_declared``), never a path or a query (sdk-core#335). It follows a run in
+    which a live test was set up with the gate open, one that skips at its setup included,
+    so a run whose live tests all skip prints a count of 0; any other run prints no such
+    line. Then one line per quota
+    policy: times, counts and the policy's source only, never a key, a host or a query
     (ADR-0035, decision 7).
     """
+    guard = config.stash.get(_GUARD, None)
+    if guard is not None and guard.live.ran:
+        terminalreporter.write_line(guard.live.line(name_hosts=not _tenants_declared()))
     for source, left in config.stash.get(_QUOTA_LEFT, {}).values():
         terminalreporter.write_line(f"quota after the live run: {source}: {left}")
 

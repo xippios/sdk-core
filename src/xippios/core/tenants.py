@@ -92,6 +92,18 @@ _LISTS_TENANTS = "__xippios_lists_tenants__"
 """Marks a ``list_task``: a lock that binds one tenant narrows its result to that tenant."""
 _UPPER = re.compile(r"[A-Z0-9_]+")
 """A field, or the variable prefix: the upper-case parts of a variable's name."""
+_declared = False
+"""Set once a ``Tenants`` is built in this process, and never cleared (``_tenants_declared``)."""
+
+
+def _tenants_declared() -> bool:
+    """Whether this process built a ``Tenants``, so that it may have sent to a tenant's host.
+
+    The testing plugin's count of a live run's requests names no host then, since a
+    multi-tenant source's host can name its tenant (ADR-0030, decision 4) and nothing tells
+    a tenant's host from another at the connection pool.
+    """
+    return _declared
 
 
 def _is_set(variable: str) -> bool:
@@ -226,6 +238,8 @@ class Tenants:
         self._clients: dict[str, tuple[str, AsyncClient]] = {}
         self._closing: set[asyncio.Task[None]] = set()
         self._lock = threading.Lock()
+        global _declared
+        _declared = True
 
     def __repr__(self) -> str:
         return (
