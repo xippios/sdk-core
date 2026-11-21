@@ -18,6 +18,7 @@ from xippios.core import sync
 from xippios.core.errors import InvalidRequestError, NotFoundError
 from xippios.core.mcp import (
     ResultCap,
+    ToolSet,
     build_server,
     is_loopback_only,
     is_write_server,
@@ -836,3 +837,67 @@ async def test_a_task_that_takes_offset_itself_is_refused_a_paged_cap() -> None:
     assert await server.list_tools() == [], "checked before anything is registered"
     unpaged = build_server("example", [list_pages])
     assert (await mcp_call(unpaged, "example_list_pages", {"offset": 7}))["data"] == [7]
+
+
+def create_rows_factory(writes: list[int]) -> Callable[..., Result[list[int]]]:
+    def create_rows(count: int, confirm: bool = False) -> Result[list[int]]:
+        """Create rows, or preview them unless confirm is true.
+
+        Args:
+            count: How many rows, e.g. ``300``.
+            confirm: ``True`` creates them, ``False`` previews them.
+        """
+        if confirm:
+            writes.append(count)
+        meta = ResultMeta(source="example", endpoint="rows", request={"count": count})
+        return Result[list[int]](data=list(range(count)), meta=meta)
+
+    return create_rows
+
+
+WRITE_IS_NOT_PAGED = (
+    r"^example_create_rows: a paged cap runs the task again for the next rows, so a write "
+    r"task is never paged: following its note would repeat a confirmed write; leave the "
+    r"tool unpaged$"
+)
+
+
+@pytest.mark.anyio
+async def test_a_write_task_is_refused_a_paged_cap_since_a_continuation_writes_again() -> None:
+    # https://github.com/xippios/sdk-core/pull/388#pullrequestreview-6008310538, finding 1:
+    # following "continue with offset=200" ran a confirmed write a second time.
+    writes: list[int] = []
+    caps = {"create_rows": ResultCap(paged=True)}
+    with pytest.raises(ValueError, match=WRITE_IS_NOT_PAGED):
+        build_server("example", [create_rows_factory(writes)], caps=caps, read_only=False)
+    tools = ToolSet("example", [create_rows_factory(writes)], caps=caps, read_only=False)
+    with pytest.raises(ValueError, match=WRITE_IS_NOT_PAGED):
+        build_server(tools)
+    server = build_server("example", [])
+    with pytest.raises(ValueError, match=WRITE_IS_NOT_PAGED):
+        register_tasks(
+            server,
+            "example",
+            [create_rows_factory(writes)],
+            cap=ResultCap(paged=True),
+            read_only=False,
+        )
+    assert await server.list_tools() == [], "checked before anything is registered"
+    assert not is_write_server(server), "nor marked"
+    assert writes == []
+
+
+@pytest.mark.anyio
+async def test_a_write_task_may_keep_the_last_rows_which_runs_it_once() -> None:
+    writes: list[int] = []
+    caps = {"create_rows": ResultCap(keep="last")}
+    server = build_server("example", [create_rows_factory(writes)], caps=caps, read_only=False)
+    (tool,) = await server.list_tools()
+    assert list(tool.input_schema["properties"]) == ["count", "confirm"], "no offset"
+    payload = await mcp_call(server, "example_create_rows", {"count": 300, "confirm": True})
+    assert payload["data"] == list(range(100, 300))
+    assert payload["note"] == (
+        "showing rows 101 to 300 of 300 (cap: 200 rows or 65536 bytes); narrow the query to "
+        "see the rest"
+    ), "the note names no call that runs the task again"
+    assert writes == [300]
