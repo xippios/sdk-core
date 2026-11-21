@@ -516,13 +516,33 @@ def run_tree(
         sys.dont_write_bytecode = writes
 
 
+def reports(result: pytest.RunResult, test: str) -> list[pytest.TestReport]:
+    """The reports of the collected test named ``test``, its setup's, call's and teardown's."""
+    every = result.reprec.getreports("pytest_runtest_logreport")  # type: ignore[attr-defined]
+    return [report for report in every if report.nodeid.endswith(f"::{test}")]
+
+
 def outcome(result: pytest.RunResult, test: str) -> str:
     """``passed``, ``failed`` or ``skipped`` for the collected test named ``test``."""
-    reports = result.reprec.getreports("pytest_runtest_logreport")  # type: ignore[attr-defined]
-    ours = [report for report in reports if report.nodeid.endswith(f"::{test}")]
-    called = {report.outcome for report in ours if report.when == "call"}
-    skipped = {report.outcome for report in ours if report.skipped}
-    return str((called or skipped or {"not run"}).pop())
+    ours = reports(result, test)
+    called: set[str] = {report.outcome for report in ours if report.when == "call"}
+    skipped: set[str] = {report.outcome for report in ours if report.skipped}
+    return (called or skipped or {"not run"}).pop()
+
+
+def message(result: pytest.RunResult, test: str) -> str:
+    """The message with which the collected test named ``test`` failed or skipped, or ``""``.
+
+    Read from its report, never from the run's output: where the environment names a CI
+    (``CI`` or ``BUILD_NUMBER``), pytest's short test summary repeats a failure's message
+    whole, and elsewhere it cuts the line at the terminal's width.
+    """
+    for report in reports(result, test):
+        if report.failed or report.skipped:
+            if isinstance(report.longrepr, tuple):  # a skip: its path, its line, its reason
+                return str(report.longrepr[2])
+            return report.longreprtext
+    return ""
 
 
 def ran(result: pytest.RunResult) -> list[str]:
@@ -550,12 +570,9 @@ def test_a_source_that_collects_the_check_fails_on_an_unmarked_answer_and_names_
     result = run_tree(pytester, {"tests/test_tasks.py": TASKS_UNMARKED})
     result.assert_outcomes(passed=3, failed=1)  # the source's own test and two checks pass
     assert outcome(result, STATIC) == "failed"
-    result.stdout.fnmatch_lines(
-        [
-            "*names its kind of conventions §10, or that it is an input of the test*",
-            "*tests/test_tasks.py:5 in test_series_is_empty: httpx.Response(200,*",
-        ]
-    )
+    failure = message(result, STATIC)
+    assert "names its kind of conventions §10, or that it is an input of the test" in failure
+    assert "- tests/test_tasks.py:5 in test_series_is_empty: httpx.Response(200," in failure
     marked = TASKS_UNMARKED.replace(
         "():\n", '():\n    """NOT RECORDED: an empty page (conventions §10, kind 2)."""\n'
     )
@@ -578,10 +595,10 @@ def test_the_check_reads_the_tests_under_the_root_and_not_beside_its_module(
         "tests",
     )
     assert outcome(result, STATIC) == "failed"
-    text = result.stdout.str()
-    assert "tests/test_tasks.py:5" in text
-    assert "tests/fixtures/series/helper.py" not in text, "tests/fixtures/ is not read"
-    assert "scripts/test_elsewhere.py" not in text, "only tests/ is read"
+    failure = message(result, STATIC)
+    assert "tests/test_tasks.py:5" in failure
+    assert "tests/fixtures/series/helper.py" not in failure, "tests/fixtures/ is not read"
+    assert "scripts/test_elsewhere.py" not in failure, "only tests/ is read"
 
 
 ALLOWING = (
@@ -612,7 +629,9 @@ def test_the_table_of_the_collecting_module_covers_a_helper_with_its_reason(
 ) -> None:
     result = run_tree(pytester, {"tests/test_tasks.py": TASKS_SERVING})
     assert outcome(result, STATIC) == "failed"
-    result.stdout.fnmatch_lines(["*tests/test_tasks.py:12 in test_journal: serve(respx_mock, {})*"])
+    assert "tests/test_tasks.py:12 in test_journal: serve(respx_mock, {})" in message(
+        result, STATIC
+    )
     result = run_tree(
         pytester, {"tests/test_tasks.py": TASKS_SERVING, "tests/test_built_answers.py": ALLOWING}
     )
@@ -629,13 +648,13 @@ def test_a_stale_entry_of_the_table_fails_and_names_it(pytester: pytest.Pytester
     )
     assert outcome(result, STATIC) == "passed"
     assert outcome(result, STALE) == "failed"
-    result.stdout.fnmatch_lines(["*('tests/test_tasks.py', 'serve'): it covers no place*"])
+    assert "('tests/test_tasks.py', 'serve'): it covers no place" in message(result, STALE)
     gone = ALLOWING.replace("tests/test_tasks.py", "tests/test_gone.py")
     result = run_tree(
         pytester, {"tests/test_tasks.py": marked, "tests/test_built_answers.py": gone}
     )
     assert outcome(result, STALE) == "failed"
-    result.stdout.fnmatch_lines(["*('tests/test_gone.py', 'serve'): no such module*"])
+    assert "('tests/test_gone.py', 'serve'): no such module" in message(result, STALE)
 
 
 @pytest.mark.parametrize(
@@ -657,7 +676,7 @@ def test_a_declaration_of_another_form_fails_and_says_the_form(
         },
     )
     assert outcome(result, STATIC) == "failed"
-    result.stdout.fnmatch_lines(["*the collecting module declares*"])
+    assert "the collecting module declares" in message(result, STATIC)
 
 
 TASKS_READING = """
@@ -681,7 +700,7 @@ def test_a_source_names_its_readers_in_the_collecting_module(pytester: pytest.Py
         pytester, {**files, "tests/test_built_answers.py": reading}, "tests/test_built_answers.py"
     )
     assert outcome(result, STATIC) == "failed"
-    result.stdout.fnmatch_lines(["*tests/test_tasks.py:5 in test_merged: merge_custom(*"])
+    assert "tests/test_tasks.py:5 in test_merged: merge_custom(" in message(result, STATIC)
 
 
 TASKS_REPLAYING = '''
@@ -723,11 +742,11 @@ def test_the_census_names_a_replay_for_another_request_without_the_third_kind(
     result = run_tree(pytester, {"tests/test_tasks.py": TASKS_REPLAYING})
     assert outcome(result, STATIC) == "passed", "a replay at its own path is no place"
     assert outcome(result, CENSUS) == "failed"
-    text = result.stdout.str()
-    assert "tests/test_tasks.py::test_corn_2023: a replay answered another query" in text
-    assert "tests/test_tasks.py::TestElsewhere::test_year: a replay answered" in text
-    assert "test_corn_2024" not in text, "a redacted key is the recorded one"
-    assert text.count("TestElsewhere::test_year") == 1, "a parametrized test is named once"
+    failure = message(result, CENSUS)
+    assert "- tests/test_tasks.py::test_corn_2023: a replay answered another query" in failure
+    assert "- tests/test_tasks.py::TestElsewhere::test_year: a replay answered" in failure
+    assert "test_corn_2024" not in failure, "a redacted key is the recorded one"
+    assert failure.count("TestElsewhere::test_year") == 1, "a parametrized test is named once"
     marked = TASKS_REPLAYING.replace("MARK", THIRD).replace(
         "class TestElsewhere:\n", f'class TestElsewhere:\n    """{THIRD}"""\n\n'
     )
@@ -792,7 +811,7 @@ def test_a_recording_served_at_another_url_is_a_place_and_takes_the_third_kind(
     result = run_tree(pytester, {"tests/test_tasks.py": tasks})
     assert outcome(result, STATIC) == "passed", "any kind marks the place"
     assert outcome(result, CENSUS) == "failed"
-    result.stdout.fnmatch_lines(["*test_corn_2023: a replay answered another path and query*"])
+    assert "test_corn_2023: a replay answered another path and query" in message(result, CENSUS)
     result = run_tree(pytester, {"tests/test_tasks.py": tasks.replace("kind 2", "kind 3")})
     assert outcome(result, CENSUS) == "passed"
 
@@ -821,7 +840,7 @@ def test_the_census_compares_a_form_body(pytester: pytest.Pytester) -> None:
     assert outcome(result, CENSUS) == "passed", "the same form, its fields in another order"
     result = run_tree(pytester, {**files, "tests/test_tasks.py": tasks.replace("NAME", "Wheat")})
     assert outcome(result, CENSUS) == "failed"
-    result.stdout.fnmatch_lines(["*test_save: a replay answered another body*"])
+    assert "test_save: a replay answered another body" in message(result, CENSUS)
 
 
 def test_the_census_runs_after_every_test_it_judges(pytester: pytest.Pytester) -> None:
@@ -852,7 +871,7 @@ def test_a_partial_run_judges_only_the_tests_that_ran(pytester: pytest.Pytester)
 def test_the_census_needs_the_plugin(pytester: pytest.Pytester) -> None:
     result = run_tree(pytester, {"tests/conftest.py": None}, "-p", "no:xippios.core.testing.plugin")
     assert outcome(result, CENSUS) == "failed"
-    result.stdout.fnmatch_lines(["*the census of replays needs the plugin*"])
+    assert "the census of replays needs the plugin" in message(result, CENSUS)
     assert outcome(result, STATIC) == "passed", "the reader needs no plugin"
 
 
@@ -862,7 +881,7 @@ def test_the_census_skips_in_a_worker_of_pytest_xdist(pytester: pytest.Pytester)
     worker = "def pytest_configure(config):\n    config.workerinput = {}  # as pytest-xdist's\n"
     result = run_tree(pytester, {"conftest.py": worker, "tests/test_tasks.py": TASKS_REPLAYING})
     assert outcome(result, CENSUS) == "skipped"
-    result.stdout.fnmatch_lines(["*pytest-xdist*"])
+    assert "pytest-xdist" in message(result, CENSUS)
 
 
 def test_the_census_keeps_nothing_in_a_run_that_does_not_collect_it(
