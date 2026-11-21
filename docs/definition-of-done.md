@@ -57,7 +57,7 @@ amendment 2026-11-18, point e).
 - [ ] generated enum files re-rendered once through the template's refresh script and committed as formatted, after its `ruff format && ruff check --fix`
 - [ ] `mypy --strict` covers `scripts/` too
 - [ ] the current conventions version applied (1.22's name rule excepted, §2)
-- [ ] the changelog fragment names the core, template and conventions versions adopted (§15 item 9)
+- [ ] the changelog fragment names the core bound, the template's tag and the conventions' version as they stand after the adoption, changed or not, and is `breaking` where the adoption brings a core minor and `changed` where it brings none (§15 item 9; ADR-0043)
 
 ## Process
 - [ ] commit messages follow Conventional Commits

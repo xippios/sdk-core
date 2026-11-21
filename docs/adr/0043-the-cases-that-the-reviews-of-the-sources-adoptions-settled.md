@@ -1,6 +1,7 @@
 # ADR-0043: The cases that the reviews of the sources' adoptions settled
 
-Status: Accepted · Date: 2026-11-21 · Decided by https://github.com/xippios/sdk-core/issues/355
+Status: Accepted · Date: 2026-11-21 · Decided by https://github.com/xippios/sdk-core/issues/355 ·
+Amended 2026-11-21 by https://github.com/xippios/sdk-core/issues/382
 
 ## Context
 
@@ -15,7 +16,10 @@ adopts core and the template, adds refusals, decoders and tests of built answers
 with a live run, so each meets every case again. The rows are
 https://github.com/xippios/sdk-core/issues/342, https://github.com/xippios/sdk-core/issues/345,
 https://github.com/xippios/sdk-core/issues/346, https://github.com/xippios/sdk-core/issues/347
-and https://github.com/xippios/sdk-core/issues/351.
+and https://github.com/xippios/sdk-core/issues/351. Two questions decided what the rows left to
+the human: https://github.com/xippios/sdk-core/issues/355 the versions that an adoption's entry
+names and whether a release rewords an entry, and https://github.com/xippios/sdk-core/issues/382
+the commit of a release's live run.
 
 ## Decision
 
@@ -23,7 +27,9 @@ and https://github.com/xippios/sdk-core/issues/351.
    of an adoption names the core bound, the template's tag and the conventions' version as they
    stand after the adoption, changed or not, so that one form fits the adoption of a core minor
    and a template-only update alike and the tooling can write it. The human decided it on
-   2026-11-21 (https://github.com/xippios/sdk-core/issues/355). The other option, an entry that
+   2026-11-21 (https://github.com/xippios/sdk-core/issues/355). The host, which no template
+   renders (ADR-0026, decision 1), names the two versions it has, the core bound and the
+   conventions' version, in the same form. The other option, an entry that
    names what the adoption changed, such as `Adopts sdk-template v0.3.2, from v0.3.0.`, is the
    shortest, and a reviewer has to know what the adoption changed to judge it: the check passed
    that line on https://github.com/xippios/sdk-usda-gats/pull/52 and
@@ -56,18 +62,24 @@ and https://github.com/xippios/sdk-core/issues/351.
    of `live.yml` on `main`, as step 3 of each source's `/release-prep` has it
    (https://github.com/xippios/sdk-core/issues/351). A run on an earlier commit of `main` is no
    such run, whatever the merges after it changed, so a release whose base moved after its run
-   waits for the next nightly or one more dispatch. Reviews accepted a run one merge older,
-   where the later merge changed tests alone, on https://github.com/xippios/sdk-usda-wasde/pull/46
-   and https://github.com/xippios/sdk-google-mail/pull/65, whose decision 2 named it a departure
-   from the letter of step 3, and the check held https://github.com/xippios/sdk-cashctrl/pull/120
-   on the same, which then cited a third run, on its base (decision 2 there). The rule takes the
-   letter of step 3, for two reasons. The row that gave step 3 its rule,
+   waits for the next nightly or one more dispatch. The human decided it on 2026-11-21
+   (https://github.com/xippios/sdk-core/issues/382), after this record was first written with the
+   rule as the step's own reading, which its status line keeps as the amendment of that day.
+   Nothing is left to judge, so every release gets the same verdict, and it is the rule that the
+   sources' release procedure already words: the row that gave step 3 its rule,
    https://github.com/xippios/sdk-template/issues/73, has the run postdate the last pull request
    before the release, an adoption that lands late included, so that no task reaches its tag
-   without a live test. And a judgment of what the later merge changed is the reading that gave
-   one case two verdicts (https://github.com/xippios/.github/issues/116), while the commit that a
-   run tested and the commit that a release starts from compare without one. The cost is one
-   more run where a merge lands after the live run.
+   without a live test. Reviews accepted a run one merge older, where the later merge changed
+   tests alone, on https://github.com/xippios/sdk-usda-wasde/pull/46 and
+   https://github.com/xippios/sdk-google-mail/pull/65, whose decision 2 named it a departure from
+   the letter of step 3, and the check held https://github.com/xippios/sdk-cashctrl/pull/120 on
+   the same, which then cited a third run, on its base (decision 2 there). The other options were
+   an older run that counts where the merges since changed no code that a live test runs, which
+   saves a dispatch and leaves someone to judge what a merge changed, the reading that gave one
+   case two verdicts (https://github.com/xippios/.github/issues/116), and a run one merge older
+   that always counts, which would release a last merge that changed the client without a live
+   run over it. The cost is one more run, the maintainer's dispatch, where a merge lands after the
+   nightly.
 5. **Three cases fall between the kinds of a built answer.** Conventions §10 name five kinds of
    a body that a test serves or reads where it was not recorded (ADR-0028, decision 8), and the
    reviews settled three cases between them (https://github.com/xippios/sdk-core/issues/345).
@@ -110,5 +122,5 @@ and https://github.com/xippios/sdk-core/issues/351.
 - A release whose base moves after its live run takes one more run before it merges.
 - The check of a built answer's mark, step 5 of sdk-core 0.4.1, reads the cases of decision 5.
 
-Conventions §5, §10, §12 and §15 and the review checklist's items 3, 4, 12 and 13 state its
-decisions from 1.29 on.
+Conventions §5, §10, §12 and §15, the review checklist's items 3, 4, 12 and 13 and the definition
+of done's Adoption PR block state its decisions from 1.29 on.

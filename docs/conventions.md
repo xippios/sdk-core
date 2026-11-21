@@ -897,8 +897,9 @@ standalone from the package. A task named in `BULK_TASKS` gets no route:
   it (ADR-0028, decision 8; ADR-0043). A recorded answer changed in its status, its content
   type and its body at once is a new answer composed in a recorded shape, the second kind,
   which stands only where the snapshot documents it, and not a recording changed in memory,
-  the fourth (sdk-usda-esr's release list turned into an empty 404, sdk-cashctrl's recorded
-  401 turned into its other status errors; ADR-0043). A value that no route serves as an
+  the fourth (sdk-usda-esr, which serves no empty 404 off an exports path since its snapshot
+  documents none, and sdk-cashctrl's status errors, composed in the shape of its recorded 401
+  rather than changed from it; ADR-0043). A value that no route serves as an
   answer and no `classify` reads, handed to the code under test, is an input of the test and
   takes no kind, such as a literal given to a model or a scrub, or an exchange given to a
   recorder's step alone, while an answer that a route serves or that `classify` reads takes
@@ -1109,11 +1110,12 @@ which §12 bounds to one minor.
   time (§4); otherwise the run gets no PR of its own and the release PR cites it,
   "unchanged" meaning the records, not the files (ADR-0039, decision 6). A source's release
   PR cites a green run of `live.yml` on the commit of `main` that it starts from, the nightly
-  run or one dispatch of `live.yml` on `main`
-  (https://github.com/xippios/sdk-core/issues/351; ADR-0043). A run on an earlier commit of
+  run or one dispatch of `live.yml` on `main` (https://github.com/xippios/sdk-core/issues/351,
+  https://github.com/xippios/sdk-core/issues/382; ADR-0043). A run on an earlier commit of
   `main` is no such run, whatever the merges after it changed, so a release whose base moved
   after its run waits for the next nightly or one more dispatch
-  (https://github.com/xippios/sdk-core/issues/351; ADR-0043). A release PR
+  (https://github.com/xippios/sdk-core/issues/351,
+  https://github.com/xippios/sdk-core/issues/382; ADR-0043). A release PR
   changes only `pyproject.toml`, `uv.lock`, `CHANGELOG.md`, `README.md`, `CLAUDE.md`,
   `docs/handover.md` and the fragments under `changelog/`, which it deletes. Release =
   the release PR merges on `main` → `publish.yml` tags `vX.Y.Z` from `pyproject.toml` on
@@ -1223,8 +1225,10 @@ Three routes depart from the list (ADR-0039, decision 2):
 The host `xippios-mcp`, scaffolded by hand from the template's shared files (ADR-0026,
 decision 1), adopts a core minor in an adoption PR of its own without `copier update`,
 judged against items 1, 3, 4, 7, 8 and 9: item 1 raises the bound of `xippios-core` and of
-each of its extras, while its sources keep the `>=` floors of ADR-0026, decision 9, and item
-9's fragment names the core and conventions versions it adopts. Items 2, 5 and 6 have
+each of its extras, while its sources keep the `>=` floors of ADR-0026, decision 9, and
+item 9's fragment names the core bound and the conventions' version as they stand after the
+adoption, changed or not, and no template tag, since no template renders the host
+(https://github.com/xippios/sdk-core/issues/355; ADR-0043). Items 2, 5 and 6 have
 nothing to bind in it. The template changes that the new conventions version needs in the
 files it was scaffolded from are hand-applied and listed file by file in the PR
 description, as on route (3) (ADR-0026, amendment 2026-11-18, point e).
