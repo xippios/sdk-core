@@ -329,6 +329,33 @@ def test_unknown_code_takes_a_hint_over_the_closest_and_a_reason() -> None:
     assert bare.closest == ()
 
 
+def test_unknown_code_of_a_value_that_is_no_code_leaves_out_the_lists_age() -> None:
+    # A value a source's hint table holds, such as an ISO alpha-3 code for UN Comtrade's
+    # integers: no refresh makes it a code (https://github.com/xippios/sdk-core/issues/430).
+    error = UnknownCode(
+        "reporter_code",
+        "CHE",
+        list_name="Reporters",
+        fetched=FETCHED,
+        hint="CHE is the ISO alpha-3 code of 757 (Switzerland): pass 757.",
+        reason="UN Comtrade answers a code it does not have with count 0.",
+        source="comtrade",
+        no_code=True,
+    )
+    assert str(error) == (
+        "'CHE' is not a reporter_code in the packaged Reporters list (fetched 2026-10-23). CHE "
+        "is the ISO alpha-3 code of 757 (Switzerland): pass 757. UN Comtrade answers a code it "
+        "does not have with count 0."
+    )
+    assert (error.param, error.value, error.closest) == ("reporter_code", "CHE", ())
+    for clone in [copy.deepcopy(error), *_pickled(error)]:
+        assert str(clone) == str(error)
+    plain = UnknownCode("reporter_code", 0, list_name="Reporters", fetched=FETCHED, no_code=True)
+    assert str(plain) == (
+        "0 is not a reporter_code in the packaged Reporters list (fetched 2026-10-23)."
+    )
+
+
 def test_unknown_code_names_a_bare_code_once_and_no_command_of_a_maintainer() -> None:
     # A list of bare values, sdk-usda-nass's state_alpha: each value is its own name
     # (https://github.com/xippios/sdk-core/issues/111).

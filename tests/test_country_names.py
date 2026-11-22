@@ -271,6 +271,8 @@ def test_a_code_the_list_lacks_withholds_the_answer_with_the_lists_refusal() -> 
         "'CHE' is not an integer code: reporter_code takes the integer codes of the packaged "
         "reporters list (fetched 2026-10-23)"
     )
+    # A value of the other type withholds the answer by the same reason (ADR-0056, decision 3).
+    assert str(typed.value).endswith("so the answer is withheld.")
 
 
 @names_codes(country_code=COUNTRIES)

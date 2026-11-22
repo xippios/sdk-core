@@ -4,7 +4,10 @@ Each form the nine sources' copies take has its test: a text code (sdk-usda-psd)
 integer code (sdk-usda-esr), a folded case (sdk-usda-nass), a hint table (sdk-usda-psd's
 ``COUNTRY_HINTS``), a text for a list of integer codes, the text for when no code is close
 (sdk-usda-nass, sdk-usda-gats), a strategy of the source's own (sdk-usda-esr, sdk-usda-gats,
-sdk-comtrade, sdk-usda-wasde) and the reason.
+sdk-comtrade, sdk-usda-wasde) and the reason. The cases that the trial of the release met in
+sdk-comtrade and sdk-usda-nass have theirs: a text for integer codes that the source's strategy
+names, a hinted refusal of a value that is no code, and the reason on the refusal of a value of
+the other type.
 """
 
 import importlib
@@ -138,8 +141,8 @@ def test_a_value_the_hint_table_holds_is_refused_with_its_hint_in_place_of_close
             f"{given!r} is not a country_code in the packaged countries list (fetched "
             "2026-10-23). Omit country_code for every country; PSD's 'all' is a path element, "
             "not a code. PSD answers unknown codes with an empty result, so the package refuses "
-            "them. If upstream added it since, the packaged list is out of date."
-        )
+            "them."
+        )  # no code at all: no refresh of the list would make it one
         assert info.value.closest == ()
 
 
@@ -161,13 +164,12 @@ def test_a_hint_is_read_before_the_lists_type() -> None:
         commodities().check("commodity_code", "all", hints=hints)
     assert str(info.value) == (
         "'all' is not a commodity_code in the packaged commodities list (fetched 2026-10-23). "
-        "Omit commodity_code for every commodity. If upstream added it since, the packaged "
-        "list is out of date."
+        "Omit commodity_code for every commodity."
     )
     assert info.value.closest == ()
     with pytest.raises(UnknownCode) as world:  # an integer for text codes, by its text
         countries().check("reporter_code", 0, hints={"0": "0 (World) is a partner code only."})
-    assert "(fetched 2026-10-23). 0 (World) is a partner code only. If" in str(world.value)
+    assert str(world.value).endswith("(fetched 2026-10-23). 0 (World) is a partner code only.")
 
 
 def test_a_hint_is_read_for_text_and_integers_alone() -> None:
@@ -299,6 +301,173 @@ def test_an_enum_member_is_compared_by_its_value_and_returned_as_given() -> None
     with pytest.raises(UnknownCode) as unit:
         commodities().check("commodity_code", Unit.RYE)
     assert str(unit.value).startswith("7 is not a commodity_code")
+
+
+# What the trial of the release met (https://github.com/xippios/sdk-core/issues/410)
+
+COMTRADE_PARTNERS = PackagedList.model_validate(
+    {
+        "param": "partnerAreas",
+        "endpoint": "partnerAreas.json",
+        "fetched": FETCHED,
+        "records": [
+            {"PartnerCode": 36, "PartnerDesc": "Australia", "PartnerCodeIsoAlpha2": "AU"},
+            {"PartnerCode": 40, "PartnerDesc": "Austria", "PartnerCodeIsoAlpha2": "AT"},
+            {"PartnerCode": 112, "PartnerDesc": "Belarus", "PartnerCodeIsoAlpha2": "BY"},
+            {"PartnerCode": 757, "PartnerDesc": "Switzerland", "PartnerCodeIsoAlpha2": "CH"},
+            {"PartnerCode": 842, "PartnerDesc": "USA", "PartnerCodeIsoAlpha2": "US"},
+        ],
+    }
+)
+"""sdk-comtrade's partner areas, integer codes, each with its ISO alpha-2 code."""
+
+COMTRADE_REASON = (
+    "UN Comtrade answers a code it does not have with count 0, so the package refuses it "
+    "before the call."
+)
+
+ALPHA_3_HINTS = {"CHE": "CHE is the ISO alpha-3 code of 757 (Switzerland): pass 757."}
+"""sdk-comtrade's hint table: an ISO alpha-3 code is no code of upstream's (ADR-0056, 8)."""
+
+
+def partners() -> PackagedCodes:
+    return COMTRADE_PARTNERS.codes("PartnerCode", "PartnerDesc", source="comtrade")
+
+
+def alpha_2_first(seen: list[tuple[object, Mapping[Any, str]]]) -> Any:
+    """sdk-comtrade's own strategy: an ISO alpha-2 code names its area, else nothing."""
+    by_alpha_2 = {
+        str(record["PartnerCodeIsoAlpha2"]): int(record["PartnerCode"])
+        for record in COMTRADE_PARTNERS.records
+    }
+
+    def strategy(value: object, names: Mapping[Any, str]) -> list[tuple[Any, str]]:
+        seen.append((value, names))
+        code = by_alpha_2.get(value.strip().upper()) if isinstance(value, str) else None
+        return [] if code is None else [(code, names[code])]
+
+    return strategy
+
+
+def test_a_text_for_integer_codes_asks_the_sources_strategy() -> None:
+    # "US" for a partner: the codes whose name holds the two letters are Australia, Austria
+    # and Belarus, and the source's strategy knows 842
+    # (https://github.com/xippios/sdk-core/issues/418).
+    seen: list[tuple[object, Mapping[Any, str]]] = []
+    with pytest.raises(InvalidRequestError) as info:
+        partners().check("partner_code", "US", closest=alpha_2_first(seen), reason=COMTRADE_REASON)
+    assert not isinstance(info.value, UnknownCode)
+    assert str(info.value) == (
+        "'US' is not an integer code: partner_code takes the integer codes of the packaged "
+        "partnerAreas list (fetched 2026-10-23), such as 36 (Australia). Did you mean 842 (USA)? "
+        f"{COMTRADE_REASON}"
+    )
+    assert seen == [("US", dict(partners().names))]  # the value as given, the names as shown
+
+
+def test_a_text_for_integer_codes_is_named_by_name_without_a_strategy() -> None:
+    with pytest.raises(InvalidRequestError) as info:
+        partners().check("partner_code", "US")
+    assert str(info.value).endswith(
+        "such as 36 (Australia). By name: 36 (Australia), 40 (Austria), 112 (Belarus)."
+    )
+
+
+def test_a_text_the_strategy_names_nothing_for_is_named_by_name() -> None:
+    seen: list[tuple[object, Mapping[Any, str]]] = []
+    with pytest.raises(InvalidRequestError) as info:
+        partners().check("partner_code", "Switzerland", closest=alpha_2_first(seen))
+    assert str(info.value).endswith("such as 36 (Australia). By name: 757 (Switzerland).")
+    assert [value for value, _ in seen] == ["Switzerland"]
+
+
+def test_a_text_of_digits_names_the_integer_and_asks_no_strategy() -> None:
+    seen: list[tuple[object, Mapping[Any, str]]] = []
+    with pytest.raises(InvalidRequestError) as info:
+        partners().check("partner_code", " 842 ", closest=alpha_2_first(seen))
+    assert str(info.value).endswith("such as 36 (Australia). Pass it as the integer 842.")
+    assert seen == []
+
+
+def test_an_integer_the_list_lacks_still_gets_the_strategy_and_else_the_nearest() -> None:
+    seen: list[tuple[object, Mapping[Any, str]]] = []
+    with pytest.raises(UnknownCode) as info:
+        partners().check("partner_code", 841, closest=alpha_2_first(seen))
+    assert seen == [(841, dict(partners().names))]
+    assert info.value.closest == ()
+    with pytest.raises(UnknownCode) as nearest:
+        partners().check("partner_code", 841)
+    assert nearest.value.closest == ((842, "USA"), (757, "Switzerland"), (112, "Belarus"))
+
+
+def test_a_value_of_the_hint_table_leaves_out_that_the_list_is_out_of_date() -> None:
+    # "CHE" is no code at all: no refresh of the list makes it one
+    # (https://github.com/xippios/sdk-core/issues/430).
+    with pytest.raises(UnknownCode) as info:
+        partners().check("reporter_code", "CHE", hints=ALPHA_3_HINTS, reason=COMTRADE_REASON)
+    assert str(info.value) == (
+        "'CHE' is not a reporter_code in the packaged partnerAreas list (fetched 2026-10-23). "
+        f"CHE is the ISO alpha-3 code of 757 (Switzerland): pass 757. {COMTRADE_REASON}"
+    )
+    assert "out of date" not in str(info.value)
+
+
+def test_a_refusal_without_a_hint_keeps_that_the_list_may_be_out_of_date() -> None:
+    tail = "If upstream added it since, the packaged list is out of date."
+    with pytest.raises(UnknownCode) as close:
+        partners().check("partner_code", 843, hints=ALPHA_3_HINTS, reason=COMTRADE_REASON)
+    assert str(close.value).endswith(
+        f"Did you mean 842 (USA), 757 (Switzerland), 112 (Belarus)? {COMTRADE_REASON} {tail}"
+    )
+    with pytest.raises(UnknownCode) as far:
+        states().check("state_alpha", "ZZZZZZ", hints={"all": "never shown"}, otherwise="Ask.")
+    assert str(far.value).endswith(f"(fetched 2026-10-23). Ask. {tail}")  # otherwise is no hint
+
+
+def test_an_integer_for_text_codes_carries_the_reason() -> None:
+    # sdk-usda-nass's agg_level_desc=19 (https://github.com/xippios/sdk-core/issues/432).
+    levels = PackagedList.model_validate(
+        {
+            "param": "agg_level_desc",
+            "endpoint": "api/get_param_values",
+            "fetched": FETCHED,
+            "records": [{"agg_level_desc": "COUNTY"}, {"agg_level_desc": "STATE"}],
+        }
+    ).codes("agg_level_desc", fold_case=True, source="usda-nass")
+    reason = "Quick Stats answers an unknown value with HTTP 400, so nothing was sent."
+    with pytest.raises(InvalidRequestError) as info:
+        levels.check("agg_level_desc", 19, reason=reason)
+    assert not isinstance(info.value, UnknownCode)
+    assert str(info.value) == (
+        "19 is not a text code: agg_level_desc takes the text codes of the packaged "
+        f"agg_level_desc list (fetched 2026-10-23), such as COUNTY. {reason}"
+    )
+    reporters = PackagedList.model_validate(
+        {**PSD_COUNTRIES.model_dump(), "records": [{"code": "757", "name": "Switzerland"}]}
+    ).codes("code", "name")
+    with pytest.raises(InvalidRequestError) as text:
+        reporters.check("reporter_code", 757, reason=reason)
+    assert str(text.value).endswith(
+        f"such as 757 (Switzerland). Pass it as the text '757'. {reason}"
+    )
+
+
+def test_a_text_for_integer_codes_carries_the_reason_after_its_hint() -> None:
+    reason = "ESR answers unknown codes with an empty result, so the package refuses them."
+    with pytest.raises(InvalidRequestError) as digits:
+        commodities().check("commodity_code", "104", reason=reason)
+    assert str(digits.value) == (
+        "'104' is not an integer code: commodity_code takes the integer codes of the packaged "
+        "commodities list (fetched 2026-10-23), such as 104 (Wheat - White). Pass it as the "
+        f"integer 104. {reason}"
+    )
+    with pytest.raises(InvalidRequestError) as named:
+        commodities().check("commodity_code", "wheat", reason=reason)
+    assert str(named.value).endswith(f"By name: 104 (Wheat - White). {reason}")
+    otherwise = "list_commodities lists them."
+    with pytest.raises(InvalidRequestError) as bare:
+        commodities().check("commodity_code", None, otherwise=otherwise, reason=reason)
+    assert str(bare.value).endswith(f"such as 104 (Wheat - White). {otherwise} {reason}")
 
 
 # The index, kept for the process
