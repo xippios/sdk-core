@@ -1,7 +1,8 @@
 """The sentences of `docs/conventions.md` that the cases of ADR-0043 stand on, and ADR-0055's,
 the preview rule of ADR-0050, the recording of a task's exchanges of ADR-0057, the names of a
 request's country codes of ADR-0056, the check of the committed FETCHED.md of ADR-0046,
-decision 6, the refusal of a hinted value of ADR-0041's amendment of 2026-11-22, and the review
+decision 6, the refusal of a hinted value of ADR-0041's amendment of 2026-11-22, the two
+sentences of a period series that ADR-0054's amendment of 2026-11-22 words, and the review
 checklist's sentence that holds an adoption against the two lists of
 the handover's section for the release.
 
@@ -242,6 +243,43 @@ def test_the_refusal_of_a_hinted_value_is_one_sentence_that_cites_its_amendment(
         "leaves out that the packaged list is out of date",
     ):
         assert name in rule, f"§5: {rule!r} does not name {name!r}"
+
+
+SERIES_RULES = [
+    # §4, the period series: a task calls the ceiling's check before any request of the call,
+    # so that its refusal's sentence that nothing was sent is true, as §5 asks of a refusal of
+    # the call as given, and a task that checks only after a request words that refusal itself;
+    # a later failure names the periods before it as answered, true of a pass that counts, as
+    # the two questions that amended ADR-0054 decided
+    # (https://github.com/xippios/sdk-core/issues/438,
+    # https://github.com/xippios/sdk-core/issues/454).
+    pytest.param(
+        "A task calls the ceiling's `check` before any request of the call",
+        (
+            "says that nothing was sent",
+            "before its advice",
+            "§5",
+            "only after a request",
+            "words that refusal itself and says what was sent",
+            "ADR-0054, decision 5, amendment 2026-11-22",
+        ),
+        id="s4-the-ceiling-s-refusal",
+    ),
+    pytest.param(
+        "When a request of a period series after the first fails",
+        ("the periods answered before it", "ADR-0054, decision 6, amendment 2026-11-22"),
+        id="s4-a-later-failure",
+    ),
+]
+
+
+@pytest.mark.parametrize(("phrase", "names"), SERIES_RULES)
+def test_each_rule_of_a_series_message_is_one_sentence_that_cites_its_amendment(
+    phrase: str, names: tuple[str, ...]
+) -> None:
+    rule = sentence(section(4), phrase)
+    for name in names:
+        assert name in rule, f"§4: {rule!r} does not name {name!r}"
 
 
 def test_the_exemption_s_sentence_names_the_words_of_the_family_check_in_their_order() -> None:

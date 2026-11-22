@@ -432,12 +432,18 @@ option=...)`, whose `check` refuses a range over the ceiling in force with
 `InvalidRequestError` before the first request, naming the range, the ceiling and its unit
 and, where the MCP server's ceiling is lower, the option that raises it, which the ceiling's
 `add_options` and `apply_options` give the tool set as its option hooks (ADR-0054). A task
+calls the ceiling's `check` before any request of the call, so that its refusal says that
+nothing was sent, after the ceiling and before its advice, as §5 asks of a refusal of the call
+as given, and a task that checks a range only after a request of the call, as sdk-usda-nass's
+split of `year__GE` alone checks after its count of the range, words that refusal itself and
+says what was sent (ADR-0054, decision 5, amendment 2026-11-22). A task
 sends the requests of a period series with core's `fetch_periods(periods, fetch, skip=...)`,
 one after another in the order given, a period whose fetch raises one of `skip` passed over,
 and assembles the periods it returns with their answers itself, the vintage included
 (ADR-0054). When a request of a period series after the first fails, `fetch_periods` returns
 nothing and raises the error the fetch raised, its class and attributes kept, its message
-naming the periods fetched before it by their count, the first and the last (ADR-0054).
+naming the periods answered before it by their count, the first and the last, which holds for
+a pass that counts as for one that fetches (ADR-0054, decision 6, amendment 2026-11-22).
 
 A task that reads a file (§2) sets `endpoint` to the file's name as upstream names it,
 which may change with each release and carry a revision's suffix (`wasde1026.xml` and

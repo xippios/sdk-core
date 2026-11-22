@@ -159,26 +159,34 @@ class Ceiling:
     def check(self, count: int, *, asked: str | None = None, advice: str | None = None) -> None:
         """Refuse a range of more periods than the ceiling in force, before the first request.
 
+        A task calls it before any request of the call, which makes the refusal's
+        ``Nothing was sent.`` true: a task that checks a range only after a request of the
+        call, as sdk-usda-nass's split of ``year__GE`` alone after its count of the range,
+        words that refusal itself and says what was sent (ADR-0054, amendment 2026-11-22).
+
         The refusal is the caller's ``InvalidRequestError``: the range as the task names it,
         or else the count asked, then the ceiling in force with its unit, and, below
         ``most``, that it is the ceiling set for this process, with the MCP server's default
-        and the option that raises it where one is declared::
+        and the option that raises it where one is declared. It then says that nothing was
+        sent, as a refusal of the call as given does (conventions §5), and ends with its
+        advice::
 
             2024-08 to 2026-08 is 25 months; one call fetches at most 24 months, the ceiling
             set for this process (the MCP server starts with 24 by default; --series-months
-            raises it, up to 60). Ask for fewer months.
+            raises it, up to 60). Nothing was sent. Ask for fewer months.
 
         Args:
             count: The periods the call would fetch, e.g. ``len(months)``.
             asked: The range as the task names it, which the refusal opens with, e.g.
                 ``"2024-08 to 2026-08"``; ``None`` names the count alone, ``25 months
                 asked``.
-            advice: The sentence that closes the refusal, e.g. ``"Give a shorter range, e.g.
-                year__GE=2021 with year__LE=2025."``, written with ``value`` where it names
-                a bound; ``Ask for fewer <unit>.`` by default.
+            advice: The sentence that closes the refusal, after ``Nothing was sent.``, e.g.
+                ``"Give a shorter range, e.g. year__GE=2021 with year__LE=2025."``, written
+                with ``value`` where it names a bound; ``Ask for fewer <unit>.`` by default.
 
         Raises:
-            InvalidRequestError: ``count`` is over ``value``.
+            InvalidRequestError: ``count`` is over ``value``; nothing was sent, since the
+                task calls ``check`` before any request of the call.
         """
         ceiling = self._value
         if count <= ceiling:
@@ -195,7 +203,9 @@ class Ceiling:
                     f"raises it, up to {self.most})"
                 )
         closing = advice or f"Ask for fewer {self.unit}."
-        raise InvalidRequestError(f"{opening}; {bound}. {closing}", source=self.source)
+        raise InvalidRequestError(
+            f"{opening}; {bound}. Nothing was sent. {closing}", source=self.source
+        )
 
     def add_options(self, parser: argparse.ArgumentParser) -> None:
         """Add ``option`` to the MCP server's command line, a hook of ``main``.
@@ -243,14 +253,18 @@ class Ceiling:
 
 
 def _named(periods: list[object]) -> str:
-    """The periods fetched by their count, the first and the last: never sixty of them."""
+    """The periods answered by their count, the first and the last: never sixty of them.
+
+    Answered, not fetched: a pass of counts on the loop counted them, and a period passed
+    over held no data, yet upstream answered each (ADR-0054, amendment 2026-11-22).
+    """
     if len(periods) == 1:
-        return f"1 period fetched, {periods[0]}"
-    return f"{len(periods)} periods fetched, {periods[0]} to {periods[-1]}"
+        return f"1 period answered, {periods[0]}"
+    return f"{len(periods)} periods answered, {periods[0]} to {periods[-1]}"
 
 
-def _stopped(error: Exception, period: object, fetched: list[object]) -> None:
-    """Name in ``error`` the periods fetched before ``period``, whose fetch raised it.
+def _stopped(error: Exception, period: object, answered: list[object]) -> None:
+    """Name in ``error`` the periods answered before ``period``, whose fetch raised it.
 
     A ``XippiosError``'s message, and the argument that holds it, are extended in place,
     the two that ``str``, ``repr`` and both adapters read; any other error keeps its
@@ -259,7 +273,7 @@ def _stopped(error: Exception, period: object, fetched: list[object]) -> None:
     sentence; any other takes a full stop first, a closing quote or bracket included, since
     it closes a value whose own punctuation is the value's. An empty message is the sentence.
     """
-    sentence = f"The series stopped at {period} after {_named(fetched)}, and returns nothing."
+    sentence = f"The series stopped at {period} after {_named(answered)}, and returns nothing."
     if not isinstance(error, XippiosError):
         error.add_note(sentence)
         return
@@ -288,17 +302,18 @@ async def fetch_periods[P, T](
 
     When a fetch raises anything else, the helper returns nothing and raises that error
     again, the same instance, its class, its attributes, its cause and its traceback kept.
-    After the first period its message also names the periods fetched before it, those
-    passed over included, since upstream answered them, by their count, the first and the
-    last, each as its ``str`` gives it::
+    After the first period its message also names the periods answered before it, those
+    passed over included, by their count, the first and the last, each as its ``str``
+    gives it. Answered holds for a pass that fetches and for one that counts, as a task may
+    run the loop over its counts before its data::
 
         503 from GET /api/esr/exports/commodityCode/104/allCountries/marketYear/2023:
-        Service Unavailable. The series stopped at 2023 after 2 periods fetched, 2021 to
+        Service Unavailable. The series stopped at 2023 after 2 periods answered, 2021 to
         2022, and returns nothing.
 
     An error that is no ``XippiosError`` keeps its arguments and gets that sentence as a
     note, which a traceback prints; a cancellation, no ``Exception``, passes untouched. A
-    failure in the first period passes as raised, since nothing was fetched before it.
+    failure in the first period passes as raised, since nothing was answered before it.
 
     Args:
         periods: The periods, oldest first as a series runs, each named by its ``str`` in a
