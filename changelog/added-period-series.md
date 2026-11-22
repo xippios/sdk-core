@@ -1,13 +1,15 @@
 - `Ceiling(most, *, unit, mcp=None, option=None, help=None, source=None)` declares the ceiling
   of a period series once, and its `check` refuses a range over the ceiling in force before the
   first request, naming the range, the ceiling and its unit and, below `most`, the option that
-  raises it, which `add_options` and `apply_options` give `main` as a tool set's two hooks.
-  `fetch_periods(periods, fetch, *, skip=())` sends one request per period in the order given,
-  passes over a period whose fetch raises one of `skip`, and returns the periods with their
-  answers for the task to assemble, its vintage included. When a fetch after the first fails,
-  it returns nothing and raises the same error, its message naming the periods fetched before
-  it by their count, the first and the last.
-  (ADR-0054, §4, https://github.com/xippios/sdk-core/issues/315)
+  raises it, then saying that nothing was sent, before its advice, and its `add_options` and
+  `apply_options` are a tool set's two hooks for `main`. `fetch_periods(periods, fetch, *,
+  skip=())` sends one request per period in the order given, passes over a period whose fetch
+  raises one of `skip`, and returns the periods with their answers for the task to assemble,
+  its vintage included. When a fetch after the first fails, it returns nothing and raises the
+  same error, its message naming the periods answered before it by their count, the first and
+  the last.
+  (ADR-0054, §4, https://github.com/xippios/sdk-core/issues/315,
+  https://github.com/xippios/sdk-core/issues/438)
   - Hand-apply: `src/xippios/usda/esr/tasks.py` (sdk-usda-esr) — the ceiling of
     `_series_range` → `Ceiling(10, unit="market years", source=SOURCE)` and its `check`, and
     the loop of `get_weekly_series` → `fetch_periods(..., skip=(NoDataForYear,))`, the order
