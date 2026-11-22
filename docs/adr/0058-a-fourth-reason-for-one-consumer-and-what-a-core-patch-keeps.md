@@ -17,8 +17,8 @@ decision 2, admits code with two consumers, and its decision 3 admits code with 
 reason of three kinds, a family invariant, one of three security properties and what the
 adapters need, which the definition of done asks a core PR's ADR to name. ADR-0052 and ADR-0057
 each said that its reason was none of the three, so neither met the definition of done's line
-as it read. ADR-0023 holds two amendments already, of 2026-10-27 and of 2026-10-29, so a third
-change of it is a record of its own.
+as it read. ADR-0023 holds two amendments already, of 2026-10-27 and of 2026-10-29, so the
+change is a record of its own, to which ADR-0023 points.
 
 Two decided changes of 0.4.1 make a source's own test fail when its lock moves to 0.4.1 inside
 `xippios-core~=0.4.0`: the new tests of the family check, which fail at once (ADR-0044,
@@ -39,7 +39,16 @@ keeps a patch compatible.
    that step's record names by the question's URL. The rest of ADR-0023 stands as written: the
    reason is stated in the ADR that introduces the code, and "A second source will probably
    need it" stays no reason. ADR-0052 and ADR-0057 name the reason (d) of their names in an
-   amendment of 2026-11-22 each.
+   amendment of 2026-11-22 each. For `naive_time` it is the answer on
+   https://github.com/xippios/sdk-core/issues/371, part 1, the design question of step 8 of
+   0.4.1, which added it. For `record_task` it is the answer on
+   https://github.com/xippios/sdk-core/issues/364, part 3, the design question of step 17, which
+   made the recording of every exchange of a task ride with the recorder's frame of 0.4.1,
+   against its recommendation, and so admitted the helper with one consumer. Step 17's
+   follow-up, 17.1, built it, and the answer on https://github.com/xippios/sdk-core/issues/376,
+   the follow-up's own design question, decided its shape and not its entry. The recommendation of
+   https://github.com/xippios/sdk-core/issues/455, which its answer took, names the answer on
+   https://github.com/xippios/sdk-core/issues/364 as the reason of `record_task`.
 2. **A core patch keeps a source's package and its callers compatible.** "Core patch releases
    stay compatible.", in conventions §12 and in ADR-0039, decision 1, means that a patch of
    core keeps a source's package and what its callers see through its Python API, its MCP tools
@@ -54,7 +63,8 @@ keeps a patch compatible.
 
 - The definition of done's line on a core PR's consumers and the review checklist's item 11
   name the fourth reason beside ADR-0023, decision 3, so ADR-0052 and ADR-0057 meet them as they
-  read after their amendments.
+  read after their amendments. ADR-0023 carries an amendment of 2026-11-22 that names decision 1
+  here as the one that supersedes its closed list.
 - The release of 0.4.1 stays a patch, which every source's bound `xippios-core~=0.4.0` takes, and
   each source meets the checks that the handover lists for 0.4.1 in the adoption PR of its
   patch. The handover no longer calls every change of 0.4.1 additive.

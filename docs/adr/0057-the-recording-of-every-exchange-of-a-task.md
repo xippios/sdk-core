@@ -107,11 +107,12 @@ https://github.com/xippios/sdk-core/issues/455 amends decision 1, from finding 1
 organization's range review of core 0.4.1
 (https://github.com/xippios/sdk-core/pull/453#issuecomment-7082327015). `record_task` and
 `record_task_sync` enter core with one consumer, sdk-google-mail, by reason (d), which ADR-0058,
-decision 1, adds to the three of ADR-0023, decision 3: the maintainer's decision on the closed
-design questions of the step that added them, his answer on
-https://github.com/xippios/sdk-core/issues/364, part 3, that the recording of every exchange of a
-task rides with the recorder's frame, and his answer on
-https://github.com/xippios/sdk-core/issues/376, which decided its shape. Decision 1's words that
+decision 1, adds to the three of ADR-0023, decision 3. The decision that admitted them is the
+maintainer's answer on https://github.com/xippios/sdk-core/issues/364, part 3, the design
+question of step 17, that the recording of every exchange of a task rides with the recorder's
+frame of 0.4.1, which step 17's follow-up, 17.1, built. His answer on
+https://github.com/xippios/sdk-core/issues/376, the design question of step 17.1, decided the
+helper's shape and not its entry. Decision 1's words that
 the helper's reason is none of the reasons of ADR-0023, decision 3, stay true of its three, and
 its words that ADR-0023 stands as written read from this amendment: ADR-0023 stands but for the
 fourth reason of its decision 3, and its decisions 2 and 3 judge the next helper as before.

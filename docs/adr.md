@@ -11,7 +11,7 @@ records in `docs/adr/`. A record changes, and this file follows when the script 
 - <a id="0017"></a>[ADR-0017](adr/0017-sensitive-upstream-fields.md): Sensitive upstream fields — personal identifiers stay out of task projections · Accepted · 2026-10-25
 - <a id="0020"></a>[ADR-0020](adr/0020-file-distributed-sources.md): File-distributed sources · Accepted · 2026-10-26 · amended 2026-11-18
 - <a id="0021"></a>[ADR-0021](adr/0021-dependencies-between-source-packages.md): Dependencies between source packages · Accepted · 2026-10-26
-- <a id="0023"></a>[ADR-0023](adr/0023-core-scope-two-consumers.md): Core scope — code enters `xippios-core` with two consumers · Accepted · 2026-10-26
+- <a id="0023"></a>[ADR-0023](adr/0023-core-scope-two-consumers.md): Core scope — code enters `xippios-core` with two consumers · Accepted · 2026-10-26 · amended 2026-11-22
 - <a id="0025"></a>[ADR-0025](adr/0025-google-mail.md): Google Mail — loopback, the renewing bearer, scopes, the kit's return and the decoded view · Accepted · 2026-10-29 · amended 2026-11-18
 - <a id="0026"></a>[ADR-0026](adr/0026-the-host-xippios-mcp.md): The host xippios-mcp · Accepted · 2026-10-29 · amended 2026-11-18
 - <a id="0027"></a>[ADR-0027](adr/0027-x-metered-content-source.md): X as a metered, content-bearing source · Accepted · 2026-10-30

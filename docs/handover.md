@@ -1322,11 +1322,13 @@ is for (https://github.com/xippios/sdk-core/issues/310), the count before a quer
 upstream's limit, the `since` filter, the preview of a write, the nightly comparison of a
 packaged list with the live one, and the frames of the snapshot, reference and recorder
 scripts, with the rules that the reviews of the sources' adoptions of 0.4.0 settled. Two
-helpers have one consumer each and entered by the maintainer's decision on the design question
-of the step that added them, the fourth reason for one consumer (ADR-0058, decision 1):
-`naive_time`, which sdk-usda-esr calls (https://github.com/xippios/sdk-core/issues/371;
-ADR-0052, amendment 2026-11-22), and `record_task` with `record_task_sync`, with which
-sdk-google-mail records its tasks (https://github.com/xippios/sdk-core/issues/364,
+helpers have one consumer each and entered by the maintainer's decision on a step's design
+question, the fourth reason for one consumer (ADR-0058, decision 1): `naive_time`, which
+sdk-usda-esr calls, by the answer on step 8's question
+(https://github.com/xippios/sdk-core/issues/371; ADR-0052, amendment 2026-11-22), and
+`record_task` with `record_task_sync`, with which sdk-google-mail records its tasks, by the
+answer on step 17's question, whose follow-up 17.1 built them in the shape that its own
+question decided (https://github.com/xippios/sdk-core/issues/364,
 https://github.com/xippios/sdk-core/issues/376; ADR-0057, amendment 2026-11-22). A patch of core
 keeps a source's package and its callers compatible, and every name that
 `tests/test_public_surface.py` pinned at v0.4.0 stays pinned, while a check of
@@ -1337,8 +1339,8 @@ and 2026-11-22 16:35 UTC, so their own commits are on `main` too. Each step that
 brings its record, decided by its question, ADR-0043 to ADR-0057, and amends a record where a
 question changed one: steps 2 and 9 amend their own, ADR-0043 and ADR-0053, step 17 amends
 ADR-0037 and ADR-0042, step 7.1 ADR-0041 and ADR-0045, steps 16.2 and 16.3 ADR-0046, step 5.1
-ADR-0048 and ADR-0049, and step 10.1 ADR-0054. Step 20 adds ADR-0058 and amends ADR-0052 and
-ADR-0057. The conventions kept the version line 1.28 until step 18 raised it to 1.29, which
+ADR-0048 and ADR-0049, and step 10.1 ADR-0054. Step 20 adds ADR-0058 and amends ADR-0023,
+ADR-0052 and ADR-0057. The conventions kept the version line 1.28 until step 18 raised it to 1.29, which
 names the text that the release publishes.
 
 | Step | sdk-core | What | ADR | Conventions | Merge commit on `main` |

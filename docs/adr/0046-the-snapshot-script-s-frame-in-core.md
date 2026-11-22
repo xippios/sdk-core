@@ -227,8 +227,9 @@ decided: the Consequences state it as the frame has held it since it came.
 ## Consequences
 
 - The consumers are the twelve sources, each of which ports its script in its patch, and
-  sdk-template, which renders the short script on this frame in its 0.4.1
-  (https://github.com/xippios/coordinate-sdk/issues/134). A fix of the frame reaches every
+  sdk-template, which renders the short script on this frame in its 0.4.1, released after core
+  0.4.1 and before the sources' patches, by the maintainer's decision on the order of the
+  releases. A fix of the frame reaches every
   source with its next core patch.
 - A source's ported script keeps its pages, its attribution, its hooks and their helpers,
   from 330 lines (sdk-usda-nass) to 1,230 (sdk-eurostat) by the research's count; the
