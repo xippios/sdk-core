@@ -1,6 +1,6 @@
 # ADR-0049: The mark of a built answer and its check
 
-Status: Accepted · Date: 2026-11-21 · Decided by https://github.com/xippios/sdk-core/issues/367
+Status: Accepted · Date: 2026-11-21 · Decided by https://github.com/xippios/sdk-core/issues/367 · Amended 2026-11-22 by https://github.com/xippios/sdk-core/issues/439
 
 ## Context
 
@@ -20,6 +20,21 @@ modules by `ast`, with a table of exceptions, and a census that runs the replayi
 second time in a process of its own and names each test whose replay answered another request
 than the recorded one. Measured with it on 2026-11-21, the eleven other sources hold 335
 places that need a mark and name no kind (https://github.com/xippios/sdk-core/issues/344).
+
+The trial of the release ran the check once in six sources ported onto core's `main`
+(https://github.com/xippios/sdk-core/issues/410) and met two places where it read an input of
+the test more narrowly than §10. sdk-google-mail's recorder tests build their exchanges in four
+helpers, each returning an `httpx.Response`, and hand them on through a fifth, which gives its
+parameter to `fixture_from_response`, so 18 calls that §10 calls inputs could take no sentence,
+since the check followed only a response that the test itself hands to `fixture_from_response`
+(https://github.com/xippios/sdk-google-mail/issues/72). And a test of a snapshot hook builds the
+frame's `Response` of `xippios.core.refresh`, the record of a documentation page, which the
+check read as httpx's wherever the test called it by its bare name, so four ports could not mark
+it as the input it is (https://github.com/xippios/sdk-comtrade/issues/60,
+https://github.com/xippios/sdk-cashctrl/issues/134,
+https://github.com/xippios/sdk-usda-esr/issues/59, https://github.com/xippios/sdk-x/issues/57).
+The human answered the question on 2026-11-22, prompted in the sdk-core panel: decision 10, the
+amendment of that day, is the answer of https://github.com/xippios/sdk-core/issues/439.
 
 ## Decision
 
@@ -80,6 +95,36 @@ places that need a mark and name no kind (https://github.com/xippios/sdk-core/is
    `tests/test_built_answers.py`. The family check gains nothing: the family module reaches
    every source with its next lock update inside `~=0.4.0`, and the 335 places would fail
    there at once. A source meets the check when its patch adds the line.
+10. **An exchange that a helper builds, and the module's imports.** By the human's answer to
+    https://github.com/xippios/sdk-core/issues/439, given in the sdk-core panel on 2026-11-22,
+    the check reads more inputs than decisions 3 and 4 took from sdk-cashctrl's, and no new
+    place:
+    - *The helper's exchange.* An `httpx.Response` is handed to the recorder, and no route
+      serves it, where it reaches `fixture_from_response` alone as a positional argument,
+      directly or by a local name that nothing else reads, either of `fixture_from_response`
+      itself or of a function of the module that gives that parameter to
+      `fixture_from_response` and reads it nowhere else. A response that a function of the
+      module returns, directly or by such a name, is judged at each call of the function by the
+      same rule: a call so handed is an input, and a call that is not is served and takes a
+      kind, so a helper whose exchange one call hands to the recorder and another serves takes
+      the sentence for the first and a kind for the second. The sentence in the helper's reach
+      covers each call that hands its exchange on, and a kind there covers every call.
+    - *No further.* A response that travels by a keyword, a container, a second function that
+      returns it or hands it on, a conditional expression or a function of another module,
+      `conftest.py` among them, is not followed: it is built in the test or takes a kind.
+      Neither is the response of a helper whose name the module reads otherwise than to call
+      it, a route's `side_effect=` among them, nor a fixture's, which pytest hands on and no
+      call does. So the rule stays checked: a response that reaches a route is served whether a
+      helper built it or not, where taking the sentence on the author's word would leave that
+      unseen.
+    - *The module's imports.* A bare `Response(...)` is httpx's where the import that binds the
+      name nearest the call, in a function that encloses it or at the module's top, brings it
+      from `httpx` or one of its modules, and, as before, where no import binds it. One
+      imported from elsewhere, `xippios.core.refresh` above all, is no answer that a route
+      serves, so the input's sentence marks it. A star import binds no name that the check
+      reads, a call under another name, `Answer(...)` after `from httpx import Response as
+      Answer`, is no place, and a call through an attribute keeps its reading, `httpx.Response`
+      httpx's and any other `*.Response` not, all three as before.
 
 ## Consequences
 
@@ -97,3 +142,11 @@ places that need a mark and name no kind (https://github.com/xippios/sdk-core/is
   `mount_fixture`, a request sent while fixtures are torn down and a streamed body.
 - The census costs a comparison per answered request in a run that collects it, and nothing
   in a run that does not.
+- By decision 10, sdk-google-mail marks its recorder tests' exchanges with the input's
+  sentence, in its four helpers' docstrings or at the calls, and a test of a snapshot hook
+  marks the frame's `Response` so, by its bare name or as `refresh.Response(...)`. A suite that
+  passed the check passes it after the amendment, since the check reads more inputs and no new
+  place: sdk-cashctrl, the one source that collects it on 2026-11-22, keeps its entry of
+  `ALLOWED`, whose helper hands a response that a nested function returns to a route. What the
+  check cannot see gains httpx's `Response` re-exported by another module, or called through
+  another name of `httpx`.

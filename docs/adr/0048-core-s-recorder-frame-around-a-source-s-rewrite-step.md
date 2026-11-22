@@ -1,6 +1,6 @@
 # ADR-0048: Core's recorder frame around a source's rewrite step
 
-Status: Accepted · Date: 2026-11-21 · Decided by https://github.com/xippios/sdk-core/issues/364
+Status: Accepted · Date: 2026-11-21 · Decided by https://github.com/xippios/sdk-core/issues/364 · Amended 2026-11-22 by https://github.com/xippios/sdk-core/issues/439
 
 ## Context
 
@@ -24,6 +24,17 @@ refuses every status but 200, and core records an answer whatever its status. Co
 part (https://github.com/xippios/sdk-core/issues/322), the four scripts differ in their command
 line, their guard and their rules, and do alike the send, the order of the steps, the check by
 value and the write.
+
+The trial of the release (https://github.com/xippios/sdk-core/issues/410) met one step that drops
+a field of a request it must not keep: sdk-google-mail's leaves `raw`, the whole message, out of
+a recorded write's body. Core's census compares a replay's JSON body with its recording key by
+key, through the recording's redaction (ADR-0049, decision 5), so it named four tests that
+replay their own recordings as answering another body
+(https://github.com/xippios/sdk-google-mail/issues/72). No record of core said what a step does
+with such a field: ADR-0017 keeps a value out of a fixture, and decision 1 has the step return
+the values it replaced. The human answered the question on 2026-11-22, prompted in the sdk-core
+panel: decision 7, the amendment of that day, is the answer of
+https://github.com/xippios/sdk-core/issues/439.
 
 ## Decision
 
@@ -90,6 +101,14 @@ value and the write.
    policy, which one consumer does not bring into core: it stands as written. A step's rules stay
    the source's, and what enters core is the frame that runs them, by decision 2 of ADR-0023, with
    three carriers of the step and four of the one-attempt client, not by 3 (b).
+7. **A recorder redacts a field of a request and drops none.** By the human's answer to
+   https://github.com/xippios/sdk-core/issues/439, given in the sdk-core panel on 2026-11-22: a
+   recorder writes `REDACTED` in place of the value of a field of a request that it must not
+   keep, and drops no field, so that the census compares a replay with its recording key by key,
+   the field's recorded `REDACTED` matching any value sent. Which fields a recorder must not keep
+   stays the source's, as decision 5 leaves a step's rules to it: the rule is how its step writes
+   them. Core's code stays as it is, and so does its census, which compares what it compared, with
+   no table of fields and no declaration of a dropped one, as strict for every source.
 
 ## Consequences
 
@@ -106,6 +125,12 @@ value and the write.
   recording is narrowed, or the step leaves the value out of what it returns.
 - A recording that ends in a redirect names the redirect's status, and the source records the
   request that upstream answers itself.
+- By decision 7, sdk-google-mail's step writes `REDACTED` for `raw` in a write's request body,
+  where it dropped the key, and the source records `send_message/ok.json` and
+  `create_draft/ok.json` again with it, in a pull request before its adoption: a keyed write on
+  its demo mailbox, which needs the maintainer's go and a budget. Of the other two sources with a
+  recorder of their own, read on their `main` of 2026-11-21, sdk-cashctrl's step redacts and
+  drops nothing, and sdk-x's rewrites answers alone.
 
 Conventions §3 and §10, the README and the docstrings of `record`, `send_once`,
 `fixture_from_response`, `write_fixture`, `fixture_text`, `Scrub` and `xippios.core.testing` state
