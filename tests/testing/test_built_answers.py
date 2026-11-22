@@ -545,6 +545,12 @@ NOT_FOLLOWED = [
         "fixture_from_response(exchange())",
         id="a-helper-also-passed-by-its-name",
     ),
+    pytest.param(
+        "scrubbed = lambda recorder, response: SERVED.append(response)\n"
+        "    scrubbed(recorder, exchange())",
+        "    scrubbed(recorder, exchange())",
+        id="a-name-of-the-function-that-the-test-binds-again",
+    ),
 ]
 
 
@@ -555,6 +561,52 @@ def test_an_exchange_that_travels_further_is_built_in_the_test_or_takes_a_kind(
     test = f'def test_one(recorder):\n    """The exchange {INPUT}"""\n    {body}\n'
     source = clean(EXCHANGE) + test
     assert lines(source) == [at(source, where)]
+
+
+HIDDEN = [
+    pytest.param("def exchange():", "@serving\ndef exchange():", id="a-decorated-helper"),
+    pytest.param(
+        "def scrubbed(", "@serving\ndef scrubbed(", id="a-decorated-function-that-hands-it-on"
+    ),
+    pytest.param(
+        "    return httpx.Response(200)",
+        "    global LAST\n    LAST = httpx.Response(200)\n    return LAST",
+        id="a-helper-that-keeps-it-in-a-global",
+    ),
+    pytest.param("import httpx\n", "import httpx\nfrom helpers import *\n", id="a-star-import"),
+]
+"""What could hand the helper or its exchange elsewhere than its calls see, unread by the check."""
+
+
+@pytest.mark.parametrize(("old", "new"), HIDDEN)
+def test_a_helper_whose_exchange_could_go_elsewhere_unseen_is_not_followed(
+    old: str, new: str
+) -> None:
+    # A decorator receives the function, a global is read by any function, and a star import
+    # may bind the names of both functions again: a route could serve the exchange unseen.
+    docstring = f'    """The exchange {INPUT}"""\n'
+    test = f"def test_one(recorder):\n{docstring}    scrubbed(recorder, exchange())\n"
+    source = clean(EXCHANGE).replace(old, new) + test
+    assert lines(source) == [at(source, "    scrubbed(recorder, exchange())")]
+
+
+def test_a_return_inside_an_if_statement_is_followed_at_each_call() -> None:
+    source = f'''
+    import httpx
+
+    def exchange(ok=True):
+        """The exchange {INPUT}"""
+        if ok:
+            return httpx.Response(200)
+        return None
+
+    def test_recorded():
+        fixture_from_response(exchange())
+
+    def test_served(respx_mock):
+        respx_mock.get("https://api.example.test").mock(return_value=exchange(True))
+    '''
+    assert lines(source) == [at(source, "mock(return_value=exchange(True))")]
 
 
 def test_an_exchange_chosen_by_a_conditional_expression_is_not_followed() -> None:
@@ -597,9 +649,12 @@ def test_reduce():
         pytest.param("from httpx._models import Response\n", True, id="a-module-of-httpx"),
         pytest.param("", True, id="a-name-the-module-does-not-import"),
         pytest.param("from xippios.core.refresh import *\n", True, id="a-star-import"),
+        pytest.param("from tests.helpers import Response\n", True, id="a-re-export"),
+        pytest.param("from .helpers import Response\n", True, id="a-relative-re-export"),
+        pytest.param("from respx.models import Response\n", True, id="another-library-s"),
     ],
 )
-def test_a_bare_response_is_httpx_s_where_its_module_imports_it_from_httpx(
+def test_a_bare_response_is_the_frame_s_only_where_its_module_imports_it_from_the_frame(
     imports: str, served: bool
 ) -> None:
     source = imports + clean(HOOK)
@@ -608,12 +663,43 @@ def test_a_bare_response_is_httpx_s_where_its_module_imports_it_from_httpx(
     assert lines(unmarked) == [at(unmarked, "reduce(Response(")], "the frame's Response is a place"
 
 
-def test_the_import_nearest_to_the_call_names_its_response() -> None:
-    inside = clean(HOOK).replace('"""\n', '"""\n    from xippios.core.refresh import Response\n', 1)
-    assert lines("from httpx import Response\n" + inside) == [], "the function's import binds"
-    httpx_inside = clean(HOOK).replace('"""\n', '"""\n    from httpx import Response\n', 1)
-    source = "from xippios.core.refresh import Response\n" + httpx_inside
-    assert lines(source) == [at(source, "reduce(Response(")]
+FRAME = "from xippios.core.refresh import Response\n"
+
+
+def inside(statement: str) -> str:
+    """``HOOK`` with ``statement`` as the first line of its test, after the docstring."""
+    return clean(HOOK).replace('"""\n', f'"""\n    {statement}\n', 1)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        pytest.param(FRAME + "import httpx\n" + inside("Response = httpx.Response"), id="assigned"),
+        pytest.param(FRAME + clean(HOOK).replace("():", "(Response):"), id="a-parameter"),
+        pytest.param(
+            FRAME
+            + "import httpx\n\n\nclass Response(httpx.Response):\n    pass\n\n\n"
+            + clean(HOOK),
+            id="a-class",
+        ),
+        pytest.param(FRAME + inside("from httpx import Response"), id="httpx-s-in-the-function"),
+        pytest.param(
+            "from httpx import Response\n" + inside(FRAME.strip()), id="httpx-s-at-the-top"
+        ),
+        pytest.param(FRAME + "from helpers import *\n" + clean(HOOK), id="beside-a-star-import"),
+    ],
+)
+def test_the_frame_s_import_names_the_response_only_where_nothing_else_binds_the_name(
+    source: str,
+) -> None:
+    assert lines(source) == [at(source, "reduce(Response(")], "read as httpx's, as before"
+
+
+def test_the_frame_s_import_in_a_function_and_at_the_top_names_the_frame_s_response() -> None:
+    assert lines(FRAME + inside(FRAME.strip())) == []
+
+
+def test_httpx_s_response_under_another_name_is_no_place() -> None:
     alias = "from httpx import Response as Answer\n\ndef test_one():\n    Answer(200)\n"
     assert lines(alias) == [], "a call the check reads by its name, Answer, is no place"
 

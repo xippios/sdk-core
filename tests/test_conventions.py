@@ -492,10 +492,12 @@ def test_each_rule_of_a_task_s_recording_is_one_sentence_that_cites_adr_0057(
 
 def test_a_recorder_redacts_a_field_of_a_request_and_drops_none_by_adr_0048() -> None:
     # §10, the recorder's rewrite step: what it writes for a field of a request that it must
-    # not keep (decided by the human in https://github.com/xippios/sdk-core/issues/439).
+    # not keep, the maintainer's answer on https://github.com/xippios/sdk-core/issues/439. It
+    # drops none of a request's fields, and says nothing of an answer's.
     rule = sentence(section(10), "A recorder writes `REDACTED` in place of the value of a field")
-    for name in ("of a request that it must not keep", "drops no field", "key by key"):
+    for name in ("of a request that it must not keep", "drops none of them", "key by key"):
         assert name in rule, f"§10: {rule!r} does not name {name!r}"
+    assert "drops no field" not in rule, f"§10: {rule!r} reaches an answer's fields"
     assert "ADR-0048, decision 7" in rule, f"§10: {rule!r} does not cite its record"
 
 
