@@ -130,12 +130,18 @@ of https://github.com/xippios/sdk-core/issues/428.
      URL is that page's.
    - *What is read back.* What only a response knows stands in the expected file as the
      committed file holds it and is not judged: the time of the fetch, an ETag's value,
-     Last-Modified, Bytes and sha256, the redirect clauses a note opens with, the rest of a
-     note where the snapshot's `note` makes it, the reason of an unread page's row where `note`
-     makes it, the host a page redirects to, the row of a page's 403 before its second origin,
-     the names of the files that `split` made, the lines from the first heading after "How
-     this is captured" to "Files and pages" where the snapshot declares `sections`, and a
-     statement's clause that no run checks it where the page's answer decided it. A row that
+     Last-Modified, Bytes and sha256, the redirect clauses a note holds before the part that
+     its page's declaration gives, the rest of a note where the snapshot's `note` makes it, the
+     reason of an unread page's row where `note` makes it, the host a page redirects to, the
+     row of a page's 403 before its second origin, the names of the files that `split` made,
+     the lines from the first heading after the frame's paragraph of how it captures to the
+     frame's table of files where the snapshot declares `sections`, and a statement's clause
+     that no run checks it where the page's answer decided it. The file is read as the frame
+     writes it: its lines split at each line feed alone, a cell with the one space on each
+     side taken off and its pipes unescaped, and the tables found from the end, so a source's
+     own text that reads like a line of the frame's, a capture that opens like a heading or a
+     section that quotes the table, stays the source's (the review of
+     https://github.com/xippios/sdk-core/pull/429). A row that
      no declared page owns is read back, after the row it follows, as a page that `linked`
      found where the snapshot declares `linked`, and is otherwise a difference, so a removed
      page and a hand-added row are held only in a snapshot without `linked`. In one sentence of

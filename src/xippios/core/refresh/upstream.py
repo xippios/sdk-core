@@ -1068,6 +1068,12 @@ def _how(snapshot: Snapshot) -> list[str]:
     return _paragraph(*sentences)
 
 
+def _captured(snapshot: Snapshot) -> list[str]:
+    """The lines under "How this is captured": the capture's paragraphs, then the frame's."""
+    capture = [part for part in snapshot.capture.split("\n\n") if part.strip()]
+    return [*(line for part in capture for line in _paragraph(part)), *_how(snapshot)]
+
+
 def _file_line(cells: Sequence[str]) -> str:
     """A row of the table of files from its nine cells, the allowlist mark after an ETag."""
     line = _row(cells)
@@ -1153,7 +1159,6 @@ def _compose(
             f"The check reads past these words, which state none here: {words}. How this is",
             "captured says why.",
         )
-    capture = [part for part in snapshot.capture.split("\n\n") if part.strip()]
     lines = [
         f"# Upstream documentation snapshot \N{EM DASH} {snapshot.name}",
         "",
@@ -1178,8 +1183,7 @@ def _compose(
         ),
         "## How this is captured",
         "",
-        *[line for part in capture for line in _paragraph(part)],
-        *_how(snapshot),
+        *_captured(snapshot),
         *sections,
         "## Files and pages",
         "",
@@ -1331,28 +1335,59 @@ _REDIRECTED = re.compile(r"redirected \(\d{3}\) to \S+?(?=; |$)")
 _SPLIT_FILES = "(the files split from this page)"
 
 
-def _uncell(text: str) -> str:
-    """A cell's value, the escape of its pipes undone."""
-    return text.replace(r"\|", "|")
+def _lines(text: str) -> list[str]:
+    """The lines of ``FETCHED.md`` as the frame joins them, at each line feed.
 
-
-def _table(lines: Sequence[str], header: str, rule: str, width: int) -> list[list[str]]:
-    """The rows of the table under ``header``, each as its cells; none without the table.
-
-    A row of another width than the table's is left out, so the comparison names it as a line
-    that the declaration does not give.
+    A line separator or a next-line mark inside a cell or a section stays in its line, as the
+    frame wrote it there, and the carriage return of a checkout that ends its lines in CRLF is
+    dropped.
     """
-    for at, line in enumerate(lines):
-        if line == header and list(lines[at + 1 : at + 2]) == [rule]:
-            rows = []
-            for row in lines[at + 2 :]:
-                if not row.startswith("| "):
-                    break
-                cells = [_uncell(cell.strip()) for cell in _CELL.split(row)[1:-1]]
-                if len(cells) == width:
-                    rows.append(cells)
-            return rows
-    return []
+    return text.replace("\r\n", "\n").removesuffix("\n").split("\n")
+
+
+def _cells(row: str) -> list[str]:
+    """A row's cells as the frame writes them: the one space on each side off, pipes unescaped.
+
+    A value's own white space at its edges, which the frame writes as given, is kept.
+    """
+    parts = _CELL.split(row)[1:-1]
+    return [part.removeprefix(" ").removesuffix(" ").replace(r"\|", "|") for part in parts]
+
+
+def _table(lines: Sequence[str], heading: str, header: str, rule: str) -> list[list[str]]:
+    """The rows of the frame's table under ``heading``, each as its cells; none without it.
+
+    The table is the last one under its heading, its header and its rule: what follows the
+    frame's table of files is the frame's own, while a source's section before it may quote
+    any line. A row of another width than the table's is left out, so the comparison names it
+    as a line that the declaration does not give.
+    """
+    width = header.count("|") - 1
+    found = [
+        at
+        for at in range(len(lines) - 3)
+        if list(lines[at : at + 4]) == [heading, "", header, rule]
+    ]
+    if not found:
+        return []
+    rows = []
+    for row in lines[found[-1] + 4 :]:
+        if not row.startswith("| "):
+            break
+        cells = _cells(row)
+        if len(cells) == width:
+            rows.append(cells)
+    return rows
+
+
+def _heading_at(lines: list[str], heading: str, header: str) -> int:
+    """Where the frame's table under ``heading`` stands, the last such, or past the end."""
+    found = [
+        at
+        for at in range(len(lines) - 2)
+        if lines[at] == heading and lines[at + 1] == "" and lines[at + 2] == header
+    ]
+    return found[-1] if found else len(lines)
 
 
 def _between(lines: list[str], start: str, end: str) -> list[str]:
@@ -1388,13 +1423,27 @@ def _read_back(snapshot: Snapshot, lines: list[str]) -> set[str]:
 def _sections(snapshot: Snapshot, lines: list[str]) -> list[str]:
     """The committed lines of the source's own sections, where its ``sections`` writes some.
 
-    They run from the first ``##`` heading after "How this is captured" to "Files and pages".
+    They stand after the frame's paragraph of how it captures, which closes "How this is
+    captured" below the capture's own paragraphs, and before the frame's table of files. They
+    open with a section's heading, so lines before the first ``##`` heading there are none of
+    them, and a line of the capture that reads like a heading is the capture's. Where the
+    frame's paragraph is not found, its place is counted from the declaration.
     """
     if snapshot.sections is _no_sections:
         return []
-    captured = _between(lines, "## How this is captured", "## Files and pages")
-    start = next((at for at, line in enumerate(captured) if line.startswith("## ")), len(captured))
-    return captured[start:]
+    try:
+        heading = lines.index("## How this is captured")
+    except ValueError:
+        return []
+    end = _heading_at(lines, "## Files and pages", _FILES)
+    how = _how(snapshot)
+    start = next(
+        (at + len(how) for at in range(heading, end) if lines[at : at + len(how)] == how),
+        heading + 2 + len(_captured(snapshot)),
+    )
+    region = lines[start:end]
+    first = next((at for at, line in enumerate(region) if line.startswith("## ")), len(region))
+    return region[first:]
 
 
 def _redirects(note: str) -> tuple[list[str], str]:
@@ -1405,6 +1454,21 @@ def _redirects(note: str) -> tuple[list[str], str]:
         clauses.append(found.group(0))
         rest = rest[found.end() :].removeprefix("; ")
     return clauses, rest
+
+
+def _redirects_before(note: str, tail: str) -> list[str]:
+    """The redirect clauses of a committed note that ends in ``tail``, the declaration's part.
+
+    A page's own note may read like a redirect clause, so where the declaration gives the end
+    of the note the clauses are read before it; otherwise they are those the note opens with.
+    """
+    if tail != "-" and note == tail:
+        return []
+    if tail != "-" and note.endswith(f"; {tail}"):
+        clauses, rest = _redirects(note[: -len(tail) - 2])
+        if not rest:
+            return clauses
+    return _redirects(note)[0]
 
 
 def _own_note(rest: str, declared: Sequence[str]) -> str:
@@ -1472,9 +1536,13 @@ def _declared_row(snapshot: Snapshot, page: Page, cells: Sequence[str]) -> list[
     """
     file, url, fetched, _, size, digest, etag, modified, note = cells
     answered = url if page.origin and url in (page.url, page.origin) else page.url
-    redirected, rest = _redirects(note)
     declared = _declared(page, answered)
-    own = page.note if snapshot.note is None else _own_note(rest, declared)
+    if snapshot.note is None:
+        own = page.note
+        redirected = _redirects_before(note, _note_cell(declared, own))
+    else:
+        redirected, rest = _redirects(note)
+        own = _own_note(rest, declared)
     return [
         file if page.split else page.file or _NO_FILE,
         answered,
@@ -1613,7 +1681,7 @@ def compare_fetched(snapshot: Snapshot, out: Path | None = None) -> list[str]:
     path = out / FETCHED
     if not path.is_file():
         return []
-    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    lines = _lines(path.read_bytes().decode("utf-8", errors="replace"))
     forms = [int(found[1]) for line in lines if (found := _MARK_LINE.fullmatch(line))]
     if not forms or forms[-1] < FORM:
         return []
@@ -1622,15 +1690,19 @@ def compare_fetched(snapshot: Snapshot, out: Path | None = None) -> list[str]:
             f"{FETCHED} is of form {forms[-1]}, which a later xippios-core writes: this one writes "
             f"and judges form {FORM}"
         ]
-    files = [cells for cells in _table(lines, _FILES, _FILES_RULE, 9) if cells[0] != OBSERVED]
-    expected = _compose(
-        snapshot,
-        read=_read_back(snapshot, lines),
-        sections=_sections(snapshot, lines),
-        files=_expected_files(snapshot, files),
-        observed=(out / OBSERVED).is_file(),
-        left_out=_expected_left_out(snapshot, _table(lines, _LEFT_OUT, _LEFT_OUT_RULE, 4)),
-    ).splitlines()
+    table = _table(lines, "## Files and pages", _FILES, _FILES_RULE)
+    files = [cells for cells in table if cells[0] != OBSERVED]
+    left_out = _table(lines, "## Not fetched", _LEFT_OUT, _LEFT_OUT_RULE)
+    expected = _lines(
+        _compose(
+            snapshot,
+            read=_read_back(snapshot, lines),
+            sections=_sections(snapshot, lines),
+            files=_expected_files(snapshot, files),
+            observed=(out / OBSERVED).is_file(),
+            left_out=_expected_left_out(snapshot, left_out),
+        )
+    )
     differing: list[str] = []
     matcher = difflib.SequenceMatcher(None, lines, expected, autojunk=False)
     for tag, start, end, first, last in matcher.get_opcodes():
