@@ -1395,8 +1395,8 @@ a source's callers see, and the rules of conventions 1.29 that changed since 1.2
 checklist's item 12 holds an adoption against both
 (https://github.com/xippios/sdk-core/issues/334, https://github.com/xippios/sdk-core/issues/349).
 Before the release six sources ported core's `main` at
-https://github.com/xippios/sdk-core/commit/a23bd94f5829b6490427c31864b2a4c07f2a74f6 on a
-trial branch, ran their tests offline with their copies deleted, and the parts and the notes
+[a23bd94](https://github.com/xippios/sdk-core/commit/a23bd94f5829b6490427c31864b2a4c07f2a74f6)
+on a trial branch, ran their tests offline with their copies deleted, and the parts and the notes
 were corrected wherever a port had to do otherwise than they said, each correction citing its
 source's trial row (https://github.com/xippios/sdk-core/issues/410,
 https://github.com/xippios/sdk-core/issues/435).
