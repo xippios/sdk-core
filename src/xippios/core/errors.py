@@ -274,7 +274,9 @@ class QueryTooLarge(InvalidRequestError):
         request: As given.
 
     Raises:
-        ValueError: ``bound`` is ``True`` and ``count`` is ``None``: a bound is a number.
+        ValueError: ``bound`` is ``True`` and ``count`` is ``None``, since a bound is a
+            number, or ``bound`` is ``True`` with a ``request``, since a size read from the
+            arguments is refused before any request and names none.
     """
 
     def __init__(
@@ -287,10 +289,15 @@ class QueryTooLarge(InvalidRequestError):
         request: str | None = None,
         source: str | None = None,
     ) -> None:
+        if bound and count is None:
+            raise ValueError("bound=True needs the count read from the arguments, not None")
+        if bound and request is not None:
+            raise ValueError(
+                "bound=True names no request: a size read from the arguments is refused before "
+                "any request is sent"
+            )
         query = "query" if request is None else request
         if count is None:
-            if bound:
-                raise ValueError("bound=True needs the count read from the arguments, not None")
             refused = "the query" if request is None else request
             size = (
                 f"upstream refused {refused} as too large; it serves at most {limit:,} records "
@@ -298,7 +305,7 @@ class QueryTooLarge(InvalidRequestError):
             )
         elif bound:
             size = (
-                f"{query} could return up to {count:,} records, a size read from its arguments "
+                f"query could return up to {count:,} records, a size read from its arguments "
                 f"with nothing counted or sent; upstream serves at most {limit:,} per call."
             )
         else:

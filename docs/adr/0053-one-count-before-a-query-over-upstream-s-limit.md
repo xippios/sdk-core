@@ -84,7 +84,8 @@ maintainer's answer to https://github.com/xippios/sdk-core/issues/405, which is 
    its request by `request_description`, and the package's own refusal before its data request
    to name none (ADR-0030, decision 4; ADR-0043), so the rule stands as written and gains no
    sentence. The runner refuses before the data request and passes none, a bound read from the
-   arguments passes none, and without `request` every form reads as decision 1 gives it.
+   arguments passes none, and the error refuses a bound with a request by `ValueError`, as it
+   refuses a bound without a count. Without `request` every form reads as decision 1 gives it.
    https://github.com/xippios/sdk-core/issues/405 asks the maintainer, and it is open. Under its
    first other option the argument goes, and conventions §5 name this error as the exception
    until a later row; under its second, a source words that one message itself, and core words
