@@ -16,8 +16,8 @@ of `reference/README.md` by code while five keep it by hand. ADR-0023, decision 
 helper the template renders into every repository to core.
 https://github.com/xippios/sdk-core/issues/309 took the frame into sdk-core 0.4.1
 (https://github.com/xippios/sdk-core/issues/321), ADR-0046 gave both script frames one
-subpackage, `xippios.core.refresh`, and the human answered the design question on
-2026-11-21, prompted in the sdk-core panel.
+subpackage, `xippios.core.refresh`, and the maintainer's answer on
+https://github.com/xippios/sdk-core/issues/370, given on 2026-11-21, decided the design question.
 
 ## Decision
 

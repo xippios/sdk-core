@@ -28,8 +28,8 @@ has no limit, so a limit would be the package's own.
 
 Decisions 1 to 3 are the answer of https://github.com/xippios/sdk-core/issues/372, decisions 4
 to 6 are those of the pull request that built the helper, and decision 7, the amendment of
-2026-11-22, is the answer of https://github.com/xippios/sdk-core/issues/405, which the
-maintainer gave in the sdk-core panel that day.
+2026-11-22, is the maintainer's answer on https://github.com/xippios/sdk-core/issues/405, given
+that day.
 
 ## Decision
 
@@ -77,7 +77,7 @@ maintainer gave in the sdk-core panel that day.
    raises as `ValidationError`. No taxonomy error is raised, since no change of the request
    mends it (conventions §5).
 7. **The error that a source's `classify` maps names its request.** By the maintainer's answer
-   to https://github.com/xippios/sdk-core/issues/405, given in the sdk-core panel on 2026-11-22,
+   on https://github.com/xippios/sdk-core/issues/405, given on 2026-11-22,
    `QueryTooLarge` takes one optional argument, `request=None`, beside `source`, the text that
    `request_description(response)` gives, which a source's `classify` passes when it maps
    upstream's refusal to the error, and keeps it as an attribute. The four fields of decision 1
