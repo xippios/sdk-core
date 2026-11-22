@@ -1,6 +1,6 @@
 # ADR-0053: One count before a query over upstream's limit
 
-Status: Accepted · Date: 2026-11-22 · Decided by https://github.com/xippios/sdk-core/issues/372
+Status: Accepted · Date: 2026-11-22 · Decided by https://github.com/xippios/sdk-core/issues/372 · Amended 2026-11-22 by https://github.com/xippios/sdk-core/issues/405
 
 ## Context
 
@@ -26,9 +26,10 @@ asks: upstream estimates the size itself and refuses a query over its limit, pri
 estimate. sdk-faostat can count with `no_records=true`, whose answer is a float, but its upstream
 has no limit, so a limit would be the package's own.
 
-Decisions 1 to 3 are the answer of https://github.com/xippios/sdk-core/issues/372, and decisions
-4 to 7 are those of the pull request that built the helper. Decision 7 waits on the
-maintainer's answer to https://github.com/xippios/sdk-core/issues/405, which is open.
+Decisions 1 to 3 are the answer of https://github.com/xippios/sdk-core/issues/372, decisions 4
+to 6 are those of the pull request that built the helper, and decision 7, the amendment of
+2026-11-22, is the answer of https://github.com/xippios/sdk-core/issues/405, which the
+maintainer gave in the sdk-core panel that day.
 
 ## Decision
 
@@ -75,9 +76,12 @@ maintainer's answer to https://github.com/xippios/sdk-core/issues/405, which is 
    pydantic `int` field reads `1234.0` as `1234` and refuses `1234.5`, which core's `parse`
    raises as `ValidationError`. No taxonomy error is raised, since no change of the request
    mends it (conventions §5).
-7. **The error that a source's `classify` maps names its request.** `QueryTooLarge` takes
-   `request=None`, beside `source`, the text that `request_description(response)` gives, and
-   keeps it as an attribute. Given, the message names it where its forms say "the query" or
+7. **The error that a source's `classify` maps names its request.** By the maintainer's answer
+   to https://github.com/xippios/sdk-core/issues/405, given in the sdk-core panel on 2026-11-22,
+   `QueryTooLarge` takes one optional argument, `request=None`, beside `source`, the text that
+   `request_description(response)` gives, which a source's `classify` passes when it maps
+   upstream's refusal to the error, and keeps it as an attribute. The four fields of decision 1
+   stand. Given, the message names it where its forms say "the query" or
    "query": `upstream refused GET /api/api_GET/ as too large; it serves at most 50,000 records
    per call.`, and `GET /v1/data would return 13,344,840 records; ...` for upstream's refusal
    that prints its count. Conventions §5 ask every error that a source's `classify` maps to name
@@ -86,10 +90,6 @@ maintainer's answer to https://github.com/xippios/sdk-core/issues/405, which is 
    sentence. The runner refuses before the data request and passes none, a bound read from the
    arguments passes none, and the error refuses a bound with a request by `ValueError`, as it
    refuses a bound without a count. Without `request` every form reads as decision 1 gives it.
-   https://github.com/xippios/sdk-core/issues/405 asks the maintainer, and it is open. Under its
-   first other option the argument goes, and conventions §5 name this error as the exception
-   until a later row; under its second, a source words that one message itself, and core words
-   the other forms.
 
 ## Consequences
 
