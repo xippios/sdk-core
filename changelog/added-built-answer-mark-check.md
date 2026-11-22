@@ -18,5 +18,10 @@
     `tests/*.py` (sdk-usda-esmis 10, sdk-eurostat 31, sdk-usda-psd 20, sdk-usda-nass 20,
     sdk-comtrade 27, sdk-faostat 38, sdk-usda-wasde 14, sdk-usda-gats 40, sdk-usda-esr 34,
     sdk-x 52, sdk-google-mail 49) — every place marked with `§10` and its kind, or as an input
-    of the test, the counts measured on 2026-11-21 and an upper bound — the collected check
-    fails on each place without its mark.
+    of the test, the counts measured on 2026-11-21 and an upper bound of the places without a
+    mark alone, and every test that the census fails, whose replay answered another request,
+    marked as the third kind or narrowed, which those counts leave out: the trial of the
+    release counted 6 in sdk-google-mail, 4 in sdk-comtrade, 24 in sdk-usda-nass, 5 in
+    sdk-usda-esr, 11 in sdk-x and none in sdk-cashctrl — the collected check fails on each
+    place without its mark, and the census on each such test
+    (https://github.com/xippios/sdk-core/issues/435).

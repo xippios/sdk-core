@@ -51,3 +51,19 @@
     `src/xippios/x/tasks.py` (sdk-x) — no entry, since X bills every page that a second run
     fetches, and a page with two lists stays a preview — its notes stay as they read
     (https://github.com/xippios/sdk-x/issues/35).
+    `tests/test_org_lock.py` (sdk-cashctrl) —
+    `test_the_bound_read_server_reaches_the_bound_organisation_only` reads that
+    `cashctrl_list_currencies` takes `offset` where it read that it takes no arguments — the
+    refusal of an argument that a tool does not declare names those it takes, a paged tool's
+    `offset` among them (https://github.com/xippios/sdk-cashctrl/issues/134).
+    `tests/test_tasks.py` (sdk-usda-esr, sdk-usda-psd, sdk-usda-nass, sdk-usda-gats) — the
+    refusal of an undeclared argument names `offset` last among the arguments of a paged tool,
+    in `test_the_adapters_refuse_a_bad_argument_before_the_task_runs` for sdk-usda-esr's
+    `get_exports` and sdk-usda-psd's `get_data`, and in
+    `test_a_tool_error_answer_is_flagged_and_an_undeclared_argument_refused` for
+    sdk-usda-nass's `list_param_values` and, where it is paged, sdk-usda-gats's
+    `list_countries` — as above (https://github.com/xippios/sdk-usda-esr/issues/59,
+    https://github.com/xippios/sdk-usda-nass/issues/86).
+    `tests/test_contract.py` (sdk-faostat) —
+    `test_a_tool_refuses_an_argument_it_does_not_declare` reads that `list_domains` takes
+    `search, offset` where it is paged — as above.

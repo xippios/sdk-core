@@ -38,13 +38,19 @@
     `packaged=PACKAGED_LISTS` in place of its own check and
     `quota_header="x-ratelimit-remaining"` — as above.
     `scripts/refresh_reference.py` (sdk-usda-gats) — ported to five `Listed`, each endpoint its
-    `OPERATIONS` entry, `unitsOfMeasure` with `Enumeration(ids="unitOfMeasureId",
-    names="unitOfMeasureName")` and `packaged=PACKAGED_LISTS` — as above.
+    `OPERATIONS` entry, the origin made from the list, `unitsOfMeasure` with
+    `Enumeration(ids="unitOfMeasureId", names="unitOfMeasureName")` and
+    `packaged=PACKAGED_LISTS` — as above, and without its origin a list's row names its
+    endpoint alone, where its README names the request and the operation.
     `scripts/refresh_reference.py` (sdk-usda-nass) — ported to eleven `Listed`, `fetch_param`
     building each parameter list at the wrapper's `retrieved_at` and `fetch_derived` each
-    derived list, `CLASS_NAMES`, `_SPELLED_OUT` and the dollar rule as `Enumeration` fields,
-    `columns.csv` parsed in `before` and written in `after` on a full run, its read timeout
-    set around the call, and `packaged=[*PACKAGED_PARAMS, *DERIVED_LISTS]` — as above.
+    derived list, each with its origin, `GET /api/get_param_values?param=<param>` for the
+    nine parameter lists and the query of each derived list, `CLASS_NAMES`, `_SPELLED_OUT`
+    and the dollar rule as `Enumeration` fields, `columns.csv` parsed in `before` and written
+    in `after` on a full run, its read timeout set around the call, and
+    `packaged=[*PACKAGED_PARAMS, *DERIVED_LISTS]` — as above, and without the origins
+    `--render-only` rewrites the eleven rows of `reference/README.md` to the bare endpoint
+    (https://github.com/xippios/sdk-usda-nass/issues/86).
     `scripts/refresh_reference.py` (sdk-usda-psd) — ported to five `Listed`, the two id lists
     with their `Enumeration(ids=..., names=...)`, the origin made from the list and
     `packaged=PACKAGED_LISTS` in place of its own check — as above, and it gains `--only` and

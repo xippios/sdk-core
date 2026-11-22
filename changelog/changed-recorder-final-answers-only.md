@@ -4,3 +4,10 @@
   instead. A final answer is still kept whatever its status, a 4xx or a 5xx included, and no
   fixture of the twelve sources holds a 1xx or a 3xx.
   (ADR-0048, §10, https://github.com/xippios/sdk-core/issues/364)
+  - Hand-apply: `tests/test_record_fixture.py` (sdk-cashctrl) —
+    `test_the_host_then_the_secrets_then_the_rewrite`, which hands a built 302 to
+    `fixture_from_response` as its input, builds a 200, and the redirect of
+    `test_a_file_path_writes_no_answer_but_an_error_or_a_refusal` asserts core's message, which
+    names the method, the path and the status, where the recorder's named the file path — core
+    refuses a 1xx or 3xx on every path, so both fail at the lock's move
+    (https://github.com/xippios/sdk-cashctrl/issues/134).

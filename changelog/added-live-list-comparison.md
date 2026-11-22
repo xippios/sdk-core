@@ -24,10 +24,13 @@
     `tests/test_live.py` (sdk-comtrade) — delete the comparisons of `test_list_reporters_live`,
     `test_list_partners_live`, `test_list_codes_live` and `test_list_classifications_live`,
     collect the module and declare `Reporters`, `partnerAreas`, `motCode` and
-    `ListofReferences` in `LIVE_LISTS`, each fetched as the payload of `api.reference_rows`, and
-    each of its eleven other lists in `LIVE_LISTS` or in `NO_LIVE_LIST` with its reason, as its
-    patch chooses, the four taken from the specification in `NO_LIVE_LIST` — the copy core now
-    holds, and the family check fails without the declaration.
+    `ListofReferences` in `LIVE_LISTS`, each fetched from `api.reference_rows` and read
+    through its model, as `scripts/refresh_reference.py` writes the list, and not compared as
+    the payload, whose `id` stands where the packaged `motCode` list has `motCode` and whose
+    `"True"` the packaged `TradeDataItems` holds as `true`, and each of its eleven other lists
+    in `LIVE_LISTS` or in `NO_LIVE_LIST` with its reason, as its patch chooses, the four taken
+    from the specification in `NO_LIVE_LIST` — the copy core now holds, and the family check
+    fails without the declaration (https://github.com/xippios/sdk-comtrade/issues/60).
     `tests/test_live.py` (sdk-usda-esmis) — delete
     `test_the_packaged_agency_table_matches_upstream_live`, collect the module and declare
     `agency` in `LIVE_LISTS` with `api.agency_find_all`, and `publication` in `LIVE_LISTS`, at
