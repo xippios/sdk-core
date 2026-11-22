@@ -159,6 +159,11 @@ class Ceiling:
     def check(self, count: int, *, asked: str | None = None, advice: str | None = None) -> None:
         """Refuse a range of more periods than the ceiling in force, before the first request.
 
+        A task calls it before any request of the call, which makes the refusal's
+        ``Nothing was sent.`` true: a task that checks a range only after a request of the
+        call, as sdk-usda-nass's split of ``year__GE`` alone after its count of the range,
+        words that refusal itself and says what was sent (ADR-0054, amendment 2026-11-22).
+
         The refusal is the caller's ``InvalidRequestError``: the range as the task names it,
         or else the count asked, then the ceiling in force with its unit, and, below
         ``most``, that it is the ceiling set for this process, with the MCP server's default
@@ -180,7 +185,8 @@ class Ceiling:
                 with ``value`` where it names a bound; ``Ask for fewer <unit>.`` by default.
 
         Raises:
-            InvalidRequestError: ``count`` is over ``value``; nothing was sent.
+            InvalidRequestError: ``count`` is over ``value``; nothing was sent, since the
+                task calls ``check`` before any request of the call.
         """
         ceiling = self._value
         if count <= ceiling:

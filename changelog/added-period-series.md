@@ -1,15 +1,15 @@
 - `Ceiling(most, *, unit, mcp=None, option=None, help=None, source=None)` declares the ceiling
-  of a period series once, and its `check` refuses a range over the ceiling in force before the
-  first request, naming the range, the ceiling and its unit and, below `most`, the option that
-  raises it, then saying that nothing was sent, before its advice, and its `add_options` and
-  `apply_options` are a tool set's two hooks for `main`. `fetch_periods(periods, fetch, *,
-  skip=())` sends one request per period in the order given, passes over a period whose fetch
-  raises one of `skip`, and returns the periods with their answers for the task to assemble,
-  its vintage included. When a fetch after the first fails, it returns nothing and raises the
-  same error, its message naming the periods answered before it by their count, the first and
-  the last.
+  of a period series once, and its `check`, which a task calls before any request of the call,
+  refuses a range over the ceiling in force, naming the range, the ceiling and its unit and,
+  below `most`, the option that raises it, then saying that nothing was sent, before its advice,
+  and its `add_options` and `apply_options` are a tool set's two hooks for `main`.
+  `fetch_periods(periods, fetch, *, skip=())` sends one request per period in the order given,
+  passes over a period whose fetch raises one of `skip`, and returns the periods with their
+  answers for the task to assemble, its vintage included. When a fetch after the first fails,
+  it returns nothing and raises the same error, its message naming the periods answered before
+  it by their count, the first and the last.
   (ADR-0054, §4, https://github.com/xippios/sdk-core/issues/315,
-  https://github.com/xippios/sdk-core/issues/438)
+  https://github.com/xippios/sdk-core/issues/438, https://github.com/xippios/sdk-core/issues/454)
   - Hand-apply: `src/xippios/usda/esr/tasks.py` (sdk-usda-esr) — the ceiling of
     `_series_range` → `Ceiling(10, unit="market years", source=SOURCE)` and its `check`, and
     the loop of `get_weekly_series` → `fetch_periods(..., skip=(NoDataForYear,))`, the order
@@ -27,8 +27,10 @@
     `src/xippios/usda/nass/tasks.py` (sdk-usda-nass) — `split_ceiling`, `set_split_ceiling`,
     `mcp_add_options`, `mcp_apply_options` and the check of `_split_by_year` → one
     `Ceiling(20, unit="years", mcp=5, option="--split-years", help=..., source=SOURCE)`, its
-    two hooks under the two names, and its two passes → `fetch_periods` — the copy core now
-    holds, and the removal of `split_ceiling` and `set_split_ceiling`, which its 0.2.0 entry
+    two hooks under the two names, its `check` on the two-sided split before any call, the
+    split of `year__GE` alone keeping a refusal of its own after its count of the range
+    (https://github.com/xippios/sdk-core/issues/454), and its two passes → `fetch_periods` —
+    the copy core now holds, and the removal of `split_ceiling` and `set_split_ceiling`, which its 0.2.0 entry
     named, breaks a caller's call, so it takes a `breaking` entry and a minor (§12) unless the
     port keeps the two names (https://github.com/xippios/sdk-usda-nass/issues/86).
     `tests/test_tasks.py` (sdk-usda-gats, sdk-usda-nass) — the refusal of a range over the

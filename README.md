@@ -253,20 +253,22 @@ async def get_weekly_series_async(code: int, start_year: int, end_year: int) -> 
 `InvalidRequestError`, `2010 to 2021 is 12 market years; one call fetches at most 10 market
 years. Nothing was sent. Ask for fewer market years.`, which says before its advice that
 nothing was sent, as conventions §5 ask of a refusal of the call as given, and `advice` takes
-the place of the last sentence where the source names its own parameters. The two stay apart,
-so a task sends a release list or a count between them and still refuses a range before any
-request. `fetch_periods(periods, fetch, *, skip=())` awaits each request before the next, in
-the order given, passes over a period whose fetch raises one of `skip`, and returns the other
-periods with their answers: the task derives its vintage itself, from the rows or from a
-release list. When a fetch after the first raises, the helper returns nothing and raises that
-error again, the same instance with its class, its attributes, its cause and its traceback,
-and its message ends with the periods answered before it, those passed over included, by their
-count, the first and the last, each by its `str`: `503 from GET /v1/weeks/2023: Service
-Unavailable. The series stopped at 2023 after 2 periods answered, 2021 to 2022, and returns
-nothing.` Answered holds for a loop over counts too, which a task may run before the loop over
-its data (ADR-0054, amendment 2026-11-22). An error that is no `XippiosError` keeps its
-arguments and gets that sentence as a note, and a failure in the first period passes as
-raised.
+the place of the last sentence where the source names its own parameters. A task calls `check`
+before any request of the call, which makes that sentence true, and a task that can check a
+range only after a request words that refusal itself and says what was sent (ADR-0054,
+amendment 2026-11-22). The two stay apart, so a task sends a release list or a count between
+them and still refuses a range before any request. `fetch_periods(periods, fetch, *, skip=())`
+awaits each request before the next, in the order given, passes over a period whose fetch
+raises one of `skip`, and returns the other periods with their answers: the task derives its
+vintage itself, from the rows or from a release list. When a fetch after the first raises, the
+helper returns nothing and raises that error again, the same instance with its class, its
+attributes, its cause and its traceback, and its message ends with the periods answered before
+it, those passed over included, by their count, the first and the last, each by its `str`:
+`503 from GET /v1/weeks/2023: Service Unavailable. The series stopped at 2023 after 2 periods
+answered, 2021 to 2022, and returns nothing.` Answered holds for a loop over counts too, which a
+task may run before the loop over its data (ADR-0054, amendment 2026-11-22). An error that is
+no `XippiosError` keeps its arguments and gets that sentence as a note, and a failure in the
+first period passes as raised.
 
 Upstream failures arrive as taxonomy errors, never as raw `httpx` exceptions:
 
