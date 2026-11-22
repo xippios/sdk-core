@@ -29,7 +29,7 @@
 # release; if the other run already tagged a later commit, the maintainer rejects its `pypi`
 # deployment and the release is re-done as a patch. A release is not merged while
 # another release run is waiting.
-name: Publish to PyPI
+name: Publish
 
 on:
   push:
