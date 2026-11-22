@@ -56,8 +56,8 @@ amendment 2026-11-18, point e).
 - [ ] every test that asserted a limiter wait or a quota pause is marked `rate_limited`, and one that asserted key resolution has a module-level `placeholder_api_key` override that pins nothing (ADR-0035, ADR-0037)
 - [ ] generated enum files re-rendered once through the template's refresh script and committed as formatted, after its `ruff format && ruff check --fix`
 - [ ] `mypy --strict` covers `scripts/` too
-- [ ] the current conventions version applied (1.22's name rule excepted, §2)
-- [ ] the changelog fragment names the core bound, the template's tag and the conventions' version as they stand after the adoption, changed or not, and is `breaking` where the adoption brings a core minor and `changed` where it brings none (§15 item 9; ADR-0043)
+- [ ] the current conventions version applied (1.22's name rule excepted, §2): for a core release, each of the conventions' rules changed since the version before that the handover's section `Adopting core X.Y.Z` lists (https://github.com/xippios/sdk-core/issues/349)
+- [ ] the changelog fragment names the core bound, the template's tag and the conventions' version as they stand after the adoption, changed or not, and is `breaking` where the adoption brings a core minor and `changed` where it brings none (§15 item 9; ADR-0043); for a core release, each of the changes that a source's callers see that the handover's section `Adopting core X.Y.Z` lists and the adoption brings to them has its entry among the adoption's fragments (https://github.com/xippios/sdk-core/issues/334)
 
 ## Process
 - [ ] commit messages follow Conventional Commits

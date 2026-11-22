@@ -1378,7 +1378,8 @@ the adoption PR meets them:
   sources that package lists, sdk-comtrade, sdk-eurostat, sdk-faostat, sdk-usda-esmis,
   sdk-usda-esr, sdk-usda-gats, sdk-usda-nass, sdk-usda-psd and sdk-usda-wasde.
 
-Pre-filled below from the 19 fragments of the CHANGELOG's `[0.4.1]` section, whose Hand-apply
+Pre-filled below from the 19 fragments of steps 1 to 17.1, which the CHANGELOG's `[0.4.1]`
+section assembles, whose Hand-apply
 notes give each file, what it changes and the tests that break without it, from the records
 ADR-0043 to ADR-0057 and from the Consumers of each step's PR, all read on `main` at the merge
 of step 12; each item cites the issue its fragment answers. The adoption PR confirms every
@@ -1402,8 +1403,10 @@ it does.
 
 1. **The rest of a cut answer** (https://github.com/xippios/sdk-core/issues/314; ADR-0047). A
    tool whose cap is `ResultCap(paged=True)` takes the adapter's `offset`, the rows already
-   shown, and the note of its cut answer ends with `; continue with offset=<n>`, on every page
-   of the tool, the last too; a cap with `keep="last"` shows the newest rows of a series
+   shown, and every page of the tool carries its note, the last too, so an answer without a
+   note is whole: the note of every page but the last ends with `; continue with offset=<n>`,
+   and the last page's names its rows alone (ADR-0047, decisions 3 and 4); a cap with
+   `keep="last"` shows the newest rows of a series
    ordered oldest first, and the tool's `offset` walks to older rows. It reaches the tools that
    sdk-cashctrl, sdk-comtrade, sdk-eurostat, sdk-faostat, sdk-usda-esmis, sdk-usda-esr,
    sdk-usda-gats, sdk-usda-nass and sdk-usda-psd name in `MCP_CAPS`, and none of
@@ -1438,15 +1441,20 @@ it does.
    413, and the tasks of sdk-eurostat and sdk-faostat where their patches take the error or the
    runner (https://github.com/xippios/sdk-eurostat/issues/53,
    https://github.com/xippios/sdk-faostat/issues/35). Entry: under `changed`, the refusal's
-   wording; sdk-comtrade's also names `meta.total` and the class its callers catch, core's
-   `xippios.core.QueryTooLarge`, where its `errors` module exported a class of its own.
+   wording, and sdk-comtrade's `meta.total`. sdk-comtrade's patch deletes its own
+   `QueryTooLarge` from `xippios.comtrade.errors`, a name of its `__all__` that its README
+   names, so a caller's import of it fails and the class to catch is core's
+   `xippios.core.QueryTooLarge` (https://github.com/xippios/sdk-core/issues/317; ADR-0053,
+   Consequences): that removal takes an entry of its own under `breaking`, in the minor of its
+   alpha-3 codes (§12).
 5. **One check of an argument against a packaged list**
    (https://github.com/xippios/sdk-core/issues/313; ADR-0045). A source's refusal of a code its
    list lacks comes from core's check, with the list's name, its fetch date and the closest codes
    by core's strategy or the source's, and a value of the other type than the list's codes is
    refused with `InvalidRequestError`, which names the integer or the text to pass: a text of
    digits given for sdk-usda-psd's and sdk-usda-gats's integer codes, which they compared by
-   its text, and an integer given for sdk-usda-nass's text codes (ADR-0045, Consequences). It
+   its text and their tasks declare as integers, and an integer given for sdk-usda-nass's text
+   codes (ADR-0045, Consequences). It
    reaches the nine sources that package lists. Entry: under `changed`, the refusals whose
    wording or class the port changes, as the tests that the port changes show them.
 6. **A `since` that takes back a vintage** (https://github.com/xippios/sdk-core/issues/318;
@@ -1676,7 +1684,8 @@ the rules of 1.28.
     `fetch_periods` (https://github.com/xippios/sdk-core/issues/315): esr, psd, gats, nass;
   - a nightly comparison of a packaged list → `xippios.core.testing.live` with `LIVE_LISTS`,
     or `assert_list_current` (https://github.com/xippios/sdk-core/issues/319): esr, psd, gats,
-    comtrade, esmis, wasde;
+    comtrade, esmis, wasde, and faostat's assertion of the removed codes in
+    `test_list_elements`;
   - the tests of `OBSERVED.md` that the family check now makes
     (https://github.com/xippios/sdk-core/issues/348): esmis, wasde, esr, cashctrl, faostat;
   - the frame of `scripts/refresh_upstream.py` → a `Snapshot` run by `xippios.core.refresh`
@@ -1712,12 +1721,15 @@ the rules of 1.28.
 - Item 9: the adoption's fragment under `changelog/` is `changed` and names
   `xippios-core~=0.4.1`, sdk-template v0.4.1 and conventions 1.29 (§15 item 9; ADR-0043,
   decisions 1 and 3), and each change of the first list that the adoption brings to the
-  source's callers has its own fragment (review checklist, item 12).
+  source's callers has its own fragment (the definition of done's Adoption PR block; review
+  checklist, item 12).
 - `FETCHED.md` is the frame's alone: the first run of the ported snapshot script that fetches
   rewrites it once in the frame's form, every row with an ETag gaining the code span and the
   mark and the 403 rows moving to `Not fetched` (https://github.com/xippios/sdk-core/issues/320;
   ADR-0046, decision 3), and an adoption PR, which fetches nothing, leaves it to that run
-  (§15).
+  (§15). sdk-eurostat's row of `OBSERVED.md`, which the family check asks from the lock's move
+  and its committed `FETCHED.md` lacks, comes from a refresh by its present script, in a pull
+  request of its own before the adoption PR (below).
 - A live run prints the requests it sent by host, `requests sent by the live run: 15
   (api.example.org: 15)`, from which the source's release PR reads its count of live calls,
   and a run that built a `Tenants` registry names no host; the source changes no file for it
@@ -1860,8 +1872,17 @@ the rules of 1.28.
     with the count and the limit read from it, or a task raises it before the request with
     `bound=True`, is its patch's (https://github.com/xippios/sdk-eurostat/issues/53);
   - `docs/upstream/FETCHED.md`: the row of `OBSERVED.md`, which the family check asks from the
-    lock's move and the ported script writes at its next run (ADR-0044, decision 4;
-    https://github.com/xippios/sdk-eurostat/issues/49);
+    lock's move and which its capture script writes at its next run (ADR-0044, decision 4;
+    https://github.com/xippios/sdk-eurostat/issues/49). On its `main` of 2026-11-20
+    `docs/upstream/OBSERVED.md` exists, added that day, and `FETCHED.md`, last written on
+    2026-10-28, has no row of it. Its present script, the copy and not the port, appends
+    `| OBSERVED.md | - | - | - | - | written by hand: what upstream does but never documents;
+    not fetched or checked |` wherever the file exists, and `tests/test_refresh_upstream.py`
+    holds that row: its first cell is the file's name, its four cells between are `-` and its
+    last cell says that the file is written by hand, so the family check passes it. A refresh
+    by that script, in a pull request of its own before the adoption PR, writes the row; the
+    adoption PR then meets the check and fetches nothing (§15), and the first fetching run of
+    the ported script writes `FETCHED.md` again in the frame's form;
   - `tests/test_live.py`: its nineteen packaged lists in `LIVE_LISTS`, 15 more files a night,
     or in `NO_LIVE_LIST` with their reasons (https://github.com/xippios/sdk-core/issues/319);
   - `scripts/refresh_upstream.py` ported with `quota_wait`, `keep_recorded` with `canonical`
@@ -1894,8 +1915,9 @@ the rules of 1.28.
     `get_mirror_flows` (https://github.com/xippios/sdk-comtrade/issues/35); its ceiling stays in
     `validate_slice`, and `fetch_periods` over its chunks of 12 is its patch's choice
     (https://github.com/xippios/sdk-comtrade/issues/36);
-  - `errors.py`: `QueryTooLarge` deleted, `RECORD_LIMIT` and `MAX_PERIODS` kept, and its two
-    pieces of advice passed as `narrow` (https://github.com/xippios/sdk-core/issues/317);
+  - `errors.py`: `QueryTooLarge` deleted from the module and its `__all__`, `RECORD_LIMIT` and
+    `MAX_PERIODS` kept, and its two pieces of advice passed as `narrow`
+    (https://github.com/xippios/sdk-core/issues/317);
   - `tests/test_tasks.py`, `tests/test_live.py` and `README.md`: every alpha-3 code given to a
     slice task becomes its numeric code, `"757"` and `"842"` among them
     (https://github.com/xippios/sdk-core/issues/375), the error is built with `limit=` and
@@ -1909,11 +1931,13 @@ the rules of 1.28.
     fifteen `Listed` with `packaged=[*PACKAGED_LISTS, *PACKAGED_TABLES]`, its
     `tests/test_scripts.py` reading the frame's usage and `--render-only`
     (https://github.com/xippios/sdk-core/issues/321).
-- Its release is a minor, by its refusal of alpha-3 codes (§12), and its adoption's fragment is
+- Its release is a minor, by its refusal of alpha-3 codes and the removal of its own
+  `QueryTooLarge` from `xippios.comtrade.errors` (§12), and its adoption's fragment is
   `changed` all the same, since the adoption brings no core minor (§15 item 9; ADR-0043,
   decision 3).
 - The first list: its alpha-3 codes, the name of each country code, the refusal after one
-  count, the rest of a cut answer and one check of an argument.
+  count with the removal of its own class, the rest of a cut answer, one check of an argument,
+  and a series over periods where its patch takes `fetch_periods`.
 
 ### sdk-usda-psd
 
