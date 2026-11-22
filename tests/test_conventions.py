@@ -3,8 +3,9 @@ the preview rule of ADR-0050, the recording of a task's exchanges of ADR-0057, t
 request's country codes of ADR-0056, the check of the committed FETCHED.md of ADR-0046,
 decision 6, the attribution check of its decision 7, the refusal of a hinted value of ADR-0041's
 amendment of 2026-11-22, the two sentences of a period series that ADR-0054's amendment of
-2026-11-22 words, and the review checklist's sentence that holds an adoption against the two
-lists of the handover's section for the release.
+2026-11-22 words, a recorder's field of a request of ADR-0048, decision 7, and the review
+checklist's sentence that holds an adoption against the two lists of the handover's section for
+the release.
 
 The organization's release check quotes the conventions from sdk-core's `main`, and a finding
 blocks only where it quotes the sentence that a change breaks
@@ -487,6 +488,17 @@ def test_each_rule_of_a_task_s_recording_is_one_sentence_that_cites_adr_0057(
     rule = sentence(section(10), phrase)
     for name in (TASK_RECORD, *names):
         assert name in rule, f"§10: {rule!r} does not name {name!r}"
+
+
+def test_a_recorder_redacts_a_field_of_a_request_and_drops_none_by_adr_0048() -> None:
+    # §10, the recorder's rewrite step: what it writes for a field of a request that it must
+    # not keep, the maintainer's answer on https://github.com/xippios/sdk-core/issues/439. It
+    # drops none of a request's fields, and says nothing of an answer's.
+    rule = sentence(section(10), "A recorder writes `REDACTED` in place of the value of a field")
+    for name in ("of a request that it must not keep", "drops none of them", "key by key"):
+        assert name in rule, f"§10: {rule!r} does not name {name!r}"
+    assert "drops no field" not in rule, f"§10: {rule!r} reaches an answer's fields"
+    assert "ADR-0048, decision 7" in rule, f"§10: {rule!r} does not cite its record"
 
 
 # §3, the snapshot: the check of the committed FETCHED.md without a request (sdk-core#426,

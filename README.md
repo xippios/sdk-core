@@ -1672,6 +1672,46 @@ docstring covers nothing. A value handed to the code that no route serves may sa
 that it `is an input of the test, not an answer from <upstream>.` An entry of `ALLOWED` covers
 the places inside its definition and the calls of it, and one that covers no place fails.
 
+An exchange given to a recorder's step is such a value where it reaches
+`fixture_from_response` alone: built in the test or returned by a function of the module, each
+call of which is judged on its own, and handed on directly, by a local name or through a
+function of the module that gives it to `fixture_from_response` alone. The sentence in the
+helper's docstring then covers each call that hands its exchange on, and a call whose exchange
+a route serves takes a kind:
+
+```python
+import httpx
+from xippios.core.testing import Scrub, fixture_from_response
+
+
+def message_exchange(body):
+    """The exchange is an input of the test, not an answer from Example."""
+    return httpx.Response(200, json=body, request=httpx.Request("GET", MESSAGE_URL))
+
+
+def scrubbed(response):
+    return fixture_from_response(response, scrub=Scrub(secrets=SECRETS))
+
+
+def test_a_message_is_scrubbed():
+    fixture = scrubbed(message_exchange({"id": "1"}))  # handed to the recorder alone
+```
+
+An exchange that travels further, by a keyword, a container, a second function, a conditional
+expression or a module of its own such as `conftest.py`, is built in the test or takes a kind,
+and so is one that a route could reach unseen: through a function that a decorator receives,
+whose name something else binds at the module's top or in the calling function, or that the
+module passes as a value, a name of a `global` or `nonlocal` statement, or a module with a star
+import. For a helper's exchange, `fixture_from_response` is core's recorder only where every
+binding of the name in the module is an import from `xippios.core.testing`, as in the example
+above. The
+frame's `Response`, which a test of a snapshot hook imports from `xippios.core.refresh`, is
+served by no route and takes the sentence by its bare name as by `refresh.Response(...)`. A
+bare `Response` is the frame's only where every binding of the name in the module is that
+import, and httpx's otherwise, a re-export or an assignment of that name among them. The check
+reads a module's text: a name bound again at run time, through `globals()` or
+`monkeypatch.setattr`, it reads as the text binds it (ADR-0049, decision 10).
+
 The census, the third test, runs after every other test of the run. The plugin compares each
 request that a replay answered with the recorded one, through the recording's redaction, so
 a key the recording holds `REDACTED` matches the placeholder sent, and the census fails each
@@ -1852,6 +1892,11 @@ given. `fixture_from_response(response, scrub=..., rewrite=...)` runs the same r
 scrub, step and check on one exchange and writes nothing, so a source that records several
 exchanges checks them all before it writes one with `write_fixture(fixture, path)`, laid out
 as `record` writes it; `fixture_text(fixture)` gives that text.
+
+The step's type is `Rewrite`, which `xippios.core.testing` exports. A field of a request that
+the recorder must not keep, such as a whole message sent in a write's body, the step writes as
+`REDACTED` in place of its value and never drops, so that the census of built answers compares
+a replay with its recording key by key (ADR-0048, decision 7).
 
 A source that needs the answer itself, the bytes it cuts a sample from or a write's answer
 it reports, sends the recording's one request with `send_once` (or `send_once_sync`): sent

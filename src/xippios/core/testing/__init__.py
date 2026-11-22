@@ -5,8 +5,8 @@ offline (no network for the session; no rate-limit wait and a placeholder key in
 test not marked live; ADR-0035); fixture recording, one request sent once and read up
 to a bound, a final answer only, with secrets scrubbed in memory and verified before the
 write (``Scrub``), a large answer cut on request (``max_bytes=``, ADR-0040), a source's
-own rewrite step run and checked before the write (``rewrite=``), the one send without
-the write (``send_once``) and the writer (``write_fixture``, ``fixture_text``;
+own rewrite step run and checked before the write (``rewrite=``, a ``Rewrite``), the one
+send without the write (``send_once``) and the writer (``write_fixture``, ``fixture_text``;
 ADR-0048), and the recording of every exchange of a task, all written or none
 (``record_task``; ADR-0057); fixture replay through ``respx``, with what was sent and
 recorded as plain values (``sent_urls``, ``sent_query``, ``sent_bodies``,
@@ -53,6 +53,7 @@ from xippios.core.testing.environment import keep_reserved_tenants
 from xippios.core.testing.fixtures import (
     Fixture,
     FixtureResponse,
+    Rewrite,
     fixture_from_response,
     fixture_path,
     fixture_text,
@@ -79,6 +80,7 @@ __all__ = [
     "Fixture",
     "FixtureResponse",
     "ReplayFixture",
+    "Rewrite",
     "Scrub",
     "assert_list_current",
     "assert_projection",

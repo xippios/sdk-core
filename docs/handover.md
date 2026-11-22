@@ -1669,6 +1669,11 @@ the rules of 1.28.
     unmarked place, naming its file and line, and runs the census of the replays after every
     other test. The source marks its places and holds the collecting line that sdk-template
     renders (https://github.com/xippios/sdk-core/issues/344).
+    The input's sentence marks an exchange that reaches `fixture_from_response` alone, built in
+    the test or returned by a function of the module, each call judged on its own, and handed
+    on directly, by a local name or through one function of the module, and the check reads a
+    module's imports, so the frame's `Response` takes it too (ADR-0049, decision 10;
+    https://github.com/xippios/sdk-core/issues/439).
 19. **The recording of a task** (ADR-0057). `record_task` records every exchange that a task
     makes, in order, each sent once and none answered from the cache, writes all or none as
     `<case>.json` and `<case>_<k>.json`, records no token request inside an auth flow, refuses
@@ -1688,6 +1693,10 @@ the rules of 1.28.
     returned that is left in the URL, a header value, a body or a string decoded from a JSON
     body refuses the write, `REDACTED` alone masked first. sdk-x, sdk-google-mail and
     sdk-cashctrl pass their steps (https://github.com/xippios/sdk-core/issues/322).
+    A recorder writes `REDACTED` for a field of a request that it must not keep and drops none,
+    so that the census compares a replay with its recording key by key; sdk-google-mail does so
+    for `raw` before its adoption, as its part says (ADR-0048, decision 7;
+    https://github.com/xippios/sdk-core/issues/439).
 22. **The live comparison of a packaged list** (ADR-0055). A source declares in
     `tests/test_live.py` each packaged list that its nightly run compares with upstream's, in
     `LIVE_LISTS`, and each it does not, in `NO_LIVE_LIST` with the reason; a code gone, new or
@@ -1741,7 +1750,13 @@ the rules of 1.28.
   sdk-usda-nass (https://github.com/xippios/sdk-usda-nass/issues/86), 5 beside 26 in
   sdk-usda-esr (https://github.com/xippios/sdk-usda-esr/issues/59), 11 beside 51 in sdk-x
   (https://github.com/xippios/sdk-x/issues/57) and none beside none in sdk-cashctrl
-  (https://github.com/xippios/sdk-cashctrl/issues/134).
+  (https://github.com/xippios/sdk-cashctrl/issues/134). The places stay places since
+  https://github.com/xippios/sdk-core/issues/439, and some take the input's sentence where the
+  trial's core asked a kind: the calls of sdk-google-mail's four helpers that hand their
+  exchange to its recorder, and the frame's `Response` in a test of a hook, sdk-x's four
+  among them. Four of sdk-google-mail's six tests answer their recordings once it records
+  its two write fixtures again, as its part below says (ADR-0048, decision 7; ADR-0049,
+  decision 10).
 - Items 3 and 4, the copies each core change replaced, deleted with their tests, and the core
   change named for each in the PR description; per source below:
   - the check of an argument against a packaged list → `PackagedList.codes(...)` and its
@@ -1816,6 +1831,11 @@ the rules of 1.28.
   - the tests of the source's own code stay: a hook's, calling the hook, and those of what its
     `Snapshot` declares, its `capture`, its pages and its `not_fetched`, reading the
     declaration (ADR-0046, decision 2).
+- A test of a hook that builds the frame's `Response`, imported from `xippios.core.refresh` by
+  its bare name with nothing else in its module binding the name, or called as
+  `refresh.Response(...)`, marks it with the input's sentence, since no route serves it, and
+  needs no entry of `ALLOWED` (ADR-0049, decision 10;
+  https://github.com/xippios/sdk-core/issues/439).
 - Item 5, unchanged.
 - Item 6: each of the nine sources that package lists runs its ported reference script once
   with `--render-only`, which writes `enums.py` and the provenance rows of `reference/README.md`
@@ -2017,6 +2037,14 @@ the rules of 1.28.
   words (ADR-0046, decision 7; https://github.com/xippios/sdk-google-mail/issues/72).
 - No paged cap: `get_thread` keeps its `start` and `get_message` is one record
   (https://github.com/xippios/sdk-google-mail/issues/38).
+- Before the adoption, in a pull request of its own: its recorder writes `REDACTED` for `raw`
+  in a write's request body, where it dropped the key, and records `send_message/ok.json` and
+  `create_draft/ok.json` again with it, a keyed run on the demo mailbox that needs the
+  maintainer's go and a budget, so that core's census compares the four tests that replay them
+  with their recordings key by key (ADR-0048, decision 7;
+  https://github.com/xippios/sdk-core/issues/439). At the adoption, its recorder tests mark
+  the exchanges of their four helpers with the input's sentence, in each helper's docstring or
+  at the calls (ADR-0049, decision 10).
 - The first list: what a write task's preview shows.
 
 ### sdk-faostat

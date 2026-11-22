@@ -63,6 +63,8 @@ EXPORTS = {
         "assert_list_current",
         # the recording of every exchange of a task (ADR-0057)
         "record_task", "record_task_sync",
+        # the type of a recorder's rewrite step (ADR-0048, decision 1)
+        "Rewrite",
     },
     "xippios.core.mcp": {
         "ResultCap", "build_parser", "build_server", "cap_result", "error_to_text", "main",

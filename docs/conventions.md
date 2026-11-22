@@ -1080,7 +1080,12 @@ standalone from the package. A task named in `BULK_TASKS` gets no route:
   module's docstring reaches nothing (ADR-0049). A value that is an input of the test says so
   in the sentence `<the value> is an input of the test, not an answer from <upstream>.` in
   place of a kind, its words fixed up to the word "test" and its upstream the source's own
-  (ADR-0049). A replay that answers another request than its recording, in its host, its path,
+  (ADR-0049). An exchange given to a recorder's step takes that sentence where it reaches
+  `fixture_from_response` alone, built in the test or returned by a function of its module,
+  each call of which is judged on its own, and handed on directly, by a local name or through a
+  function of the module that gives it to `fixture_from_response` alone, while one that travels
+  further is built in the test or takes a kind (ADR-0049, decision 10).
+  A replay that answers another request than its recording, in its host, its path,
   its query or its body compared through the recording's redaction, is the third kind, and its
   test names `kind 3` beside `§10` in its docstring or its class's, in a comment inside it or
   in the docstring of a helper or fixture that it uses (ADR-0049).
@@ -1174,8 +1179,11 @@ standalone from the package. A task named in `BULK_TASKS` gets no route:
   the step returned still present as given in the URL, a header value, a body or a
   string decoded from a JSON body, `REDACTED` masked first, refuses the write, the error
   naming where, never the value; an encoded form is the step's to return or to look for
-  (ADR-0048, decisions 1 and 2). A source that writes the fixture itself writes it with
-  `write_fixture`, laid out as the recorder writes it.
+  (ADR-0048, decisions 1 and 2). A recorder writes `REDACTED` in place of the value of a field
+  of a request that it must not keep and drops none of them, so that the census of built
+  answers compares a replay with its recording key by key (ADR-0048, decision 7). A source
+  that writes the fixture itself writes it with `write_fixture`, laid out as the recorder
+  writes it.
   A body that is not UTF-8 text cannot be scrubbed and is refused unless the recording
   flags it (`allow_binary=True`, stored base64 with `body_base64`). The recorder drops
   the response headers that only identify a request (`x-request-id`, `x-amz-cf-id`,
