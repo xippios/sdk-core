@@ -1808,9 +1808,14 @@ the rules of 1.28.
     https://github.com/xippios/sdk-cashctrl/issues/91); its refusal of a 1xx or 3xx on its five
     file paths becomes core's on every path, and its refusal of another 2xx and of a binary
     body at a file path stays (ADR-0048, Consequences);
-  - in `tests/test_observed.py`, `test_every_file_the_notes_cite_exists` and the row, the
-    label and the date of its two other tests, which the family check holds
-    (https://github.com/xippios/sdk-core/issues/348);
+  - in `tests/test_observed.py`, `test_every_file_the_notes_cite_exists`,
+    `test_fetched_md_lists_observed_md_in_a_row_of_its_own`, whose row as the file's last line
+    and whose sentence "never edited by hand" are the copy's form, which the first run of the
+    ported snapshot script replaces with the frame's, the row standing before `Not fetched`,
+    and the label and the date of `test_every_note_ends_with_its_probe`, which the family
+    check holds, the whole of `FETCHED.md` from that first run on
+    (https://github.com/xippios/sdk-core/issues/348,
+    https://github.com/xippios/sdk-core/issues/428);
   - in `tests/test_refresh_upstream.py`,
     `test_fetched_lists_observed_in_a_row_of_its_own_where_it_exists`,
     `test_a_snapshot_keeps_observed_and_removes_a_stale_file`, whose removal of a stale file
@@ -2104,7 +2109,11 @@ the rules of 1.28.
     https://github.com/xippios/sdk-core/issues/315); `tests/test_live.py`'s `LISTS` and its
     test → `commodities`, `countries`, `regions` and `unitsOfMeasure` in `LIVE_LISTS`
     (https://github.com/xippios/sdk-core/issues/319); `tests/test_observed.py` loses what the
-    family check holds (https://github.com/xippios/sdk-core/issues/348);
+    family check holds, `test_fetched_md_lists_observed_md_in_a_row_of_its_own` whole, since
+    its sentence "Nothing here was edited by hand" is the copy's and the first run of the
+    ported snapshot script words it as the frame does
+    (https://github.com/xippios/sdk-core/issues/348,
+    https://github.com/xippios/sdk-core/issues/428);
   - `scripts/refresh_upstream.py` ported with `note`, `linked` and `reduce`
     (https://github.com/xippios/sdk-core/issues/320), and `scripts/refresh_reference.py` to
     four `Listed` with `quota_header="x-ratelimit-remaining"`, `tests/test_params.py` reading
