@@ -214,6 +214,54 @@ reader, a release month `"2026-09"` read into `(2026, 9)` and compared with each
 `(release_year, release_month)`. A `since` that bounds dates or periods beside an `until`,
 both included, is another rule, and this helper does not serve it (conventions §4).
 
+A task that assembles a period series from one upstream call per period, a market year or a
+month, declares its ceiling once as a `Ceiling`, checks the range against it before the first
+request, and sends the requests with `fetch_periods`, which returns each period with its
+answer (conventions §4, ADR-0054):
+
+```python
+from xippios.core import Ceiling, InvalidRequestError, Result, ResultMeta, fetch_periods
+from xippios.core.data_gov import NoDataForYear
+
+SERIES = Ceiling(10, unit="market years", source="example")  # the same over MCP
+
+
+async def get_weekly_series_async(code: int, start_year: int, end_year: int) -> Result[list[Week]]:
+    if start_year > end_year:  # the order of a range stays the source's own refusal
+        raise InvalidRequestError(f"start_year {start_year} is after end_year {end_year}.")
+    SERIES.check(end_year - start_year + 1, asked=f"{start_year} to {end_year}")
+    fetched = await fetch_periods(
+        range(start_year, end_year + 1),
+        lambda year: api.get_weeks(code, year),  # one request per market year
+        skip=(NoDataForYear,),  # upstream's empty 404: a year without data
+    )
+    weeks = sorted((week for _, answer in fetched for week in answer), key=week_ending)
+    newest = max(weeks, key=week_ending, default=None)  # the vintage stays the task's
+    meta = ResultMeta(
+        source="example",
+        endpoint="GetWeeks",
+        vintage=None if newest is None else newest.week_ending.isoformat(),
+        request={"code": code, "start_year": start_year, "end_year": end_year},
+    )
+    return Result(data=weeks, meta=meta)
+```
+
+`check(count, *, asked=None, advice=None)` refuses more periods than the ceiling in force with
+`InvalidRequestError`, `2010 to 2021 is 12 market years; one call fetches at most 10 market
+years. Ask for fewer market years.`, and `advice` takes the place of the last sentence where
+the source names its own parameters. The two stay apart, so a task sends a release list or a
+count between them and still refuses a range before any request. `fetch_periods(periods,
+fetch, *, skip=())` awaits each request before the next, in the order given, passes over a
+period whose fetch raises one of `skip`, and returns the other periods with their answers:
+the task derives its vintage itself, from the rows or from a release list. When a fetch after
+the first raises, the helper returns nothing and raises that error again, the same instance
+with its class, its attributes, its cause and its traceback, and its message ends with the
+periods fetched before it, those passed over included, by their count, the first and the
+last, each by its `str`: `503 from GET /v1/weeks/2023: Service Unavailable. The series
+stopped at 2023 after 2 periods fetched, 2021 to 2022, and returns nothing.` An error that is
+no `XippiosError` keeps its arguments and gets that sentence as a note, and a failure in the
+first period passes as raised.
+
 Upstream failures arrive as taxonomy errors, never as raw `httpx` exceptions:
 
 ```python
@@ -1129,6 +1177,34 @@ A source's own options go through `main`'s hooks, so the command line is parsed 
 `add_options` puts them on core's parser, so `--help` lists them; `apply_options(namespace,
 server)` returns the server to run; and a `XippiosError` it raises, a missing variable
 say, stops the process with exit status 2 and the message, before anything is served.
+
+A period series whose MCP tool fetches fewer periods than its Python API declares the
+server's ceiling and the option that sets another on its `Ceiling`, whose two methods are the
+hooks, so core's `main` gains no option and the source keeps its option's name (ADR-0054):
+
+```python
+# tasks.py
+SERIES = Ceiling(
+    60,
+    unit="months",
+    mcp=24,  # the MCP server starts with 24
+    option="--series-months",  # which sets another, 1 to 60
+    help="one request per month, so 60 months take about a minute of calls",
+    source="example",
+)
+mcp_add_options = SERIES.add_options  # the tool set's two hooks
+mcp_apply_options = SERIES.apply_options
+```
+
+The entry point, and a host that applies the tool set's `option_defaults()`, set the ceiling
+in force, `SERIES.value`, to 24 for the whole process, its Python and HTTP calls included, and
+`--series-months 36` sets 36; a value outside 1 to 60 stops the entry point with exit status 2.
+Below 60 the refusal says so: `2024-08 to 2026-08 is 25 months; one call fetches at most 24
+months, the ceiling set for this process (the MCP server starts with 24 by default;
+--series-months raises it, up to 60). Ask for fewer months.` The option's help is core's
+range and default, `most months one tool call fetches, 1 to 60 (default 24)`, then `help`.
+`SERIES.set(36)` sets the ceiling from Python, and a test that sets it sets `SERIES.most`
+again after it.
 
 Client configuration, for Claude Desktop or any MCP client:
 

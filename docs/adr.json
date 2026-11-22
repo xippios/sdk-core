@@ -873,6 +873,20 @@
       "superseded_by": null
     },
     {
+      "id": "ADR-0054",
+      "number": 54,
+      "title": "One helper for a series over periods",
+      "path": "docs/adr/0054-one-helper-for-a-series-over-periods.md",
+      "status": "Accepted",
+      "date": "2026-11-22",
+      "decided_by": "https://github.com/xippios/sdk-core/issues/373",
+      "amended": [],
+      "amends": [],
+      "supersedes": [],
+      "other": [],
+      "superseded_by": null
+    },
+    {
       "id": "ADR-0055",
       "number": 55,
       "title": "One live comparison of a packaged list",

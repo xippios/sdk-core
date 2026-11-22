@@ -63,6 +63,7 @@ from xippios.core.reference import (
     matches,
     nearest,
 )
+from xippios.core.series import Ceiling, fetch_periods
 from xippios.core.tenants import TenantLock, Tenants, bind_tasks, list_task, tenant_instructions
 
 __all__ = [
@@ -73,6 +74,7 @@ __all__ = [
     "BasicKeyAuth",
     "BearerAuth",
     "BearerToken",
+    "Ceiling",
     "ClientConfig",
     "ConfigError",
     "Downloaded",
@@ -106,6 +108,7 @@ __all__ = [
     "closest",
     "collect",
     "error_from_response",
+    "fetch_periods",
     "list_task",
     "load_json",
     "load_table",
