@@ -1270,6 +1270,39 @@ the assertion underneath in its own test, `assert_list_current(codes, current)`,
 `packaged=` the packaged records read as it reads the current ones where its records name
 the release they came from, and gives that test as the list's reason in `NO_LIVE_LIST`.
 
+The check of a built answer's mark is collected by a line of its own, in a file that holds
+the source's declarations for it (conventions §10, ADR-0049):
+
+```python
+# tests/test_built_answers.py
+from xippios.core.testing.built_answers import *  # noqa: F403
+
+READERS = frozenset({"merge_fields"})  # the source's own functions that take a written body
+ALLOWED = {  # helpers whose places are neither a kind of §10 nor an input, with the reason
+    ("tests/test_tasks.py", "serve_pages"): "each page served where and as it was recorded",
+}
+```
+
+It reads every module under `tests/`, `tests/fixtures/` left out, and fails, naming the file
+and the line, on each place that no mark covers: an `httpx.Response` that a test builds, a
+route's `.respond(...)`, a body written in the test and handed to `classify`, to a model's
+`model_validate` or `model_validate_json`, to a scrub or to a function of `READERS`, and a
+recording replayed with `url=`. A mark names `§10` and its kind, `kind 1` to `kind 5`, in one
+docstring or block of comments, `NOT RECORDED: an empty page (conventions §10, kind 2)`, and
+covers the places of the function or class whose docstring holds it, of the statement it
+stands on or above, and of every call of a helper whose docstring holds it; a module's
+docstring covers nothing. A value handed to the code that no route serves may say instead
+that it `is an input of the test, not an answer from <upstream>.` An entry of `ALLOWED` covers
+the places inside its definition and the calls of it, and one that covers no place fails.
+
+The census, the third test, runs after every other test of the run. The plugin compares each
+request that a replay answered with the recorded one, through the recording's redaction, so
+a key the recording holds `REDACTED` matches the placeholder sent, and the census fails each
+test whose replay answered another host, path, query or body without `kind 3` beside `§10`.
+A partial run judges only the tests that ran, and under pytest-xdist the census skips, since
+each worker keeps its own. A source meets the check once it adds the line, and the module's
+docstring lists what it cannot see.
+
 ```toml
 # pyproject.toml: the variables that hold the placeholder key in offline tests
 [tool.pytest.ini_options]

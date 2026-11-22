@@ -23,6 +23,7 @@ from xippios.core.client.cache import _clear_every_cache
 from xippios.core.client.quota import QuotaPolicy, _every_policy, _reset_every_policy
 from xippios.core.client.ratelimit import TokenBucket
 from xippios.core.tenants import _tenants_declared
+from xippios.core.testing.built_answers import _install_census
 from xippios.core.testing.fixtures import fixture_path
 from xippios.core.testing.replay import ReplayFixture, replay
 
@@ -195,13 +196,18 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    """Register the markers and refuse the network for the session (``_NetworkGuard``)."""
+    """Register the markers and refuse the network for the session (``_NetworkGuard``).
+
+    It registers the census of replays too, which listens only in a run that collects the
+    census test of ``xippios.core.testing.built_answers`` (ADR-0049).
+    """
     for marker in _MARKERS:
         config.addinivalue_line("markers", marker)
     guard = _NetworkGuard()
     guard.install()
     config.stash[_GUARD] = guard
     config.stash[_QUOTA_LEFT] = {}
+    _install_census(config)
 
 
 def pytest_unconfigure(config: pytest.Config) -> None:

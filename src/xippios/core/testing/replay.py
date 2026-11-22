@@ -20,6 +20,11 @@ from xippios.core.testing.fixtures import Fixture, _query_of, load_fixture
 
 __all__ = ["ReplayFixture", "mount_fixture", "replay", "sent_bodies", "sent_query", "sent_urls"]
 
+_mounted: list[tuple[Fixture, respx.Route, int]] | None = None
+"""What ``mount_fixture`` mounted in the running test, each with its route's count of calls at
+the mount, kept while the census of ``xippios.core.testing.built_answers`` listens, and
+``None`` otherwise (ADR-0049)."""
+
 
 class ReplayFixture(Protocol):
     """The type of the plugin's ``replay_fixture`` fixture, for a test's annotation.
@@ -128,6 +133,10 @@ def mount_fixture(
             content=fixture.response.content,
         )
     )
+    if _mounted is not None:  # the census compares what the route answers with the recording
+        # respx gives back the route it holds for an equal pattern: the calls from here on
+        # are this recording's.
+        _mounted.append((fixture, route, route.call_count))
     return route
 
 

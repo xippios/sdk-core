@@ -817,6 +817,20 @@
       "superseded_by": null
     },
     {
+      "id": "ADR-0049",
+      "number": 49,
+      "title": "The mark of a built answer and its check",
+      "path": "docs/adr/0049-the-mark-of-a-built-answer-and-its-check.md",
+      "status": "Accepted",
+      "date": "2026-11-21",
+      "decided_by": "https://github.com/xippios/sdk-core/issues/367",
+      "amended": [],
+      "amends": [],
+      "supersedes": [],
+      "other": [],
+      "superseded_by": null
+    },
+    {
       "id": "ADR-0050",
       "number": 50,
       "title": "What a write task's preview shows",
