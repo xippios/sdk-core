@@ -244,6 +244,11 @@ class QueryTooLarge(InvalidRequestError):
         nothing counted or sent; upstream serves at most 100,000 per call.
         upstream refused the query as too large; it serves at most 50,000 records per call.
 
+    The error a source's ``classify`` maps from upstream's answer names its request, as
+    conventions §5 ask of every message about an answer: given ``request``, the message
+    names it where the forms say "the query" or "query", ``upstream refused GET /v1/data
+    as too large; ...``. The package's own refusal before its data request names none.
+
     A source subclasses it for an attribute of its own and words it in ``narrow``, as
     sdk-usda-nass keeps the ``year`` that alone is over the limit.
 
@@ -256,6 +261,9 @@ class QueryTooLarge(InvalidRequestError):
         narrow: What narrows the query, the sentences that end the message, e.g.
             ``"Split by period, then by reporter."``.
         bound: ``True`` where ``count`` was read from the arguments and nothing counted.
+        request: The request upstream refused, as ``request_description(response)`` gives
+            it, e.g. ``"GET /v1/data"``, for the error a source's ``classify`` maps;
+            ``None``, the default, for a refusal before the data request.
         source: Source slug, e.g. ``"comtrade"``.
 
     Attributes:
@@ -263,6 +271,7 @@ class QueryTooLarge(InvalidRequestError):
         limit: As given.
         narrow: As given.
         bound: As given.
+        request: As given.
 
     Raises:
         ValueError: ``bound`` is ``True`` and ``count`` is ``None``: a bound is a number.
@@ -275,29 +284,34 @@ class QueryTooLarge(InvalidRequestError):
         limit: int,
         narrow: str,
         bound: bool = False,
+        request: str | None = None,
         source: str | None = None,
     ) -> None:
+        query = "query" if request is None else request
         if count is None:
             if bound:
                 raise ValueError("bound=True needs the count read from the arguments, not None")
+            refused = "the query" if request is None else request
             size = (
-                f"upstream refused the query as too large; it serves at most {limit:,} records "
+                f"upstream refused {refused} as too large; it serves at most {limit:,} records "
                 "per call."
             )
         elif bound:
             size = (
-                f"query could return up to {count:,} records, a size read from its arguments "
+                f"{query} could return up to {count:,} records, a size read from its arguments "
                 f"with nothing counted or sent; upstream serves at most {limit:,} per call."
             )
         else:
             size = (
-                f"query would return {count:,} records; upstream serves at most {limit:,} per call."
+                f"{query} would return {count:,} records; upstream serves at most {limit:,} "
+                "per call."
             )
         super().__init__(f"{size} {narrow}", source=source)
         self.count = count
         self.limit = limit
         self.narrow = narrow
         self.bound = bound
+        self.request = request
 
 
 def _refused_arguments(

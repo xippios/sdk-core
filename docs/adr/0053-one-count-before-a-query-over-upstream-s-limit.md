@@ -27,7 +27,8 @@ estimate. sdk-faostat can count with `no_records=true`, whose answer is a float,
 has no limit, so a limit would be the package's own.
 
 Decisions 1 to 3 are the answer of https://github.com/xippios/sdk-core/issues/372, and decisions
-4 to 6 are those of the pull request that built the helper.
+4 to 7 are those of the pull request that built the helper. Decision 7 waits on the
+maintainer's answer to https://github.com/xippios/sdk-core/issues/405, which is open.
 
 ## Decision
 
@@ -74,6 +75,20 @@ Decisions 1 to 3 are the answer of https://github.com/xippios/sdk-core/issues/37
    pydantic `int` field reads `1234.0` as `1234` and refuses `1234.5`, which core's `parse`
    raises as `ValidationError`. No taxonomy error is raised, since no change of the request
    mends it (conventions §5).
+7. **The error that a source's `classify` maps names its request.** `QueryTooLarge` takes
+   `request=None`, beside `source`, the text that `request_description(response)` gives, and
+   keeps it as an attribute. Given, the message names it where its forms say "the query" or
+   "query": `upstream refused GET /api/api_GET/ as too large; it serves at most 50,000 records
+   per call.`, and `GET /v1/data would return 13,344,840 records; ...` for upstream's refusal
+   that prints its count. Conventions §5 ask every error that a source's `classify` maps to name
+   its request by `request_description`, and the package's own refusal before its data request
+   to name none (ADR-0030, decision 4; ADR-0043), so the rule stands as written and gains no
+   sentence. The runner refuses before the data request and passes none, a bound read from the
+   arguments passes none, and without `request` every form reads as decision 1 gives it.
+   https://github.com/xippios/sdk-core/issues/405 asks the maintainer, and it is open. Under its
+   first other option the argument goes, and conventions §5 name this error as the exception
+   until a later row; under its second, a source words that one message itself, and core words
+   the other forms.
 
 ## Consequences
 
@@ -81,23 +96,21 @@ Decisions 1 to 3 are the answer of https://github.com/xippios/sdk-core/issues/37
   `errors.py`. `get_data` calls the runner, and `_bounded` raises core's error with
   `bound=True`. Its advice moves into `narrow`, and the clause that upstream cuts the rest
   without saying so leaves the message, which its docstring keeps.
-- sdk-usda-nass keeps its subclass for `year` and raises it at its four sites: its `classify`
-  for upstream's 413, with a count of `None`; its split, per year, by its own check, since the
+- sdk-usda-nass keeps its subclass for `year`, which passes `request` on, and raises it at its
+  four sites: its `classify` for upstream's 413, with a count of `None` and
+  `request=request_description(response)`; its split, per year, by its own check, since the
   split counts every year before its first fetch and so takes no runner; and around the runner
   of `get_data`, whose refusal it catches to split the years or to raise its own error for one
   year. Since its fetch can raise the 413 too, the catch passes an error with a count of `None`
   as raised, and splits on a counted refusal alone. The message for a year alone starts with
   core's form, and the year goes into `narrow`.
 - sdk-eurostat takes the error alone, from its `classify`, with the count and the limit read
-  from upstream's own refusal, and never the runner, since upstream offers no count request.
+  from upstream's own refusal and `request=request_description(response)`, and never the
+  runner, since upstream offers no count request.
   Its row, https://github.com/xippios/sdk-eurostat/issues/53, proposes an estimate from the
   arguments before the request, which is the error's `bound=True`. sdk-faostat can take the
   runner only against a limit of its own, its count read into an `int`
   (https://github.com/xippios/sdk-faostat/issues/35). Each decides in its own patch, and this
   record builds nothing for either.
-- The message names no request. That is right for the package's refusal before its data
-  request (conventions §5). For upstream's refusal that a source's `classify` maps, which
-  ADR-0043 asks to name its request, it stays as sdk-usda-nass's message is today, and a field
-  for the request is an amendment of this record.
 - The two consumers of ADR-0023 are sdk-comtrade and sdk-usda-nass, which delete their copies of
   the gate in their patches.

@@ -337,8 +337,11 @@ per call. Split by period, ...`; with `bound=True`, for a size read from the arg
 could return up to 100,008 records, a size read from its arguments with nothing counted or
 sent; ...`; and with a count of `None`, for upstream's own refusal of the query that a
 source's `classify` maps, `upstream refused the query as too large; it serves at most 50,000
-records per call. ...`. A source subclasses it only for an attribute of its own, worded in
-`narrow`, as sdk-usda-nass keeps the `year` that alone is over the limit.
+records per call. ...`. That `classify` passes `request=request_description(response)`, since a
+message about an answer names its request, and the message names it in place of the query:
+`upstream refused GET /v1/data as too large; ...`. A refusal before the data request names
+none. A source subclasses it only for an attribute of its own, worded in `narrow`, as
+sdk-usda-nass keeps the `year` that alone is over the limit.
 
 ## Quotas, hooks and keyless calls
 
