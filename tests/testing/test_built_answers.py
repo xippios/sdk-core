@@ -376,6 +376,248 @@ def test_the_input_s_sentence_is_fixed_up_to_the_word_test() -> None:
     assert lines(commented) == []
 
 
+# --- an exchange that a helper of the module builds for the recorder ---
+
+# The shapes of sdk-google-mail's recorder tests: helpers that return a built exchange, and one
+# that gives its parameter to fixture_from_response alone.
+RECORDER_TESTS = """
+import json
+
+import httpx
+
+URL = "https://api.example.test/v1/messages/1"
+
+
+def token_exchange():
+    request = httpx.Request("POST", "https://auth.example.test/token", data={"code": "c"})
+    return httpx.Response(200, json={"access_token": "made-up"}, request=request)
+
+
+def message_exchange(body, url=URL):
+    return httpx.Response(200, json=body, request=httpx.Request("GET", url))
+
+
+def scrubbed(recorder, response):
+    fixture = recorder.rewrite(fixture_from_response(response, scrub=SCRUB), SECRETS)
+    return fixture
+
+
+def test_the_token_is_scrubbed(recorder):
+    fixture = scrubbed(recorder, token_exchange())
+
+
+def test_core_alone_leaves_the_token(recorder):
+    fixture = fixture_from_response(token_exchange(), scrub=SCRUB)
+
+
+def test_a_message_by_its_name(recorder):
+    response = message_exchange({"id": "1"})
+    fixture = scrubbed(recorder, response)
+
+
+def test_a_message_s_body(recorder):
+    body = json.loads(scrubbed(recorder, message_exchange({"id": "1"})).response.body)
+"""
+
+CALLS = (
+    "scrubbed(recorder, token_exchange())",
+    "fixture_from_response(token_exchange(),",
+    "response = message_exchange(",
+    "json.loads(scrubbed(recorder, message_exchange(",
+)
+"""The calls of the helpers in ``RECORDER_TESTS``, each one place where no mark covers it."""
+
+
+def test_the_input_marks_an_exchange_that_a_helper_returns_to_the_recorder_alone() -> None:
+    assert lines(RECORDER_TESTS) == [at(RECORDER_TESTS, call) for call in CALLS]
+    in_the_tests = RECORDER_TESTS.replace(
+        "(recorder):\n", f'(recorder):\n    """The exchange {INPUT}"""\n'
+    )
+    assert lines(in_the_tests) == [], "each call is handed to the recorder alone"
+    in_the_helpers = RECORDER_TESTS.replace(
+        "def token_exchange():\n", f'def token_exchange():\n    """The exchange {INPUT}"""\n'
+    ).replace(
+        "def message_exchange(body, url=URL):\n",
+        f'def message_exchange(body, url=URL):\n    """The exchange {INPUT}"""\n',
+    )
+    assert lines(in_the_helpers) == [], "the helper's docstring reaches each call that hands it on"
+    built_here = """
+    import httpx
+
+    def scrubbed(recorder, response):
+        return fixture_from_response(response)
+
+    def test_one(recorder):
+        scrubbed(recorder, httpx.Response(200, json={}))
+    """
+    assert lines(built_here) == [at(built_here, "scrubbed(recorder, httpx")]
+    marked = clean(built_here).replace("(recorder):\n", f'(recorder):\n    """It {INPUT}"""\n')
+    assert lines(marked) == [], "an exchange the test builds, handed on by a function"
+
+
+SERVED_AND_RECORDED = f'''
+import httpx
+
+
+def exchange():
+    """The exchange {INPUT}"""
+    return httpx.Response(200, json={{}}, request=httpx.Request("GET", "https://api.example.test"))
+
+
+def test_recorded():
+    fixture_from_response(exchange())
+
+
+def test_served(respx_mock):
+    respx_mock.get("https://api.example.test").mock(return_value=exchange())
+'''
+
+
+def test_a_helper_s_exchange_is_judged_at_each_call_and_a_served_one_takes_a_kind() -> None:
+    served = at(SERVED_AND_RECORDED, "mock(return_value=exchange())")
+    assert lines(SERVED_AND_RECORDED) == [served], "the call that a route serves takes a kind"
+    unmarked = SERVED_AND_RECORDED.replace(f'    """The exchange {INPUT}"""\n', "")
+    assert lines(unmarked) == [at(unmarked, "fixture_from_response(exchange())"), served - 1]
+    in_the_test = SERVED_AND_RECORDED.replace(
+        "(respx_mock):\n", f'(respx_mock):\n    """The exchange {INPUT}"""\n'
+    )
+    assert lines(in_the_test) == [served + 1], "the input's sentence marks no served answer"
+    kind = SERVED_AND_RECORDED.replace(
+        "(respx_mock):\n", '(respx_mock):\n    """Composed (conventions §10, kind 2)."""\n'
+    )
+    assert lines(kind) == []
+
+
+EXCHANGE = f'''
+import httpx
+
+
+def exchange():
+    """The exchange {INPUT}"""
+    return httpx.Response(200)
+
+
+def scrubbed(recorder, response):
+    return fixture_from_response(response)
+
+
+'''
+"""A helper that returns an exchange, and one that gives its parameter to the recorder."""
+
+NOT_FOLLOWED = [
+    pytest.param(
+        "fixture_from_response(response=exchange())",
+        "fixture_from_response(response=exchange())",
+        id="a-keyword-of-the-recorder",
+    ),
+    pytest.param(
+        "scrubbed(recorder, response=exchange())",
+        "scrubbed(recorder, response=exchange())",
+        id="a-keyword-of-the-function",
+    ),
+    pytest.param(
+        "for response in [exchange()]:\n        fixture_from_response(response)",
+        "for response in [exchange()]:",
+        id="a-container",
+    ),
+    pytest.param(
+        "fixture_from_response(wrapped())\n\n\ndef wrapped():\n    return exchange()",
+        "fixture_from_response(wrapped())",
+        id="a-second-function-that-returns-it",
+    ),
+    pytest.param(
+        "checked(recorder, exchange())\n\n\n"
+        "def checked(recorder, response):\n    return scrubbed(recorder, response)",
+        "checked(recorder, exchange())",
+        id="a-second-function-that-hands-it-on",
+    ),
+    pytest.param(
+        "logged(recorder, exchange())\n\n\n"
+        "def logged(recorder, response):\n    print(response)\n"
+        "    return fixture_from_response(response)",
+        "logged(recorder, exchange())",
+        id="a-function-that-reads-it-otherwise",
+    ),
+    pytest.param(
+        "fixture_from_response(exchange())\n\n\n"
+        "def test_served(respx_mock):\n"
+        "    respx_mock.get('https://api.example.test').mock(side_effect=exchange)",
+        "fixture_from_response(exchange())",
+        id="a-helper-also-passed-by-its-name",
+    ),
+]
+
+
+@pytest.mark.parametrize(("body", "where"), NOT_FOLLOWED)
+def test_an_exchange_that_travels_further_is_built_in_the_test_or_takes_a_kind(
+    body: str, where: str
+) -> None:
+    test = f'def test_one(recorder):\n    """The exchange {INPUT}"""\n    {body}\n'
+    source = clean(EXCHANGE) + test
+    assert lines(source) == [at(source, where)]
+
+
+def test_an_exchange_chosen_by_a_conditional_expression_is_not_followed() -> None:
+    source = f'''
+    import httpx
+
+    def exchange(ok):
+        """The exchange {INPUT}"""
+        return httpx.Response(200) if ok else httpx.Response(404)
+
+    def test_one():
+        """The exchange {INPUT}"""
+        fixture_from_response(exchange(True))
+    '''
+    assert lines(source) == [at(source, "fixture_from_response(exchange(True))")]
+
+
+def test_a_helper_that_nothing_in_its_module_calls_is_judged_as_served() -> None:
+    # A helper of conftest.py, whose calls stand in other modules, among them.
+    source = clean(EXCHANGE).split("\n\ndef scrubbed")[0]
+    assert lines(source) == [at(source, "return httpx.Response(200)")]
+
+
+# --- the module's imports: which Response a bare name calls ---
+
+HOOK = f'''
+def test_reduce():
+    """The page {INPUT}"""
+    reduce(Response("https://docs.example.test/a", 200, b"", None, None, None, ()))
+'''
+"""A test of a snapshot hook that builds a page's answer by the bare name ``Response``."""
+
+
+@pytest.mark.parametrize(
+    ("imports", "served"),
+    [
+        pytest.param("from xippios.core.refresh import Response\n", False, id="the-frame-s"),
+        pytest.param("from xippios.core.refresh import Page, Response\n", False, id="among-others"),
+        pytest.param("from httpx import Response\n", True, id="httpx-s"),
+        pytest.param("from httpx._models import Response\n", True, id="a-module-of-httpx"),
+        pytest.param("", True, id="a-name-the-module-does-not-import"),
+        pytest.param("from xippios.core.refresh import *\n", True, id="a-star-import"),
+    ],
+)
+def test_a_bare_response_is_httpx_s_where_its_module_imports_it_from_httpx(
+    imports: str, served: bool
+) -> None:
+    source = imports + clean(HOOK)
+    assert lines(source) == ([at(source, "reduce(Response(")] if served else [])
+    unmarked = source.replace(f'    """The page {INPUT}"""\n', "")
+    assert lines(unmarked) == [at(unmarked, "reduce(Response(")], "the frame's Response is a place"
+
+
+def test_the_import_nearest_to_the_call_names_its_response() -> None:
+    inside = clean(HOOK).replace('"""\n', '"""\n    from xippios.core.refresh import Response\n', 1)
+    assert lines("from httpx import Response\n" + inside) == [], "the function's import binds"
+    httpx_inside = clean(HOOK).replace('"""\n', '"""\n    from httpx import Response\n', 1)
+    source = "from xippios.core.refresh import Response\n" + httpx_inside
+    assert lines(source) == [at(source, "reduce(Response(")]
+    alias = "from httpx import Response as Answer\n\ndef test_one():\n    Answer(200)\n"
+    assert lines(alias) == [], "a call the check reads by its name, Answer, is no place"
+
+
 def test_an_allowed_definition_covers_its_places_and_its_calls() -> None:
     source = """
     import httpx
