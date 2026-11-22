@@ -18,7 +18,11 @@ check finds the package, ``tests/fixtures/`` left out, with ``ast`` and its comm
 
 **A place** is:
 
-- an ``httpx.Response`` that a test builds, or another ``*.Response``;
+- an ``httpx.Response`` that a test builds, or another ``*.Response``, which no route serves:
+  a bare ``Response`` is httpx's where the import that binds the name nearest the call, in a
+  function that encloses it or at the module's top, brings it from ``httpx`` or one of its
+  modules, and where no import binds it; one imported from elsewhere, the frame's of
+  ``xippios.core.refresh`` among them, is another;
 - a route's ``.respond(...)``;
 - a body written in the test (a dict, list or tuple display, a string, an f-string or bytes)
   given as a positional argument to ``classify``, to a model's ``model_validate`` or
@@ -34,11 +38,24 @@ A recording replayed at its own operation's path is no place: the census judges 
 
 **A mark** names ``§10`` and a kind, ``kind 1`` to ``kind 5`` in §10's order, anywhere in one
 docstring or one block of comments, usually as ``NOT RECORDED: ... (conventions §10, kind
-2)``. A value that no route serves and no ``classify`` reads, handed to the code under test
-(a literal given to a model, a scrub or a reader, or an ``httpx.Response`` given to
-``fixture_from_response`` alone, directly or by its name), may instead say that it is an
-input of the test, in the sentence ``... is an input of the test, not an answer from
-<upstream>.``, whose words up to "test" are fixed; a served answer takes a kind.
+2)``. A value that no route serves and no ``classify`` reads, handed to the code under test,
+may instead say that it is an input of the test, in the sentence ``... is an input of the
+test, not an answer from <upstream>.``, whose words up to "test" are fixed; a served answer
+takes a kind. Such a value is a literal given to a model, a scrub or a reader, a ``Response``
+that is not httpx's, or an ``httpx.Response`` handed to the recorder: one that reaches
+``fixture_from_response`` alone as a positional argument, directly or by a local name that
+nothing else reads, of ``fixture_from_response`` itself or of a function of the module that
+gives that parameter to ``fixture_from_response`` and reads it nowhere else.
+
+**A helper's exchange.** An ``httpx.Response`` that a function of the module returns, directly
+or by such a name, is judged at each call of the function: a call handed to the recorder as
+above takes the sentence, and one that is not is served and takes a kind. The sentence in the
+helper's reach covers each call that hands its exchange on, and a kind there covers every
+call. Nothing further is followed: an exchange that travels by a keyword, a container, a
+second function that returns it or hands it on, a conditional expression or a function of
+another module is built in the test or takes a kind, as is the exchange of a helper whose
+name the module reads otherwise than to call it, ``side_effect=helper`` among them, and of a
+fixture, which pytest hands on and no call does (ADR-0049, decision 10).
 
 **Its reach.** A mark covers a place from the docstring of a function or class that encloses
 it, from a comment on the place's own lines, from a block of comments that ends right above
@@ -82,6 +99,10 @@ says why; the other two tests read files and run under it alike.
   speaks of;
 - a body built in another module than the one that serves it, a fixture of ``conftest.py``
   that another module uses among them, or under a name the rules above do not list;
+- httpx's ``Response`` called under another name, ``Answer(...)`` after ``from httpx import
+  Response as Answer``, which is no place, or through another name of ``httpx`` or a module
+  that imports it, ``h.Response(...)`` or a ``Response`` that ``tests/helpers.py``
+  re-exports, which it reads as served by no route; a star import binds no name it reads;
 - a body passed by keyword or by a name, ``classify(response)`` or
   ``Model.model_validate(obj={...})``, and a recording changed by assignment, a loaded
   recording's header replaced and the response then handed on by its name;
@@ -181,7 +202,12 @@ class Place:
 
 
 class _Module:
-    """One test module's tree, its parents, its comments and its top-level definitions."""
+    """One test module's tree, its parents, its comments and its top-level definitions.
+
+    With the names it reads, each to its nodes, the names that its ``from ... import`` lines
+    bind in each function and at its top, and the positions of each top-level function's
+    parameters that the function gives to ``fixture_from_response`` alone.
+    """
 
     def __init__(self, source: str, readers: Collection[str] = ()) -> None:
         self.tree = ast.parse(source)
@@ -197,6 +223,22 @@ class _Module:
         }
         self.defs: dict[str, _Definition] = {
             node.name: node for node in self.tree.body if isinstance(node, _DEFINITIONS)
+        }
+        self.names: dict[str, list[ast.Name]] = {}
+        self.imports: dict[ast.AST, dict[str, set[str]]] = {}
+        for node in ast.walk(self.tree):
+            if isinstance(node, ast.Name):
+                self.names.setdefault(node.id, []).append(node)
+            elif isinstance(node, ast.ImportFrom):
+                bound = self.imports.setdefault(next(iter(self.scopes(node)), self.tree), {})
+                origin = "." * node.level + (node.module or "")
+                for alias in node.names:
+                    if alias.name != "*":  # a star import binds no name that the check reads
+                        bound.setdefault(alias.asname or alias.name, set()).add(origin)
+        self.handing = {
+            name: self._handing(node)
+            for name, node in self.defs.items()
+            if isinstance(node, _FUNCTIONS)
         }
 
     def scopes(self, node: ast.AST) -> list[ast.AST]:
@@ -267,47 +309,161 @@ class _Module:
         moved = [k.value for k in node.keywords if k.arg == "url"]
         return any(not (isinstance(v, ast.Constant) and v.value is None) for v in moved)
 
-    def handed(self, node: ast.Call) -> bool:
-        """An ``httpx.Response`` given to ``fixture_from_response`` alone, which no route serves.
+    def uses(self, node: ast.expr) -> list[ast.expr]:
+        """Where the value of ``node`` is read.
 
-        Directly, or by a local name that nothing else reads: an exchange handed to the
-        recorder's code.
+        ``node`` itself, or each read of the one name it is assigned to, in the function that
+        holds it.
         """
         parent = self.parent.get(node)
-        if isinstance(parent, ast.Call) and ast.unparse(parent.func) == "fixture_from_response":
-            return True
-        if not (isinstance(parent, ast.Assign) and len(parent.targets) == 1):
-            return False
-        target = parent.targets[0]
-        if not isinstance(target, ast.Name):
-            return False
+        if not (
+            isinstance(parent, ast.Assign)
+            and len(parent.targets) == 1
+            and isinstance(parent.targets[0], ast.Name)
+        ):
+            return [node]
+        name = parent.targets[0].id
         scope = next((s for s in self.scopes(node) if isinstance(s, _FUNCTIONS)), self.tree)
-        uses = [
+        return [
             n
             for n in ast.walk(scope)
-            if isinstance(n, ast.Name) and n.id == target.id and isinstance(n.ctx, ast.Load)
+            if isinstance(n, ast.Name) and n.id == name and isinstance(n.ctx, ast.Load)
         ]
-        return bool(uses) and all(
-            isinstance(call := self.parent.get(n), ast.Call)
+
+    def _to_recorder(self, use: ast.AST) -> bool:
+        """Whether ``use`` is a positional argument of ``fixture_from_response``."""
+        call = self.parent.get(use)
+        return (
+            isinstance(call, ast.Call)
+            and use in call.args
             and ast.unparse(call.func) == "fixture_from_response"
-            for n in uses
         )
+
+    def _handing(self, function: ast.FunctionDef | ast.AsyncFunctionDef) -> frozenset[int]:
+        """The positions of ``function``'s parameters that it hands to the recorder alone.
+
+        Each read of the parameter a positional argument of ``fixture_from_response``, and no
+        other use, so that an exchange given there is handed to the recorder.
+        """
+        positional = [*function.args.posonlyargs, *function.args.args]
+        return frozenset(
+            index
+            for index, parameter in enumerate(positional)
+            if (
+                reads := [
+                    n
+                    for n in ast.walk(function)
+                    if isinstance(n, ast.Name) and n.id == parameter.arg
+                ]
+            )
+            and all(isinstance(n.ctx, ast.Load) and self._to_recorder(n) for n in reads)
+        )
+
+    def _hands(self, use: ast.expr) -> bool:
+        """Whether ``use`` is given to the recorder, directly or through one function.
+
+        A positional argument of ``fixture_from_response``, or of a function of the module at a
+        parameter that the function gives to ``fixture_from_response`` alone.
+        """
+        if self._to_recorder(use):
+            return True
+        call = self.parent.get(use)
+        if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)):
+            return False
+        if use not in call.args or any(isinstance(arg, ast.Starred) for arg in call.args):
+            return False
+        return call.args.index(use) in self.handing.get(call.func.id, frozenset())
+
+    def handed(self, node: ast.expr) -> bool:
+        """Whether the exchange ``node`` gives reaches ``fixture_from_response`` alone.
+
+        Directly, or by a local name that nothing else reads, as a positional argument of
+        ``fixture_from_response`` or of a function of the module that gives that parameter to
+        it alone: an exchange handed to the recorder's code, which no route serves.
+        """
+        uses = self.uses(node)
+        return bool(uses) and all(self._hands(use) for use in uses)
+
+    def returned_by(self, node: ast.Call) -> str | None:
+        """The top-level function whose every call receives the ``Response`` ``node`` builds.
+
+        The function returns it, directly or by a local name that nothing else reads, and the
+        module reads the function's name only to call it, so each call can be judged on its
+        own. ``None`` for anything else: a conditional expression, a fixture, which pytest
+        hands on, or a function that a second one returns.
+        """
+        scopes = self.scopes(node)
+        function = scopes[0] if scopes else None
+        if _called(node.func) != "Response" or not (
+            isinstance(function, _FUNCTIONS) and function in self.tree.body
+        ):
+            return None
+        uses = self.uses(node)
+        if not uses or not all(
+            isinstance(self.parent.get(use), ast.Return) and self.scopes(use)[0] is function
+            for use in uses
+        ):
+            return None
+        reads = self.names.get(function.name, [])
+        if not reads or not all(
+            isinstance(call := self.parent.get(name), ast.Call) and call.func is name
+            for name in reads
+        ):
+            return None
+        return function.name
+
+    def serves_at(self, site: ast.AST) -> bool:
+        """Whether a helper's returned exchange is served at ``site``, one of its call sites.
+
+        A test that takes the helper as a fixture serves it, and so does a call that does not
+        hand it to the recorder.
+        """
+        return not (isinstance(site, ast.expr) and self.handed(site))
+
+    def served_at(self, place: ast.AST, helper: str, site: ast.AST, served: set[ast.AST]) -> bool:
+        """Whether ``place``, inside ``helper``, is served at ``site``, a call of the helper.
+
+        An exchange the helper returns, by that call alone; any other place as it was judged.
+        """
+        if place not in served:
+            return False
+        if isinstance(place, ast.Call) and self.returned_by(place) == helper:
+            return self.serves_at(site)
+        return True
+
+    def from_httpx(self, node: ast.Call) -> bool:
+        """Whether the ``Response`` that ``node`` builds is httpx's.
+
+        ``httpx.Response`` by its attribute; the bare name where the import that binds it
+        nearest the call, in an enclosing function or at the module's top, brings it from
+        ``httpx`` or one of its modules, or where no import binds it.
+        """
+        if not isinstance(node.func, ast.Name):
+            return ast.unparse(node.func) == "httpx.Response"
+        enclosing = [scope for scope in self.scopes(node) if isinstance(scope, _FUNCTIONS)]
+        for scope in [*enclosing, self.tree]:
+            origins = self.imports.get(scope, {}).get(node.func.id)
+            if origins:
+                return any(origin == "httpx" or origin.startswith("httpx.") for origin in origins)
+        return True
 
     def serves(self, node: ast.Call) -> bool:
         """Whether the place serves an answer, which a kind of §10 alone marks.
 
         A route's answer or one ``classify`` reads; a value handed to the code may be marked
-        an input instead.
+        an input instead. httpx's ``Response`` that a function of the module returns is served
+        where a call of the function serves it.
         """
         name = _called(node.func)
         if name == "respond" or name in _REPLAYS or name == "classify":
             return True
-        if name == "Response":
-            from_httpx = (
-                isinstance(node.func, ast.Name) or ast.unparse(node.func) == "httpx.Response"
-            )
-            return from_httpx and not self.handed(node)
-        return False
+        if name != "Response" or not self.from_httpx(node) or self.handed(node):
+            return False
+        helper = self.returned_by(node)
+        if helper is None:
+            return True
+        sites = self.calls_of({helper})
+        return not sites or any(self.serves_at(site) for site in sites)
 
     def takes_fixtures(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
         """Whether pytest hands ``node`` fixtures: a top-level function, or a class's method.
@@ -354,19 +510,24 @@ def uncovered(
     }
     sites: dict[ast.AST, str] = {}
     while True:  # a helper that holds an unmarked place passes it to its calls
-        helpers = {module.holder(node) for node in unmarked} - {None}
-        serving = {module.holder(node) for node in unmarked & served}
-        called = {h for h in helpers if h is not None and not h.startswith("test_")}
-        sites = module.calls_of(called)
+        held: dict[str, list[ast.AST]] = {}
+        for node in unmarked:
+            holder = module.holder(node)
+            if holder is not None:
+                held.setdefault(holder, []).append(node)
+        sites = module.calls_of({h for h in held if not h.startswith("test_")})
         new: set[ast.AST] = set()
         for site, helper in sites.items():
-            serves = helper in serving
             if site in unmarked or module.holder(site) in allowed:
                 continue
+            inside = held[helper]
+            serves = any(module.served_at(place, helper, site, served) for place in inside)
             if module.marked(site, serves):
                 continue
             if isinstance(site, _FUNCTIONS) and _is_mark(ast.get_docstring(site), serves):
                 continue
+            if not serves and all(module.marked(place, False) for place in inside):
+                continue  # the input's sentence in the helper's reach, at a call that hands it on
             new.add(site)
             if serves:
                 served.add(site)
