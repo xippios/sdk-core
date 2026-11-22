@@ -1689,7 +1689,9 @@ the rules of 1.28.
   - the tests of `OBSERVED.md` that the family check now makes
     (https://github.com/xippios/sdk-core/issues/348): esmis, wasde, esr, cashctrl, faostat;
   - the frame of `scripts/refresh_upstream.py` → a `Snapshot` run by `xippios.core.refresh`
-    (https://github.com/xippios/sdk-core/issues/320): every source;
+    (https://github.com/xippios/sdk-core/issues/320), and the tests of the frame in
+    `tests/test_refresh_upstream.py` with it, as the item on that file below says
+    (https://github.com/xippios/sdk-core/issues/415): every source;
   - the frame of `scripts/refresh_reference.py` → `Listed` and `run(lists, ...)`
     (https://github.com/xippios/sdk-core/issues/321): comtrade, eurostat, faostat, esmis, esr,
     gats, nass, psd, wasde;
@@ -1708,8 +1710,36 @@ the rules of 1.28.
   after its end (ADR-0054, Consequences); a `since` that is an inclusive bound beside an
   `until` (ADR-0052); a recorder's command line, its guards and its rules
   (https://github.com/xippios/sdk-core/issues/364); an option of a refresh script's own, read
-  before the frame's `run` (ADR-0051, decision 7); and what sdk-cashctrl's snapshot script does
-  that the frame does not carry (below).
+  before the frame's `run` (ADR-0051, decision 7); the tests of a snapshot script that hold
+  what neither core's tests of the frame nor a hook carry (next item); and what sdk-cashctrl's
+  snapshot script does that the frame does not carry (below).
+- `tests/test_refresh_upstream.py`, 64 tests in the twelve sources, calls `render_fetched` and,
+  in all but sdk-eurostat, `write_snapshot` and `Response`, which the port deletes from the
+  script, so it follows the port as §15 items 3 and 4 delete a copy with its tests, each
+  source's part below naming the tests that go and those that stay
+  (https://github.com/xippios/sdk-core/issues/415):
+  - the tests of what the frame now does go with the copy, held in core's
+    `tests/refresh/test_upstream.py`: the row of `OBSERVED.md` and a write that leaves the file
+    as written by `test_observed_md_has_its_row_and_is_left_as_written`, the table
+    `Not fetched` by
+    `test_not_fetched_lists_the_pages_left_out_and_those_no_anonymous_client_reads`, an ETag in
+    its code span by `test_every_etag_stands_in_a_code_span_with_the_mark`, and the write and
+    `--check` by `test_the_frame_fetches_writes_and_checks`; a copy's sentence that names no
+    `OBSERVED.md` while there is none gives way to the frame's one form, which names it "where
+    it exists" in every source (ADR-0046, decision 3);
+  - the tests of the source's own code stay: a hook's, calling the hook, and those of what its
+    `Snapshot` declares, its `capture`, its pages and its `not_fetched`, reading the
+    declaration (ADR-0046, decision 2);
+  - two kinds hold what neither core's tests of the frame nor a hook carry, and stay the
+    source's own (§15 item 4): a test that the two sentences of `FETCHED.md` that cite the
+    record of upstream fidelity cite sdk-core ADR-0028, which the frame writes and no test of
+    core's pins, in sdk-faostat, sdk-google-mail, sdk-usda-esr, sdk-usda-gats, sdk-usda-nass and
+    sdk-x; and a test that compares the committed `FETCHED.md` with the script's render without
+    a request, which the frame compares only in `--check`, after a request to every page, in
+    sdk-cashctrl, sdk-faostat, sdk-usda-esr and sdk-usda-wasde. The frame's `render_fetched` is
+    no name of the public surface of `xippios.core.refresh`, and the committed `FETCHED.md`
+    takes the frame's form only at the first run of the ported script that fetches, never in
+    the adoption PR (ADR-0046, decision 3; §15).
 - Item 5, unchanged.
 - Item 6: each of the nine sources that package lists runs its ported reference script once
   with `--render-only`, which writes `enums.py` and the provenance rows of `reference/README.md`
@@ -1757,7 +1787,18 @@ the rules of 1.28.
     body at a file path stays (ADR-0048, Consequences);
   - in `tests/test_observed.py`, `test_every_file_the_notes_cite_exists` and the row, the
     label and the date of its two other tests, which the family check holds
-    (https://github.com/xippios/sdk-core/issues/348).
+    (https://github.com/xippios/sdk-core/issues/348);
+  - in `tests/test_refresh_upstream.py`,
+    `test_fetched_lists_observed_in_a_row_of_its_own_where_it_exists` and
+    `test_a_snapshot_keeps_observed_and_removes_a_stale_file`, the frame's, whose removal of a
+    file at the top of `docs/upstream/` the port gives up (below)
+    (https://github.com/xippios/sdk-core/issues/415).
+- Keeps, in `tests/test_refresh_upstream.py`,
+  `test_an_entry_that_would_be_written_as_observed_is_refused`, calling its `split`, whose check
+  refuses `observed.md` and `fetched.md` in lower case, where the frame refuses `OBSERVED.md`
+  and `FETCHED.md` by those names, and, as its own (§15 item 4),
+  `test_the_committed_fetched_md_is_the_scripts_text`
+  (https://github.com/xippios/sdk-core/issues/415).
 - Changes:
   - `models.py`: `WritePreview` declares `reads: list[str]`, and `tasks_write.py`'s `_preview`
     sets it from the read it made, the eight previews that read their record once naming its
@@ -1800,6 +1841,12 @@ the rules of 1.28.
   (https://github.com/xippios/sdk-core/issues/182,
   https://github.com/xippios/sdk-google-mail/issues/39); `scripts/refresh_upstream.py` ported
   with `reduce` and `note` (https://github.com/xippios/sdk-core/issues/320).
+- `tests/test_refresh_upstream.py`: `test_fetched_md_lists_observed_md_in_a_row_of_its_own`,
+  `test_fetched_md_has_no_row_of_observed_md_while_there_is_none`,
+  `test_a_snapshot_leaves_observed_md_as_written_and_check_reads_it` and
+  `test_no_page_is_kept_as_observed_md` go with the copy, and
+  `test_fetched_md_cites_the_standing_record_of_sdk_core` stays its own (§15 item 4)
+  (https://github.com/xippios/sdk-core/issues/415).
 - No paged cap: `get_thread` keeps its `start` and `get_message` is one record
   (https://github.com/xippios/sdk-google-mail/issues/38).
 - The first list: what a write task's preview shows.
@@ -1824,7 +1871,18 @@ the rules of 1.28.
     there, 14 more keyed requests a night, or in `NO_LIVE_LIST` with its reason
     (https://github.com/xippios/sdk-core/issues/319);
   - `tests/test_refresh_upstream.py`: `test_every_file_a_note_cites_exists` and the label and
-    date of its probe test go (https://github.com/xippios/sdk-core/issues/348);
+    date of its probe test, `test_every_note_ends_with_its_probe_its_date_and_its_operation`,
+    go, its operation staying (https://github.com/xippios/sdk-core/issues/348);
+    `test_fetched_md_lists_observed_md_in_a_row_of_its_own`,
+    `test_fetched_md_names_no_observed_md_while_there_is_none`,
+    `test_a_snapshot_leaves_observed_md_as_written_and_check_reads_it`,
+    `test_a_page_left_out_has_a_row_in_not_fetched` and `test_a_rows_etag_stands_in_a_code_span`
+    go with the copy; `test_the_script_keeps_no_observed_notes` and
+    `test_every_page_the_documentation_links_is_fetched_or_not_fetched` stay, reading its
+    `Snapshot` and its `note`; and `test_fetched_md_cites_the_standing_record_of_sdk_core`,
+    `test_the_committed_fetched_md_is_the_scripts_text`, whose row of `OBSERVED.md` the family
+    check holds, and `test_the_committed_etags_are_the_renderers_cells` stay its own
+    (§15 item 4) (https://github.com/xippios/sdk-core/issues/415);
   - `scripts/refresh_upstream.py` ported with `credentials` and its samples `keyed`, `reduce`,
     `note` and `canonical` (https://github.com/xippios/sdk-core/issues/320), and
     `scripts/refresh_reference.py` to fifteen `Listed` of `getCodeList`, its count of logins
@@ -1850,6 +1908,12 @@ the rules of 1.28.
   step leaves the value out of what it returns (ADR-0048, Consequences).
 - `scripts/refresh_upstream.py` ported with `canonical` for its scope lists and `reduce`
   (https://github.com/xippios/sdk-core/issues/320).
+- `tests/test_refresh_upstream.py`: `test_fetched_md_lists_observed_md_in_a_row_of_its_own`,
+  `test_fetched_md_has_no_row_of_observed_md_while_there_is_none`,
+  `test_a_snapshot_leaves_observed_md_as_written_and_check_reads_it` and
+  `test_no_page_is_kept_as_observed_md` go with the copy, and
+  `test_fetched_md_cites_the_standing_record_of_sdk_core` stays its own (§15 item 4)
+  (https://github.com/xippios/sdk-core/issues/415).
 - No paged cap, since X bills every page that a second run fetches
   (https://github.com/xippios/sdk-x/issues/35), and nothing of `record_task`, since each of its
   seven tasks makes one call (ADR-0057, Consequences).
@@ -1890,7 +1954,12 @@ the rules of 1.28.
     and `scripts/refresh_reference.py` to nineteen `Listed`, `lists.json` and the samples
     written in `after`, `--samples` and `--only` by a codelist's id read before the call, its
     empty `enums.py` as committed, `tests/test_refresh_reference.py` keeping the tests of its
-    own fetches (https://github.com/xippios/sdk-core/issues/321).
+    own fetches (https://github.com/xippios/sdk-core/issues/321);
+  - `tests/test_refresh_upstream.py`: its two tests,
+    `test_fetched_md_lists_observed_md_in_a_row_of_its_own` and
+    `test_fetched_md_names_no_observed_md_while_there_is_none`, go with the copy in the adoption
+    PR, after the refresh by its present script above, whose row they hold
+    (https://github.com/xippios/sdk-core/issues/415).
 - The first list: the rest of a cut answer, the name of each country code, one check of an
   argument, and the refusal after one count where its patch takes it.
 
@@ -1930,7 +1999,12 @@ the rules of 1.28.
     (https://github.com/xippios/sdk-core/issues/320), and `scripts/refresh_reference.py` to
     fifteen `Listed` with `packaged=[*PACKAGED_LISTS, *PACKAGED_TABLES]`, its
     `tests/test_scripts.py` reading the frame's usage and `--render-only`
-    (https://github.com/xippios/sdk-core/issues/321).
+    (https://github.com/xippios/sdk-core/issues/321);
+  - `tests/test_refresh_upstream.py`: its three tests,
+    `test_fetched_md_lists_observed_md_in_a_row_of_its_own`,
+    `test_fetched_md_names_no_observed_md_while_there_is_none` and
+    `test_a_snapshot_leaves_observed_md_as_written`, go with the copy
+    (https://github.com/xippios/sdk-core/issues/415).
 - Its release is a minor, by its refusal of alpha-3 codes and the removal of its own
   `QueryTooLarge` from `xippios.comtrade.errors` (§12), and its adoption's fragment is
   `changed` all the same, since the adoption brings no core minor (§15 item 9; ADR-0043,
@@ -1965,7 +2039,12 @@ the rules of 1.28.
   - `scripts/refresh_upstream.py` ported with `note`, `linked` and `reduce`
     (https://github.com/xippios/sdk-core/issues/320), and `scripts/refresh_reference.py` to
     five `Listed`, gaining `--only` and the count of its requests
-    (https://github.com/xippios/sdk-core/issues/321).
+    (https://github.com/xippios/sdk-core/issues/321);
+  - `tests/test_refresh_upstream.py`: `test_fetched_md_lists_observed_md_in_a_row_of_its_own`,
+    `test_fetched_md_names_no_observed_md_while_there_is_none` and
+    `test_a_snapshot_leaves_observed_md_as_written` go with the copy, and
+    `test_fetched_md_says_when_and_where_the_portal_document_was_found` stays, reading the
+    `capture` of its `Snapshot` (https://github.com/xippios/sdk-core/issues/415).
 - Its own: `list_countries(region_code=...)`, whose value its row refuses through the check
   (https://github.com/xippios/sdk-usda-psd/issues/30).
 - The first list: the name of each country code, the rest of a cut answer, one check of an
@@ -1997,7 +2076,16 @@ the rules of 1.28.
   - `scripts/refresh_upstream.py` ported with `note`, `linked` and `reduce`
     (https://github.com/xippios/sdk-core/issues/320), and `scripts/refresh_reference.py` to
     four `Listed` with `quota_header="x-ratelimit-remaining"`, `tests/test_params.py` reading
-    the port's `Listed` endpoints (https://github.com/xippios/sdk-core/issues/321).
+    the port's `Listed` endpoints (https://github.com/xippios/sdk-core/issues/321);
+  - `tests/test_refresh_upstream.py`: `test_fetched_md_lists_observed_md_in_a_row_of_its_own`,
+    `test_fetched_md_names_no_observed_md_while_there_is_none` and
+    `test_a_snapshot_leaves_observed_md_as_written` go with the copy, but for the last one's
+    assertion that `document_row`'s cut gives back the committed part, which is its `reduce`'s
+    and stays with that hook; `test_fetched_md_says_when_and_where_the_portal_document_was_found`
+    stays, reading the `capture` of its `Snapshot` and the script; and
+    `test_fetched_md_cites_core_s_standing_record` and
+    `test_the_committed_fetched_md_is_the_scripts_text` stay its own (§15 item 4)
+    (https://github.com/xippios/sdk-core/issues/415).
 - Its own: `list_countries(region_id=...)`, whose value its row refuses through the check
   (https://github.com/xippios/sdk-usda-esr/issues/27).
 - The first list: the name of each country code, the rest of a cut answer, one check of an
@@ -2026,7 +2114,13 @@ the rules of 1.28.
     ceiling's refusals in core's wording (https://github.com/xippios/sdk-core/issues/315);
   - `scripts/refresh_upstream.py` ported with `note`, `linked` and `reduce`
     (https://github.com/xippios/sdk-core/issues/320), and `scripts/refresh_reference.py` to
-    five `Listed` (https://github.com/xippios/sdk-core/issues/321).
+    five `Listed` (https://github.com/xippios/sdk-core/issues/321);
+  - `tests/test_refresh_upstream.py`: `test_fetched_md_lists_observed_md_in_a_row_of_its_own`,
+    `test_fetched_md_names_no_observed_md_while_there_is_none` and
+    `test_a_snapshot_leaves_observed_md_as_written` go with the copy,
+    `test_fetched_md_says_when_and_where_the_portal_document_was_found` stays, reading the
+    `capture` of its `Snapshot`, and `test_fetched_md_cites_the_standing_record_of_sdk_core`
+    stays its own (§15 item 4) (https://github.com/xippios/sdk-core/issues/415).
 - Its own: `list_countries(region_code=...)` and `list_commodities(product_type=...)`, whose
   values its row refuses through the check (https://github.com/xippios/sdk-usda-gats/issues/31).
 - The first list: the name of each country code, the rest of a cut answer, one check of an
@@ -2059,7 +2153,12 @@ the rules of 1.28.
   - `scripts/refresh_upstream.py` ported with `reduce`
     (https://github.com/xippios/sdk-core/issues/320), and `scripts/refresh_reference.py` to
     eleven `Listed`, `columns.csv` parsed in `before` and written in `after` on a full run and
-    its read timeout set around the call (https://github.com/xippios/sdk-core/issues/321).
+    its read timeout set around the call (https://github.com/xippios/sdk-core/issues/321);
+  - `tests/test_refresh_upstream.py`: `test_fetched_md_lists_observed_md_in_a_row_of_its_own`,
+    `test_fetched_md_names_no_observed_md_while_there_is_none` and
+    `test_a_snapshot_leaves_observed_md_as_written_and_check_reads_it` go with the copy, and
+    `test_fetched_md_cites_the_standing_record_of_sdk_core` stays its own (§15 item 4)
+    (https://github.com/xippios/sdk-core/issues/415).
 - The first list: the refusal after one count, the rest of a cut answer, one check of an
   argument and a series over periods.
 
@@ -2080,6 +2179,11 @@ the rules of 1.28.
   another host recorded by its status (https://github.com/xippios/sdk-core/issues/320), and
   `scripts/refresh_reference.py` to two `Listed`, gaining `--only`, `--render-only` and the
   count of its requests (https://github.com/xippios/sdk-core/issues/321).
+- `tests/test_refresh_upstream.py`: its three tests,
+  `test_fetched_md_lists_observed_md_in_a_row_of_its_own`,
+  `test_fetched_md_names_no_observed_md_while_there_is_none` and
+  `test_a_snapshot_leaves_observed_md_as_written`, go with the copy
+  (https://github.com/xippios/sdk-core/issues/415).
 - Its own: `since` and `until` as an inclusive range (ADR-0052;
   https://github.com/xippios/sdk-usda-esmis/issues/35).
 - The first list: the rest of a cut answer and one check of an argument.
@@ -2101,6 +2205,23 @@ the rules of 1.28.
   to four `Listed` built from one download through xippios-usda-esmis, whose client it passes
   to `run`, gaining `--only`, `--render-only` and the count of its requests
   (https://github.com/xippios/sdk-core/issues/321).
+- `tests/test_refresh_upstream.py` (https://github.com/xippios/sdk-core/issues/415):
+  - `test_the_notes_written_by_hand_are_observed_md`,
+    `test_fetched_md_lists_observed_md_in_a_row_of_its_own`,
+    `test_fetched_md_names_no_observed_md_while_there_is_none`,
+    `test_a_snapshot_leaves_observed_md_as_written` and
+    `test_a_page_left_out_has_a_row_in_not_fetched` go with the copy, but for the line of the
+    second and third that the text names no `layout.md`, the notes' former name, which reads
+    its own text and stays with the tests of its `capture`;
+  - `test_fetched_md_lists_no_page_left_out_in_prose`,
+    `test_every_row_of_not_fetched_gives_its_reason`, `test_no_url_of_not_fetched_holds_a_space`,
+    `test_every_page_the_snapshot_links_is_fetched_or_not_fetched` and
+    `test_every_row_of_not_fetched_is_a_page_the_snapshot_links` stay, reading its `Snapshot`,
+    its `capture` and its `not_fetched`; the fourth reads the committed table by rows of nine
+    cells, and once the frame writes `FETCHED.md` a row with an ETag ends in the allowlist mark
+    (ADR-0046, decision 4);
+  - `test_the_committed_fetched_md_carries_the_renderers_table_and_prose` stays its own (§15
+    item 4), its row of `OBSERVED.md` held by the family check.
 - The first list: one check of an argument.
 
 ### xippios-mcp

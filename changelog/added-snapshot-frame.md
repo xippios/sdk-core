@@ -8,7 +8,8 @@
   takes one form in every source, each ETag in a code span on a row with the allowlist
   mark and the table `Not fetched` under its heading even when it has no row.
   (ADR-0046, §3, https://github.com/xippios/sdk-core/issues/320,
-  https://github.com/xippios/sdk-core/issues/340)
+  https://github.com/xippios/sdk-core/issues/340,
+  https://github.com/xippios/sdk-core/issues/415)
   - Hand-apply: `scripts/refresh_upstream.py` — ported to a `Snapshot` declaration run by
     `xippios.core.refresh.run`, its `# /// script` block dropped, its frame code deleted
     and its own code kept as hooks: sdk-comtrade
@@ -38,3 +39,11 @@
     `docs/upstream/FETCHED.md` — rewritten once by the first run of the ported script, in
     the frame's form, every row with an ETag gaining the code span and the mark and the
     403 rows moving to `Not fetched` — the frame writes it alone (ADR-0028, decision 4).
+    `tests/test_refresh_upstream.py` — its tests of what the frame now does, the render of
+    `FETCHED.md` with the row of `OBSERVED.md`, the write and `--check`, deleted with the
+    copy, its tests of the source's own hooks and of what its `Snapshot` declares kept,
+    calling the hooks or reading the declaration, and a test that holds what neither
+    core's tests of the frame nor a hook carry kept by the source (§15, item 4), as
+    `docs/handover.md` names each test per source — the tests call `render_fetched`, and
+    all but sdk-eurostat's `write_snapshot` and `Response`, which the port deletes from the
+    script, and §15, items 3 and 4, delete a copy with its tests.
