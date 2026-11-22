@@ -1,6 +1,7 @@
 """The sentences of `docs/conventions.md` that the cases of ADR-0043 stand on, and ADR-0055's,
-the preview rule of ADR-0050, the recording of a task's exchanges of ADR-0057, and the names of
-a request's country codes of ADR-0056.
+the preview rule of ADR-0050, the recording of a task's exchanges of ADR-0057, the names of a
+request's country codes of ADR-0056, and the review checklist's sentence that holds an adoption
+against the two lists of the handover's section for the release.
 
 The organization's release check quotes the conventions from sdk-core's `main`, and a finding
 blocks only where it quotes the sentence that a change breaks
@@ -252,6 +253,27 @@ def test_the_review_checklist_judges_each_rule_by_its_record(number: int, phrase
     item = checklist_item(number)
     assert phrase in item, f"item {number} does not say {phrase!r}"
     assert RECORD in item, f"item {number} does not cite {RECORD}"
+
+
+HANDOVER_ROWS = (
+    "https://github.com/xippios/sdk-core/issues/334",  # the changes that a source's callers see
+    "https://github.com/xippios/sdk-core/issues/349",  # the conventions' rules that changed
+)
+
+
+def test_the_review_checklist_holds_an_adoption_against_the_handover_s_two_lists() -> None:
+    # Item 12 reads §15's items 8 and 9 through the handover's section for the release, so
+    # an adoption's review names the same rules and the same entries in every source.
+    rule = sentence(checklist_item(12), "the two lists of the handover's section")
+    for name in (
+        "`Adopting core X.Y.Z`",
+        "the conventions' rules changed since",
+        "§15 item 8",
+        "the changes that a source's callers see",
+        "the adoption's fragments",
+        *HANDOVER_ROWS,
+    ):
+        assert name in rule, f"item 12: {rule!r} does not name {name!r}"
 
 
 def test_the_definition_of_done_words_an_adoption_s_fragment_as_item_9_does() -> None:
