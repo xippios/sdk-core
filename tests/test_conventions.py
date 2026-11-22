@@ -1,5 +1,6 @@
 """The sentences of `docs/conventions.md` that the cases of ADR-0043 stand on, and ADR-0055's,
-the preview rule of ADR-0050, and the recording of a task's exchanges of ADR-0057.
+the preview rule of ADR-0050, the recording of a task's exchanges of ADR-0057, and the names of
+a request's country codes of ADR-0056.
 
 The organization's release check quotes the conventions from sdk-core's `main`, and a finding
 blocks only where it quotes the sentence that a change breaks
@@ -191,6 +192,36 @@ def test_each_rule_of_the_live_comparison_is_one_sentence_that_cites_adr_0055(
     rule = sentence(section(10), phrase)
     for name in ("ADR-0055", *names):
         assert name in rule, f"§10: {rule!r} does not name {name!r}"
+
+
+NAMES_RULES = [
+    # §4, at the envelope's meta: the name of each country code of a request
+    # (https://github.com/xippios/sdk-core/issues/375).
+    pytest.param(
+        "`meta.names` maps each country parameter of the request",
+        ("`dict[str, dict[str, str]]`", "left out of a dumped answer while it is empty"),
+        id="s4-the-field",
+    ),
+    pytest.param(
+        "fills it with core's decorator `names_codes",
+        ("one `PackagedCodes` per parameter", "withholds an answer for a code its list lacks"),
+        id="s4-the-decorator",
+    ),
+    pytest.param(
+        "stands in `UNNAMED_CODES` of its tasks module with the reason",
+        ("`country`, `area`, `reporter` or `partner`", "the family check fails"),
+        id="s4-the-exemption",
+    ),
+]
+
+
+@pytest.mark.parametrize(("phrase", "names"), NAMES_RULES)
+def test_each_rule_of_the_names_of_codes_is_one_sentence_that_cites_adr_0056(
+    phrase: str, names: tuple[str, ...]
+) -> None:
+    rule = sentence(section(4), phrase)
+    for name in ("ADR-0056", *names):
+        assert name in rule, f"§4: {rule!r} does not name {name!r}"
 
 
 @pytest.mark.parametrize(

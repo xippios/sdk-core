@@ -2,8 +2,10 @@ import json
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
+import pydantic
 import pytest
 from pydantic import AliasChoices, Field, computed_field
+from pydantic_core import to_jsonable_python
 
 from xippios.core.errors import ValidationError
 from xippios.core.models import (
@@ -114,6 +116,80 @@ def test_result_envelope_round_trips() -> None:
     assert dumped["data"][0]["series_id"] == "a"
     assert Result[list[Series]].model_validate(dumped) == result
     assert Result[list[Series]].model_validate_json(result.model_dump_json()) == result
+
+
+FIELDS = [
+    "source",
+    "endpoint",
+    "retrieved_at",
+    "published_at",
+    "published_at_naive",
+    "vintage",
+    "request",
+    "total",
+    "tenant",
+]
+"""The fields an answer's ``meta`` dumped before ``names`` (conventions §4)."""
+
+
+def test_names_is_empty_by_default_and_left_out_of_a_dump_while_empty() -> None:
+    # ADR-0056, decision 1: an answer of a task without a country parameter dumps as before.
+    meta = ResultMeta(source="example", endpoint="data", request={"year": 2024})
+    assert meta.names == {}
+    assert list(meta.model_dump()) == FIELDS
+    assert list(json.loads(meta.model_dump_json())) == FIELDS
+    result = Result[list[int]](data=[1], meta=meta)
+    assert list(to_jsonable_python(result)["meta"]) == FIELDS, "as the MCP adapter dumps it"
+    assert list(result.model_dump(mode="json")["meta"]) == FIELDS
+
+
+def test_names_maps_each_parameter_to_its_codes_and_names_and_round_trips() -> None:
+    names = {"reporter_code": {"757": "Switzerland", "842": "USA"}, "partner_code": {"0": "World"}}
+    meta = ResultMeta(source="example", endpoint="data", names=names)
+    dumped = meta.model_dump(mode="json")
+    assert list(dumped) == [*FIELDS, "names"]
+    assert dumped["names"] == names
+    assert ResultMeta.model_validate(dumped) == meta
+    assert ResultMeta.model_validate_json(meta.model_dump_json()) == meta
+    empty = ResultMeta(source="example", endpoint="data")
+    assert ResultMeta.model_validate(empty.model_dump(mode="json")) == empty
+
+
+@pytest.mark.parametrize(
+    "names",
+    [{"country_code": "CN"}, {"country_code": ["CN"]}, {"country_code": {"CN": None}}],
+)
+def test_names_refuses_another_shape(names: object) -> None:
+    with pytest.raises(pydantic.ValidationError, match="names"):
+        ResultMeta(source="example", endpoint="data", names=names)
+
+
+def test_the_schema_of_meta_gains_the_optional_property_alone() -> None:
+    # An HTTP route's response and an MCP tool's output take the schema in serialization mode,
+    # which a dump that leaves a field out would otherwise lose (ADR-0056, decision 1).
+    serialization = ResultMeta.model_json_schema(mode="serialization")
+    assert serialization == ResultMeta.model_json_schema(mode="validation")
+    assert list(serialization["properties"]) == [*FIELDS, "names"]
+    assert serialization["required"] == ["source", "endpoint"]
+    assert serialization["properties"]["names"] == {
+        "additionalProperties": {"additionalProperties": {"type": "string"}, "type": "object"},
+        "title": "Names",
+        "type": "object",
+    }
+    envelope = Result[list[int]].model_json_schema(mode="serialization")
+    assert envelope["$defs"]["ResultMeta"]["properties"] == serialization["properties"]
+
+
+def test_a_composed_meta_keeps_the_names_of_the_answer_it_extends() -> None:
+    # Conventions §4: a task that extends a composed answer's request builds a new meta.
+    answer = ResultMeta(
+        source="example", endpoint="data", request={"area": "4"}, names={"area": {"4": "Algeria"}}
+    )
+    extended = ResultMeta(
+        **answer.model_dump(exclude={"request"}), request={**answer.request, "since": "2020"}
+    )
+    assert extended.names == {"area": {"4": "Algeria"}}
+    assert extended.request == {"area": "4", "since": "2020"}
 
 
 def test_parse_model_and_generic() -> None:
