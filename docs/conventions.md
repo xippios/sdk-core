@@ -190,6 +190,22 @@ skip it (§8, §9; ADR-0040).
   states it (`© 2026 CashCtrl Ltd.`) and the URL the text was fetched from. A vendor's
   objection is honoured by replacing the snapshot with a summary that keeps the names and
   semantics the wrappers rely on.
+  The frame's attribution check reads an HTML page's visible text, an image's alternative
+  text included where the image stands and no other attribute, and searches it as well as
+  the same text without the alternative text, so that words an alternative text stands
+  between are searched as before, and the whole text of any other page, while a sample, a
+  page that an anonymous client cannot read and a binary body are not read, and it stops the
+  run, before writing, on a copyright, a licence or terms of use that the attribution does
+  not record (ADR-0046, decision 7).
+  A statement recorded with a link passes the check only as the text of a link to its
+  target, on any page that prints the link, while a statement without a link and a word of
+  the vocabulary pass wherever they stand, and a page that is no HTML has no link, so a
+  linked statement's words stop the run there (ADR-0046, decision 7).
+  An API document in JSON names a licence, terms or a contact in its `info` only as the
+  attribution records them from that document: each of `license`, `termsOfService` and
+  `contact` that it holds is quoted by a statement's text or link, and the three leave the
+  document's text before the search, while a document in YAML or in another form is searched
+  as text whole (ADR-0046, Consequences).
 - A source whose API is one part of a shared upstream document (several FAS APIs
   described in one OpenAPI document) snapshots its own part and records the full
   document's byte size and sha256 in `FETCHED.md`, so a refresh can tell the part from

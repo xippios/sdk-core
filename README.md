@@ -1038,10 +1038,21 @@ another host: such a page stops the run unless it is recorded by that status, an
 `FETCHED.md` lists it under `Not fetched` with the host. The run stops, before writing,
 when a page states a copyright, a licence or terms of use that `attribution` does not
 record, or no longer prints one it records; `vocabulary` names words that state none.
+The check reads an HTML page's visible text, an image's alternative text included where
+the image stands, and searches the same text without the alternative text too, so the words
+an image stands between are searched as before, and it reads any other page's text whole. A
+statement recorded with a link,
+`Statement("Terms of Service", DOCS_URL, "the footer", "https://example.org/tos")`, passes
+only as the text of a link to that target, on any page that prints the link, so the same
+words in prose, linked elsewhere or on a page that is no HTML stop the run, while a
+statement without a link and the words of `vocabulary` pass wherever they stand (ADR-0046,
+decision 7). An API document's `info` names a licence, terms or a contact only as a
+statement recorded from the document quotes it (ADR-0046, Consequences).
 `FETCHED.md` is written whole, in one form for every source: the time of the run, the
 attribution, one row per file with the size and sha256 of the body as fetched, each ETag
 in a code span on a row that ends in the secret scan's allowlist mark, a row for
-`OBSERVED.md` where it exists, and the table `Not fetched` under its heading, empty or not.
+`OBSERVED.md` where it exists, and the table `Not fetched` under its heading, empty or not,
+each row on one line, a line feed in a note or a reason written as a space.
 `--check` exits 1 when a file differs from what upstream serves, compared after
 `canonical`, or when `FETCHED.md` would change in more than its rows' measures.
 

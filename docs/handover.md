@@ -1535,7 +1535,10 @@ the rules of 1.28.
    the frame's, a converter its hooks use is the source's own dependency, and every file but
    `FETCHED.md` is written as its hooks make it. The source ports its script, its own code kept
    as hooks, as https://github.com/xippios/sdk-core/issues/320 names per source, and declares
-   the converter its hooks use itself.
+   the converter its hooks use itself. Its attribution check reads an image's alternative text
+   and passes a statement recorded with a link only as the text of that link (ADR-0046,
+   decision 7), and it holds an API document's `info` as conventions §3 state it (ADR-0046,
+   Consequences).
 2. **`FETCHED.md` in one form** (ADR-0046, decisions 3 and 4). The frame writes `FETCHED.md`
    in one form for every source, and the first run of the ported script rewrites it once;
    every ETag stands in a code span on a row that ends in the secret scan's allowlist mark, and
@@ -1854,6 +1857,19 @@ the rules of 1.28.
   takes none, since the three sources that check one compare three different things, so
   sdk-google-mail, sdk-usda-wasde and sdk-x keep their titles in a table that their `reduce`
   reads (below; https://github.com/xippios/sdk-google-mail/issues/72).
+- The ported script's attribution check reads an image's alternative text as text of the page,
+  searching the same text without it as well, and reads past a statement recorded with a link
+  only as the text of a link to its target, on any page that prints the link, while a
+  statement without a link and the vocabulary pass wherever they stand (ADR-0046, decision 7;
+  https://github.com/xippios/sdk-core/issues/437). An alternative text that holds a word of
+  terms or copyright, or that stands inside the words of a recorded statement, and a linked
+  statement's words outside its link stop the source's first run that fetches until the
+  attribution records them, which no offline run shows: that run's pull request records each,
+  as a statement of its page or a word of the vocabulary. An image with an alternative text
+  inside a recorded link, beside its words, is part of the link's text, so the page stops with
+  "no longer links" until the statement records the link's text as the page reads it, a link
+  `<a href="…"><img alt="icon"> Terms of Service</a>` as "icon Terms of Service" with its
+  target (ADR-0046, Consequences).
 - A live run prints the requests it sent by host, `requests sent by the live run: 15
   (api.example.org: 15)`, from which the source's release PR reads its count of live calls,
   and a run that built a `Tenants` registry names no host; the source changes no file for it
@@ -1941,15 +1957,23 @@ the rules of 1.28.
     it, `note` for the files that keep a nested table as HTML and `sections` for its vendor
     examples, its attribution recording "Terms of Service" from its page with its link to
     https://cashctrl.com/en/about/terms, which the error handling's text links, or the frame
-    stops the run (https://github.com/xippios/sdk-cashctrl/issues/134). It gives up five things
+    stops the run (https://github.com/xippios/sdk-cashctrl/issues/134). It gives up six things
     that the frame carries for no single source: `--from-file`, its own User-Agent, its request
     for the page gzipped, the removal of an entry's file at the top of `docs/upstream/` once
     the table of contents drops the entry, so its port puts its entries under a subdirectory or
-    removes such a file by hand, `--check` naming no leftover, and the fragment of its entry in
+    removes such a file by hand, `--check` naming no leftover, the fragment of its entry in
     each split file's row of `FETCHED.md`, `index.html#/order`, since the frame's row of a file
-    split from a page names the page's URL, the file's first line keeping the fragment
-    (ADR-0046, decision 2, and Consequences;
-    https://github.com/xippios/sdk-cashctrl/issues/134).
+    split from a page names the page's URL, the file's first line keeping the fragment, and its
+    check that the notice stands in the footer's logo, below (ADR-0046, decisions 2 and 7, and
+    Consequences; https://github.com/xippios/sdk-cashctrl/issues/134).
+- Its footer's copyright notice, `NOTICE`, is recorded from `PAGE_URL`, since the frame reads it
+  in the alternative text of the footer's logo and checks it on every run, and its link to the
+  terms passes as that link (ADR-0046, decision 7;
+  https://github.com/xippios/sdk-cashctrl/issues/134). The check of the notice in `split`,
+  `copyright_year` with `_COPYRIGHT` and the year it compares, goes as a copy of the frame's
+  check, and with it the sixth thing of those above, the check that the notice stands in the
+  footer's logo, a part of the page that the frame does not tell apart; a test of the port that
+  held the notice to `split` holds it to the declaration.
 - Takes nothing of `record_task`: it records exchange by exchange into 44 directories named
   after wrappers, and three of its tasks download (ADR-0057, Consequences).
 - The first list: the rest of a cut answer and what a write task's preview shows.
@@ -1987,6 +2011,10 @@ the rules of 1.28.
   `test_a_snapshot_leaves_observed_md_as_written_and_check_reads_it` and
   `test_no_page_is_kept_as_observed_md`, go with the copy
   (https://github.com/xippios/sdk-core/issues/415).
+- Its rule on a linked statement stays, with no hook of its own: the frame reads past "Terms of
+  Service" only as the text of a link to one of its three recorded targets, on any of its
+  pages, as its script did, and searches its discovery document, which is no HTML, for those
+  words (ADR-0046, decision 7; https://github.com/xippios/sdk-google-mail/issues/72).
 - No paged cap: `get_thread` keeps its `start` and `get_message` is one record
   (https://github.com/xippios/sdk-google-mail/issues/38).
 - The first list: what a write task's preview shows.
@@ -2067,6 +2095,10 @@ the rules of 1.28.
   keeping no size, sha256 or ETag where the script kept the footer text's; only the first run
   that fetches shows whether its whole visible text passes the search
   (https://github.com/xippios/sdk-x/issues/57).
+- Its rule on a linked statement stays, with no hook of its own: the frame reads past "Terms of
+  Service" only as the text of the footer's link to https://x.com/en/tos, and searches its
+  Markdown pages, which are no HTML, for those words, as its script did (ADR-0046, decision 7;
+  https://github.com/xippios/sdk-x/issues/57).
 - `tests/test_refresh_upstream.py`: its five tests,
   `test_fetched_md_lists_observed_md_in_a_row_of_its_own`,
   `test_fetched_md_has_no_row_of_observed_md_while_there_is_none`,

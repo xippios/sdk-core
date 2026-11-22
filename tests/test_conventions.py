@@ -1,10 +1,10 @@
 """The sentences of `docs/conventions.md` that the cases of ADR-0043 stand on, and ADR-0055's,
 the preview rule of ADR-0050, the recording of a task's exchanges of ADR-0057, the names of a
 request's country codes of ADR-0056, the check of the committed FETCHED.md of ADR-0046,
-decision 6, the refusal of a hinted value of ADR-0041's amendment of 2026-11-22, the two
-sentences of a period series that ADR-0054's amendment of 2026-11-22 words, and the review
-checklist's sentence that holds an adoption against the two lists of
-the handover's section for the release.
+decision 6, the attribution check of its decision 7, the refusal of a hinted value of ADR-0041's
+amendment of 2026-11-22, the two sentences of a period series that ADR-0054's amendment of
+2026-11-22 words, and the review checklist's sentence that holds an adoption against the two
+lists of the handover's section for the release.
 
 The organization's release check quotes the conventions from sdk-core's `main`, and a finding
 blocks only where it quotes the sentence that a change breaks
@@ -530,6 +530,54 @@ def test_each_rule_of_the_check_of_fetched_md_is_one_sentence_that_cites_adr_004
     rule = sentence(section(3), phrase)
     for name in (SNAPSHOT_DECISION, *names):
         assert name in rule, f"§3: {rule!r} does not name {name!r}"
+
+
+# §3, the snapshot: what the frame's attribution check reads and accepts, by the maintainer's
+# answer on https://github.com/xippios/sdk-core/issues/437 (ADR-0046, decision 7), and the rule
+# on an API document's `info` that only the code and its tests stated
+# (https://github.com/xippios/sdk-x/issues/57), which no question decided and ADR-0046 states in
+# its Consequences (finding 2 of the review of https://github.com/xippios/sdk-core/pull/451).
+
+ATTRIBUTION_DECISION = "ADR-0046, decision 7"
+ATTRIBUTION_CONSEQUENCES = "ADR-0046, Consequences"
+
+ATTRIBUTION_RULES = [
+    pytest.param(
+        "The frame's attribution check reads an HTML page's visible text",
+        ATTRIBUTION_DECISION,
+        (
+            "alternative text",
+            "where the image stands",
+            "no other attribute",
+            "without the alternative text",
+            "a sample",
+        ),
+        id="s3-what-the-attribution-check-reads",
+    ),
+    pytest.param(
+        "A statement recorded with a link passes the check only as the text of a link",
+        ATTRIBUTION_DECISION,
+        ("on any page", "without a link", "vocabulary", "no HTML"),
+        id="s3-a-statement-recorded-with-a-link",
+    ),
+    pytest.param(
+        "An API document in JSON names a licence, terms or a contact in its `info`",
+        ATTRIBUTION_CONSEQUENCES,
+        ("`license`", "`termsOfService`", "`contact`", "YAML"),
+        id="s3-an-api-document-s-info",
+    ),
+]
+
+
+@pytest.mark.parametrize(("phrase", "record", "names"), ATTRIBUTION_RULES)
+def test_each_rule_of_the_attribution_check_is_one_sentence_that_cites_adr_0046(
+    phrase: str, record: str, names: tuple[str, ...]
+) -> None:
+    rule = sentence(section(3), phrase)
+    for name in (record, *names):
+        assert name in rule, f"§3: {rule!r} does not name {name!r}"
+    others = {ATTRIBUTION_DECISION, ATTRIBUTION_CONSEQUENCES} - {record}
+    assert not any(other in rule for other in others), f"§3: {rule!r} cites another part"
 
 
 def test_the_review_checklist_holds_the_name_the_family_check_reads() -> None:
