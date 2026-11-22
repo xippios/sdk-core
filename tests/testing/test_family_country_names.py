@@ -112,9 +112,9 @@ NAMED = ["get_data", "get_flows", "get_series", "get_stacked", "get_plain"]
 """The tasks that pass: named, exempt, or holding none of the words."""
 
 INTRO = (
-    "every task parameter whose name holds country, area, reporter or partner is named in the "
-    "answer's meta by names_codes, or stands in UNNAMED_CODES of its tasks module with the "
-    "reason it is not (conventions §4, ADR-0056):"
+    "every task parameter whose name holds country, countries, area, reporter or partner is "
+    "named in the answer's meta by names_codes, or stands in UNNAMED_CODES of its tasks module "
+    "with the reason it is not (conventions §4, ADR-0056):"
 )
 
 

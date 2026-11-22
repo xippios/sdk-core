@@ -15,6 +15,8 @@ from pathlib import Path
 
 import pytest
 
+from xippios.core.testing import family
+
 ROOT = Path(__file__).resolve().parents[1]
 CONVENTIONS = ROOT / "docs" / "conventions.md"
 CHECKLIST = ROOT / "docs" / "review-checklist.md"
@@ -194,6 +196,9 @@ def test_each_rule_of_the_live_comparison_is_one_sentence_that_cites_adr_0055(
         assert name in rule, f"§10: {rule!r} does not name {name!r}"
 
 
+EXEMPTION = "stands in `UNNAMED_CODES` of its tasks module with the reason"
+"""The phrase of §4's sentence on the exemption and the family check (ADR-0056)."""
+
 NAMES_RULES = [
     # §4, at the envelope's meta: the name of each country code of a request
     # (https://github.com/xippios/sdk-core/issues/375).
@@ -208,8 +213,8 @@ NAMES_RULES = [
         id="s4-the-decorator",
     ),
     pytest.param(
-        "stands in `UNNAMED_CODES` of its tasks module with the reason",
-        ("`country`, `area`, `reporter` or `partner`", "the family check fails"),
+        EXEMPTION,
+        ("the family check fails", "and stands in neither"),
         id="s4-the-exemption",
     ),
 ]
@@ -222,6 +227,16 @@ def test_each_rule_of_the_names_of_codes_is_one_sentence_that_cites_adr_0056(
     rule = sentence(section(4), phrase)
     for name in ("ADR-0056", *names):
         assert name in rule, f"§4: {rule!r} does not name {name!r}"
+
+
+def test_the_exemption_s_sentence_names_the_words_of_the_family_check_in_their_order() -> None:
+    # The organization's check quotes the sentence alone, so it lists exactly the words that
+    # the check looks for (ADR-0056, decision 5), read here from the check itself.
+    words = family._COUNTRY.pattern.split("|")
+    assert all(word.isalpha() for word in words), f"{words!r}: a word, no pattern"
+    listed = ", ".join(f"`{word}`" for word in words[:-1]) + f" or `{words[-1]}`"
+    rule = sentence(section(4), EXEMPTION)
+    assert listed in rule, f"§4: {rule!r} does not list {listed!r}"
 
 
 @pytest.mark.parametrize(
