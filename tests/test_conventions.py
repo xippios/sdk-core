@@ -648,3 +648,17 @@ def test_the_patch_record_keeps_its_question() -> None:
     found = next((r for r in records if r["id"] == PATCH_RECORD), None)
     assert found, f"the index holds no {PATCH_RECORD}"
     assert (found["decided_by"], found["amended"]) == (PATCH_QUESTION, [])
+
+
+def test_adr_0023_points_to_the_record_that_supersedes_its_closed_list() -> None:
+    # A reader of ADR-0023 and of the index finds the fourth reason: its status line names the
+    # question, as ADR-0042's names the one whose record superseded two of its decisions, and
+    # its amendment names ADR-0058, decision 1.
+    records = json.loads(INDEX.read_text(encoding="utf-8"))["records"]
+    found = next(r for r in records if r["id"] == "ADR-0023")
+    assert PATCH_QUESTION in [entry["by"] for entry in found["amended"]], "ADR-0023 is not amended"
+    text = flat((ROOT / found["path"]).read_text(encoding="utf-8"))
+    amendment = text.split("## Amendment 2026-11-22", 1)
+    assert len(amendment) == 2, "ADR-0023 has no amendment of 2026-11-22"
+    for name in ("ADR-0058", "decision 1", "supersedes", "one of three", PATCH_QUESTION):
+        assert name in amendment[1], f"ADR-0023's amendment does not name {name!r}"
