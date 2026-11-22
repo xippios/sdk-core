@@ -49,7 +49,11 @@ and decisions 5 to 7 are those of the pull request that built the helper.
    applies a tool set's hooks with `option_defaults()` serves `mcp` as the entry point does.
    The ceiling in force is the process's, as the two copies hold it: `apply_options` sets it
    for every call in the process. Core's `main` gains no option, and each source keeps its
-   option's name and its numbers, since months and years take no one number.
+   option's name and its numbers, since months and years take no one number. A declaration
+   that cannot hold, a `most` that is no whole number from 1, one of `mcp` and `option`
+   without the other, an `mcp` outside 1 to `most`, an `option` that is no long option or a
+   `help` without one, is refused with `ValueError` where the source declares it, before any
+   call, since it is a fault of the source's code.
 3. **A later failure raises the same error, naming the periods fetched, and returns nothing.**
    `fetch_periods(periods, fetch, *, skip=())` sends one request per period, in the order
    given, each awaited before the next, passes over a period whose fetch raises one of `skip`,
@@ -78,8 +82,11 @@ and decisions 5 to 7 are those of the pull request that built the helper.
    2 periods fetched, 2021 to 2022, and returns nothing.`, so a series of 60 months names two
    of them, not sixty. A period passed over counts as fetched, since upstream answered it.
    The message of a `XippiosError` and the argument that holds it are extended in place, the
-   two that `str`, both adapters and `repr` read. A failure in the first period passes as
-   raised, since nothing was fetched before it.
+   two that `str`, both adapters and `repr` read. The sentence follows a message whose last
+   character, past its trailing white space, is `.`, `?` or `!` after a space, and any other
+   message after a full stop, a closing quote or bracket included, since that closes a value,
+   a repr or a JSON body, whose punctuation is the value's. A failure in the first period
+   passes as raised, since nothing was fetched before it.
 7. **An error that is no `XippiosError` gets a note.** Its arguments are its own class's, so
    the helper leaves them and adds the same sentence as a note (PEP 678), which a traceback
    prints. A cancellation passes untouched, since the helper catches no `BaseException` that is

@@ -254,14 +254,17 @@ def _stopped(error: Exception, period: object, fetched: list[object]) -> None:
 
     A ``XippiosError``'s message, and the argument that holds it, are extended in place,
     the two that ``str``, ``repr`` and both adapters read; any other error keeps its
-    arguments, its class's own, and gets the sentence as a note (PEP 678).
+    arguments, its class's own, and gets the sentence as a note (PEP 678). A message whose
+    last character, past its trailing white space, is ``.``, ``?`` or ``!`` ended its
+    sentence; any other takes a full stop first, a closing quote or bracket included, since
+    it closes a value whose own punctuation is the value's. An empty message is the sentence.
     """
     sentence = f"The series stopped at {period} after {_named(fetched)}, and returns nothing."
     if not isinstance(error, XippiosError):
         error.add_note(sentence)
         return
     message = error.message.rstrip()
-    if message and not message.endswith("."):
+    if message and message[-1] not in ".?!":
         message += "."  # the error's own sentence ends before the next one starts
     longer = f"{message} {sentence}".lstrip()
     error.args = tuple(longer if arg == error.message else arg for arg in error.args)
