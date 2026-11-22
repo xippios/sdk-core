@@ -1,10 +1,12 @@
 """A series over periods: the ceiling of one call and its requests in order (ADR-0054, #315).
 
-The row's proof first: a range over the ceiling is refused before a request, a period without
-data is skipped, and a failure in the third of five periods names the two fetched. Then the
-MCP server's lower ceiling through the tool set's hooks, the option that raises it, an empty
-range, a failure in the first period, every period skipped, and what a failure keeps of the
-error: its instance, class, attributes, cause and traceback.
+The row's proof first: a range over the ceiling is refused before a request, saying that
+nothing was sent, a period without data is skipped, and a failure in the third of five periods
+names the two answered. Then the MCP server's lower ceiling through the tool set's hooks, the
+option that raises it, an empty range, a failure in the first period, every period skipped, a
+pass that counts, and what a failure keeps of the error: its instance, class, attributes, cause
+and traceback. The words "Nothing was sent" and "answered" are those of ADR-0054's amendment of
+2026-11-22 (https://github.com/xippios/sdk-core/issues/438).
 """
 
 import argparse
@@ -95,8 +97,8 @@ async def test_a_range_over_the_ceiling_is_refused_before_a_request() -> None:
     with pytest.raises(InvalidRequestError) as info:
         await series(market_years(), upstream.fetch, 2010, 2021)
     assert info.value.message == (
-        "2010 to 2021 is 12 market years; one call fetches at most 10 market years. Ask for "
-        "fewer market years."
+        "2010 to 2021 is 12 market years; one call fetches at most 10 market years. Nothing was "
+        "sent. Ask for fewer market years."
     )
     assert info.value.source == SOURCE
     assert upstream.asked == [], "refused before any request"
@@ -119,7 +121,7 @@ async def test_a_period_without_data_is_skipped() -> None:
 
 
 @pytest.mark.anyio
-async def test_a_failure_in_the_third_of_five_periods_names_the_two_fetched() -> None:
+async def test_a_failure_in_the_third_of_five_periods_names_the_two_answered() -> None:
     error = unavailable(2023)
     upstream = Upstream({2023: error})
     with pytest.raises(UpstreamError) as info:
@@ -127,7 +129,7 @@ async def test_a_failure_in_the_third_of_five_periods_names_the_two_fetched() ->
     assert info.value is error, "the same error, raised again"
     assert info.value.message == (
         "503 from GET /api/example/year/2023: Service Unavailable. The series stopped at 2023 "
-        "after 2 periods fetched, 2021 to 2022, and returns nothing."
+        "after 2 periods answered, 2021 to 2022, and returns nothing."
     )
     assert upstream.asked == [2021, 2022, 2023], "no request after the failure"
 
@@ -142,7 +144,8 @@ def test_the_python_api_holds_most_and_its_refusal_names_no_mcp_server() -> None
     with pytest.raises(InvalidRequestError) as info:
         ceiling.check(61, asked="2021-08 to 2026-08")
     assert info.value.message == (
-        "2021-08 to 2026-08 is 61 months; one call fetches at most 60 months. Ask for fewer months."
+        "2021-08 to 2026-08 is 61 months; one call fetches at most 60 months. Nothing was sent. "
+        "Ask for fewer months."
     )
 
 
@@ -163,7 +166,7 @@ def test_the_mcp_servers_lower_ceiling_comes_through_the_tool_sets_hooks() -> No
     assert info.value.message == (
         "2024-08 to 2026-08 is 25 months; one call fetches at most 24 months, the ceiling set "
         "for this process (the MCP server starts with 24 by default; --series-months raises "
-        "it, up to 60). Ask for fewer months."
+        "it, up to 60). Nothing was sent. Ask for fewer months."
     )
 
 
@@ -183,8 +186,8 @@ def test_the_option_raises_the_ceiling_up_to_most(monkeypatch: pytest.MonkeyPatc
         ceiling.check(37)
     assert info.value.message == (
         "37 months asked; one call fetches at most 36 months, the ceiling set for this process "
-        "(the MCP server starts with 24 by default; --series-months raises it, up to 60). Ask "
-        "for fewer months."
+        "(the MCP server starts with 24 by default; --series-months raises it, up to 60). "
+        "Nothing was sent. Ask for fewer months."
     )
     assert (
         "--series-months MONTHS most months one tool call fetches, 1 to 60 (default 24); one "
@@ -248,8 +251,8 @@ def test_a_ceiling_set_without_an_option_says_so_and_names_no_server() -> None:
         ceiling.check(6, asked="2020 to 2025", advice="Narrow the range, e.g. 2021 to 2025.")
     assert info.value.message == (
         "2020 to 2025 is 6 market years; one call fetches at most 5 market years, the ceiling "
-        "set for this process. Narrow the range, e.g. 2021 to 2025."
-    )
+        "set for this process. Nothing was sent. Narrow the range, e.g. 2021 to 2025."
+    ), "the sentence stands before the source's advice too"
     with pytest.raises(InvalidRequestError) as unset:
         ceiling.set(11)
     assert unset.value.message == (
@@ -308,24 +311,48 @@ async def test_a_failure_in_the_first_period_passes_as_raised() -> None:
 
 
 @pytest.mark.anyio
-async def test_a_period_skipped_counts_as_fetched() -> None:
+async def test_a_period_skipped_counts_as_answered() -> None:
     """Upstream answered it, with no data, so a caller starts again after it."""
     upstream = Upstream({2021: no_data(2021), 2022: no_data(2022), 2023: unavailable(2023)})
     with pytest.raises(UpstreamError) as info:
         await fetch_periods([2021, 2022, 2023], upstream.fetch, skip=(NoDataForYear,))
     assert info.value.message.endswith(
-        "The series stopped at 2023 after 2 periods fetched, 2021 to 2022, and returns nothing."
+        "The series stopped at 2023 after 2 periods answered, 2021 to 2022, and returns nothing."
     )
 
 
 @pytest.mark.anyio
-async def test_one_period_fetched_is_named_alone() -> None:
+async def test_one_period_answered_is_named_alone() -> None:
     upstream = Upstream({2022: unavailable(2022)})
     with pytest.raises(UpstreamError) as info:
         await fetch_periods([2021, 2022], upstream.fetch)
     assert info.value.message.endswith(
-        "The series stopped at 2022 after 1 period fetched, 2021, and returns nothing."
+        "The series stopped at 2022 after 1 period answered, 2021, and returns nothing."
     )
+
+
+@pytest.mark.anyio
+async def test_a_pass_that_counts_names_the_periods_counted_as_answered() -> None:
+    """sdk-usda-nass's split counts every year on the loop before it fetches one, so the
+    periods before a failed count were counted and never fetched: the sentence holds for
+    both passes (https://github.com/xippios/sdk-usda-nass/issues/86)."""
+    error = unavailable(2021)
+    counted: list[int] = []
+
+    async def count(year: int) -> int:
+        if year == 2021:
+            raise error
+        counted.append(year)
+        return 12
+
+    with pytest.raises(UpstreamError) as info:
+        await fetch_periods([2020, 2021, 2022], count)
+    assert info.value is error
+    assert info.value.message == (
+        "503 from GET /api/example/year/2021: Service Unavailable. The series stopped at 2021 "
+        "after 1 period answered, 2020, and returns nothing."
+    )
+    assert counted == [2020]
 
 
 @pytest.mark.anyio
@@ -338,7 +365,7 @@ async def test_only_the_classes_of_skip_are_passed_over() -> None:
     assert info.value is gone
     assert info.value.message == (
         "404 from GET /api/example/year/2022: NOT_FOUND. The series stopped at 2022 after 1 "
-        "period fetched, 2021, and returns nothing."
+        "period answered, 2021, and returns nothing."
     )
     assert upstream.asked == [2021, 2022]
 
@@ -356,7 +383,7 @@ async def test_a_long_series_names_the_first_the_last_and_the_count() -> None:
         await fetch_periods(periods, fetch)
     assert info.value.message == (
         "429 from GET /api/example: spent. The series stopped at 202512 after 59 periods "
-        "fetched, 202101 to 202511, and returns nothing."
+        "answered, 202101 to 202511, and returns nothing."
     )
     assert "202306" not in info.value.message, "not sixty periods"
     assert info.value.retry_after == 60.0
@@ -382,7 +409,7 @@ async def test_a_later_failure_keeps_the_class_the_attributes_the_cause_and_the_
     assert error.__cause__ is cause
     assert any(entry.name == "fetch" for entry in info.traceback), "the raising frame stays"
     longer = error.message
-    assert longer.endswith("after 2 periods fetched, 2021 to 2022, and returns nothing.")
+    assert longer.endswith("after 2 periods answered, 2021 to 2022, and returns nothing.")
     assert (str(error), error.args) == (longer, (longer,)), "what both adapters and repr read"
     copy = pickle.loads(pickle.dumps(error))  # the taxonomy's __reduce__ keeps the message
     assert (type(copy), copy.message, copy.status) == (UpstreamError, longer, 503)
@@ -421,7 +448,7 @@ async def test_a_message_that_ends_its_sentence_takes_the_next_one_after_a_space
     with pytest.raises(XippiosError) as info:
         await fetch_periods([2021, 2022], upstream.fetch)
     assert info.value.message == (
-        f"{opening}The series stopped at 2022 after 1 period fetched, 2021, and returns nothing."
+        f"{opening}The series stopped at 2022 after 1 period answered, 2021, and returns nothing."
     )
     assert info.value.args == (info.value.message,)
 
@@ -435,7 +462,7 @@ async def test_an_error_that_is_no_xippios_error_keeps_its_arguments_and_gets_a_
     assert info.value is error
     assert info.value.args == ("weekEndingDate",)
     assert info.value.__notes__ == [
-        "The series stopped at 2023 after 2 periods fetched, 2021 to 2022, and returns nothing."
+        "The series stopped at 2023 after 2 periods answered, 2021 to 2022, and returns nothing."
     ]
 
 
