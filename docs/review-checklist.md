@@ -88,7 +88,13 @@ the repository it reviews.
     2026-11-18, point e). A source's adoption fragment names the core bound, the template's
     tag and the conventions' version as they stand after the adoption, changed or not, and
     is `breaking` where it brings a core minor and `changed` where it brings none
-    (conventions §15, item 9; ADR-0043).
+    (conventions §15, item 9; ADR-0043). An adoption of a core release is held against the
+    two lists of the handover's section `Adopting core X.Y.Z` for that release: each of the
+    conventions' rules changed since the version before holds in the source, as §15 item 8
+    asks, and each of the changes that a source's callers see that the adoption brings to
+    them has its entry among the adoption's fragments
+    (https://github.com/xippios/sdk-core/issues/334,
+    https://github.com/xippios/sdk-core/issues/349).
 13. **Release PR** (the version in `pyproject.toml` changed, or for sdk-template the top
     heading of `CHANGELOG.md`): it changes only the files of conventions §12
     (`pyproject.toml`, `uv.lock`, `CHANGELOG.md`, `README.md`, `CLAUDE.md`,
