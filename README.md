@@ -1680,6 +1680,10 @@ helper's docstring then covers each call that hands its exchange on, and a call 
 a route serves takes a kind:
 
 ```python
+import httpx
+from xippios.core.testing import Scrub, fixture_from_response
+
+
 def message_exchange(body):
     """The exchange is an input of the test, not an answer from Example."""
     return httpx.Response(200, json=body, request=httpx.Request("GET", MESSAGE_URL))
@@ -1698,11 +1702,15 @@ expression or a module of its own such as `conftest.py`, is built in the test or
 and so is one that a route could reach unseen: through a function that a decorator receives,
 whose name something else binds at the module's top or in the calling function, or that the
 module passes as a value, a name of a `global` or `nonlocal` statement, or a module with a star
-import. The frame's `Response`, which a test of
-a snapshot hook imports from `xippios.core.refresh`, is served by no route and takes the
-sentence by its bare name as by `refresh.Response(...)`. A bare `Response` is the frame's only
-where every binding of the name in the module is that import, and httpx's otherwise, a
-re-export or an assignment of that name among them (ADR-0049, decision 10).
+import. For a helper's exchange, `fixture_from_response` is core's recorder only where every
+binding of the name in the module is an import from `xippios.core.testing`, as in the example
+above. The
+frame's `Response`, which a test of a snapshot hook imports from `xippios.core.refresh`, is
+served by no route and takes the sentence by its bare name as by `refresh.Response(...)`. A
+bare `Response` is the frame's only where every binding of the name in the module is that
+import, and httpx's otherwise, a re-export or an assignment of that name among them. The check
+reads a module's text: a name bound again at run time, through `globals()` or
+`monkeypatch.setattr`, it reads as the text binds it (ADR-0049, decision 10).
 
 The census, the third test, runs after every other test of the run. The plugin compares each
 request that a replay answered with the recorded one, through the recording's redaction, so

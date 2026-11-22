@@ -97,8 +97,10 @@ https://github.com/xippios/sdk-core/issues/439.
    there at once. A source meets the check when its patch adds the line.
 10. **An exchange that a helper builds, and the module's imports.** By the maintainer's answer
     on https://github.com/xippios/sdk-core/issues/439, given on 2026-11-22, the check reads more
-    inputs than decisions 3 and 4 took from sdk-cashctrl's, and no new place, and nothing that
-    it flagged before passes but the shapes below:
+    inputs than decisions 3 and 4 took from sdk-cashctrl's, and no new place. Of what a module's
+    text shows, nothing that it flagged before passes but the shapes below; a name that the
+    module binds again at run time, through `globals()`, `setattr` or `monkeypatch.setattr`, no
+    reader of the text sees, and the check reads it as the text binds it:
     - *The helper's exchange.* An `httpx.Response` is handed to the recorder, and no route
       serves it, where it reaches `fixture_from_response` alone as a positional argument,
       directly or by a local name that nothing else reads, either of `fixture_from_response`
@@ -108,7 +110,12 @@ https://github.com/xippios/sdk-core/issues/439.
       same rule: a call so handed is an input, and a call that is not is served and takes a
       kind, so a helper whose exchange one call hands to the recorder and another serves takes
       the sentence for the first and a kind for the second. The sentence in the helper's reach
-      covers each call that hands its exchange on, and a kind there covers every call.
+      covers each call that hands its exchange on, and a kind there covers every call. For a
+      helper's exchange and for a function that hands one on, `fixture_from_response` is
+      core's recorder only where every binding of the name in the module is an import from
+      `xippios.core.testing` or a module under it and no star import stands beside it, as the
+      recorder tests of sdk-cashctrl and sdk-google-mail, and sdk-x's trial port, import it; an
+      exchange built in the test and given to the name directly is read as before.
     - *No further.* A response that travels by a keyword, a container, a second function that
       returns it or hands it on, a conditional expression or a function of another module,
       `conftest.py` among them, is not followed: it is built in the test or takes a kind. Nor
@@ -155,4 +162,6 @@ https://github.com/xippios/sdk-core/issues/439.
   every module under `tests/` of the twelve sources' `main` and of the six trial branches, no
   source gains a place. httpx's `Response` called through another name of `httpx`,
   `h.Response(...)` after `import httpx as h`, which the check read as served by no route
-  before this decision, it still cannot see.
+  before this decision, it still cannot see, nor a name that the module binds again at run
+  time, through `globals()`, `setattr` or `monkeypatch.setattr`, which its module states
+  with what the check cannot see.
