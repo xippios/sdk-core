@@ -51,8 +51,9 @@ It gives a source package the things that should be identical across the family:
 - **Result envelope**: every task function returns `Result[T]` with `ResultMeta`
   (source, endpoint, retrieved_at, published_at with published_at_naive for a time
   upstream printed without a zone, vintage, request without the parameters left `None`,
-  total: upstream's count of the matching records when the source reports one, and
-  tenant: the tenant the data came from, by name, for a multi-tenant source); a field it
+  total: upstream's count of the matching records when the source reports one,
+  tenant: the tenant the data came from, by name, for a multi-tenant source, and names:
+  the name of each country code of the request, which `names_codes` writes); a field it
   does not define is refused. `Decimal` fields of upstream models arrive as JSON numbers
   in both adapters; `UpstreamModel.project` builds a projection of a record under
   upstream names, `dump_upstream` gives a record back under upstream's field names,
@@ -882,6 +883,79 @@ source = render_enums(
 )
 ```
 
+### The country a code stands for
+
+A country argument takes upstream's own code and no second one, and every answer names the
+country it stands for, since a known code can be another country than the caller meant: in a
+list where `CN` is Comoros, China is `CH`. A task that takes a country, an area, a reporter or
+a partner declares the list of each such parameter with `names_codes`, and `meta.names` of
+every answer it returns maps each parameter to its codes and their names (conventions §4,
+ADR-0056):
+
+```python
+from xippios.core import PackagedList, Result, names_codes, sync
+
+COUNTRIES = PackagedList.load("xippios.example", "countries").codes(
+    "countryCode", "countryName", source="example"
+)  # CN Comoros, CH China, ...
+REPORTERS = PackagedList.load("xippios.example", "reporters").codes(
+    "reporterCode", "reporterDesc", source="example"
+)  # integer codes: 757 Switzerland, 842 USA
+
+
+@names_codes(country_code=COUNTRIES)
+async def get_data_async(country_code: str | None = None) -> Result[list[Row]]: ...
+
+
+@names_codes(reporter_code=REPORTERS, separator=",")  # upstream's "757,842"
+async def get_flows_async(reporter_code: str) -> Result[list[Flow]]: ...
+
+
+get_data = sync(get_data_async)
+get_flows = sync(get_flows_async)
+```
+
+```python
+>>> get_data("CN").meta.names
+{'country_code': {'CN': 'Comoros'}}
+>>> get_flows("757,842").meta.names
+{'reporter_code': {'757': 'Switzerland', '842': 'USA'}}
+>>> get_data().meta.names  # every country: no entry, and the dump has no names
+{}
+```
+
+The decorator reads the call's arguments, defaults applied, once the task returned: a text is
+one code, or several split on `separator`; a list, a tuple or a set holds several; a code
+stands once, under its text as the caller gave it, so an integer by its digits, with the name
+its list holds, white space collapsed. A text of digits is read as the integer for a list of
+integer codes, and an integer as its text for a list of text codes. It wraps an `async def`, a
+plain function or a `sync` facade, whose async twin it wraps too, so the MCP tool, the HTTP
+route and a server bound by `bind_tasks` answer with the names, and the tool's schema, the
+docstring and the signature stay the task's. A name that is no parameter of the task, a value
+that is no `PackagedCodes` and a parameter named twice are refused with `TypeError` when the
+module is imported, and a decorated task that returns anything but a `Result` raises
+`TypeError`. Names the answer carries already, a composed answer's, are kept, and two
+decorators stack, one per separator.
+
+The task checks its codes before the call, with its hints and its reason, so a code the list
+lacks never reaches the decorator. One that does, a code sent unchecked, is refused after the
+call with the list's own refusal, `UnknownCode`, whose reason says that the answer is
+withheld: an answer whose country no list names is never returned. The name is the one the
+source's own list holds for the code, so nothing is mapped between sources (ADR-0028).
+
+A task whose codes no packaged list can name, or a parameter whose name holds one of the
+family check's words while it takes no code, is exempt with the reason, in `UNNAMED_CODES`
+beside `BULK_TASKS` in `tasks.py`:
+
+```python
+UNNAMED_CODES = {
+    "get_data": {
+        "area": "Under area_cs it is an ISO3 or M49 code, which no packaged list names.",
+        "area_cs": "The coding system of area, no code.",
+    },
+}
+```
+
 ## The snapshot script's frame
 
 A source's `scripts/refresh_upstream.py`, which snapshots its upstream documentation into
@@ -1427,6 +1501,15 @@ async def test_the_write_server(
         sent=respx_mock,
     )
 ```
+
+Every task, read and write, bulk or not, with a parameter whose name holds `country`,
+`countries`, `area`, `reporter` or `partner`, in any case, names its codes with `names_codes`
+for that parameter or stands in `UNNAMED_CODES` of its module with the reason (see The
+country a code stands for; ADR-0056). An entry for a task outside the module's `__all__`, for
+a parameter the task lacks or that holds none of the words, for a parameter `names_codes`
+names as well, or without its reason fails too. The check reads signatures, so a country
+inside a free-form mapping, such as a `filters` argument, is the review's, and it fails at once
+from core 0.4.1 on.
 
 A source that keeps `docs/upstream/OBSERVED.md`, its notes of what upstream does but never
 documents, is held to three rules of conventions §3, one test each (ADR-0044):

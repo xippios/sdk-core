@@ -295,6 +295,7 @@ class ResultMeta(BaseModel):
     request: dict[str, Any]           # the parameters used, for reproducibility
     total: int | None                 # upstream's record count, if it reports one
     tenant: str | None                # the tenant the data came from, by name (§7)
+    names: dict[str, dict[str, str]]  # each country parameter's codes to their names
 
 class Result(BaseModel, Generic[T]):
     data: T
@@ -473,6 +474,22 @@ validator, so the drop of a top-level `None` and the redaction reach what it add
 `tenant` is the name of the tenant a multi-tenant source served the data for (§7),
 never a credential, a host or another of the tenant's values; `None` for a
 single-tenant source and for the list of tenants.
+
+A country argument takes upstream's own code and no second code, and every answer names the
+country it stands for (https://github.com/xippios/sdk-core/issues/310): `meta.names` maps each
+country parameter of the request to its codes and the names that its packaged list holds for
+them, `{"country_code": {"CN": "Comoros"}}`, a `dict[str, dict[str, str]]` in which a code
+stands as the caller gave it, an integer by its digits, empty for a task without such a
+parameter and left out of a dumped answer while it is empty (ADR-0056). A task that takes a
+country, an area, a reporter or a partner fills it with core's decorator `names_codes`, one
+`PackagedCodes` per parameter (§5), `@names_codes(country_code=COUNTRIES)`, which names the
+codes of the call's arguments on every answer that the task returns and withholds an answer for
+a code its list lacks with that list's refusal (ADR-0056). A parameter whose codes no packaged
+list can name, or whose name holds such a word while it takes no code, stands in
+`UNNAMED_CODES` of its tasks module with the reason, `{"get_data": {"area_cs": "The coding
+system of area, no code."}}`, and the family check fails a task whose parameter holds
+`country`, `area`, `reporter` or `partner` and stands in neither (ADR-0056). The name comes
+from the same source's list of the code and maps nothing between sources (ADR-0028, ADR-0056).
 
 `total` is upstream's count of the records matching the request, or `None` when the
 source reports none or the count is unknown (ADR-0034). A paginated task called without
