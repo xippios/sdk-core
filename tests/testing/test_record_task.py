@@ -16,7 +16,7 @@ import respx
 
 from xippios.core import sync
 from xippios.core.client import AsyncClient, ClientConfig, MemoryCache, RetryPolicy
-from xippios.core.errors import NotFoundError
+from xippios.core.errors import NotFoundError, ValidationError
 from xippios.core.testing import (
     REDACTED,
     Fixture,
@@ -235,6 +235,78 @@ async def test_a_3xx_among_the_exchanges_refuses_the_recording(
         await record_task(redirected_async, fixtures=fixtures_dir, case="ok")
     assert "redirected/ok_2.json" in str(refused.value)
     assert not fixtures_dir.exists()
+
+
+async def decodes_a_redirect_async() -> None:
+    await CLIENT.get_json("/v1/series")
+    await CLIENT.get_json("/v1/moved")  # a 302 has no JSON body: the task raises
+
+
+async def swallows_a_redirect_async() -> None:
+    await CLIENT.get_json("/v1/series")
+    with contextlib.suppress(ValidationError):
+        await CLIENT.get_json("/v1/moved")
+    await CLIENT.get_json("/v1/series/corn/meta")
+
+
+async def raises_after_a_redirect_async() -> None:
+    await CLIENT.get("/v1/moved")
+    await CLIENT.get_json("/v1/series")
+    await CLIENT.get_json("/v1/series/corn/meta")  # answers 404: the task raises
+
+
+@pytest.mark.anyio
+async def test_a_3xx_the_task_decodes_refuses_with_the_frame_s_reason_and_the_task_s_error(
+    respx_mock: respx.MockRouter, fixtures_dir: Path
+) -> None:
+    # https://github.com/xippios/sdk-core/issues/364, part 2: refused on every path, whatever
+    # the task makes of the answer.
+    _serve(respx_mock)
+    respx_mock.get(f"{BASE}/v1/moved").respond(302, headers={"Location": f"{BASE}/v2/moved"})
+    with pytest.raises(ValueError, match=r"exchange 2 of 2.*HTTP 302") as refused:
+        await record_task(decodes_a_redirect_async, fixtures=fixtures_dir, case="ok")
+    assert "decodes_a_redirect/ok_2.json" in str(refused.value)
+    assert isinstance(refused.value.__cause__, ValidationError), "the task's own error"
+    assert not fixtures_dir.exists()
+
+
+@pytest.mark.anyio
+async def test_a_3xx_the_task_swallows_refuses_the_recording(
+    respx_mock: respx.MockRouter, fixtures_dir: Path
+) -> None:
+    _serve(respx_mock)
+    respx_mock.get(f"{BASE}/v1/moved").respond(302, headers={"Location": f"{BASE}/v2/moved"})
+    with pytest.raises(ValueError, match=r"exchange 2 of 3.*HTTP 302"):
+        await record_task(swallows_a_redirect_async, fixtures=fixtures_dir, case="ok")
+    assert not fixtures_dir.exists()
+
+
+@pytest.mark.anyio
+async def test_a_3xx_before_the_task_s_error_refuses_with_its_own_number(
+    respx_mock: respx.MockRouter, fixtures_dir: Path
+) -> None:
+    routes = _serve(respx_mock)
+    routes[1].respond(404, json={"error": "no such series"})
+    respx_mock.get(f"{BASE}/v1/moved").respond(302, headers={"Location": f"{BASE}/v2/moved"})
+    with pytest.raises(ValueError, match=r"exchange 1 of 3.*HTTP 302") as refused:
+        await record_task(raises_after_a_redirect_async, fixtures=fixtures_dir, case="ok")
+    assert "raises_after_a_redirect/ok.json" in str(refused.value)
+    assert isinstance(refused.value.__cause__, NotFoundError)
+    assert not fixtures_dir.exists()
+
+
+async def writes_into_a_redirect_async() -> None:
+    await CLIENT.post_json("/v1/notes", json={"n": 1})
+
+
+@pytest.mark.anyio
+async def test_a_write_answered_with_a_3xx_says_once_that_it_may_have_been_applied(
+    respx_mock: respx.MockRouter, fixtures_dir: Path
+) -> None:
+    respx_mock.post(f"{BASE}/v1/notes").respond(303, headers={"Location": f"{BASE}/v1/notes/7"})
+    with pytest.raises(ValueError, match="HTTP 303") as refused:
+        await record_task(writes_into_a_redirect_async, fixtures=fixtures_dir, case="ok")
+    assert str(refused.value).count("may have been applied") == 1, str(refused.value)
 
 
 async def downloads_async(dest: str) -> None:
