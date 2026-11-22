@@ -9,6 +9,7 @@ from xippios.core.errors import (
     ConfigError,
     InvalidRequestError,
     NotFoundError,
+    QueryTooLarge,
     RateLimitError,
     TransportError,
     UpstreamError,
@@ -36,6 +37,8 @@ class SpecialNotFound(NotFoundError):
         (XippiosError("x"), 500),
         (SpecialNotFound("x"), 404),
         (InvalidRequestError("x"), 422),
+        (QueryTooLarge(200_000, limit=100_000, narrow="x"), 422),
+        (QueryTooLarge(None, limit=50_000, narrow="x"), 422),
     ],
 )
 def test_status_table(exc: XippiosError, status: int) -> None:

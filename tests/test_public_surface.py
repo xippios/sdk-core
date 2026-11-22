@@ -37,6 +37,8 @@ EXPORTS = {
         "PackagedCodes",
         # the ceiling of a period series and its requests in order (ADR-0054)
         "Ceiling", "fetch_periods",
+        # the count before a query over upstream's limit: the error and the runner (ADR-0053)
+        "QueryTooLarge", "fetch_counted",
     },
     "xippios.core.client": {
         "AsyncClient", "BasicKeyAuth", "BearerAuth", "CachedResponse", "ClientConfig",

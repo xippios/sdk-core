@@ -12,6 +12,7 @@ from xippios.core.errors import (
     ConfigError,
     InvalidRequestError,
     NotFoundError,
+    QueryTooLarge,
     RateLimitError,
     TransportError,
     UnknownCode,
@@ -203,6 +204,17 @@ class RequestRejected(InvalidRequestError):
         self.upstream_message = upstream_message
 
 
+class YearTooLarge(QueryTooLarge):
+    """sdk-usda-nass's shape: core's error, the year that alone is over the limit kept."""
+
+    def __init__(self, count: int | None, *, year: int | None = None) -> None:
+        narrow = "Narrow the filters."
+        if year is not None:
+            narrow = f"Year {year} alone is over it, so split_by_year cannot fetch it. {narrow}"
+        super().__init__(count, limit=50_000, narrow=narrow, source="usda-nass")
+        self.year = year
+
+
 ERRORS = [
     XippiosError("something failed", source="example"),
     ConfigError("EXAMPLE_API_KEY is not set"),
@@ -222,6 +234,9 @@ ERRORS = [
         closest=[("ZA", "South Africa")],
         source="example",
     ),
+    QueryTooLarge(200_000, limit=100_000, narrow="Split by period.", source="example"),
+    QueryTooLarge(None, limit=50_000, narrow="Narrow.", request="GET /v1/x", source="example"),
+    YearTooLarge(57_873_464, year=2021),
 ]
 
 
@@ -251,6 +266,7 @@ def test_errors_survive_copy_and_pickle(
         assert vars(clone) == vars(error)
         for name in (
             "status", "retry_after", "raw", "body", "fields", "upstream_message", "closest",
+            "count", "limit", "narrow", "bound", "year", "request",
         ):  # fmt: skip
             assert getattr(clone, name, None) == getattr(error, name, None)
 
@@ -261,8 +277,8 @@ def test_every_taxonomy_class_is_covered() -> None:
         for name in errors.__all__
         if isinstance(cls := getattr(errors, name), type) and issubclass(cls, XippiosError)
     }
-    assert len(taxonomy) == 10
-    assert {type(error) for error in ERRORS} == taxonomy | {RequestRejected}
+    assert len(taxonomy) == 11
+    assert {type(error) for error in ERRORS} == taxonomy | {RequestRejected, YearTooLarge}
 
 
 FETCHED = datetime(2026, 10, 23, 9, 15, tzinfo=UTC)
@@ -328,3 +344,105 @@ def test_unknown_code_names_a_bare_code_once_and_no_command_of_a_maintainer() ->
     assert error.closest == tuple(closest)
     by_id = UnknownCode("attribute_id", 98, list_name="ids", fetched=FETCHED, closest=[(99, "99")])
     assert "Did you mean 99? " in str(by_id)
+
+
+def test_query_too_large_words_the_count_the_limit_and_what_narrows_the_query() -> None:
+    # sdk-comtrade's gate on its countOnly count (ADR-0053, decision 1).
+    narrow = "Split by period (max 12 per call), then by reporter."
+    error = QueryTooLarge(5_006_385, limit=100_000, narrow=narrow, source="comtrade")
+    assert isinstance(error, InvalidRequestError)
+    assert str(error) == (
+        "query would return 5,006,385 records; upstream serves at most 100,000 per call. " + narrow
+    )
+    assert (error.count, error.limit, error.narrow, error.bound) == (
+        5_006_385,
+        100_000,
+        narrow,
+        False,
+    )
+    assert error.source == "comtrade"
+
+
+def test_query_too_large_says_a_bound_was_read_from_the_arguments_and_nothing_counted() -> None:
+    # sdk-comtrade's slices: product codes times periods, refused before any request.
+    narrow = "Name fewer product codes or periods per call."
+    error = QueryTooLarge(100_008, limit=100_000, narrow=narrow, bound=True)
+    assert str(error) == (
+        "query could return up to 100,008 records, a size read from its arguments with nothing "
+        "counted or sent; upstream serves at most 100,000 per call. " + narrow
+    )
+    assert (error.count, error.bound) == (100_008, True)
+
+
+def test_query_too_large_without_a_count_says_upstream_refused_the_query() -> None:
+    # sdk-usda-nass's classify, for upstream's HTTP 413 over the record limit.
+    error = QueryTooLarge(None, limit=50_000, narrow="Narrow the filters.")
+    assert str(error) == (
+        "upstream refused the query as too large; it serves at most 50,000 records per call. "
+        "Narrow the filters."
+    )
+    assert (error.count, error.limit, error.bound) == (None, 50_000, False)
+
+
+def test_query_too_large_names_no_request_unless_given() -> None:
+    # The package's own refusals, before the data request, name none (conventions §5).
+    for error in (
+        QueryTooLarge(5_006_385, limit=100_000, narrow="Split."),
+        QueryTooLarge(100_008, limit=100_000, narrow="Name fewer.", bound=True),
+        QueryTooLarge(None, limit=50_000, narrow="Narrow."),
+    ):
+        assert error.request is None
+        assert "GET" not in str(error)
+
+
+def test_query_too_large_from_classify_names_its_request_without_a_count() -> None:
+    # sdk-usda-nass's classify, for upstream's HTTP 413 (conventions §5; ADR-0043).
+    response = _response(413, '{"error": ["exceeds limit=50000"]}')
+    error = QueryTooLarge(
+        None,
+        limit=50_000,
+        narrow="Narrow the filters.",
+        request=errors.request_description(response),
+        source="usda-nass",
+    )
+    assert str(error) == (
+        "upstream refused GET /v1/thing as too large; it serves at most 50,000 records per "
+        "call. Narrow the filters."
+    )
+    assert error.request == "GET /v1/thing"
+    assert "api.example.test" not in str(error)
+    assert "not-for-the-message" not in str(error)
+
+
+def test_query_too_large_from_classify_names_its_request_beside_upstream_s_count() -> None:
+    # sdk-eurostat's classify, for upstream's refusal that prints its estimate.
+    request = errors.request_description(_response(413))
+    error = QueryTooLarge(13_344_840, limit=5_000_000, narrow="Name fewer.", request=request)
+    assert str(error) == (
+        "GET /v1/thing would return 13,344,840 records; upstream serves at most 5,000,000 per "
+        "call. Name fewer."
+    )
+
+
+def test_a_bound_without_a_count_is_refused() -> None:
+    with pytest.raises(ValueError, match="bound"):
+        QueryTooLarge(None, limit=100_000, narrow="Name fewer codes.", bound=True)
+
+
+def test_a_bound_with_a_request_is_refused() -> None:
+    # A size read from the arguments is the package's refusal before any request, which
+    # names none (conventions §5; ADR-0053, decision 7).
+    with pytest.raises(ValueError, match="bound=True names no request"):
+        QueryTooLarge(
+            100_008, limit=100_000, narrow="Name fewer.", bound=True, request="GET /v1/thing"
+        )
+
+
+def test_a_source_s_subclass_keeps_its_own_attribute_and_core_s_wording() -> None:
+    error = YearTooLarge(57_873_464, year=2021)
+    assert isinstance(error, QueryTooLarge)
+    assert (error.count, error.limit, error.year) == (57_873_464, 50_000, 2021)
+    assert str(error) == (
+        "query would return 57,873,464 records; upstream serves at most 50,000 per call. "
+        "Year 2021 alone is over it, so split_by_year cannot fetch it. Narrow the filters."
+    )
