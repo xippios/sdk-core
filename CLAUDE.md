@@ -64,7 +64,8 @@ src/xippios/core/
                      built_answers (the mark of a built answer and its census), live (the nightly
                      comparison of a packaged list), family (the conformance check)
                                                                                 [extra: testing]
-tests/               mirrors the tree: tests/client/, tests/mcp/, tests/http/, tests/testing/
+tests/               mirrors the tree: tests/client/, tests/mcp/, tests/http/, tests/refresh/,
+                     tests/testing/
 scripts/
   adr_index.py       writes docs/adr.md and docs/adr.json from the records; --check writes nothing
 changelog/           one fragment per change, assembled into CHANGELOG.md by the release (README.md)
