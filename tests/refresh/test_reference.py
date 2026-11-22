@@ -124,11 +124,23 @@ def units(client: AsyncClient) -> Callable[[], Any]:
     return fetch
 
 
+def arguments(source: Source, lists: Sequence[Listed], hooks: dict[str, Any]) -> dict[str, Any]:
+    """``run``'s keywords: the package, the names it ships, by default those declared, and
+    the client, then ``hooks``."""
+    shipped = [listed.name for listed in lists if isinstance(listed, Listed)]
+    return {
+        "package": source.package,
+        "packaged": shipped,
+        "client": source.client,
+        **hooks,
+    }
+
+
 def go(source: Source, lists: Sequence[Listed], *args: str, **hooks: Any) -> tuple[int, str]:
     """The script's ``run`` with ``args``: its exit status and what it printed."""
     printed = io.StringIO()
     with redirect_stdout(printed):
-        status = run(lists, list(args), package=source.package, client=source.client, **hooks)
+        status = run(lists, list(args), **arguments(source, lists, hooks))
     return status, printed.getvalue()
 
 
@@ -137,8 +149,9 @@ def go_raising(
 ) -> tuple[BaseException, str]:
     """``go`` for a run that raises: what it raised and what it printed before."""
     printed = io.StringIO()
-    with redirect_stdout(printed), pytest.raises((XippiosError, SystemExit, ValueError)) as error:
-        run(lists, list(args), package=source.package, client=source.client, **hooks)
+    raised = (XippiosError, SystemExit, ValueError, OSError, RuntimeError)
+    with redirect_stdout(printed), pytest.raises(raised) as error:
+        run(lists, list(args), **arguments(source, lists, hooks))
     return error.value, printed.getvalue()
 
 
@@ -614,12 +627,96 @@ def test_nothing_is_written_until_everything_is_fetched(source: Source) -> None:
     assert called == []
 
 
-# --- the one run of both frames, and where the package is ----------------------------------
+def test_a_formatter_that_fails_leaves_every_file_as_it_was(source: Source) -> None:
+    """``enums.py`` is formatted with ``ruff format`` and ``ruff check --fix`` before the
+    first write, under the source's configuration for its path, so a module ruff leaves
+    failing stops a run, and a render alone, with every file as it was."""
+    (source.root / "ruff.toml").write_text('line-length = 30\n\n[lint]\nselect = ["E501"]\n')
+    lists = [
+        Listed(
+            "state_alpha_long_name",
+            values(source.client, "state_alpha_long_name"),
+            endpoint="get_param_values",
+            enum=Enumeration(),
+        )
+    ]
+    before = source.files()
+    with respx.mock(base_url=BASE) as upstream:
+        upstream.get("/get_param_values").respond(200, json=["ALPHA_VALUE_THAT_IS_LONG"])
+        error, _ = go_raising(source, lists)
+    assert isinstance(error, SystemExit)
+    assert "ruff check --fix left enums.py failing; nothing was written" in str(error), error
+    assert source.files() == before
+    stamped(
+        source, "state_alpha_long_name", "get_param_values", 7, [{"state_alpha_long_name": "A"}]
+    )
+    before = source.files()
+    error, _ = go_raising(source, lists, "--render-only")
+    assert "ruff check --fix left enums.py failing; nothing was written" in str(error), error
+    assert source.files() == before
+
+
+def test_a_write_that_fails_puts_back_every_file_it_replaced(source: Source) -> None:
+    """The packaged files, the README and ``enums.py`` are written as one: a write that fails
+    halfway, here the README's, puts back each file the run replaced, removes each it made,
+    and raises its error."""
+    stamped(source, "state_alpha", "get_param_values", 8, [{"state_alpha": "OLD"}])
+    source.readme.chmod(0o444)
+    before = source.files()
+    try:
+        with respx.mock(base_url=BASE) as upstream:
+            upstream.get("/get_param_values").respond(200, json=["AK"])
+            error, printed = go_raising(source, two_value_lists(source))
+    finally:
+        source.readme.chmod(0o644)
+    assert isinstance(error, PermissionError), error
+    assert source.files() == before, "state_alpha.json put back, unit.json and enums.py gone"
+    assert "state_alpha.json:" not in printed
+
+
+def test_an_after_hook_that_raises_leaves_the_frames_files_written(source: Source) -> None:
+    """``after`` runs once the frame's files are written whole, so a hook that raises leaves
+    them standing, the run says so, and the hook's error ends it."""
+
+    def after(written: Mapping[str, PackagedList]) -> None:
+        raise RuntimeError("the index could not be written")
+
+    with respx.mock(base_url=BASE) as upstream:
+        upstream.get("/get_param_values").respond(200, json=["AK"])
+        error, printed = go_raising(source, two_value_lists(source), after=after)
+    assert isinstance(error, RuntimeError)
+    assert source.packaged("unit").records == [{"unit": "AK"}]
+    assert "class Unit(StrEnum):" in source.enums.read_text()
+    assert "after raised RuntimeError: the files above stand written" in printed, printed
+
+
+# --- the one run of both frames, the package's own lists, and where the package is ---------
+
+
+def test_the_lists_are_those_the_package_declares(source: Source) -> None:
+    """``packaged`` names the lists the package declares it ships, its
+    ``params.PACKAGED_LISTS``: a list declared to ``run`` alone, or by the package alone,
+    stops a run, and a render alone, before anything is fetched or written."""
+    lists = two_value_lists(source)
+    before = source.files()
+    with respx.mock(base_url=BASE, assert_all_called=False) as upstream:
+        route = upstream.route()
+        for args in ((), ("--render-only",)):
+            error, _ = go_raising(source, lists, *args, packaged=("state_alpha", "county"))
+            assert isinstance(error, SystemExit)
+            assert "declared to run alone: unit. Declared by the package alone: county." in str(
+                error
+            ), error
+        error, _ = go_raising(source, lists, packaged="state_alpha")
+        assert "packaged names the lists the package ships" in str(error), error
+    assert route.call_count == 0
+    assert source.files() == before
 
 
 def test_run_takes_either_declaration(source: Source, tmp_path: Path) -> None:
-    """``run`` takes a ``Snapshot`` as step 16 made it, or the lists with their package and
-    client; a snapshot given the lists' arguments, and lists without them, are refused."""
+    """``run`` takes a ``Snapshot`` as step 16 made it, or the lists with their package, the
+    lists it ships and the client; a snapshot given the lists' arguments, and lists without
+    them, are refused."""
     snapshot = Snapshot(name="Example", slug="example", pages=(), out=tmp_path / "upstream")
     with pytest.raises(SystemExit, match="Nothing to fetch: declare the snapshot's pages"):
         run(snapshot, [])
@@ -627,8 +724,12 @@ def test_run_takes_either_declaration(source: Source, tmp_path: Path) -> None:
         run(snapshot=snapshot, argv=[])
     with pytest.raises(TypeError, match="a Snapshot takes argv alone"):
         run(snapshot, [], package=source.package)  # type: ignore[call-overload]
-    with pytest.raises(TypeError, match="the lists' package and client"):
+    with pytest.raises(TypeError, match="the lists' package, packaged and client"):
         run(two_value_lists(source), [])  # type: ignore[call-overload]
+    with pytest.raises(TypeError, match="the lists' package, packaged and client"):
+        run(  # type: ignore[call-overload]
+            two_value_lists(source), [], package=source.package, client=source.client
+        )
 
 
 def test_a_package_outside_the_working_directory_is_refused(
@@ -643,7 +744,13 @@ def test_a_package_outside_the_working_directory_is_refused(
     assert isinstance(error, SystemExit)
     assert "outside the directory the script runs in" in str(error), error
     with pytest.raises(SystemExit, match=r"nowhere\.at\.all is not importable"):
-        run(two_value_lists(source), [], package="nowhere.at.all", client=source.client)
+        run(
+            two_value_lists(source),
+            [],
+            package="nowhere.at.all",
+            packaged=("state_alpha", "unit"),
+            client=source.client,
+        )
 
 
 # --- the README's short script -------------------------------------------------------------
@@ -679,6 +786,9 @@ async def get_commodities() -> list[dict[str, Any]]:
     return list(await client.get_json("/api/commodities"))
 """
 
+EXAMPLE_PARAMS = """PACKAGED_LISTS: tuple[str, ...] = ({names})
+"""
+
 
 @pytest.fixture
 def example(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
@@ -689,6 +799,8 @@ def example(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
     (package / "__init__.py").write_text("")
     (package / "_client.py").write_text(EXAMPLE_CLIENT)
     (package / "api.py").write_text(EXAMPLE_API)
+    names = '"state_alpha", "unitsOfMeasure", "commodities"'
+    (package / "params.py").write_text(EXAMPLE_PARAMS.format(names=names))
     (package / "reference/README.md").write_text(README)
     (root / "ruff.toml").write_text(RUFF)
     monkeypatch.chdir(root)
@@ -735,3 +847,11 @@ def test_the_readmes_short_script_runs_on_the_frame(
         "| `unitsOfMeasure.json`",
         "| `commodities.json`",
     ]
+    (example / "params.py").write_text(EXAMPLE_PARAMS.format(names='"state_alpha", "regions"'))
+    sys.modules.pop("xippios.example.params", None)
+    with respx.mock(base_url=BASE, assert_all_called=False) as upstream:
+        route = upstream.route()
+        with pytest.raises(SystemExit) as exited:
+            exec(compile(script, "README.md", "exec"), {**namespace})
+    assert "Declared by the package alone: regions." in str(exited.value), exited.value
+    assert route.call_count == 0, "the package's own lists are checked before a request"
