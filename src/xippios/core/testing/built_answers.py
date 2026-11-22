@@ -51,14 +51,18 @@ gives that parameter to ``fixture_from_response`` and reads it nowhere else.
 or by such a name, is judged at each call of the function: a call handed to the recorder as
 above takes the sentence, and one that is not is served and takes a kind. The sentence in the
 helper's reach covers each call that hands its exchange on, and a kind there covers every
-call. Nothing further is followed: an exchange that travels by a keyword, a container, a
-second function that returns it or hands it on, a conditional expression or a function of
-another module is built in the test or takes a kind. So is the exchange of a helper, and the
-exchange given to a function, that could reach a route unseen: a function that a decorator
-receives, whose name something else binds at the module's top or in the calling function, or
-that the module reads otherwise than to call it (``side_effect=helper``), or that stands in a
-module with a star import; a name that a ``global`` or ``nonlocal`` statement names; and a
-fixture, which pytest hands on and no call does (ADR-0049, decision 10).
+call. For a helper's exchange and for a function that hands one on, ``fixture_from_response``
+is core's recorder only where every binding of the name in the module is an import from
+``xippios.core.testing`` or a module under it and no star import stands beside it, as the
+sources import it. Nothing further is followed: an exchange that travels by a keyword, a
+container, a second function that returns it or hands it on, a conditional expression or a
+function of another module is built in the test or takes a kind. So is the exchange of a
+helper, and the exchange given to a function, that could reach a route unseen: a function
+that a decorator receives, whose name something else binds at the module's top or in the
+calling function, or that the module reads otherwise than to call it
+(``side_effect=helper``), or that stands in a module with a star import; a name that a
+``global`` or ``nonlocal`` statement names; and a fixture, which pytest hands on and no call
+does (ADR-0049, decision 10).
 
 **Its reach.** A mark covers a place from the docstring of a function or class that encloses
 it, from a comment on the place's own lines, from a block of comments that ends right above
@@ -105,6 +109,10 @@ says why; the other two tests read files and run under it alike.
 - httpx's ``Response`` called under another name, ``Answer(...)`` after ``from httpx import
   Response as Answer``, which is no place, or through another name of ``httpx``,
   ``h.Response(...)`` after ``import httpx as h``, which it reads as served by no route;
+- a name that the module binds again at run time, through ``globals()``, ``setattr`` or
+  ``monkeypatch.setattr``, which it reads as the module's text binds it: the frame's
+  ``Response`` made httpx's, or a helper, a function that hands an exchange on or
+  ``fixture_from_response`` replaced by one that serves;
 - a body passed by keyword or by a name, ``classify(response)`` or
   ``Model.model_validate(obj={...})``, and a recording changed by assignment, a loaded
   recording's header replaced and the response then handed on by its name;
@@ -149,6 +157,9 @@ _READS = ("classify", "model_validate", "model_validate_json")
 _REPLAYS = ("replay_fixture", "replay", "mount_fixture")
 _FRAME = "xippios.core.refresh"
 """The module whose ``Response`` is the frame's record of a page, which no route serves."""
+_RECORDER = "fixture_from_response"
+_TESTING = "xippios.core.testing"
+"""The package whose ``fixture_from_response`` is core's recorder, which serves nothing."""
 _FUNCTIONS = (ast.FunctionDef, ast.AsyncFunctionDef)
 _DEFINITIONS = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
 _SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
@@ -240,6 +251,17 @@ class _Module:
                 local = not isinstance(node, (ast.Global, ast.Nonlocal))
                 scope = next(iter(self.scopes(node)), self.tree) if local else self.tree
                 self.bindings.setdefault(name, []).append((node, origin, scope))
+        bound = self.bindings.get(_RECORDER, [])
+        self.recorder = (
+            bool(bound)
+            and not self.star
+            and all(o == _TESTING or (o or "").startswith(f"{_TESTING}.") for _, o, _ in bound)
+        )
+        """Whether ``fixture_from_response`` is core's recorder everywhere in the module.
+
+        Every binding of the name an import from ``xippios.core.testing`` or a module under it,
+        and no star import beside them, so that no function of the module binds it otherwise.
+        """
         self.handing = {
             name: self._handing(node)
             for name, node in self.defs.items()
@@ -383,13 +405,19 @@ class _Module:
             if isinstance(n, ast.Name) and n.id == name and isinstance(n.ctx, ast.Load)
         ]
 
-    def _to_recorder(self, use: ast.AST) -> bool:
-        """Whether ``use`` is a positional argument of ``fixture_from_response``."""
+    def _to_recorder(self, use: ast.AST, core: bool = False) -> bool:
+        """Whether ``use`` is a positional argument of ``fixture_from_response``.
+
+        By the name alone, as before, for an exchange built in the test; with ``core``, for a
+        helper's exchange or a handing function's parameter, only where the name is core's
+        recorder (``recorder``).
+        """
         call = self.parent.get(use)
         return (
             isinstance(call, ast.Call)
             and use in call.args
-            and ast.unparse(call.func) == "fixture_from_response"
+            and ast.unparse(call.func) == _RECORDER
+            and (self.recorder or not core)
         )
 
     def _handing(self, function: ast.FunctionDef | ast.AsyncFunctionDef) -> frozenset[int]:
@@ -409,7 +437,7 @@ class _Module:
                     if isinstance(n, ast.Name) and n.id == parameter.arg
                 ]
             )
-            and all(isinstance(n.ctx, ast.Load) and self._to_recorder(n) for n in reads)
+            and all(isinstance(n.ctx, ast.Load) and self._to_recorder(n, core=True) for n in reads)
         )
 
     def _hands(self, use: ast.expr) -> bool:
@@ -418,7 +446,7 @@ class _Module:
         A positional argument of ``fixture_from_response``, or of a function of the module at a
         parameter that the function gives to ``fixture_from_response`` alone.
         """
-        if self._to_recorder(use):
+        if self._to_recorder(use, core=True):
             return True
         call = self.parent.get(use)
         if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)):
@@ -448,18 +476,19 @@ class _Module:
             isinstance(n, (ast.Global, ast.Nonlocal)) and name in n.names for n in ast.walk(scope)
         )
 
-    def handed(self, node: ast.expr) -> bool:
+    def handed(self, node: ast.expr, core: bool = False) -> bool:
         """Whether the exchange ``node`` gives reaches ``fixture_from_response`` alone.
 
         Directly, or by a local name that nothing else reads, as a positional argument of
-        ``fixture_from_response``, as before; or so to a function of the module that gives
-        that parameter to it alone, where no other function can read the name: an exchange
-        handed to the recorder's code, which no route serves.
+        ``fixture_from_response``, as before, or of core's recorder alone with ``core``, for a
+        helper's exchange; or so to a function of the module that gives that parameter to
+        core's recorder alone, where no other function can read the name: an exchange handed
+        to the recorder's code, which no route serves.
         """
         uses = self.uses(node)
         if not uses:
             return False
-        if all(self._to_recorder(use) for use in uses):
+        if all(self._to_recorder(use, core) for use in uses):
             return True
         return not self._escapes(node) and all(self._hands(use) for use in uses)
 
@@ -507,7 +536,7 @@ class _Module:
         called = site.func if isinstance(site, ast.Call) else None
         if isinstance(called, ast.Name) and self.shadowed(site, called.id):
             return True
-        return not self.handed(site)
+        return not self.handed(site, core=True)
 
     def served_at(self, place: ast.AST, helper: str, site: ast.AST, served: set[ast.AST]) -> bool:
         """Whether ``place``, inside ``helper``, is served at ``site``, a call of the helper.
