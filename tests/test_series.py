@@ -305,7 +305,7 @@ async def test_a_failure_in_the_first_period_passes_as_raised() -> None:
     with pytest.raises(UpstreamError) as info:
         await fetch_periods([2021, 2022], upstream.fetch, skip=(NoDataForYear,))
     assert info.value is error
-    assert info.value.message == message, "nothing was fetched before it"
+    assert info.value.message == message, "nothing was answered before it"
     assert getattr(info.value, "__notes__", []) == []
     assert upstream.asked == [2021]
 
