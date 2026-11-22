@@ -3,9 +3,10 @@ the preview rule of ADR-0050, the recording of a task's exchanges of ADR-0057, t
 request's country codes of ADR-0056, the check of the committed FETCHED.md of ADR-0046,
 decision 6, the attribution check of its decision 7, the refusal of a hinted value of ADR-0041's
 amendment of 2026-11-22, the two sentences of a period series that ADR-0054's amendment of
-2026-11-22 words, a recorder's field of a request of ADR-0048, decision 7, and the review
+2026-11-22 words, a recorder's field of a request of ADR-0048, decision 7, the review
 checklist's sentence that holds an adoption against the two lists of the handover's section for
-the release.
+the release, and ADR-0058's two: what a core patch keeps compatible, and the fourth reason for
+code with one consumer, as the definition of done and the review checklist name it.
 
 The organization's release check quotes the conventions from sdk-core's `main`, and a finding
 blocks only where it quotes the sentence that a change breaks
@@ -598,3 +599,52 @@ def test_the_review_checklist_holds_the_name_the_family_check_reads() -> None:
     item = checklist_item(2)
     for name in ("`SNAPSHOT`", "`scripts/refresh_upstream.py`", SNAPSHOT_DECISION):
         assert name in item, f"item 2 does not name {name!r}"
+
+
+# §12 and the code a core PR adds: the maintainer's answer on
+# https://github.com/xippios/sdk-core/issues/455, ADR-0058. A patch keeps a source's package and
+# its callers compatible while a stricter check may fail a source's own test, and the
+# maintainer's decision on a step's closed design question is a fourth reason for one consumer.
+
+PATCH_RECORD = "ADR-0058"
+PATCH_QUESTION = "https://github.com/xippios/sdk-core/issues/455"
+COMPATIBLE = "Core patch releases stay compatible."
+"""The sentence of §12 that the organization's check quoted, whose reach ADR-0058 states."""
+
+
+def test_what_a_core_patch_keeps_compatible_is_one_sentence_that_cites_adr_0058() -> None:
+    # It stands right after the sentence it says the reach of, so the check reads them together.
+    text = section(12)
+    phrase = "A patch of core keeps a source's package and its callers compatible"
+    rule = sentence(text, phrase)
+    for name in (
+        "a check of `xippios.core.testing`",
+        "the family check",
+        "the recorder",
+        "makes stricter",
+        "may fail a source's own test at the lock's move",
+        "`Adopting core X.Y.Z`",
+        PATCH_QUESTION,
+        "ADR-0058, decision 2",
+    ):
+        assert name in rule, f"§12: {rule!r} does not name {name!r}"
+    assert f"{COMPATIBLE} {phrase}" in text, f"§12: {phrase!r} does not follow {COMPATIBLE!r}"
+
+
+def test_the_one_consumer_reason_names_the_record_that_adds_the_fourth() -> None:
+    # The definition of done's line on consumers and the review checklist's item 11 judge a core
+    # PR's ADR by the reasons of ADR-0023, decision 3, and by the fourth that ADR-0058 adds, so
+    # an ADR that names the fourth meets both as they read.
+    done = DONE.read_text(encoding="utf-8").splitlines()
+    lines = [flat(line) for line in done if "the two consumers of what it adds" in line]
+    assert len(lines) == 1, "the definition of done has one line on a core PR's consumers"
+    for where, rule in (("the definition of done", lines[0]), ("item 11", checklist_item(11))):
+        for name in ("the one-consumer reason of ADR-0023 decision 3", "ADR-0058, decision 1"):
+            assert name in rule, f"{where}: {rule!r} does not name {name!r}"
+
+
+def test_the_patch_record_keeps_its_question() -> None:
+    records = json.loads(INDEX.read_text(encoding="utf-8"))["records"]
+    found = next((r for r in records if r["id"] == PATCH_RECORD), None)
+    assert found, f"the index holds no {PATCH_RECORD}"
+    assert (found["decided_by"], found["amended"]) == (PATCH_QUESTION, [])
