@@ -379,11 +379,13 @@ def test_the_input_s_sentence_is_fixed_up_to_the_word_test() -> None:
 # --- an exchange that a helper of the module builds for the recorder ---
 
 # The shapes of sdk-google-mail's recorder tests: helpers that return a built exchange, and one
-# that gives its parameter to fixture_from_response alone.
+# that gives its parameter to fixture_from_response alone, imported from core as the sources
+# import it.
 RECORDER_TESTS = """
 import json
 
 import httpx
+from xippios.core.testing import fixture_from_response
 
 URL = "https://api.example.test/v1/messages/1"
 
@@ -447,6 +449,7 @@ def test_the_input_marks_an_exchange_that_a_helper_returns_to_the_recorder_alone
     assert lines(elsewhere) == [], "the module's function is followed at every other call"
     built_here = """
     import httpx
+    from xippios.core.testing import fixture_from_response
 
     def scrubbed(recorder, response):
         return fixture_from_response(response)
@@ -461,6 +464,7 @@ def test_the_input_marks_an_exchange_that_a_helper_returns_to_the_recorder_alone
 
 SERVED_AND_RECORDED = f'''
 import httpx
+from xippios.core.testing import fixture_from_response
 
 
 def exchange():
@@ -494,6 +498,7 @@ def test_a_helper_s_exchange_is_judged_at_each_call_and_a_served_one_takes_a_kin
 
 EXCHANGE = f'''
 import httpx
+from xippios.core.testing import fixture_from_response
 
 
 def exchange():
@@ -594,9 +599,53 @@ def test_a_helper_whose_exchange_could_go_elsewhere_unseen_is_not_followed(
     assert lines(source) == [at(source, "    scrubbed(recorder, exchange())")]
 
 
+CORE_RECORDER = "from xippios.core.testing import fixture_from_response\n"
+
+REBOUND = [
+    pytest.param(
+        "    scrubbed(recorder, exchange())\n",
+        "    fixture_from_response = lambda response: SERVED.append(response)\n"
+        "    scrubbed(recorder, exchange())\n",
+        id="a-lambda-in-the-test",
+    ),
+    pytest.param(
+        CORE_RECORDER, CORE_RECORDER + "fixture_from_response = SERVED.append\n", id="at-the-top"
+    ),
+    pytest.param(
+        "    return fixture_from_response(response)",
+        "    fixture_from_response = SERVED.append\n    return fixture_from_response(response)",
+        id="inside-the-handing-function",
+    ),
+    pytest.param(
+        CORE_RECORDER,
+        "from tests.serving import serve as fixture_from_response\n",
+        id="imported-from-another-module",
+    ),
+    pytest.param(CORE_RECORDER, "", id="not-imported"),
+]
+"""Bindings of ``fixture_from_response`` that make it another function than core's recorder."""
+
+
+@pytest.mark.parametrize(("old", "new"), REBOUND)
+def test_a_helper_s_exchange_reaches_core_s_recorder_only_by_its_import_from_core(
+    old: str, new: str
+) -> None:
+    # A route could serve what a rebound name receives: a helper's exchange given to it, or a
+    # handing function's parameter, is served as on main, as an exchange built in the test and
+    # given to the name directly is judged as on main.
+    test = f'def test_one(recorder):\n    """The exchange {INPUT}"""\n'
+    test += "    scrubbed(recorder, exchange())\n    fixture_from_response(exchange())\n"
+    source = clean(EXCHANGE) + test
+    assert lines(source) == [], "imported from xippios.core.testing, both calls are handed"
+    rebound = source.replace(old, new)
+    calls = ("    scrubbed(recorder, exchange())", "    fixture_from_response(exchange())")
+    assert lines(rebound) == [at(rebound, call) for call in calls]
+
+
 def test_a_return_inside_an_if_statement_is_followed_at_each_call() -> None:
     source = f'''
     import httpx
+    from xippios.core.testing import fixture_from_response
 
     def exchange(ok=True):
         """The exchange {INPUT}"""
@@ -616,6 +665,7 @@ def test_a_return_inside_an_if_statement_is_followed_at_each_call() -> None:
 def test_an_exchange_chosen_by_a_conditional_expression_is_not_followed() -> None:
     source = f'''
     import httpx
+    from xippios.core.testing import fixture_from_response
 
     def exchange(ok):
         """The exchange {INPUT}"""
