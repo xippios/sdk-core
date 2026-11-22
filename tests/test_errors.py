@@ -235,6 +235,7 @@ ERRORS = [
         source="example",
     ),
     QueryTooLarge(200_000, limit=100_000, narrow="Split by period.", source="example"),
+    QueryTooLarge(None, limit=50_000, narrow="Narrow.", request="GET /v1/x", source="example"),
     YearTooLarge(57_873_464, year=2021),
 ]
 
@@ -265,7 +266,7 @@ def test_errors_survive_copy_and_pickle(
         assert vars(clone) == vars(error)
         for name in (
             "status", "retry_after", "raw", "body", "fields", "upstream_message", "closest",
-            "count", "limit", "narrow", "bound", "year",
+            "count", "limit", "narrow", "bound", "year", "request",
         ):  # fmt: skip
             assert getattr(clone, name, None) == getattr(error, name, None)
 
@@ -381,6 +382,53 @@ def test_query_too_large_without_a_count_says_upstream_refused_the_query() -> No
         "Narrow the filters."
     )
     assert (error.count, error.limit, error.bound) == (None, 50_000, False)
+
+
+def test_query_too_large_names_no_request_unless_given() -> None:
+    # The package's own refusals, before the data request, name none (conventions §5).
+    for error in (
+        QueryTooLarge(5_006_385, limit=100_000, narrow="Split."),
+        QueryTooLarge(100_008, limit=100_000, narrow="Name fewer.", bound=True),
+        QueryTooLarge(None, limit=50_000, narrow="Narrow."),
+    ):
+        assert error.request is None
+        assert "GET" not in str(error)
+
+
+def test_query_too_large_from_classify_names_its_request_without_a_count() -> None:
+    # sdk-usda-nass's classify, for upstream's HTTP 413 (conventions §5; ADR-0043).
+    response = _response(413, '{"error": ["exceeds limit=50000"]}')
+    error = QueryTooLarge(
+        None,
+        limit=50_000,
+        narrow="Narrow the filters.",
+        request=errors.request_description(response),
+        source="usda-nass",
+    )
+    assert str(error) == (
+        "upstream refused GET /v1/thing as too large; it serves at most 50,000 records per "
+        "call. Narrow the filters."
+    )
+    assert error.request == "GET /v1/thing"
+    assert "api.example.test" not in str(error)
+    assert "not-for-the-message" not in str(error)
+
+
+def test_query_too_large_from_classify_names_its_request_beside_upstream_s_count() -> None:
+    # sdk-eurostat's classify, for upstream's refusal that prints its estimate.
+    request = errors.request_description(_response(413))
+    error = QueryTooLarge(13_344_840, limit=5_000_000, narrow="Name fewer.", request=request)
+    assert str(error) == (
+        "GET /v1/thing would return 13,344,840 records; upstream serves at most 5,000,000 per "
+        "call. Name fewer."
+    )
+    bounded = QueryTooLarge(
+        100_008, limit=100_000, narrow="Name fewer.", bound=True, request=request
+    )
+    assert str(bounded) == (
+        "GET /v1/thing could return up to 100,008 records, a size read from its arguments with "
+        "nothing counted or sent; upstream serves at most 100,000 per call. Name fewer."
+    )
 
 
 def test_a_bound_without_a_count_is_refused() -> None:
