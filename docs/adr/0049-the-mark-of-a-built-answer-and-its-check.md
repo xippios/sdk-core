@@ -33,8 +33,8 @@ check read as httpx's wherever the test called it by its bare name, so four port
 it as the input it is (https://github.com/xippios/sdk-comtrade/issues/60,
 https://github.com/xippios/sdk-cashctrl/issues/134,
 https://github.com/xippios/sdk-usda-esr/issues/59, https://github.com/xippios/sdk-x/issues/57).
-The human answered the question on 2026-11-22, prompted in the sdk-core panel: decision 10, the
-amendment of that day, is the answer of https://github.com/xippios/sdk-core/issues/439.
+Decision 10, the amendment of 2026-11-22, is the maintainer's answer on
+https://github.com/xippios/sdk-core/issues/439.
 
 ## Decision
 
@@ -95,10 +95,10 @@ amendment of that day, is the answer of https://github.com/xippios/sdk-core/issu
    `tests/test_built_answers.py`. The family check gains nothing: the family module reaches
    every source with its next lock update inside `~=0.4.0`, and the 335 places would fail
    there at once. A source meets the check when its patch adds the line.
-10. **An exchange that a helper builds, and the module's imports.** By the human's answer to
-    https://github.com/xippios/sdk-core/issues/439, given in the sdk-core panel on 2026-11-22,
-    the check reads more inputs than decisions 3 and 4 took from sdk-cashctrl's, and no new
-    place:
+10. **An exchange that a helper builds, and the module's imports.** By the maintainer's answer
+    on https://github.com/xippios/sdk-core/issues/439, given on 2026-11-22, the check reads more
+    inputs than decisions 3 and 4 took from sdk-cashctrl's, and no new place, and nothing that
+    it flagged before passes but the shapes below:
     - *The helper's exchange.* An `httpx.Response` is handed to the recorder, and no route
       serves it, where it reaches `fixture_from_response` alone as a positional argument,
       directly or by a local name that nothing else reads, either of `fixture_from_response`
@@ -111,20 +111,24 @@ amendment of that day, is the answer of https://github.com/xippios/sdk-core/issu
       covers each call that hands its exchange on, and a kind there covers every call.
     - *No further.* A response that travels by a keyword, a container, a second function that
       returns it or hands it on, a conditional expression or a function of another module,
-      `conftest.py` among them, is not followed: it is built in the test or takes a kind.
-      Neither is the response of a helper whose name the module reads otherwise than to call
-      it, a route's `side_effect=` among them, nor a fixture's, which pytest hands on and no
-      call does. So the rule stays checked: a response that reaches a route is served whether a
-      helper built it or not, where taking the sentence on the author's word would leave that
-      unseen.
-    - *The module's imports.* A bare `Response(...)` is httpx's where the import that binds the
-      name nearest the call, in a function that encloses it or at the module's top, brings it
-      from `httpx` or one of its modules, and, as before, where no import binds it. One
-      imported from elsewhere, `xippios.core.refresh` above all, is no answer that a route
-      serves, so the input's sentence marks it. A star import binds no name that the check
-      reads, a call under another name, `Answer(...)` after `from httpx import Response as
-      Answer`, is no place, and a call through an attribute keeps its reading, `httpx.Response`
-      httpx's and any other `*.Response` not, all three as before.
+      `conftest.py` among them, is not followed: it is built in the test or takes a kind. Nor
+      is any shape in which a route could reach the exchange unseen: a function that a
+      decorator receives; one whose name something else binds at the module's top, a
+      `global` or `nonlocal` statement included, or that the module reads otherwise than to
+      call it, a route's `side_effect=` among them; a call whose name the calling function
+      binds itself; a module with a star import, which may bind any name; an exchange kept in
+      a name that a `global` or `nonlocal` statement names; and a fixture's, which pytest hands
+      on and no call does. So the rule stays checked: a response that reaches a route is served
+      whether a helper built it or not, where taking the sentence on the author's word would
+      leave that unseen.
+    - *The frame's `Response`.* A bare `Response(...)` is the frame's record of a page, which
+      no route serves and the input's sentence marks, only where every binding of the name in
+      the module is an import from `xippios.core.refresh` and no star import stands beside
+      it. Anywhere else it is httpx's, as before: a re-export, another library's, an
+      assignment, a parameter or a class of that name, or httpx's import anywhere in the
+      module. A call under another name, `Answer(...)` after `from httpx import Response as
+      Answer`, is no place, and a call through an attribute keeps its reading,
+      `httpx.Response` httpx's and any other `*.Response` not, both as before.
 
 ## Consequences
 
@@ -147,6 +151,8 @@ amendment of that day, is the answer of https://github.com/xippios/sdk-core/issu
   marks the frame's `Response` so, by its bare name or as `refresh.Response(...)`. A suite that
   passed the check passes it after the amendment, since the check reads more inputs and no new
   place: sdk-cashctrl, the one source that collects it on 2026-11-22, keeps its entry of
-  `ALLOWED`, whose helper hands a response that a nested function returns to a route. What the
-  check cannot see gains httpx's `Response` re-exported by another module, or called through
-  another name of `httpx`.
+  `ALLOWED`, whose helper hands a response that a nested function returns to a route. Read on
+  every module under `tests/` of the twelve sources' `main` and of the six trial branches, no
+  source gains a place. httpx's `Response` called through another name of `httpx`,
+  `h.Response(...)` after `import httpx as h`, which the check read as served by no route
+  before this decision, it still cannot see.

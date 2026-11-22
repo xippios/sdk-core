@@ -32,8 +32,7 @@ key, through the recording's redaction (ADR-0049, decision 5), so it named four 
 replay their own recordings as answering another body
 (https://github.com/xippios/sdk-google-mail/issues/72). No record of core said what a step does
 with such a field: ADR-0017 keeps a value out of a fixture, and decision 1 has the step return
-the values it replaced. The human answered the question on 2026-11-22, prompted in the sdk-core
-panel: decision 7, the amendment of that day, is the answer of
+the values it replaced. Decision 7, the amendment of 2026-11-22, is the maintainer's answer on
 https://github.com/xippios/sdk-core/issues/439.
 
 ## Decision
@@ -101,14 +100,15 @@ https://github.com/xippios/sdk-core/issues/439.
    policy, which one consumer does not bring into core: it stands as written. A step's rules stay
    the source's, and what enters core is the frame that runs them, by decision 2 of ADR-0023, with
    three carriers of the step and four of the one-attempt client, not by 3 (b).
-7. **A recorder redacts a field of a request and drops none.** By the human's answer to
-   https://github.com/xippios/sdk-core/issues/439, given in the sdk-core panel on 2026-11-22: a
-   recorder writes `REDACTED` in place of the value of a field of a request that it must not
-   keep, and drops no field, so that the census compares a replay with its recording key by key,
-   the field's recorded `REDACTED` matching any value sent. Which fields a recorder must not keep
-   stays the source's, as decision 5 leaves a step's rules to it: the rule is how its step writes
-   them. Core's code stays as it is, and so does its census, which compares what it compared, with
-   no table of fields and no declaration of a dropped one, as strict for every source.
+7. **A recorder redacts a field of a request and drops none.** By the maintainer's answer on
+   https://github.com/xippios/sdk-core/issues/439, given on 2026-11-22: a recorder writes
+   `REDACTED` in place of the value of a field of a request that it must not keep, and drops
+   none of them, so that the census compares a replay with its recording key by key, the field's
+   recorded `REDACTED` matching any value sent. The rule speaks of the fields of a request, which
+   the census compares, and of none of an answer's. Which fields a recorder must not keep stays
+   the source's, as decision 5 leaves a step's rules to it: the rule is how its step writes them.
+   Core's code stays as it is, and so does its census, which compares what it compared, with no
+   table of fields and no declaration of a dropped one, as strict for every source.
 
 ## Consequences
 

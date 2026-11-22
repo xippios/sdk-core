@@ -55,10 +55,10 @@ call. Nothing further is followed: an exchange that travels by a keyword, a cont
 second function that returns it or hands it on, a conditional expression or a function of
 another module is built in the test or takes a kind. So is the exchange of a helper, and the
 exchange given to a function, that could reach a route unseen: a function that a decorator
-receives, whose name the module binds again or reads otherwise than to call it
-(``side_effect=helper``), or that stands in a module with a star import; a name that a
-``global`` or ``nonlocal`` statement names; and a fixture, which pytest hands on and no call
-does (ADR-0049, decision 10).
+receives, whose name something else binds at the module's top or in the calling function, or
+that the module reads otherwise than to call it (``side_effect=helper``), or that stands in a
+module with a star import; a name that a ``global`` or ``nonlocal`` statement names; and a
+fixture, which pytest hands on and no call does (ADR-0049, decision 10).
 
 **Its reach.** A mark covers a place from the docstring of a function or class that encloses
 it, from a comment on the place's own lines, from a block of comments that ends right above

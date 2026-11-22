@@ -1694,11 +1694,15 @@ def test_a_message_is_scrubbed():
 ```
 
 An exchange that travels further, by a keyword, a container, a second function, a conditional
-expression or a module of its own such as `conftest.py`, is built in the test or takes a kind.
-A bare `Response` is httpx's where the module imports it from httpx or does not import it, so
-the frame's `Response`, which a test of a snapshot hook imports from `xippios.core.refresh`, is
-served by no route and takes the sentence by its bare name as by `refresh.Response(...)`
-(ADR-0049, decision 10).
+expression or a module of its own such as `conftest.py`, is built in the test or takes a kind,
+and so is one that a route could reach unseen: through a function that a decorator receives,
+whose name something else binds at the module's top or in the calling function, or that the
+module passes as a value, a name of a `global` or `nonlocal` statement, or a module with a star
+import. The frame's `Response`, which a test of
+a snapshot hook imports from `xippios.core.refresh`, is served by no route and takes the
+sentence by its bare name as by `refresh.Response(...)`. A bare `Response` is the frame's only
+where every binding of the name in the module is that import, and httpx's otherwise, a
+re-export or an assignment of that name among them (ADR-0049, decision 10).
 
 The census, the third test, runs after every other test of the run. The plugin compares each
 request that a replay answered with the recorded one, through the recording's redaction, so

@@ -1750,7 +1750,13 @@ the rules of 1.28.
   sdk-usda-nass (https://github.com/xippios/sdk-usda-nass/issues/86), 5 beside 26 in
   sdk-usda-esr (https://github.com/xippios/sdk-usda-esr/issues/59), 11 beside 51 in sdk-x
   (https://github.com/xippios/sdk-x/issues/57) and none beside none in sdk-cashctrl
-  (https://github.com/xippios/sdk-cashctrl/issues/134).
+  (https://github.com/xippios/sdk-cashctrl/issues/134). The places stay places since
+  https://github.com/xippios/sdk-core/issues/439, and some take the input's sentence where the
+  trial's core asked a kind: the calls of sdk-google-mail's four helpers that hand their
+  exchange to its recorder, and the frame's `Response` in a test of a hook, sdk-x's four
+  among them. Four of sdk-google-mail's six tests answer their recordings once it records
+  its two write fixtures again, as its part below says (ADR-0048, decision 7; ADR-0049,
+  decision 10).
 - Items 3 and 4, the copies each core change replaced, deleted with their tests, and the core
   change named for each in the PR description; per source below:
   - the check of an argument against a packaged list → `PackagedList.codes(...)` and its
@@ -1826,8 +1832,9 @@ the rules of 1.28.
     `Snapshot` declares, its `capture`, its pages and its `not_fetched`, reading the
     declaration (ADR-0046, decision 2).
 - A test of a hook that builds the frame's `Response`, imported from `xippios.core.refresh` by
-  its bare name or called as `refresh.Response(...)`, marks it with the input's sentence, since
-  no route serves it, and needs no entry of `ALLOWED` (ADR-0049, decision 10;
+  its bare name with nothing else in its module binding the name, or called as
+  `refresh.Response(...)`, marks it with the input's sentence, since no route serves it, and
+  needs no entry of `ALLOWED` (ADR-0049, decision 10;
   https://github.com/xippios/sdk-core/issues/439).
 - Item 5, unchanged.
 - Item 6: each of the nine sources that package lists runs its ported reference script once

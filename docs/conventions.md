@@ -1180,9 +1180,10 @@ standalone from the package. A task named in `BULK_TASKS` gets no route:
   string decoded from a JSON body, `REDACTED` masked first, refuses the write, the error
   naming where, never the value; an encoded form is the step's to return or to look for
   (ADR-0048, decisions 1 and 2). A recorder writes `REDACTED` in place of the value of a field
-  of a request that it must not keep and drops no field, so that the census of built answers
-  compares a replay with its recording key by key (ADR-0048, decision 7). A source that writes
-  the fixture itself writes it with `write_fixture`, laid out as the recorder writes it.
+  of a request that it must not keep and drops none of them, so that the census of built
+  answers compares a replay with its recording key by key (ADR-0048, decision 7). A source
+  that writes the fixture itself writes it with `write_fixture`, laid out as the recorder
+  writes it.
   A body that is not UTF-8 text cannot be scrubbed and is refused unless the recording
   flags it (`allow_binary=True`, stored base64 with `body_base64`). The recorder drops
   the response headers that only identify a request (`x-request-id`, `x-amz-cf-id`,

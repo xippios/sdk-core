@@ -1,5 +1,5 @@
 - A recorder writes `REDACTED` in place of the value of a field of a request that it must not
-  keep and drops no field, as conventions §10 now say, so that the census of built answers
+  keep and drops none of them, as conventions §10 now say, so that the census of built answers
   compares a replay with its recording key by key. Core's census compares what it compared,
   as strict for every source. (ADR-0048, §10, https://github.com/xippios/sdk-core/issues/439)
   - Hand-apply: `scripts/record_fixture.py` (sdk-google-mail) — `raw` in a write's request

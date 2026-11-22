@@ -24,6 +24,10 @@
     mark alone, and every test that the census fails, whose replay answered another request,
     marked as the third kind or narrowed, which those counts leave out: the trial of the
     release counted 6 in sdk-google-mail, 4 in sdk-comtrade, 24 in sdk-usda-nass, 5 in
-    sdk-usda-esr, 11 in sdk-x and none in sdk-cashctrl — the collected check fails on each
-    place without its mark, and the census on each such test
+    sdk-usda-esr, 11 in sdk-x and none in sdk-cashctrl. Of the places, an exchange that a
+    function of the module returns to the recorder, in sdk-google-mail's recorder tests, and
+    the frame's `Response`, in a test of a hook, may take the input's sentence, and four of
+    sdk-google-mail's six census tests answer their recordings once its two write fixtures are
+    recorded again (https://github.com/xippios/sdk-core/issues/439) — the collected check
+    fails on each place without its mark, and the census on each such test
     (https://github.com/xippios/sdk-core/issues/435).
