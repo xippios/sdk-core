@@ -23,7 +23,7 @@ that conventions §15 names for the host (ADR-0026, amendment 2026-11-18, point 
 - [ ] every new endpoint wrapper matches `docs/upstream/` — names, parameters, semantics
 - [ ] errors raised are from the taxonomy in `docs/conventions.md` §5
 - [ ] public surface changes are reflected in `__init__.py` exports and the README status table
-- [ ] a core PR names the two consumers of what it adds (in its ADR, or in its description when it has none), or, in its ADR, the one-consumer reason of ADR-0023 decision 3
+- [ ] a core PR names the two consumers of what it adds (in its ADR, or in its description when it has none), or, in its ADR, the one-consumer reason of ADR-0023 decision 3 or the fourth that ADR-0058, decision 1, adds: the maintainer's decision on the closed design question of the step that adds the code
 
 ## Tests
 - [ ] each new task function has a fixture-backed unit test (`tests/fixtures/...` recorded, not hand-written)

@@ -21,8 +21,12 @@ set, `pypi` environments with required reviewer `jdidaskalu`; PyPI account `xipp
   `.github/` names nothing that stands around it. 0.4.0 (below) gives the host xippios-mcp
   the loopback option, the package contract and the multi-tenant kit, and takes into core
   what two or more sources kept as copies, since 2026-11-18, released the same way. 0.4.1
-  (below) solves once in core what two or more sources solve alike, every change additive,
-  so a source takes it inside its one minor.
+  (below) solves once in core what two or more sources solve alike, and takes two helpers
+  with one consumer each, `naive_time` and `record_task`, by the maintainer's decision on
+  their steps' design questions (ADR-0058, decision 1). A patch, it keeps a source's package
+  and its callers compatible, so a source takes it inside its one minor, while the stricter
+  checks that "Adopting core 0.4.1" lists may fail a source's own test at the lock's move
+  (conventions §12; ADR-0058, decision 2).
 - **`sdk-template`**: v0.2.0 tagged 2026-10-25; v0.2.1 and v0.2.2 on 2026-10-27, each
   tagged by its own `release.yml` on its release PR's merge (v0.2.2 renders `gates.yml`
   calling the renamed gates repository, `xippios/sdk-gates`). Template v0.3.0, the
@@ -1317,13 +1321,27 @@ the rest of an answer that the result cap cut, the series over periods, the coun
 is for (https://github.com/xippios/sdk-core/issues/310), the count before a query over
 upstream's limit, the `since` filter, the preview of a write, the nightly comparison of a
 packaged list with the live one, and the frames of the snapshot, reference and recorder
-scripts, with the rules that the reviews of the sources' adoptions of 0.4.0 settled. Every
-change is additive (conventions §12; ADR-0039, decision 1): every name that
-`tests/test_public_surface.py` pinned at v0.4.0 stays pinned. Steps 1 to 17 and the follow-up
-17.1, one PR each, merged with a merge commit between 2026-11-21 18:31 and 2026-11-22 02:10
-UTC, so their own commits are on `main` too. Each step that changes a rule brings its record,
-decided by its question, ADR-0043 to ADR-0057, and step 17 amends ADR-0037 and ADR-0042; the
-conventions keep the version line 1.28 until step 18 raises it to 1.29.
+scripts, with the rules that the reviews of the sources' adoptions of 0.4.0 settled. Two
+helpers have one consumer each and entered by the maintainer's decision on a step's design
+question, the fourth reason for one consumer (ADR-0058, decision 1): `naive_time`, which
+sdk-usda-esr calls, by the answer on step 8's question
+(https://github.com/xippios/sdk-core/issues/371; ADR-0052, amendment 2026-11-22), and
+`record_task` with `record_task_sync`, with which sdk-google-mail records its tasks, by the
+answer on step 17's question, whose follow-up 17.1 built them in the shape that its own
+question decided (https://github.com/xippios/sdk-core/issues/364,
+https://github.com/xippios/sdk-core/issues/376; ADR-0057, amendment 2026-11-22). A patch of core
+keeps a source's package and its callers compatible, and every name that
+`tests/test_public_surface.py` pinned at v0.4.0 stays pinned, while a check of
+`xippios.core.testing` that a record makes stricter may fail a source's own test at the lock's
+move, each listed under "Every source" below (conventions §12; ADR-0058, decision 2). Steps 1
+to 19 and their follow-ups, one PR each, merged with a merge commit between 2026-11-21 18:31
+and 2026-11-22 16:35 UTC, so their own commits are on `main` too. Each step that changes a rule
+brings its record, decided by its question, ADR-0043 to ADR-0057, and amends a record where a
+question changed one: steps 2 and 9 amend their own, ADR-0043 and ADR-0053, step 17 amends
+ADR-0037 and ADR-0042, step 7.1 ADR-0041 and ADR-0045, steps 16.2 and 16.3 ADR-0046, step 5.1
+ADR-0048 and ADR-0049, and step 10.1 ADR-0054. Step 20 adds ADR-0058 and amends ADR-0023,
+ADR-0052 and ADR-0057. The conventions kept the version line 1.28 until step 18 raised it to 1.29, which
+names the text that the release publishes.
 
 | Step | sdk-core | What | ADR | Conventions | Merge commit on `main` |
 | --- | --- | --- | --- | --- | --- |
@@ -1332,27 +1350,37 @@ conventions keep the version line 1.28 until step 18 raises it to 1.29.
 | 3 | #358 `step/0.4.1-3` | a live run prints the requests it sent, by host | — | — | `f36f0578e2bece55179719b164774d9c7eb9c2e5` |
 | 4 | #356 `step/0.4.1-4` | the first line of `publish.yml` cites ADR-0039, decision 6 | — | — | `e043437c601b584511184a2351fadac334158e97` |
 | 5 | #396 `step/0.4.1-5` | `xippios.core.testing.built_answers`, the check of a built answer's mark and its census | ADR-0049 | §10 | `25862322c859cd4eb55334f7bf5ce0546133d152` |
+| 5.1 | #453 `step/0.4.1-5.1` | the built-answer check follows an exchange through a helper of its module and reads a module's imports; a recorder writes `REDACTED` for a field of a request that it must not keep and drops none; `Rewrite` exported | ADR-0048 and ADR-0049 amendments | §10 | `4df999881333dfa21e30672bab7523046270c06e` |
 | 6 | #383 `step/0.4.1-6` | the family check holds `OBSERVED.md` to three rules | ADR-0044 | §3 | `88cd703e8fec70f4816c2c41b47271534ad6cd6b` |
 | 7 | #384 `step/0.4.1-7` | `PackagedList.codes` and the `check` of its `PackagedCodes` | ADR-0045 | §5 | `627fd56ce06f2f16934495a54891f497aa27ee27` |
+| 7.1 | #433 `step/0.4.1-7.1` | the check asks a source's strategy for a text given for integer codes; a value of the hint table is refused without the sentence on an outdated list, by `UnknownCode(..., outdated=False)`; the refusal of a value of the other type keeps the source's reason | ADR-0041 and ADR-0045 amendments | §5 | `89aa56b1a4e59ecf98ff503d8142bf9cb454d586` |
 | 8 | #392 `step/0.4.1-8` | `newer_than` and `naive_time` | ADR-0052 | §4 | `345ecad12910b35d27964e0606b4751e673ea643` |
 | 9 | #403 `step/0.4.1-9` | `QueryTooLarge` and `fetch_counted` | ADR-0053, with its amendment | §5 | `a30b26cb2cad184850bd5dcb34d3c5b2b80467be` |
 | 10 | #404 `step/0.4.1-10` | `Ceiling` and `fetch_periods` in `xippios.core.series` | ADR-0054 | §4 | `357075594f1d708bca4194bdd53fd33c137dc2f6` |
+| 10.1 | #452 `step/0.4.1-10.1` | the ceiling's refusal says that nothing was sent, a task calling `check` before any request of the call; a later failure names the periods answered before it | ADR-0054 amendments | §4 | `e1c350b84837bb0acb640b269345f4370bf24b43` |
 | 11 | #395 `step/0.4.1-11` | `xippios.core.testing.live` and `assert_list_current`; the family check holds `LIVE_LISTS` and `NO_LIVE_LIST` | ADR-0055 | §10 | `5f8a005f18c97f66686d8c176dfd7907ed602abc` |
 | 12 | #406 `step/0.4.1-12` | `ResultMeta.names`, `names_codes` and `UNNAMED_CODES`; the family check holds them | ADR-0056 | §4 | `605f73c2dd6dd4aea3f2a98f86b44b06ed9219a0` |
 | 13 | #388 `step/0.4.1-13` | `ResultCap(paged=True)` and `ResultCap(keep="last")` | ADR-0047 | §8 | `14a99242e28ed7c36de9017f2abe1c4cb2258af0` |
 | 14 | #397 `step/0.4.1-14` | what a write task's preview shows; `assert_write_tools(..., preview_reads=..., dry_run=...)` | ADR-0050 | §8 | `a4854e4542660450388528101e0fbe02820c722b` |
 | 15 | #400 `step/0.4.1-15` | the reference refresh script's frame: `Listed`, `Enumeration` and `run(lists, ...)` in `xippios.core.refresh` | ADR-0051 | §3 | `bd8cff563c4f3f09e51c5efca38cb999c37f5318` |
 | 16 | #386 `step/0.4.1-16` | the snapshot script's frame: `Snapshot` and `run(snapshot)` in `xippios.core.refresh` | ADR-0046 | §3 | `f086b417d5f2c6e353705a9c4664bc7d79b1161a` |
+| 16.1 | #424 `step/0.4.1-16.1` | the snapshot frame's note names each source's `tests/test_refresh_upstream.py`; core's tests of the frame take what only the sources' tests held | — | — | `a23bd94f5829b6490427c31864b2a4c07f2a74f6` |
+| 16.2 | #429 `step/0.4.1-16.2` | the check of the committed `FETCHED.md` without a request, which the family check runs on a script's `SNAPSHOT`, and the line that names the file's form | ADR-0046 amendment | §3 | `b6eecbf68cf55a3d76e7a2ed63d75040f3a0c90f` |
+| 16.3 | #451 `step/0.4.1-16.3` | the attribution check passes a linked statement only as the text of its link and reads an image's alternative text; the writer keeps a cell on one line | ADR-0046 amendment | §3 | `37831e252046e3281515a7f1d9a8fedfa85a5e08` |
 | 17 | #390 `step/0.4.1-17` | `rewrite=` on `record` and `fixture_from_response`, `send_once`, the refusal of a 1xx or a 3xx on every path | ADR-0048; ADR-0037 and ADR-0042 amendments | §3, §10 | `b25dd53c7ef507c141220c70078651807f219ecf` |
 | 17.1 | #401 `step/0.4.1-17.1` | `record_task` and `record_task_sync` | ADR-0057 | §10 | `328a572bf59aa1d18b6e3bd5f9c01a7a9f505490` |
+| 18 | #409 `step/0.4.1-18` | this section and "Adopting core 0.4.1" with its two lists, which the definition of done's Adoption PR block and the review checklist's item 12 hold an adoption against | — | the version line, 1.29 | `9b53282d0a64095aa70cdb95a20790ae25e3a0b0` |
+| 18.1 | #448 `step/0.4.1-18.1` | the handover's parts and the Hand-apply notes as the trial's six ports corrected them | — | — | `cddef41a007148162c96a397759bd6398b45307d` |
+| 19 | #413 `step/0.4.1-19` | `conventions.yml` and `adr-index.yml` in place of `organization.yml`; `publish.yml` titled `Publish` | — | — | `ee39ad1727f34db2013e57b9c62a7d9078f99f48` |
 
-Step 18 writes this section, "Adopting core 0.4.1" and the conventions' version line 1.29
-from the merged text of the steps above, and the release PR adds the rows of step 18 and of
-the release. The release PR changes only what conventions §12 lets a release PR change. Its
-merge runs `publish.yml`, which tags `v0.4.1` on the merge commit and waits at `pypi` for the
-maintainer's approval; the recovery path is the one under "Core 0.2.1". sdk-template 0.4.1
-follows the tag and renders the snapshot script and the reference refresh script that a new
-source starts from on core's frames (ADR-0046 and ADR-0051, Consequences).
+Step 18 wrote this section, "Adopting core 0.4.1" and the conventions' version line 1.29 from
+the merged text of the steps above it, the follow-ups merged after it and step 20 brought both
+sections to what `main` holds, and the release PR adds the rows of step 20 and of the release,
+since a step cannot name its own merge. The release PR changes only what conventions §12 lets a
+release PR change. Its merge runs `publish.yml`, which tags `v0.4.1` on the merge commit and
+waits at `pypi` for the maintainer's approval; the recovery path is the one under "Core 0.2.1".
+sdk-template 0.4.1 follows the tag and renders the snapshot script and the reference refresh
+script that a new source starts from on core's frames (ADR-0046 and ADR-0051, Consequences).
 
 ## Adopting core 0.4.1
 
@@ -1385,14 +1413,16 @@ so the adoption PR meets them, and the sixth holds a source from its first refre
   without that line, a copy's or sdk-template's stub, so the adoption PR, which fetches nothing,
   meets it as it stands.
 
-Pre-filled below from the 19 fragments of steps 1 to 17.1, which the CHANGELOG's `[0.4.1]`
-section assembles, whose Hand-apply
-notes give each file, what it changes and the tests that break without it, from the records
-ADR-0043 to ADR-0057 and from the Consumers of each step's PR, all read on `main` at the merge
-of step 12; each item cites the issue its fragment answers. The adoption PR confirms every
-item against the source as it is then. Two lists come first: the changes of the release that
-a source's callers see, and the rules of conventions 1.29 that changed since 1.28. The review
-checklist's item 12 holds an adoption against both
+Step 18 pre-filled the parts below from the 19 fragments of steps 1 to 17.1, read on `main` at
+the merge of step 12, with the records ADR-0043 to ADR-0057 and the Consumers of each step's PR,
+and the follow-ups 16.1, 16.2, 18.1, 10.1, 16.3 and 5.1 brought them to the fragments as `main`
+holds them, those that steps 16.2, 7.1 and 5.1 added among them: 24 before step 20, with those
+of steps 18 and 19, which the CHANGELOG's `[0.4.1]` section assembles with step 20's. Their
+Hand-apply notes give each file, what it changes and the tests that break without it, and each
+item cites the issue its fragment answers. The adoption PR confirms every item against the
+source as it is then. Two lists come first: the changes of the release that a source's callers
+see, and the rules of conventions 1.29 that changed since 1.28. The review checklist's item 12
+holds an adoption against both
 (https://github.com/xippios/sdk-core/issues/334, https://github.com/xippios/sdk-core/issues/349).
 Before the release six sources ported core's `main` at
 [a23bd94](https://github.com/xippios/sdk-core/commit/a23bd94f5829b6490427c31864b2a4c07f2a74f6)
@@ -1715,16 +1745,22 @@ the rules of 1.28.
     green run of `live.yml` on the commit of `main` that it starts from, and a run on an earlier
     commit is none, whatever the merges after it changed. A release whose base moved after its
     run waits for the next nightly run or one more dispatch of `live.yml` on `main`.
+25. **What a core patch keeps compatible** (https://github.com/xippios/sdk-core/issues/455;
+    ADR-0058, decision 2). A patch of core keeps a source's package and its callers compatible,
+    while a check of `xippios.core.testing` that a record makes stricter, a test of the family
+    check or the recorder's refusal of an answer, may fail a source's own test at the lock's
+    move. The source meets each that "Every source" below lists in the adoption PR of its patch,
+    and its release stays a patch unless a change of its own breaks its callers.
 
 §15, adoptions:
 
-25. **The adoption's entry** (https://github.com/xippios/sdk-core/issues/355,
+26. **The adoption's entry** (https://github.com/xippios/sdk-core/issues/355,
     https://github.com/xippios/sdk-core/issues/342; ADR-0043). Item 9's fragment names the core
     bound, the template's tag and the conventions' version as they stand after the adoption,
     changed or not, and is `breaking` where the adoption brings a core minor and `changed`
     where it brings none. The adoption of core 0.4.1 is `changed` and names
     `xippios-core~=0.4.1`, sdk-template v0.4.1 and conventions 1.29.
-26. **The host's entry** (https://github.com/xippios/sdk-core/issues/355; ADR-0043). The host's
+27. **The host's entry** (https://github.com/xippios/sdk-core/issues/355; ADR-0043). The host's
     item 9 names the core bound and the conventions' version as they stand after its adoption,
     and no template tag.
 
@@ -1734,6 +1770,21 @@ the rules of 1.28.
   and `[testing]` extras likewise, from PyPI, with `uv.lock` updated (§12: `~=X.Y.Z` when patch
   Z shipped what the source adopts); all twelve read `~=0.4.0` today. The family check's five
   new tests hold the source from this move, as listed above.
+- What the lock's move can fail (conventions §12; ADR-0058, decision 2). Core 0.4.1 keeps a
+  source's package and its callers compatible, while two checks of `xippios.core.testing` that
+  its records make stricter may fail a source's own test from the move on, and the adoption PR
+  meets each:
+  - the family check's five new tests listed above, which fail at once on a source that does
+    not meet them (ADR-0044, decision 4; ADR-0055; ADR-0056), while the sixth holds a source
+    from its first refresh on;
+  - the recorder's refusal of an answer of a 1xx or a 3xx status in `send_once`, `record` and
+    `fixture_from_response` (ADR-0048, decision 4), which fails a test that hands such an answer
+    to `fixture_from_response`: sdk-cashctrl's `test_the_host_then_the_secrets_then_the_rewrite`,
+    the one such test that the trial met, which builds a 200 in its place, as its part below
+    says (https://github.com/xippios/sdk-cashctrl/issues/134).
+
+  The check of a built answer's mark fails a source's tests from the `copier update` that
+  renders its collecting line, as item 2 says, and not from the lock's move.
 - Item 2, `copier update` to sdk-template 0.4.1, which renders what "sdk-template" below lists.
   Its `tests/test_built_answers.py` brings the collecting line of the built-answer check, which
   then fails each place of the source's tests that builds or serves a body without its mark, so
@@ -2005,9 +2056,10 @@ the rules of 1.28.
   its own `record_task` → `record_task_sync(RECORDED_TASKS[name], DEMO, fixtures=FIXTURES,
   case=args.case, scrub=scrub, rewrite=step, **arguments)`
   (https://github.com/xippios/sdk-core/issues/174); the single exchange → `send_once_sync`
-  through the demo account's client, the token request with `auth=None`, and every exchange's
-  fixture built by `fixture_from_response(response, scrub=..., rewrite=step)`, the step running
-  `rewrite` and `check` (https://github.com/xippios/sdk-core/issues/322,
+  through the demo account's client, the token request with `auth=None`, and its fixture built
+  by `fixture_from_response(response, scrub=..., rewrite=step)`, the step running `rewrite` and
+  `check`, which `record_task_sync` runs on a task's exchanges as well
+  (https://github.com/xippios/sdk-core/issues/322,
   https://github.com/xippios/sdk-google-mail/issues/42). It keeps its command line, the write
   safety rule, `MessageScrub`, `rewrite` and `check`.
 - Changes: `models.py`'s `ComposePreview` and `ActionPreview` declare `reads`, each of the five

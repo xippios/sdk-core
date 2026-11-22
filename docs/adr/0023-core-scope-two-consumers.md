@@ -1,7 +1,6 @@
 # ADR-0023: Core scope — code enters `xippios-core` with two consumers
 
-Status: Accepted · Date: 2026-10-26 · Decided by Johannes on 2026-10-26 (drafted by the
-architect from the family review of 2026-10-25 and the queue rows of core 0.2.0)
+Status: Accepted · Date: 2026-10-26 · Decided by Johannes on 2026-10-26 (drafted by the architect from the family review of 2026-10-25 and the queue rows of core 0.2.0) · Amended 2026-11-22 by https://github.com/xippios/sdk-core/issues/455
 
 ## Context
 
@@ -84,3 +83,9 @@ decision 4 (queue row 281), so it returns to core in 0.4.0 under decision 2, rev
 ADR-0024's decision 6 for it. Queue row 252's renewing-bearer base has two consumers
 likewise, sdk-faostat's login and sdk-google-mail's refresh, decision 2 counting the
 same shape.
+
+## Amendment 2026-11-22
+
+ADR-0058 (https://github.com/xippios/sdk-core/issues/455), decision 1, supersedes the closed list
+of decision 3, "the reason is one of three", with a fourth reason that it words. Decisions 1, 2
+and 4 to 7, and the rest of decision 3, stand as written.

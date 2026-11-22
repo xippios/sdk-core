@@ -16,8 +16,8 @@ of `reference/README.md` by code while five keep it by hand. ADR-0023, decision 
 helper the template renders into every repository to core.
 https://github.com/xippios/sdk-core/issues/309 took the frame into sdk-core 0.4.1
 (https://github.com/xippios/sdk-core/issues/321), ADR-0046 gave both script frames one
-subpackage, `xippios.core.refresh`, and the human answered the design question on
-2026-11-21, prompted in the sdk-core panel.
+subpackage, `xippios.core.refresh`, and the maintainer's answer on
+https://github.com/xippios/sdk-core/issues/370, given on 2026-11-21, decided the design question.
 
 ## Decision
 
@@ -112,8 +112,9 @@ subpackage, `xippios.core.refresh`, and the human answered the design question o
 - The consumers are the nine sources that package lists, sdk-comtrade, sdk-eurostat,
   sdk-faostat, sdk-usda-esmis, sdk-usda-esr, sdk-usda-gats, sdk-usda-nass, sdk-usda-psd and
   sdk-usda-wasde, each of which ports its script in its patch, and sdk-template, which renders
-  the short script on this frame in its 0.4.1 (https://github.com/xippios/coordinate-sdk/issues/134).
-  sdk-cashctrl, sdk-google-mail and sdk-x package no list.
+  the short script on this frame in its 0.4.1, released after core 0.4.1 and before the sources'
+  patches, by the maintainer's decision on the order of the releases. sdk-cashctrl,
+  sdk-google-mail and sdk-x package no list.
 - A port moves the origins that five READMEs keep by hand into its declarations, and from
   then on the frame writes those rows on every run. sdk-comtrade and sdk-usda-psd gain
   `--only`, and sdk-usda-esmis and sdk-usda-wasde `--only`, `--render-only` and the meter's

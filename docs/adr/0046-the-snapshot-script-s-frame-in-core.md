@@ -17,7 +17,8 @@ from sdk-faostat's review, a hex ETag that the skeleton writes outside a code sp
 (https://github.com/xippios/sdk-core/issues/340). ADR-0023, decision 1, sends a helper the
 template renders into every repository to core. https://github.com/xippios/sdk-core/issues/309
 took the frame into sdk-core 0.4.1 (https://github.com/xippios/sdk-core/issues/320), and the
-human answered its design question on 2026-11-21, prompted in the sdk-core panel.
+maintainer's answer on https://github.com/xippios/sdk-core/issues/363, given on 2026-11-21,
+decided its design question.
 
 Five tests of sdk-cashctrl, sdk-faostat, sdk-usda-esr and sdk-usda-wasde compared the committed
 `FETCHED.md` with their script's render and sent no request. They went with the copies
@@ -25,9 +26,9 @@ Five tests of sdk-cashctrl, sdk-faostat, sdk-usda-esr and sdk-usda-wasde compare
 alone, after a request to every page, and its render takes rows that each hold an answer. Two of
 them compared prose and the declared tables, two read cells back from the committed file, and
 none computed a size or a hash again. The human took a check without a request into the package
-(https://github.com/xippios/sdk-core/issues/425) and answered its design question on
-2026-11-22, prompted in the sdk-core panel: decision 6, the amendment of that day, is the answer
-of https://github.com/xippios/sdk-core/issues/428.
+(https://github.com/xippios/sdk-core/issues/425), and decision 6, the amendment of 2026-11-22, is
+the maintainer's answer on https://github.com/xippios/sdk-core/issues/428, its design question,
+given that day.
 
 The trial of the release ported six sources onto the frame offline
 (https://github.com/xippios/sdk-core/issues/410), and three met its attribution check. The
@@ -113,8 +114,8 @@ decided: the Consequences state it as the frame has held it since it came.
    captured". A row's note made from its answer, as sdk-faostat's and the FAS portal kit's
    notes count what an answer holds, is `note`, which also stops the run on an answer it
    does not recognise, and sdk-eurostat's five seconds between requests are `pause`.
-6. **The check of the committed `FETCHED.md` without a request.** By the human's answer to
-   https://github.com/xippios/sdk-core/issues/428, given in the sdk-core panel on 2026-11-22:
+6. **The check of the committed `FETCHED.md` without a request.** By the maintainer's answer on
+   https://github.com/xippios/sdk-core/issues/428, given on 2026-11-22:
    - *The mark of the form.* The frame ends `FETCHED.md` with one line that names the form of
      the file, `<!-- form 1 of the FETCHED.md that xippios.core.refresh writes -->`, an HTML
      comment that renders as nothing, holds nothing the secret scan flags and names the
@@ -226,8 +227,9 @@ decided: the Consequences state it as the frame has held it since it came.
 ## Consequences
 
 - The consumers are the twelve sources, each of which ports its script in its patch, and
-  sdk-template, which renders the short script on this frame in its 0.4.1
-  (https://github.com/xippios/coordinate-sdk/issues/134). A fix of the frame reaches every
+  sdk-template, which renders the short script on this frame in its 0.4.1, released after core
+  0.4.1 and before the sources' patches, by the maintainer's decision on the order of the
+  releases. A fix of the frame reaches every
   source with its next core patch.
 - A source's ported script keeps its pages, its attribution, its hooks and their helpers,
   from 330 lines (sdk-usda-nass) to 1,230 (sdk-eurostat) by the research's count; the

@@ -1298,7 +1298,12 @@ which §12 bounds to one minor.
 - A source depends on one core minor with an upper bound, `xippios-core~=0.2.0`, and its
   extras likewise (`xippios-core[mcp]~=0.2.0`); the template renders it as `~=X.Y.0`,
   or `~=X.Y.Z` when patch Z shipped what the source adopts, still one minor
-  (ADR-0039, decision 1). Core patch releases stay compatible. While core is
+  (ADR-0039, decision 1). Core patch releases stay compatible. A patch of core keeps a
+  source's package and its callers compatible, while a check of `xippios.core.testing` that a
+  record makes stricter, a test of the family check or the recorder's refusal of an answer,
+  may fail a source's own test at the lock's move to the patch, and the handover's section
+  `Adopting core X.Y.Z` lists each such check, which the source meets in its adoption PR
+  (https://github.com/xippios/sdk-core/issues/455; ADR-0058, decision 2). While core is
   0.x it keeps no backward compatibility across minors: a new core minor may break, and
   a source adopts it through §15 before its next release. From 1.0 a breaking change
   bumps the major (SemVer), and the `~=` bound stays. A source already published with an
