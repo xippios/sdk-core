@@ -62,6 +62,7 @@ from xippios.core.reference import (
     load_json,
     load_table,
     matches,
+    names_codes,
     nearest,
 )
 from xippios.core.series import Ceiling, fetch_periods
@@ -117,6 +118,7 @@ __all__ = [
     "load_table",
     "matches",
     "naive_time",
+    "names_codes",
     "nearest",
     "newer_than",
     "paginate_offset",

@@ -124,7 +124,7 @@ SOURCE: dict[str, str] = {
     "tests/test_family.py": "from xippios.core.testing.family import *  # noqa: F403\n",
 }
 
-FAMILY_TESTS = 15
+FAMILY_TESTS = 16
 
 
 def run_family(
@@ -148,6 +148,47 @@ def run_family(
 def test_a_conforming_source_passes_every_family_check(pytester: pytest.Pytester) -> None:
     result = run_family(pytester)
     result.assert_outcomes(passed=FAMILY_TESTS)
+
+
+COUNTRIES = """
+from xippios.core import PackagedList, names_codes
+
+COUNTRIES = PackagedList.model_validate(
+    {
+        "param": "countries",
+        "endpoint": "lists",
+        "fetched": "2026-10-23T09:00:00Z",
+        "records": [{"countryCode": "CN", "countryName": "Comoros"}],
+    }
+).codes("countryCode", "countryName")
+"""
+
+WITH_A_COUNTRY = TASKS.replace(
+    "async def get_series_async(series_id: str, year",
+    'async def get_series_async(series_id: str, country_code: str = "CN", year',
+)
+
+
+def test_a_task_that_takes_a_country_fails_at_once_until_its_answer_names_it(
+    pytester: pytest.Pytester,
+) -> None:
+    # ADR-0056: no release warns first (https://github.com/xippios/sdk-core/issues/359, part 4).
+    unnamed = run_family(pytester, {"src/xippios/example/tasks.py": COUNTRIES + WITH_A_COUNTRY})
+    unnamed.assert_outcomes(passed=FAMILY_TESTS - 1, failed=1)
+    unnamed.stdout.fnmatch_lines(
+        [
+            "*test_family_country_codes_are_named_in_the_answer*",
+            "*- tasks.get_series takes country_code, which names_codes does not name and "
+            "UNNAMED_CODES does not exempt*",
+        ]
+    )
+    named = COUNTRIES + WITH_A_COUNTRY.replace(
+        "async def get_series_async",
+        "@names_codes(country_code=COUNTRIES)\nasync def get_series_async",
+    )
+    run_family(pytester, {"src/xippios/example/tasks.py": named}).assert_outcomes(
+        passed=FAMILY_TESTS
+    )
 
 
 def test_the_package_is_named_by_the_ini_option_when_src_holds_two(

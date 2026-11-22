@@ -39,6 +39,8 @@ EXPORTS = {
         "Ceiling", "fetch_periods",
         # the count before a query over upstream's limit: the error and the runner (ADR-0053)
         "QueryTooLarge", "fetch_counted",
+        # the name of each country code in an answer's meta (ADR-0056)
+        "names_codes",
     },
     "xippios.core.client": {
         "AsyncClient", "BasicKeyAuth", "BearerAuth", "CachedResponse", "ClientConfig",

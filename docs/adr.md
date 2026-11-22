@@ -43,6 +43,7 @@ records in `docs/adr/`. A record changes, and this file follows when the script 
 - <a id="0053"></a>[ADR-0053](adr/0053-one-count-before-a-query-over-upstream-s-limit.md): One count before a query over upstream's limit · Accepted · 2026-11-22 · amended 2026-11-22
 - <a id="0054"></a>[ADR-0054](adr/0054-one-helper-for-a-series-over-periods.md): One helper for a series over periods · Accepted · 2026-11-22
 - <a id="0055"></a>[ADR-0055](adr/0055-one-live-comparison-of-a-packaged-list.md): One live comparison of a packaged list · Accepted · 2026-11-21
+- <a id="0056"></a>[ADR-0056](adr/0056-the-name-of-each-country-code-in-an-answer-s-meta.md): The name of each country code in an answer's meta · Accepted · 2026-11-22
 - <a id="0057"></a>[ADR-0057](adr/0057-the-recording-of-every-exchange-of-a-task.md): The recording of every exchange of a task · Accepted · 2026-11-22
 
 The superseded records follow, kept as written: the record that each status names holds its decision now.
