@@ -1,6 +1,6 @@
 # ADR-0046: The snapshot script's frame in core
 
-Status: Accepted · Date: 2026-11-21 · Decided by https://github.com/xippios/sdk-core/issues/363
+Status: Accepted · Date: 2026-11-21 · Decided by https://github.com/xippios/sdk-core/issues/363 · Amended 2026-11-22 by https://github.com/xippios/sdk-core/issues/428
 
 ## Context
 
@@ -18,6 +18,16 @@ from sdk-faostat's review, a hex ETag that the skeleton writes outside a code sp
 template renders into every repository to core. https://github.com/xippios/sdk-core/issues/309
 took the frame into sdk-core 0.4.1 (https://github.com/xippios/sdk-core/issues/320), and the
 human answered its design question on 2026-11-21, prompted in the sdk-core panel.
+
+Five tests of sdk-cashctrl, sdk-faostat, sdk-usda-esr and sdk-usda-wasde compared the committed
+`FETCHED.md` with their script's render and sent no request. They went with the copies
+(https://github.com/xippios/sdk-core/pull/424), since the frame compares the file in `--check`
+alone, after a request to every page, and its render takes rows that each hold an answer. Two of
+them compared prose and the declared tables, two read cells back from the committed file, and
+none computed a size or a hash again. The human took a check without a request into the package
+(https://github.com/xippios/sdk-core/issues/425) and answered its design question on
+2026-11-22, prompted in the sdk-core panel: decision 6, the amendment of that day, is the answer
+of https://github.com/xippios/sdk-core/issues/428.
 
 ## Decision
 
@@ -88,6 +98,68 @@ human answered its design question on 2026-11-21, prompted in the sdk-core panel
    captured". A row's note made from its answer, as sdk-faostat's and the FAS portal kit's
    notes count what an answer holds, is `note`, which also stops the run on an answer it
    does not recognise, and sdk-eurostat's five seconds between requests are `pause`.
+6. **The check of the committed `FETCHED.md` without a request.** By the human's answer to
+   https://github.com/xippios/sdk-core/issues/428, given in the sdk-core panel on 2026-11-22:
+   - *The mark of the form.* The frame ends `FETCHED.md` with one line that names the form of
+     the file, `<!-- form 1 of the FETCHED.md that xippios.core.refresh writes -->`, an HTML
+     comment that renders as nothing, holds nothing the secret scan flags and names the
+     module that writes it, which is true in every source. `FORM` in
+     `xippios.core.refresh.upstream` is its number. No source held a file of the frame when
+     the mark entered, so it is part of decision 3's one form, and the first run of a ported
+     script writes it. A change of core that rewords anything the frame writes into the file
+     raises the form, and a test of core pins the digest of a render that reaches every
+     sentence and cell form, so a change of the render that does not raise it fails.
+   - *One public function.* `compare_fetched(snapshot, out=None)` of `xippios.core.refresh`
+     returns the lines in which the committed file differs from the declaration and sends no
+     request. It writes the expected file through the render's own parts, the same function
+     that `render_fetched` writes through, with what only a response knows read back from the
+     committed file, and names each differing line, `line <n> holds: ...` and `line <n> should
+     hold: ...`, then each row whose file is missing and each file without a row. Decision 1's
+     sentence that nothing in core imports either frame gains one exception: the family check
+     imports this function inside its test, as it imports the adapters (ADR-0029).
+   - *What is judged.* Every line that follows from the declaration and from the frame's own
+     text; each declared page's row with its file, its URL, its status and the clauses of its
+     note that its flags give, a row's URL being the page's or, for a page with `origin`, one
+     of its two URLs; the rows of `Not fetched` of the declared pages an anonymous client
+     cannot read, by their URL and status, and of `not_fetched`; the row of `OBSERVED.md` where
+     the file exists; the form of every ETag's cell, `-` or a code span on a row that ends in
+     the allowlist mark, and `-` for a page marked `stable=False`; each row's file under
+     `docs/upstream/`, and no file without a row in the subdirectories that a row writes to,
+     the bound of the frame's removal of stale files. A declared page's row is told by its
+     file, by its URL for a page without one, and every row with a file at a `split` page's
+     URL is that page's.
+   - *What is read back.* What only a response knows stands in the expected file as the
+     committed file holds it and is not judged: the time of the fetch, an ETag's value,
+     Last-Modified, Bytes and sha256, the redirect clauses a note opens with, the rest of a
+     note where the snapshot's `note` makes it, the reason of an unread page's row where `note`
+     makes it, the host a page redirects to, the row of a page's 403 before its second origin,
+     the names of the files that `split` made, the lines from the first heading after "How
+     this is captured" to "Files and pages" where the snapshot declares `sections`, and a
+     statement's clause that no run checks it where the page's answer decided it. A row that
+     no declared page owns is read back, after the row it follows, as a page that `linked`
+     found where the snapshot declares `linked`, and is otherwise a difference, so a removed
+     page and a hand-added row are held only in a snapshot without `linked`. In one sentence of
+     the question: what `--check` compares once its five measures are blanked, less the
+     answers. Sizes and hashes are not computed again, and `Page` gains no field.
+   - *The family check.* `test_family_fetched_md_agrees_with_the_snapshot` loads a source's
+     `scripts/refresh_upstream.py` by its path, under a module name of its own so that its
+     `if __name__ == "__main__":` block does not run, takes the declaration named `SNAPSHOT` at
+     its top level and calls the function. It reads the script first and runs it only where
+     its top level assigns `SNAPSHOT`, since a copy of the template's skeleton runs by its
+     `# /// script` block with what the project need not install, and urllib's opener refuses
+     while it loads, so a script that runs its snapshot at its top level stops before its first
+     request and before any write. A source passes with no script, with a script whose
+     `SNAPSHOT` is no `Snapshot` or is not assigned at its top level, and with a `FETCHED.md`
+     that is missing, holds no mark, as a copy's file and sdk-template's stub do, or holds the
+     mark of an older form. A file of a later form is one difference, since this core cannot
+     judge it. A script that does not load fails the check, which is never skipped, as
+     ADR-0044, decision 4, and ADR-0055 have it for the family check's other new tests. So no
+     adoption PR, which fetches nothing, turns red, and a source is held from its first refresh
+     on with no line of its own.
+   - *The rule.* Conventions §3 say that the script names its declaration `SNAPSHOT` at its
+     top level, which imports and declares alone, sends no request and writes no file, its
+     run under `if __name__ == "__main__":`, and that the family check holds the committed
+     file to it as above.
 
 ## Consequences
 
@@ -110,6 +182,15 @@ human answered its design question on 2026-11-21, prompted in the sdk-core panel
   its request for the page gzipped, since the frame takes no option of a source's own,
   writes one User-Agent from the slug and asks for each page as it is; one source needs
   each, and a second would bring it into the frame (ADR-0023, decision 2).
+- Decision 6 holds all twelve sources and every source made from sdk-template from their
+  first refresh on core 0.4.1, the four whose comparisons went with their copies,
+  sdk-cashctrl, sdk-faostat, sdk-usda-esr and sdk-usda-wasde, among them, by the family check
+  and with no test of their own (ADR-0023, decision 4, met by those four copies). A source
+  that declares `linked` has the rows that no declared page owns read back: six ports do,
+  sdk-comtrade, sdk-usda-esmis, sdk-usda-esr, sdk-usda-gats, sdk-usda-psd and
+  sdk-usda-wasde, and a source that links no page declares no `linked`, so that a removed
+  page's row stays a difference. Whether a script names its declaration `SNAPSHOT` is the
+  review's, since the check passes a script that names it otherwise.
 - The reference frame (https://github.com/xippios/sdk-core/issues/370) joins as a module of
   this subpackage, and `run` names both frames' entry, so the step that adds it makes `run`
   take either declaration without renaming either.
