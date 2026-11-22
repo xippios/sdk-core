@@ -394,12 +394,28 @@ async def test_a_later_failure_keeps_the_class_the_attributes_the_cause_and_the_
     [
         ("The upstream refused the request.", "The upstream refused the request. "),
         ("The upstream refused the request.  ", "The upstream refused the request. "),
+        ("404 from GET /x/2022: Did you mean 2021?", "404 from GET /x/2022: Did you mean 2021? "),
+        ("429 from GET /x: Slow down!", "429 from GET /x: Slow down! "),
+        ("429 from GET /x: Slow down!\n", "429 from GET /x: Slow down! "),
+        # any other last character takes a full stop: a word, a closing quote or bracket
+        ("503 from GET /x: Service Unavailable", "503 from GET /x: Service Unavailable. "),
+        ("503 from GET /x: (retry later)", "503 from GET /x: (retry later). "),
+        ("got 'weekEndingDate'", "got 'weekEndingDate'. "),
+        ("got ['2021', '2022?']", "got ['2021', '2022?']. "),
+        ('400 from GET /x: "Try again later."', '400 from GET /x: "Try again later.". '),
+        ('429 from GET /x: {"error": "Later."}', '429 from GET /x: {"error": "Later."}. '),
+        # nothing to end
         ("", ""),
+        ("  ", ""),
     ],
 )
 async def test_a_message_that_ends_its_sentence_takes_the_next_one_after_a_space(
     message: str, opening: str
 ) -> None:
+    """A message whose last character, past its trailing white space, is ``.``, ``?`` or
+    ``!`` ended its sentence. Any other last character takes a full stop: a closing quote or
+    bracket closes a value, a repr, a JSON body or upstream's quoted text, whose own
+    punctuation is the value's, so the stop ends the sentence after it."""
     error = XippiosError(message, source=SOURCE)
     upstream = Upstream({2022: error})
     with pytest.raises(XippiosError) as info:
