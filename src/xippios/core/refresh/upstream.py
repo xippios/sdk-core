@@ -20,7 +20,9 @@ fetched``, with its heading even where it has no row. A row with an ETag ends in
 scan's allowlist mark. Files the run does not produce are removed from the subdirectories
 it writes to; nothing else under ``docs/upstream/`` is touched. Every run stops, before
 writing, when a page states a copyright, a licence or terms of use that the attribution
-does not record, or no longer prints one that it records.
+does not record, or no longer prints one that it records: a page's visible text is read, an
+image's alternative text included, and a statement recorded with a link is read past only as
+the text of a link to its target (ADR-0046, decision 7).
 
 ``--check`` compares content: it exits 1 when a file differs from what upstream serves now,
 compared after the snapshot's ``canonical``, or when ``FETCHED.md`` would change in more than
@@ -152,13 +154,16 @@ class Statement:
         text: The statement as the page prints it: a footer's line, a line of a terms
             page, a link's text, the name of the licence an API document's ``info`` gives.
         source: The URL of the page that prints it, which every run checks for it where it
-            reads the page's text; a statement on a PDF, a sample or a page an anonymous
-            client cannot read is quoted as one no run checks. ``""`` for a line that only a
-            browser shows, such as a footer a script assembles, which no fetch sees.
+            reads the page's text, an image's alternative text included; a statement on a
+            PDF, a sample or a page an anonymous client cannot read is quoted as one no run
+            checks. ``""`` for a line that only a browser shows, such as a footer a script
+            assembles, which no fetch sees.
         where: Where it stands and what it is, for ``FETCHED.md``'s Attribution; for a line
             only a browser shows, the page and the date it was read on by hand.
         link: The URL it links to, where it is a link (a footer's Terms of Service): the
-            page must link its text there.
+            page must link its text there, and the check reads past its text only as the text
+            of a link there, on every page, so the same words elsewhere, or on a page that is
+            no HTML, stop the run. A statement without a link passes wherever it stands.
     """
 
     text: str
@@ -753,59 +758,103 @@ class _Capture:
 # --- the attribution -----------------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class _Link:
+    """A link of an HTML page, as the attribution check reads it.
+
+    ``href`` is its target as written, ``text`` its text, white space flattened, and ``start``
+    and ``end`` the parts of the page's text it spans, ``end`` past the last.
+    """
+
+    href: str
+    text: str
+    start: int
+    end: int
+
+
 class _Reader(HTMLParser):
-    """An HTML page's visible text and links: comments, scripts, styles and templates left out."""
+    """An HTML page's visible text and links: comments, scripts, styles and templates left out.
+
+    An image's alternative text is text of the page where the image stands, set apart from the
+    words around it as the image is, and the text of a link it stands in. Nothing else of an
+    attribute is read, a title or an aria-label among them (ADR-0046, decision 7).
+    """
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.parts: list[str] = []
-        self.links: list[tuple[str, str]] = []
+        self.links: list[_Link] = []
         self._hidden = 0
-        self._open: list[tuple[str, list[str]]] = []
+        self._open: list[tuple[str, int]] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        """Enter a hidden element, or open a link."""
+        """Enter a hidden element, open a link, or read an image's alternative text."""
         if tag in _HIDDEN:
             self._hidden += 1
         elif tag == "a":
-            self._open.append((dict(attrs).get("href") or "", []))
+            self._open.append((dict(attrs).get("href") or "", len(self.parts)))
+        elif tag == "img" and not self._hidden:
+            alt = dict(attrs).get("alt") or ""
+            if alt.strip():
+                self.parts.append(f" {alt} ")
 
     def handle_endtag(self, tag: str) -> None:
         """Leave a hidden element, or close a link with its text."""
         if tag in _HIDDEN and self._hidden:
             self._hidden -= 1
         elif tag == "a" and self._open:
-            href, parts = self._open.pop()
-            self.links.append((href, _flat("".join(parts))))
+            href, start = self._open.pop()
+            end = len(self.parts)
+            self.links.append(_Link(href, _flat("".join(self.parts[start:end])), start, end))
 
     def handle_data(self, data: str) -> None:
-        """Keep visible text, in the page and in each open link."""
-        if self._hidden:
-            return
-        self.parts.append(data)
-        for _, parts in self._open:
-            parts.append(data)
+        """Keep visible text."""
+        if not self._hidden:
+            self.parts.append(data)
 
 
 @dataclass(frozen=True)
 class _Reading:
     """What the attribution check reads of a page.
 
-    ``text`` is its text, white space flattened, and ``links`` an HTML page's links as
-    ``(href, text)``, ``None`` for another text.
+    ``parts`` is its text as read, an HTML page's in its pieces, and ``links`` an HTML page's
+    links, ``None`` for another text, which has none.
     """
 
-    text: str
-    links: tuple[tuple[str, str], ...] | None
+    parts: tuple[str, ...]
+    links: tuple[_Link, ...] | None
+
+    @property
+    def text(self) -> str:
+        """The page's text, white space flattened."""
+        return _flat("".join(self.parts))
+
+    def targets(self, page: Page) -> list[tuple[str, str]]:
+        """Each link's target, made absolute against the page's URL, and its text."""
+        return [(urljoin(page.url, link.href), link.text) for link in self.links or ()]
+
+    def unlinked(self, page: Page, linked: Collection[tuple[str, str]]) -> str:
+        """The page's text without the text of each link whose target and text are ``linked``.
+
+        A page that is no HTML has no link, so its text is whole.
+        """
+        dropped = {
+            at
+            for link, target in zip(self.links or (), self.targets(page), strict=True)
+            if target in linked
+            for at in range(link.start, link.end)
+        }
+        return _flat("".join(" " if at in dropped else part for at, part in enumerate(self.parts)))
 
 
 def _read_text(response: Response) -> _Reading | None:
     """The text the attribution check reads, or ``None`` for a binary body.
 
     A text body is decoded by the charset its ``Content-Type`` declares, else as UTF-8, a
-    byte it cannot decode replaced. An HTML page gives its visible text and its links;
-    another text body gives its text. A binary body, by its type or, sent without one, by
-    its first bytes or a NUL, is not read, and its sha256 tells a change.
+    byte it cannot decode replaced. An HTML page gives its visible text, its images'
+    alternative text included, and its links; another text body gives its text. A binary
+    body, by its type or, sent without one, by its first bytes or a NUL, is not read, and its
+    sha256 tells a change.
     """
     content_type = response.content_type or ""
     media = content_type.split(";")[0].strip().lower()
@@ -824,16 +873,20 @@ def _read_text(response: Response) -> _Reading | None:
         reader = _Reader()
         reader.feed(text)
         reader.close()
-        return _Reading(_flat("".join(reader.parts)), tuple(reader.links))
-    return _Reading(_flat(text), None)
+        return _Reading(tuple(reader.parts), tuple(reader.links))
+    return _Reading((text,), None)
+
+
+def _linked(statement: Statement) -> tuple[str, str] | None:
+    """A statement recorded with a link as the link it is, its target and its text."""
+    return (statement.link, _flat(statement.text)) if statement.link else None
 
 
 def _links(page: Page, statement: Statement, reading: _Reading) -> bool:
     """Whether the page links the statement: by a link of its text, or, not HTML, its URL."""
     if reading.links is None:
         return str(statement.link) in reading.text
-    wanted = (statement.link, _flat(statement.text))
-    return any((urljoin(page.url, href), text) == wanted for href, text in reading.links)
+    return _linked(statement) in reading.targets(page)
 
 
 def _api_document(response: Response) -> dict[str, Any] | None:
@@ -878,12 +931,18 @@ def _reading(page: Page, response: Response) -> _Reading | None:
 def check_attribution(snapshot: Snapshot, page: Page, response: Response) -> None:
     """Stop when the page states a copyright, licence or terms that the attribution lacks.
 
-    The check reads a page's visible text, so a commented-out footer, a script's strings and
-    a PDF's bytes state nothing. It stops, too, when the page no longer prints a statement
-    recorded from it, or no longer links one that is a link. A terms page must print each
-    statement recorded from it and is searched no further; an API document's ``info`` names
-    a licence, terms or a contact only as the attribution records them from it. A sample and
-    a page an anonymous client cannot read are not read.
+    The check reads a page's visible text, an image's alternative text included where the
+    image stands, so a commented-out footer, a script's strings and a PDF's bytes state
+    nothing. It stops, too, when the page no longer prints a statement recorded from it, or no
+    longer links one that is a link. A terms page must print each statement recorded from it
+    and is searched no further; an API document's ``info`` names a licence, terms or a contact
+    only as the attribution records them from it. A sample and a page an anonymous client
+    cannot read are not read.
+
+    The search reads past a statement recorded with a link only where it stands as the text of
+    a link to its target, on any page, and past a statement without a link and the vocabulary
+    wherever they stand. A page that is no HTML has no link, so there a linked statement's words
+    are searched as any others (ADR-0046, decision 7).
     """
     reading = _reading(page, response)
     if reading is None:
@@ -902,18 +961,27 @@ def check_attribution(snapshot: Snapshot, page: Page, response: Response) -> Non
                 "it: record the lines it must print. Nothing was written."
             )
         return
-    text = _searched(page, response, text, recorded)
-    for words in (*(statement.text for statement in snapshot.attribution), *snapshot.vocabulary):
+    linked = {link for statement in snapshot.attribution if (link := _linked(statement))}
+    text = _searched(page, response, reading.unlinked(page, linked), recorded)
+    unlinked = (statement.text for statement in snapshot.attribution if not statement.link)
+    for words in (*unlinked, *snapshot.vocabulary):
         text = text.replace(_flat(words), " ")
     match = _STATEMENT.search(text)
     if match:
         around = text[max(match.start() - 60, 0) : match.end() + 60]
+        named = next((s for s in snapshot.attribution if s.link and _flat(s.text) in around), None)
+        aside = (
+            f" The attribution records {named.text!r} as a link to {named.link}, and the check "
+            "reads past it only as the text of such a link."
+            if named
+            else ""
+        )
         raise SystemExit(
             f"GET {page.url}: the page states {match.group(0)!r} ({around!r}), a copyright, "
-            "licence or terms of use that the attribution does not record.\nRead it by hand "
-            "and record it in the snapshot's attribution, or, where the words state nothing, "
-            "narrow the check: add them to its vocabulary, which FETCHED.md lists, and say why "
-            "in its capture. Nothing was written."
+            f"licence or terms of use that the attribution does not record.{aside}\nRead it "
+            "by hand and record it in the snapshot's attribution, or, where the words state "
+            "nothing, narrow the check: add them to its vocabulary, which FETCHED.md lists, and "
+            "say why in its capture. Nothing was written."
         )
 
 
@@ -939,7 +1007,14 @@ def _iso_http_date(value: str | None) -> str:
 
 
 def _cell(value: str) -> str:
-    return value.replace("|", r"\|")
+    """``value`` as a table's cell, which keeps its row on one line.
+
+    A line feed, with a carriage return before it, is written as a space, as a paragraph of the
+    frame writes it, and a pipe is escaped. Any other character that splits a text into lines
+    is written as given, since the frame splits ``FETCHED.md`` at line feeds alone
+    (``_lines``).
+    """
+    return value.replace("\r\n", " ").replace("\n", " ").replace("|", r"\|")
 
 
 def _code(text: str) -> str:
@@ -1269,10 +1344,20 @@ class _Table:
     rows: dict[str, str] = field(default_factory=dict)
 
 
+def _lines(text: str) -> list[str]:
+    """The lines of ``FETCHED.md`` as the frame joins them, at each line feed.
+
+    A line separator or a next-line mark inside a cell or a section stays in its line, as the
+    frame wrote it there, and the carriage return of a checkout that ends its lines in CRLF is
+    dropped. ``--check`` and ``compare_fetched`` read the file so.
+    """
+    return text.replace("\r\n", "\n").removesuffix("\n").split("\n")
+
+
 def _measured(text: str) -> _Table:
     """Split ``FETCHED.md`` into what ``--check`` compares and what it reports."""
     table, inside, previous = _Table(), False, ""
-    for line in text.splitlines():
+    for line in _lines(text):
         cells = [cell.strip() for cell in _CELL.split(line)[1:-1]]
         inside = inside and line.startswith("| ")
         masked = line
@@ -1333,16 +1418,6 @@ def compare(
 
 _REDIRECTED = re.compile(r"redirected \(\d{3}\) to \S+?(?=; |$)")
 _SPLIT_FILES = "(the files split from this page)"
-
-
-def _lines(text: str) -> list[str]:
-    """The lines of ``FETCHED.md`` as the frame joins them, at each line feed.
-
-    A line separator or a next-line mark inside a cell or a section stays in its line, as the
-    frame wrote it there, and the carriage return of a checkout that ends its lines in CRLF is
-    dropped.
-    """
-    return text.replace("\r\n", "\n").removesuffix("\n").split("\n")
 
 
 def _cells(row: str) -> list[str]:

@@ -1,6 +1,6 @@
 # ADR-0046: The snapshot script's frame in core
 
-Status: Accepted · Date: 2026-11-21 · Decided by https://github.com/xippios/sdk-core/issues/363 · Amended 2026-11-22 by https://github.com/xippios/sdk-core/issues/428
+Status: Accepted · Date: 2026-11-21 · Decided by https://github.com/xippios/sdk-core/issues/363 · Amended 2026-11-22 by https://github.com/xippios/sdk-core/issues/428 · Amended 2026-11-22 by https://github.com/xippios/sdk-core/issues/437
 
 ## Context
 
@@ -28,6 +28,21 @@ none computed a size or a hash again. The human took a check without a request i
 (https://github.com/xippios/sdk-core/issues/425) and answered its design question on
 2026-11-22, prompted in the sdk-core panel: decision 6, the amendment of that day, is the answer
 of https://github.com/xippios/sdk-core/issues/428.
+
+The trial of the release ported six sources onto the frame offline
+(https://github.com/xippios/sdk-core/issues/410), and three met its attribution check. The
+frame took the text of every recorded statement out of every page before its search, so
+"Terms of Service" in prose, or linked to another target, passed wherever it stood, where the
+scripts of sdk-google-mail and sdk-x accepted such words only in the recorded place and wrote
+their snapshots under that rule (https://github.com/xippios/sdk-google-mail/issues/72,
+https://github.com/xippios/sdk-x/issues/57). sdk-cashctrl's page states its copyright in the
+alternative text of its footer's logo, which the frame did not read, so its statement could
+only be declared without a page, and `FETCHED.md` then said that no run checks it while the
+source's own hook did (https://github.com/xippios/sdk-cashctrl/issues/134). The trial of sdk-x
+found, too, that only the code and its tests said what the check asks of an API document's
+`info`. The human answered the question on 2026-11-22, prompted in the sdk-core panel: decision
+7, the second amendment of that day, is the answer of
+https://github.com/xippios/sdk-core/issues/437.
 
 ## Decision
 
@@ -166,6 +181,39 @@ of https://github.com/xippios/sdk-core/issues/428.
      top level, which imports and declares alone, sends no request and writes no file, its
      run under `if __name__ == "__main__":`, and that the family check holds the committed
      file to it as above.
+7. **What the attribution check reads and accepts.** By the human's answer to
+   https://github.com/xippios/sdk-core/issues/437, given in the sdk-core panel on 2026-11-22:
+   - *A statement recorded with a link passes only as its link.* The search reads past the
+     text of a statement recorded with a link only where it stands as the text of a link to
+     the recorded target, the link's target made absolute against the page's URL and its text
+     flattened, as the check of the statement on its own page compares them, on every page
+     that prints the link. The same words in prose, or as the text of a link to another
+     target, on another page or beside the recorded link on its own, stop the run, as the
+     scripts of sdk-google-mail and sdk-x had it. A statement without a link and every word of
+     the vocabulary are read past wherever they stand, as before, and after the links, so that
+     a statement without a link that holds a linked one's words passes. A page that is no HTML
+     has no link, so there a linked statement's words are searched as any others: sdk-x's
+     script searched its Markdown pages whole, and sdk-google-mail's read its discovery
+     document whole but for the statements without a link. `Statement` gains no field.
+   - *An image's alternative text is text of the page.* The reader takes the `alt` of an `img`
+     where the image stands, set apart from the words around it as the image is, and as part
+     of the text of a link it stands in; an image in a script, a style or a template, and one
+     whose alternative text is empty or white space, add nothing. No other attribute is read, a
+     `title` or an `aria-label` among them. So a statement held in an alternative text is
+     recorded from its page and checked there, and an alternative text that holds a word of the
+     search and that no statement records stops the run, as any text of the page does.
+   - *An API document's `info`, as the frame has asked it since decision 2.* A JSON body whose
+     top level holds `openapi` or `swagger` is an API document. Each of `license`,
+     `termsOfService` and `contact` that its `info` holds must be quoted by a statement recorded
+     from that document, the statement's text or link equal to the field's value or, for an
+     object, to one of its values, and the three then leave the document's text before the
+     search, its other keys searched as its text. A document in YAML, or in any form but JSON,
+     is not parsed and is searched as text whole.
+   - *What does not change.* What a statement must show on its own page, its text and, with a
+     link, a link of its text to its target; a terms page, which must print each statement
+     recorded from it and is searched no further; a sample, a page that an anonymous client
+     cannot read and a binary body, which are not read; and the sentences that the frame
+     writes into `FETCHED.md`.
 
 ## Consequences
 
@@ -197,6 +245,20 @@ of https://github.com/xippios/sdk-core/issues/428.
   sdk-usda-wasde, and a source that links no page declares no `linked`, so that a removed
   page's row stays a difference. Whether a script names its declaration `SNAPSHOT` is the
   review's, since the check passes a script that names it otherwise.
+- Decision 7 gives sdk-google-mail and sdk-x their rule on a linked statement back with no hook
+  of their own, and lets sdk-cashctrl record its footer's notice from its page, which every run
+  then checks there, while its one link to its terms passes as that link. The scripts of the
+  nine other sources record no statement with a link and see no change from the first part.
+  The second part is the cost of every word of the search: an alternative text
+  on a source's page that holds a word of terms or copyright, or that stands inside the words
+  of a recorded statement, stops its first run that fetches until the attribution records it,
+  and no offline run can show it before.
+- A value that the frame writes into a cell of `FETCHED.md` keeps its row on one line: a line
+  feed, with a carriage return before it, is written as a space, as the frame's paragraphs
+  write one, and any other character that splits a text into lines as given. `--check` reads
+  the file at its line feeds, as decision 6 reads it, so a note that holds such a character
+  passes it right after the write that made the file
+  (https://github.com/xippios/sdk-core/issues/434).
 - The reference frame (https://github.com/xippios/sdk-core/issues/370) joins as a module of
   this subpackage, and `run` names both frames' entry, so the step that adds it makes `run`
   take either declaration without renaming either.

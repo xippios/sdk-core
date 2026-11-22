@@ -1,16 +1,19 @@
 - `xippios.core.refresh` holds the frame of a source's `scripts/refresh_upstream.py`: the
   script declares a `Snapshot` with its pages, its attribution and its hooks and calls
-  `run(snapshot)`, and the fetch, the attribution check, `FETCHED.md`, the write and
-  `--check` are core's, in the standard library alone. Hooks carry what some sources do
-  beyond the template's skeleton: `Credentials` for keyed samples with `--keyless`, a file
-  kept as recorded, one page split into several files, a second origin after a 403, a wait
-  on a 429, a section of the source's own and a note made from the answer. `FETCHED.md`
-  takes one form in every source, each ETag in a code span on a row with the allowlist
-  mark and the table `Not fetched` under its heading even when it has no row.
+  `run(snapshot)`, and the fetch, the attribution check, which reads an image's alternative
+  text and passes a statement recorded with a link only as the text of that link,
+  `FETCHED.md`, the write and `--check` are core's, in the standard library alone. Hooks
+  carry what some sources do beyond the template's skeleton: `Credentials` for keyed samples
+  with `--keyless`, a file kept as recorded, one page split into several files, a second
+  origin after a 403, a wait on a 429, a section of the source's own and a note made from
+  the answer. `FETCHED.md` takes one form in every source, each ETag in a code span on a row
+  with the allowlist mark and the table `Not fetched` under its heading even when it has no
+  row.
   (ADR-0046, §3, https://github.com/xippios/sdk-core/issues/320,
   https://github.com/xippios/sdk-core/issues/340,
   https://github.com/xippios/sdk-core/issues/415,
-  https://github.com/xippios/sdk-core/issues/425)
+  https://github.com/xippios/sdk-core/issues/425,
+  https://github.com/xippios/sdk-core/issues/437)
   - Hand-apply: `scripts/refresh_upstream.py` — ported to a `Snapshot` declaration run by
     `xippios.core.refresh.run`, its `# /// script` block dropped, its frame code deleted
     and its own code kept as hooks: sdk-comtrade
@@ -43,7 +46,9 @@
     its word check inside it, `note` for the files that keep a nested table as HTML and
     `sections` for its vendor examples, its attribution recording "Terms of Service" from
     its page with its link to https://cashctrl.com/en/about/terms, which the error handling's
-    text links, and five things of its script given up: `--from-file`, its
+    text links, and its footer's copyright notice from its page, which the frame reads in the
+    logo's alternative text and checks on every run, its own check of the notice in `split`
+    deleted, and five things of its script given up: `--from-file`, its
     run from a saved copy of the page that spends no request, since the frame takes no
     option of a source's own, its own User-Agent, which names its repository, for the
     family's, its request for the page gzipped, since the frame asks for each page as it
@@ -55,11 +60,14 @@
     since the frame's row of a file split from a page names the page's URL, the file's
     first line keeping the fragment — the frame carries none of the five while one source
     alone needs it, and stops on the link while the attribution does not record it
-    (ADR-0023, decision 2, ADR-0046, decision 2,
+    (ADR-0023, decision 2, ADR-0046, decisions 2 and 7,
     https://github.com/xippios/sdk-cashctrl/issues/134).
     `docs/upstream/FETCHED.md` — rewritten once by the first run of the ported script, in
     the frame's form, every row with an ETag gaining the code span and the mark and the
-    403 rows moving to `Not fetched` — the frame writes it alone (ADR-0028, decision 4).
+    403 rows moving to `Not fetched`, a run that stops until the attribution records what it
+    finds in an image's alternative text or a linked statement's words outside its link,
+    which no offline run shows — the frame writes it alone (ADR-0028, decision 4,
+    ADR-0046, decision 7).
     `tests/test_refresh_upstream.py` — its tests of what the frame now does, the render of
     `FETCHED.md` with its sentences, the row of `OBSERVED.md` and the table `Not fetched`,
     the write with the removal of a file no longer produced, and `--check` with its
