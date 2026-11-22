@@ -304,7 +304,9 @@ class PackagedList(BaseModel):
 
 type _Strategy = Callable[[Any, Mapping[Any, str]], Sequence[tuple[Any, str]]]
 """A source's own way to the closest codes: the value and the codes to their names in,
-``(code, name)`` pairs out, best first."""
+``(code, name)`` pairs out, best first. The value is the caller's, so a strategy of integer
+codes takes a text as well and returns no pair for one it does not read (ADR-0045, amendment
+2026-11-22)."""
 
 
 class PackagedCodes:
@@ -454,7 +456,8 @@ class PackagedCodes:
                 table's keys are, before the list's type: a text or an integer the table
                 holds is refused with its text whatever the list's type, so ``"all"``
                 given for integer codes reads its hint. Such a value is no code, so its
-                refusal leaves out that the packaged list is out of date.
+                refusal leaves out that the packaged list is out of date (ADR-0041,
+                decision 8, amended 2026-11-22).
             otherwise: The text of a refusal that names no code, e.g. ``"list_regions
                 lists them."``; left out where a code is close.
             closest: The source's own strategy for the closest codes, a function of the
@@ -462,8 +465,9 @@ class PackagedCodes:
                 best first, e.g. ISO codes first; each name with its runs of white space
                 collapsed, as a refusal shows it. By default core's ``closest`` for text
                 codes and ``nearest`` for integer codes. For integer codes it is asked for
-                a text that is no number as well, such as ``"US"``, and the codes are named
-                by name where it returns none.
+                a text that is no number as well, such as ``"US"``, so it takes a text and
+                returns no pair for one it does not read, and the codes are then named by
+                name (ADR-0045, amendment 2026-11-22).
             reason: Why the package refuses the value rather than asking upstream, e.g.
                 ``"PSD answers unknown codes with an empty result, so the package refuses
                 them."``.
@@ -490,7 +494,7 @@ class PackagedCodes:
                 param, plain, otherwise=otherwise, strategy=closest, reason=reason
             )
         close: Sequence[tuple[Any, str]] = ()
-        no_code = hint is not None  # the table's value is no code: no refresh makes it one
+        outdated = hint is None  # the table's value is no code: no refresh makes it one
         if hint is None:
             close = self._closest(plain, closest)
             hint = None if close else otherwise
@@ -503,7 +507,7 @@ class PackagedCodes:
             hint=hint,
             reason=reason,
             source=self._source,
-            no_code=no_code,
+            outdated=outdated,
         )
 
     def _typed(self, plain: object) -> bool:
@@ -548,8 +552,8 @@ class PackagedCodes:
 
         A text that is no number, given for integer codes, is named by the source's strategy
         first, as an ISO code names the area it stands for, and by name where the strategy
-        names none or none is given (https://github.com/xippios/sdk-core/issues/418). The
-        refusal ends with the ``reason``, as ``UnknownCode`` does (conventions §5).
+        names none or none is given (ADR-0045, decision 4, amended 2026-11-22). The refusal
+        ends with the ``reason``, as ``UnknownCode`` does (conventions §5).
         """
         shown = self._shown_names()
         tail = ""

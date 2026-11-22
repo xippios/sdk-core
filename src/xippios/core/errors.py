@@ -174,9 +174,9 @@ class UnknownCode(InvalidRequestError):
     message names the value, the parameter, the list with its fetch date, the closest codes
     (``Did you mean 0410000 (Wheat), 0440000 (Corn)?``, and a code whose name is its own
     text named once, ``Did you mean VA?``) unless ``hint`` is given, the ``reason`` when
-    given, and that the packaged list is out of date if upstream added the value since,
-    unless ``no_code`` says that the value is no code at all. An agent reads the message
-    over MCP, so it names no command of the package's maintainers.
+    given, and, while ``outdated`` is true, that the packaged list is out of date if upstream
+    added the value since. An agent reads the message over MCP, so it names no command of
+    the package's maintainers.
 
     Args:
         param: The parameter, as the package names it, e.g. ``"commodity_code"``.
@@ -195,10 +195,11 @@ class UnknownCode(InvalidRequestError):
             ``"PSD answers unknown codes with an empty result, so the package refuses
             them."``.
         source: Source slug, e.g. ``"usda-psd"``.
-        no_code: ``True`` for a value that is no code of upstream's at all, such as a value
-            of a source's hint table (ADR-0045, decision 3): an ISO alpha-3 code where
-            upstream takes integers. No refresh of the list would make it one, so the message
-            leaves out that the packaged list is out of date. ``False`` by default.
+        outdated: Whether the message ends with ``If upstream added it since, the packaged
+            list is out of date.``, ``True`` by default. ``False`` for a value that is no
+            code of upstream's at all, which no refresh of the list would make one: a value of
+            the check's hint table, such as an ISO alpha-3 code where upstream takes integers
+            (ADR-0041, decision 8, and ADR-0045, decision 3, amended 2026-11-22).
 
     Attributes:
         param: As given.
@@ -219,7 +220,7 @@ class UnknownCode(InvalidRequestError):
         hint: str | None = None,
         reason: str | None = None,
         source: str | None = None,
-        no_code: bool = False,
+        outdated: bool = True,
     ) -> None:
         if hint is None and closest:
             named = (
@@ -230,7 +231,7 @@ class UnknownCode(InvalidRequestError):
         super().__init__(
             f"{value!r} is not {article} {param} in the packaged {list_name} list (fetched "
             f"{fetched:%Y-%m-%d}).{' ' + hint if hint else ''}{' ' + reason if reason else ''}"
-            f"{'' if no_code else ' ' + _OUTDATED}",
+            f"{' ' + _OUTDATED if outdated else ''}",
             source=source,
         )
         self.param = param

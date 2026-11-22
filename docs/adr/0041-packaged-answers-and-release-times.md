@@ -1,7 +1,6 @@
 # ADR-0041: Packaged answers and release times in `ResultMeta`
 
-Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under
-https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0022
+Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0022 · Amended 2026-11-22 by https://github.com/xippios/sdk-core/issues/440
 
 ## Context
 
@@ -153,3 +152,19 @@ the sources cite them.
 
 The conventions' header, §3, §4, §5 and §8, the README and the docstrings of `ResultMeta`,
 `xippios.core.reference` and `UnknownCode` state its decisions from 1.28 on.
+
+## Amendment 2026-11-22
+
+https://github.com/xippios/sdk-core/issues/440 amends decision 8 for a value that is no code, a
+misfit that the trial of core 0.4.1 met in sdk-comtrade
+(https://github.com/xippios/sdk-core/issues/430). `UnknownCode` takes one more keyword after
+`source`, `outdated: bool = True`, named for the sentence it governs as `closest`, `hint` and
+`reason` are named for theirs. Its tail, `If upstream added it since, the packaged list is out of
+date.`, stands while `outdated` is true, the default, and a message with `outdated=False` ends
+with its hint and its reason. The check of a packaged list passes `outdated=False` for a value of
+its hint table alone (ADR-0045, decision 3, as amended on the same day): a value that is no code
+of upstream's, such as sdk-comtrade's ISO alpha-3 `"CHE"` where upstream takes integers, which no
+refresh of the list makes a code. Every other refusal keeps the tail, a source's own
+`UnknownCode(hint=...)` and the check's refusal with `otherwise` among them, so a source on core
+0.4.0 keeps its message. Decision 8 stands otherwise as written, and conventions §5 states the
+hinted refusal in a sentence of its own.
