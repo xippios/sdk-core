@@ -3,9 +3,13 @@
 ``upstream`` is the frame of ``scripts/refresh_upstream.py``, the snapshot of the documentation
 in ``docs/upstream/``: a source declares a ``Snapshot`` with its pages, its attribution and its
 hooks, and calls ``run``. The frame needs the standard library alone, and a converter a source
-uses stays its own dependency. Nothing else in core imports this package.
+uses stays its own dependency. ``reference`` is the frame of ``scripts/refresh_reference.py``,
+the packaged lists under ``reference/`` and ``enums.py``: a source declares one ``Listed`` per
+list, with its fetch, its enum and its origin, and calls the same ``run`` with its package and
+its client (ADR-0051). Nothing else in core imports this package.
 """
 
+from xippios.core.refresh.reference import Enumeration, Listed, run
 from xippios.core.refresh.upstream import (
     Credentials,
     NotFetched,
@@ -19,11 +23,12 @@ from xippios.core.refresh.upstream import (
     decode,
     dump_json,
     load_json,
-    run,
 )
 
 __all__ = [
     "Credentials",
+    "Enumeration",
+    "Listed",
     "NotFetched",
     "Page",
     "Response",

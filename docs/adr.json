@@ -845,6 +845,20 @@
       "superseded_by": null
     },
     {
+      "id": "ADR-0051",
+      "number": 51,
+      "title": "The reference refresh script's frame in core",
+      "path": "docs/adr/0051-the-reference-refresh-script-s-frame-in-core.md",
+      "status": "Accepted",
+      "date": "2026-11-22",
+      "decided_by": "https://github.com/xippios/sdk-core/issues/370",
+      "amended": [],
+      "amends": [],
+      "supersedes": [],
+      "other": [],
+      "superseded_by": null
+    },
+    {
       "id": "ADR-0052",
       "number": 52,
       "title": "One filter for a vintage taken back",
