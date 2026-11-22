@@ -910,6 +910,7 @@ from xippios.core.refresh import Enumeration, Listed, run
 
 from xippios.example import api
 from xippios.example._client import client
+from xippios.example.params import PACKAGED_LISTS
 
 QUOTA_HEADER = "x-ratelimit-remaining"
 """The header in which upstream reports the requests left in its quota, or ``None``."""
@@ -933,18 +934,28 @@ LISTS = (
     # A table, packaged as upstream's records, with no enum.
     Listed("commodities", api.get_commodities, endpoint="GetCommodities"),
 )
-"""The packaged lists, in the order of their enums in ``enums.py``."""
+"""The packaged lists, in the order of their enums in ``enums.py``: ``PACKAGED_LISTS``."""
 
 if __name__ == "__main__":
     raise SystemExit(
-        run(LISTS, package="xippios.example", client=client, quota_header=QUOTA_HEADER)
+        run(
+            LISTS,
+            package="xippios.example",
+            packaged=PACKAGED_LISTS,
+            client=client,
+            quota_header=QUOTA_HEADER,
+        )
     )
 ```
 
 `run` is the one entry of both frames: given a `Snapshot` it is the snapshot frame's, as the
 section above has it, and given the lists it takes the package's import path, whose
-directory it writes into and which must lie in the directory the script runs in, and the
-client the fetches go through. It fetches every list before it writes one, through that
+directory it writes into and which must lie in the directory the script runs in, the names
+of the lists the package declares it ships, and the client the fetches go through. The lists
+declared to `run` must be those of `packaged`, the package's `params.PACKAGED_LISTS` in
+the template's shape, or the run stops before a request and names the lists declared on one
+side alone; a source that declares its lists in two parts hands both, as
+`[*PACKAGED_LISTS, *PACKAGED_TABLES]`. It fetches every list before it writes one, through that
 client with one attempt per request for the run, so a 5xx or a 429 spends no second call of
 upstream's quota, and prints the requests it sent and the quota left in `quota_header`, a
 failed run's too, a request that ended in a transport error counted as sent. A fetch answers
@@ -965,19 +976,23 @@ is one `render_enums` call in the order the lists are declared, a `StrEnum` of a
 values, or of the field `Enumeration(values=...)` names, and an `IntEnum` of
 `Enumeration(ids=..., names=...)`, each with its `key`, `class_name` and `member_names`,
 which a function of the values may make, then formatted with `ruff format` and
-`ruff check --fix`; where no list declares an enum, `enums.py` is left alone. The rows and the
-module are made before the first file is written, so a run that fails, on a fetch or a
-render, writes nothing. `--only LIST [LIST ...]` fetches those lists alone and keeps every
-other list's file, and `--render-only` writes the rows and `enums.py` from the packaged files
-alone, without a request or a key, as an adoption does after a core release changes the
-renderer.
+`ruff check --fix`, which read it from standard input under the configuration the repository
+gives `enums.py`; where no list declares an enum, `enums.py` is left alone. Every file is
+made, the module formatted, before the first is written, and the files are written as one:
+a write that fails halfway puts back each file the run replaced and removes each it made. So
+a run that fails, on a fetch, a render, ruff or a write, writes nothing.
+`--only LIST [LIST ...]` fetches those lists alone and keeps every other list's file, and
+`--render-only` writes the rows and `enums.py` from the packaged files alone, without a
+request or a key, as an adoption does after a core release changes the renderer.
 
 What a script writes beside its lists goes in two hooks of `run`, which `--render-only`
 calls neither of: `before`, called once the command line and the declarations are checked
 and before the first request, for what can stop the run before it spends one, as
 sdk-usda-nass parses the column table that its `columns.csv` is rebuilt from; and `after`,
 called after the last write with the lists the run fetched by name, for sdk-eurostat's index
-and test samples, sdk-usda-nass's `columns.csv` and sdk-usda-wasde's manifest. The frame
+and test samples, sdk-usda-nass's `columns.csv` and sdk-usda-wasde's manifest. An `after`
+that raises leaves the frame's files written, whole, and the run says so before the error
+ends it: what the hook writes is the source's to make before it writes. The frame
 takes no option of a source's own: a script that keeps one, sdk-eurostat's `--samples` or
 sdk-usda-wasde's `--keep` and `--from`, reads it before the call and passes the rest as
 `argv`.

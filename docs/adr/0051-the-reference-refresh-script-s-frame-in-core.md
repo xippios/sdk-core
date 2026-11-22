@@ -42,7 +42,16 @@ subpackage, `xippios.core.refresh`, and the human answered the design question o
    replaces the three tuple shapes of the copies, and the four copies that build their lists
    by hand fit without a subclass. `package` is the source's import path, as
    `PackagedList.load` takes it: the frame writes into its directory as imported, and
-   refuses one outside the directory the script runs in, an installed copy.
+   refuses one outside the directory the script runs in, an installed copy. `packaged` names
+   the lists the package declares it ships, its `params.PACKAGED_LISTS` in the template's
+   shape, and the lists declared to `run` must be exactly those, or the run stops before a
+   request and names the lists declared on one side alone, as the template's script and the
+   copies of sdk-usda-esr and sdk-usda-wasde stop. The frame takes the names from the source
+   and reads no `params` of its own, since the sources declare them four ways: a tuple of
+   every name in six, a mapping of the value lists beside one of the tables in sdk-comtrade,
+   the parameters beside the derived lists in sdk-usda-nass, and in sdk-usda-esmis an empty
+   tuple of value lists while it ships two tables. Each hands the names it ships, both parts
+   where it keeps two.
 3. **When a list was fetched.** The fetch carries the moment. Values and records are stamped
    when their fetch returned, as four copies stamp them (sdk-faostat, sdk-usda-esr,
    sdk-usda-gats, sdk-usda-psd), and a finished list keeps its own `fetched`: the wrapper's
@@ -69,8 +78,14 @@ subpackage, `xippios.core.refresh`, and the human answered the design question o
    attempt per request for the run, so a 5xx or a 429 spends no second call of upstream's
    quota, and the run prints the requests it sent and the quota left in `quota_header`, a
    failed run's too, a request that ended in a transport error counted as sent, so the count
-   is never below what the run spent (sdk-usda-esr's rule). The rows and `enums.py` are made
-   before the first write, so a fetch or a render that fails writes nothing. `--only`
+   is never below what the run spent (sdk-usda-esr's rule). Every file the run writes is made
+   before the first write: the packaged files by `PackagedList.write` in a temporary
+   directory outside the repository, the rows, and `enums.py` formatted by `ruff format` and
+   `ruff check --fix` from standard input under the configuration the repository gives its
+   path. The files are then written as one: a write that fails halfway, a full disk or a
+   file the run may not write, or an interrupt, puts back each file the run replaced and
+   removes each it made, and the error is raised. So a fetch, a render, ruff or a write that
+   fails leaves the tree as it was, and the run is run again. `--only`
    fetches the lists it names and keeps every other list's file, which must be packaged
    already, and `--render-only` writes the rows and `enums.py` from the packaged files,
    without a request or a key; both check what they need before the first request.
@@ -80,7 +95,10 @@ subpackage, `xippios.core.refresh`, and the human answered the design question o
    name, for what a script writes beside them: sdk-eurostat's index and test samples,
    sdk-usda-nass's `columns.csv`, sdk-usda-wasde's manifest. `--render-only` calls neither.
    So "nothing is written until everything is fetched" stays the frame's promise, and the
-   tests hold it.
+   tests hold it. `after` runs once the frame's files stand written whole, so a hook that
+   raises leaves them written, consistent with one another, the run says so before the
+   hook's error ends it, and what the hook wrote is as the hook left it: a hook makes what it
+   writes before it writes, as the frame does.
 7. **What stays the source's.** The frame takes no option of a source's own and counts what
    its client's `observe` hook sees. A script that keeps an option, sdk-eurostat's `--samples`
    and its `--only` by a codelist's id, sdk-usda-wasde's `--keep` and `--from`, reads it

@@ -7,18 +7,23 @@ frame does the rest, the same in every source::
     LISTS = (Listed("commodities", api.get_commodities, endpoint="GetCommodities"),)
 
     if __name__ == "__main__":
-        raise SystemExit(run(LISTS, package="xippios.example", client=client))
+        raise SystemExit(
+            run(LISTS, package="xippios.example", packaged=PACKAGED_LISTS, client=client)
+        )
 
-Every list is fetched before anything is written, through ``client`` with one attempt per
-request, each counted, so a 5xx or a 429 spends no second call of upstream's quota; the
-requests sent and the quota left are printed after the fetches, a failed run's too. A fetch
-answers values, records or a finished ``PackagedList``. Then each list is written to
+The lists must be those the package declares it ships, ``packaged``, its
+``params.PACKAGED_LISTS``. Every list is fetched before anything is written, through
+``client`` with one attempt per request, each counted, so a 5xx or a 429 spends no second
+call of upstream's quota; the requests sent and the quota left are printed after the
+fetches, a failed run's too. A fetch answers values, records or a finished
+``PackagedList``. Then each list is written to
 ``reference/<name>.json`` by ``PackagedList.write``, the rows of the provenance table of
 ``reference/README.md`` are rewritten in place under the header the README has, and
 ``enums.py`` is rendered by one ``render_enums`` call in the order the lists are declared,
 then formatted with ``ruff format`` and ``ruff check --fix``; where no list declares an
-enum, ``enums.py`` is left alone. The rows and the module are made before the first file
-is written, so a run that fails writes nothing and is run again.
+enum, ``enums.py`` is left alone. Every file is made, the module formatted, before the first
+is written, and they are written as one: a write that fails puts back what the run
+replaced, so a run that fails writes nothing and is run again.
 
 ``--only`` fetches the lists it names and keeps every other list's file. ``--render-only``
 writes the provenance rows and ``enums.py`` from the packaged files alone, without a request
@@ -32,7 +37,8 @@ import inspect
 import re
 import subprocess
 import sys
-from collections.abc import Awaitable, Callable, Iterator, Mapping, Sequence
+import tempfile
+from collections.abc import Awaitable, Callable, Collection, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -218,15 +224,21 @@ def _directory(package: str) -> Path:
     return directory
 
 
-def _check(lists: Sequence[Listed]) -> None:
+def _check(lists: Sequence[Listed], packaged: Collection[str]) -> None:
     """Stop on a declaration the frame cannot run, before anything is fetched.
 
     Raises:
         SystemExit: No list, a name that is no file's name or that two lists take, an
-            enum of ids without the field of their names, or two enums of one key.
+            enum of ids without the field of their names, two enums of one key, or lists
+            other than those the package declares it ships, ``packaged``.
     """
     if not lists:
         raise SystemExit("Nothing to fetch: declare the lists, one Listed each.")
+    if isinstance(packaged, str) or not all(isinstance(name, str) for name in packaged):
+        raise SystemExit(
+            "packaged names the lists the package ships, a collection of names such as its "
+            "params.PACKAGED_LISTS, not a text"
+        )
     names: set[str] = set()
     keys: set[str] = set()
     for listed in lists:
@@ -252,6 +264,15 @@ def _check(lists: Sequence[Listed]) -> None:
         if key in keys:
             raise SystemExit(f"two lists declare the enum of key {key}")
         keys.add(key)
+    shipped = set(packaged)
+    if names != shipped:
+        alone = ", ".join(sorted(names - shipped)) or "none"
+        theirs = ", ".join(sorted(shipped - names)) or "none"
+        raise SystemExit(
+            "The lists declared to run are not those the package declares it ships: declared "
+            f"to run alone: {alone}. Declared by the package alone: {theirs}. Nothing was "
+            "fetched or written."
+        )
 
 
 def _origin(listed: Listed, packaged: PackagedList) -> str:
@@ -432,17 +453,65 @@ def _fetched(listed: Listed) -> PackagedList:
     return PackagedList(param=param, endpoint=listed.endpoint, fetched=fetched, records=records)
 
 
-def _ruff(path: Path) -> None:
-    """Format ``path`` with ``ruff format`` and ``ruff check --fix``, as it is committed.
+def _formatted(source: str, path: Path) -> str:
+    """``source`` as ``ruff format`` and then ``ruff check --fix`` leave it, as it is committed.
+
+    Both read the source from standard input under ``--stdin-filename``, so they take the
+    configuration the repository gives ``path``, and nothing is written.
 
     Raises:
-        SystemExit: ruff leaves the file failing.
+        SystemExit: ruff leaves the module failing, its messages printed before.
     """
-    sys.stdout.flush()
     for command in (["format"], ["check", "--fix"]):
-        done = subprocess.run([sys.executable, "-m", "ruff", *command, str(path)], check=False)
+        done = subprocess.run(
+            [sys.executable, "-m", "ruff", *command, "--stdin-filename", str(path), "-"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
         if done.returncode:
-            raise SystemExit(f"ruff {' '.join(command)} left {path.name} failing")
+            sys.stderr.write(done.stderr)
+            raise SystemExit(
+                f"ruff {' '.join(command)} left {path.name} failing; nothing was written"
+            )
+        source = done.stdout
+    return source
+
+
+def _staged(written: Mapping[str, PackagedList]) -> dict[str, bytes]:
+    """Each list's file as ``PackagedList.write`` writes it, by name, before the first write.
+
+    The files are made in a temporary directory outside the repository and read back, so
+    that the run writes them with the rest, at once.
+    """
+    files: dict[str, bytes] = {}
+    with tempfile.TemporaryDirectory(prefix="xippios-refresh-") as staging:
+        for name, packaged in written.items():
+            path = Path(staging, f"{name}.json")
+            packaged.write(path)
+            files[name] = path.read_bytes()
+    return files
+
+
+def _commit(files: Mapping[Path, bytes]) -> None:
+    """Write ``files`` as one: a write that fails puts back each file written before it.
+
+    A file the run replaced gets its bytes back and one it made is removed, then the error
+    is raised, an interrupt's too.
+    """
+    previous: dict[Path, bytes | None] = {}
+    try:
+        for path, content in files.items():
+            previous[path] = path.read_bytes() if path.is_file() else None
+            path.write_bytes(content)
+    except BaseException:
+        for path, old in previous.items():
+            if old is None:
+                path.unlink(missing_ok=True)
+            else:
+                path.write_bytes(old)
+        raise
 
 
 def _refresh(
@@ -450,13 +519,14 @@ def _refresh(
     argv: Sequence[str] | None,
     *,
     package: str,
+    packaged: Collection[str],
     client: AsyncClient,
     quota_header: str | None,
     before: Callable[[], object] | None,
     after: Callable[[Mapping[str, PackagedList]], object] | None,
 ) -> int:
     """The reference frame's run: ``run`` with a sequence of ``Listed``."""
-    _check(lists)
+    _check(lists, packaged)
     names = [listed.name for listed in lists]
     parser = argparse.ArgumentParser(
         description=f"Refresh the packaged reference data of {package} from upstream."
@@ -494,8 +564,8 @@ def _refresh(
         else "run the script without --only"
     )
     if missing := [name for name in kept if not (reference / f"{name}.json").is_file()]:
-        files = ", ".join(f"{name}.json" for name in missing)
-        raise SystemExit(f"{files} is not packaged yet: {why}")
+        absent = ", ".join(f"{name}.json" for name in missing)
+        raise SystemExit(f"{absent} is not packaged yet: {why}")
     written: dict[str, PackagedList] = {}
     if chosen:
         if before is not None:
@@ -512,21 +582,25 @@ def _refresh(
     }
     rows = _provenance(text, lists, packaged)
     module = _enums(lists, packaged)
-    reference.mkdir(exist_ok=True)
-    for name, fetched in written.items():
-        fetched.write(reference / f"{name}.json")
-        print(f"{name}.json: {len(fetched.records)} records from {fetched.endpoint}")  # noqa: T201
-    readme.write_text(rows, encoding="utf-8")
-    print(f"{README}: the rows of {len(lists)} lists in its provenance table")  # noqa: T201
     enums = directory / "enums.py"
+    files = {reference / f"{name}.json": content for name, content in _staged(written).items()}
+    files[readme] = rows.encode("utf-8")
+    if module is not None:
+        files[enums] = _formatted(module[0], enums).encode("utf-8")
+    _commit(files)
+    for name, fetched in written.items():
+        print(f"{name}.json: {len(fetched.records)} records from {fetched.endpoint}")  # noqa: T201
+    print(f"{README}: the rows of {len(lists)} lists in its provenance table")  # noqa: T201
     if module is None:
         print(f"{enums.name}: left alone, no list declares an enum")  # noqa: T201
     else:
-        enums.write_text(module[0], encoding="utf-8")
-        _ruff(enums)
         print(f"{enums.name}: {module[1]} enums")  # noqa: T201
     if chosen and after is not None:
-        after(written)
+        try:
+            after(written)
+        except BaseException as error:
+            print(f"after raised {type(error).__name__}: the files above stand written")  # noqa: T201
+            raise
     return 0
 
 
@@ -541,6 +615,7 @@ def run(
     argv: Sequence[str] | None = None,
     *,
     package: str,
+    packaged: Collection[str],
     client: AsyncClient,
     quota_header: str | None = None,
     before: Callable[[], object] | None = None,
@@ -553,6 +628,7 @@ def run(
     argv: Sequence[str] | None = None,
     *,
     package: str | None = None,
+    packaged: Collection[str] | None = None,
     client: AsyncClient | None = None,
     quota_header: str | None = None,
     before: Callable[[], object] | None = None,
@@ -561,9 +637,11 @@ def run(
     """Run a source's refresh script: its ``Snapshot``, or its packaged lists (ADR-0051).
 
     ``run(snapshot)`` is the snapshot frame's run as it stands (ADR-0046), and
-    ``run(lists, package=..., client=...)`` the reference frame's: it fetches every list
-    of ``lists`` through ``client``, then writes each to ``reference/<name>.json``, the
-    provenance rows of ``reference/README.md`` and ``enums.py``. The command line takes
+    ``run(lists, package=..., packaged=..., client=...)`` the reference frame's: it
+    fetches every list of ``lists`` through ``client``, then writes each to
+    ``reference/<name>.json``, the provenance rows of ``reference/README.md`` and
+    ``enums.py`` as one, each file made, ``enums.py`` formatted by ruff, before the first
+    is written, and a write that fails puts back what it replaced. The command line takes
     ``--only LIST [LIST ...]``, which fetches those lists alone and keeps every other
     list's file, or ``--render-only``, which writes the rows and ``enums.py`` from the
     packaged files without a request.
@@ -574,6 +652,9 @@ def run(
         argv: The command line's arguments, ``sys.argv[1:]`` by default.
         package: The source's import path, e.g. ``"xippios.usda.psd"``: the frame writes
             into its directory, which must lie in the directory the script runs in.
+        packaged: The names of the lists the package declares it ships, such as its
+            ``params.PACKAGED_LISTS``: the lists must be exactly these, or the run stops
+            before a request, naming those declared on one side alone.
         client: The client the fetches send through: one attempt per request for the
             run, each counted, its configuration restored after.
         quota_header: The response header in which upstream reports the requests left in
@@ -583,30 +664,34 @@ def run(
             such as parsing a snapshot's table that a list beside the lists is made from.
         after: Called after the last write with the lists this run fetched, by name: what
             a script writes beside the lists, an index or a manifest. Neither hook is
-            called by ``--render-only``.
+            called by ``--render-only``. A hook that raises leaves the frame's files
+            written, and the run says so before the error ends it.
 
     Returns:
         The exit status: 0. A fetch's error, an upstream error among them, is raised as it
         is, after the requests sent are printed, and nothing is written.
 
     Raises:
-        SystemExit: A declaration the frame cannot run, a list ``--only`` does not know, a
-            packaged file missing, or a README without its provenance table, each before
-            the first request; a fetch's answer that does not fit its declaration.
-        TypeError: A snapshot given the lists' arguments, or lists without their package
-            and client.
+        SystemExit: A declaration the frame cannot run, lists other than ``packaged``, a
+            list ``--only`` does not know, a packaged file missing, or a README without
+            its provenance table, each before the first request; a fetch's answer that
+            does not fit its declaration, or a module ruff leaves failing, before the
+            first write.
+        TypeError: A snapshot given the lists' arguments, or lists without their package,
+            the lists it ships and their client.
     """
     if isinstance(snapshot, Snapshot):
-        given = (package, client, quota_header, before, after)
+        given = (package, packaged, client, quota_header, before, after)
         if any(argument is not None for argument in given):
             raise TypeError("a Snapshot takes argv alone: package, client and the hooks are lists'")
         return _run_snapshot(snapshot, argv)
-    if package is None or client is None:
-        raise TypeError("run(lists, ...) takes the lists' package and client by keyword")
+    if package is None or packaged is None or client is None:
+        raise TypeError("run(lists, ...) takes the lists' package, packaged and client by keyword")
     return _refresh(
         snapshot,
         argv,
         package=package,
+        packaged=packaged,
         client=client,
         quota_header=quota_header,
         before=before,
