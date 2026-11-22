@@ -485,8 +485,11 @@ def test_family_tasks_take_one_tenant(family_source: FamilySource) -> None:
     )
 
 
-_COUNTRY = re.compile(r"country|countries|area|reporter|partner", re.IGNORECASE)
+_WORDS = ("country", "countries", "area", "reporter", "partner")
+_COUNTRY = re.compile("|".join(_WORDS), re.IGNORECASE)
 """The words of a parameter that takes a country's code, as part of its name (ADR-0056).
+
+Conventions §4 lists them in this order, which ``tests/test_conventions.py`` holds.
 
 The six sources name their 37 country parameters with them: ``country_code``, ``area``,
 ``reporter``, ``reporters``, ``reporter_code``, ``partner``, ``partners``, ``partner_code`` and
@@ -496,9 +499,9 @@ The six sources name their 37 country parameters with them: ``country_code``, ``
 _UNNAMED = "UNNAMED_CODES"
 """A tasks module's exemption: a task's name to its parameters, each with the reason."""
 _NAMES_INTRO = (
-    "every task parameter whose name holds country, area, reporter or partner is named in the "
-    f"answer's meta by names_codes, or stands in {_UNNAMED} of its tasks module with the reason "
-    "it is not (conventions §4, ADR-0056):"
+    f"every task parameter whose name holds {', '.join(_WORDS[:-1])} or {_WORDS[-1]} is named "
+    f"in the answer's meta by names_codes, or stands in {_UNNAMED} of its tasks module with the "
+    "reason it is not (conventions §4, ADR-0056):"
 )
 
 

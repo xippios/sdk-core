@@ -4,8 +4,9 @@
   `PackagedCodes` per parameter. A code the list lacks that reaches the answer unchecked
   withholds the answer with the list's refusal, and an empty `names` is left out of a dumped
   answer, so an answer of a task without such a parameter dumps as before. The family check
-  fails at once a task whose parameter holds `country`, `area`, `reporter` or `partner` and is
-  neither named nor exempt in `UNNAMED_CODES` of its tasks module with the reason.
+  fails at once a task whose parameter holds `country`, `countries`, `area`, `reporter` or
+  `partner`, in any case, and is neither named nor exempt in `UNNAMED_CODES` of its tasks
+  module with the reason.
   (ADR-0056, §4, https://github.com/xippios/sdk-core/issues/316)
   - Hand-apply: `src/xippios/usda/psd/tasks.py` (sdk-usda-psd) —
     `names_codes(country_code=COUNTRIES)` on `get_balance_sheet`, `get_data`,
@@ -27,13 +28,26 @@
     `get_bilateral_flows`, `get_mirror_flows`, `get_commodity_series` and
     `get_top_partners`, every reporter parameter with `Reporters` by `reporterCode` and
     `reporterDesc` and every partner parameter with `partnerAreas` by `PartnerCode` and
-    `PartnerDesc` — the family check fails without it on all 11 tasks.
+    `PartnerDesc`, and the four slice tasks' docstrings name the numeric code alone — the
+    family check fails without it on all 11 tasks.
     `src/xippios/comtrade/params.py` (sdk-comtrade) — `_resolve_iso3` and the alpha-3 branch
     of `_resolve_area` → the refusal of `check` with a hint table keyed by the alpha-3 codes
     of `Reporters` and `partnerAreas`, each naming its code, so `"CHE"` is refused naming
-    `757 (Switzerland)`, and the tests that pass an alpha-3 code pass the numeric code — the
-    decision of https://github.com/xippios/sdk-core/issues/375, a breaking change that makes
-    its release a minor.
+    `757 (Switzerland)` — the decision of https://github.com/xippios/sdk-core/issues/375, a
+    breaking change that makes its release a minor.
+    `tests/test_tasks.py` (sdk-comtrade) — `test_bilateral_flows_resolve_iso3_codes_before_the_call`,
+    `test_iso3_codes_resolve_to_the_codes_upstream_data_uses` and
+    `test_mirror_flows_resolve_iso3_codes_and_ask_monthly_data_for_months` → the refusal that
+    names the code, and every other test that passes an alpha-3 code to a slice task, the
+    end-to-end tests of the tools and the route among them, passes `"757"`, `"842"` and the
+    other numeric codes — each fails once `_resolve_iso3` goes, since an alpha-3 code is
+    refused.
+    `tests/test_live.py` (sdk-comtrade) — `test_get_bilateral_flows_live` and
+    `test_get_mirror_flows_live` pass `"757"` and `"842"` in place of `"CHE"` and `"USA"` —
+    both fail in the nightly run once `_resolve_iso3` goes.
+    `README.md` (sdk-comtrade) — the slice examples pass the numeric codes and the slice
+    tasks' paragraphs name UN Comtrade's codes alone — they name the alpha-3 codes that the
+    tasks refuse.
     `src/xippios/eurostat/tasks.py` (sdk-eurostat) — `names_codes(reporters=COUNTRIES,
     partners=COUNTRIES)` on `get_trade`, `get_trade_hs` and `download_trade` and
     `names_codes(reporters=COUNTRIES)` on `get_sold_production` and `get_total_production`,

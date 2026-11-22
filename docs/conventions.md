@@ -485,10 +485,11 @@ country, an area, a reporter or a partner fills it with core's decorator `names_
 `PackagedCodes` per parameter (§5), `@names_codes(country_code=COUNTRIES)`, which names the
 codes of the call's arguments on every answer that the task returns and withholds an answer for
 a code its list lacks with that list's refusal (ADR-0056). A parameter whose codes no packaged
-list can name, or whose name holds such a word while it takes no code, stands in
+list can name, or whose name holds one of the check's words while it takes no code, stands in
 `UNNAMED_CODES` of its tasks module with the reason, `{"get_data": {"area_cs": "The coding
 system of area, no code."}}`, and the family check fails a task whose parameter holds
-`country`, `area`, `reporter` or `partner` and stands in neither (ADR-0056). The name comes
+`country`, `countries`, `area`, `reporter` or `partner`, in any case, and stands in neither
+(ADR-0056). The name comes
 from the same source's list of the code and maps nothing between sources (ADR-0028, ADR-0056).
 
 `total` is upstream's count of the records matching the request, or `None` when the
