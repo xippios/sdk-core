@@ -36,9 +36,12 @@ keeps a patch compatible.
    consumer.** This supersedes the closed list of ADR-0023, decision 3, "the reason is one of
    three": the reason is one of four, (a), (b) and (c) as ADR-0023 words them, and (d) the
    maintainer's decision on the closed design question of the step that adds the code, which
-   that step's record names by the question's URL. The rest of ADR-0023 stands as written: the
-   reason is stated in the ADR that introduces the code, and "A second source will probably
-   need it" stays no reason. ADR-0052 and ADR-0057 name the reason (d) of their names in an
+   that step's record names by the question's URL. For `record_task`, which step 17.1 added as
+   the follow-up that the answer on step 17's question made, the follow-up counts as part of
+   step 17, so the question of (d) is step 17's, as the answer on
+   https://github.com/xippios/sdk-core/issues/455 takes it. The rest of ADR-0023 stands as
+   written: the reason is stated in the ADR that introduces the code, and "A second source will
+   probably need it" stays no reason. ADR-0052 and ADR-0057 name the reason (d) of their names in an
    amendment of 2026-11-22 each. For `naive_time` it is the answer on
    https://github.com/xippios/sdk-core/issues/371, part 1, the design question of step 8 of
    0.4.1, which added it. For `record_task` it is the answer on
