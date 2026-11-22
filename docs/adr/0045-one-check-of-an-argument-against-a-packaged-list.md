@@ -1,6 +1,6 @@
 # ADR-0045: One check of an argument against a packaged list
 
-Status: Accepted · Date: 2026-11-21 · Decided by https://github.com/xippios/sdk-core/issues/361
+Status: Accepted · Date: 2026-11-21 · Decided by https://github.com/xippios/sdk-core/issues/361 · Amended 2026-11-22 by https://github.com/xippios/sdk-core/issues/440
 
 ## Context
 
@@ -95,3 +95,32 @@ a list.
   https://github.com/xippios/sdk-usda-psd/issues/30, and `list_countries(region_code=...)`
   and `list_commodities(product_type=...)` in https://github.com/xippios/sdk-usda-gats/issues/31.
   The conventions state no rule for a list filter, and these rows do not ask for one.
+
+## Amendment 2026-11-22
+
+https://github.com/xippios/sdk-core/issues/440 amends decisions 3 and 4, from two misfits that
+the trial of core 0.4.1 met in sdk-comtrade (https://github.com/xippios/sdk-core/issues/410,
+https://github.com/xippios/sdk-core/issues/418 and https://github.com/xippios/sdk-core/issues/430).
+
+(a) **A refusal of a value of the hint table ends with its hint and its reason** (decision 3). A
+value the table holds is no code, so its refusal names the table's text in place of the closest
+codes, then the `reason`, and leaves out that the packaged list is out of date, by
+`UnknownCode(..., outdated=False)` (ADR-0041, decision 8, as amended on the same day). No refresh
+of the list makes sdk-comtrade's ISO alpha-3 `"CHE"` a code of its integer reporters. It holds
+for every value of a table: sdk-eurostat's hint for a product that another dataset lists, and
+that upstream could still add to this list, loses the sentence too, and its hint says where the
+product is. A source marks no value of its table as one that could become a code. A refusal with
+`otherwise` names no code and keeps the sentence, since its value may be a code upstream added.
+
+(b) **The source's strategy first for a text given for integer codes** (decisions 3 and 4). A
+text that is no number, given for integer codes, is asked of the source's `closest` strategy
+first, and the codes it names are named as closest codes are, `Did you mean 842 (USA)?`. The codes
+whose name holds the text or comes close to it, `By name: 104 (Wheat - White).`, are named where
+the strategy names none or the source passed none, and a text of digits still names the integer
+to pass and asks no strategy. A strategy is a function of the value as the caller gave it, so a
+strategy of integer codes takes a text as well and returns no pair for one it does not read; one
+written for integers alone raises from the source's own function. sdk-comtrade's `"US"` for a
+partner names 842 by its strategy, where the codes by name were 36 (Australia), 40 (Austria) and
+112 (Belarus), whose names hold the two letters.
+
+Decisions 1, 2 and 5 stand as written, as does the rest of decisions 3 and 4.

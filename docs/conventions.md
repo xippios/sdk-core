@@ -575,7 +575,9 @@ packaged list is out of date if upstream added the code since, naming no command
 package's maintainers (ADR-0041, decision 8). A source checks an argument against a packaged
 list with core's one check, `check(param, value)` of the list's declaration
 `PackagedList.codes(code, name, fold_case=...)`, which returns the value as the caller gave it
-or raises `UnknownCode` (ADR-0045). Upstream's own refusal of
+or raises `UnknownCode` (ADR-0045). A refusal of a value of the check's hint table, which is no
+code, names the table's text and the reason and leaves out that the packaged list is out of date
+(ADR-0041, decision 8, amendment 2026-11-22). Upstream's own refusal of
 the query as given is mapped to `InvalidRequestError`, or a subclass, in `classify` (§6):
 usda-nass's HTTP 413 over the record limit, comtrade's HTTP 400, cashctrl's
 `RequestRejected`. A refusal the package makes from a successful answer that the task

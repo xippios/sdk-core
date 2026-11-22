@@ -304,7 +304,9 @@ class PackagedList(BaseModel):
 
 type _Strategy = Callable[[Any, Mapping[Any, str]], Sequence[tuple[Any, str]]]
 """A source's own way to the closest codes: the value and the codes to their names in,
-``(code, name)`` pairs out, best first."""
+``(code, name)`` pairs out, best first. The value is the caller's, so a strategy of integer
+codes takes a text as well and returns no pair for one it does not read (ADR-0045, amendment
+2026-11-22)."""
 
 
 class PackagedCodes:
@@ -453,14 +455,19 @@ class PackagedCodes:
                 country."}``; read with the value's text stripped and without case, as the
                 table's keys are, before the list's type: a text or an integer the table
                 holds is refused with its text whatever the list's type, so ``"all"``
-                given for integer codes reads its hint.
+                given for integer codes reads its hint. Such a value is no code, so its
+                refusal leaves out that the packaged list is out of date (ADR-0041,
+                decision 8, amended 2026-11-22).
             otherwise: The text of a refusal that names no code, e.g. ``"list_regions
                 lists them."``; left out where a code is close.
             closest: The source's own strategy for the closest codes, a function of the
                 value and the codes to their names that returns ``(code, name)`` pairs,
                 best first, e.g. ISO codes first; each name with its runs of white space
                 collapsed, as a refusal shows it. By default core's ``closest`` for text
-                codes and ``nearest`` for integer codes.
+                codes and ``nearest`` for integer codes. For integer codes it is asked for
+                a text that is no number as well, such as ``"US"``, so it takes a text and
+                returns no pair for one it does not read, and the codes are then named by
+                name (ADR-0045, amendment 2026-11-22).
             reason: Why the package refuses the value rather than asking upstream, e.g.
                 ``"PSD answers unknown codes with an empty result, so the package refuses
                 them."``.
@@ -472,18 +479,22 @@ class PackagedCodes:
             UnknownCode: The list lacks the code; it names the list, its fetch date, the
                 closest codes, or the hint, or ``otherwise``, the reason and the source.
             InvalidRequestError: ``value`` is not of the list's type and the hint table
-                does not hold it: a text of digits for
-                integer codes names the integer to pass, another text the codes whose name
-                holds it or comes close, an integer for text codes its text or the codes
-                close to it; ``otherwise`` where none is named.
+                does not hold it: a text of digits for integer codes names the integer to
+                pass, another text the codes the source's strategy names for it, else
+                those whose name holds it or comes close, an integer for text codes its
+                text or the codes close to it; ``otherwise`` where none is named, then the
+                reason and the source.
         """
         plain = _plain(value)
         if self._canonical(plain) is not None:
             return value
         hint = _hint(plain, hints)
         if hint is None and not self._typed(plain):
-            raise self._wrong_type(param, plain, otherwise=otherwise, strategy=closest)
+            raise self._wrong_type(
+                param, plain, otherwise=otherwise, strategy=closest, reason=reason
+            )
         close: Sequence[tuple[Any, str]] = ()
+        outdated = hint is None  # the table's value is no code: no refresh makes it one
         if hint is None:
             close = self._closest(plain, closest)
             hint = None if close else otherwise
@@ -496,6 +507,7 @@ class PackagedCodes:
             hint=hint,
             reason=reason,
             source=self._source,
+            outdated=outdated,
         )
 
     def _typed(self, plain: object) -> bool:
@@ -528,15 +540,29 @@ class PackagedCodes:
         return list(closest(plain, cast(Mapping[str, str], shown)))
 
     def _wrong_type(
-        self, param: str, plain: object, *, otherwise: str | None, strategy: _Strategy | None
+        self,
+        param: str,
+        plain: object,
+        *,
+        otherwise: str | None,
+        strategy: _Strategy | None,
+        reason: str | None,
     ) -> InvalidRequestError:
-        """The refusal of a value that is not of the list's type (ADR-0045, decision 4)."""
+        """The refusal of a value that is not of the list's type (ADR-0045, decision 4).
+
+        A text that is no number, given for integer codes, is named by the source's strategy
+        first, as an ISO code names the area it stands for, and by name where the strategy
+        names none or none is given (ADR-0045, decision 4, amended 2026-11-22). The refusal
+        ends with the ``reason``, as ``UnknownCode`` does (conventions §5).
+        """
         shown = self._shown_names()
         tail = ""
         if self._integer and isinstance(plain, str):
             digits = plain.strip()
             if digits.isascii() and digits.isdigit():
                 tail = f" Pass it as the integer {int(digits)}."
+            elif strategy is not None and (close := list(strategy(plain, shown))):
+                tail = f" Did you mean {_named(close)}?"
             elif named := _by_name(plain, shown):
                 tail = f" By name: {_named(named)}."
         elif not self._integer and isinstance(plain, int) and not isinstance(plain, bool):
@@ -547,6 +573,8 @@ class PackagedCodes:
                 tail = f" Did you mean {_named(close)}?"
         if not tail and otherwise:
             tail = f" {otherwise}"
+        if reason:
+            tail += f" {reason}"
         kind = "integer" if self._integer else "text"
         first = next(iter(shown.items()), None)
         such = "" if first is None else f", such as {_named([first])}"

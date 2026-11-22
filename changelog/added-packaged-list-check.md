@@ -3,13 +3,16 @@
   it returns checks an argument in one call, `check(param, value, *, hints=None,
   otherwise=None, closest=None, reason=None)`, which returns the value as given or raises
   `UnknownCode`. A value of the other type than the list's codes is refused with
-  `InvalidRequestError`, which names the integer or the text to pass. `names`, `name_of` and
-  `in` read the declared list as the check compares it.
-  (ADR-0045, §5, https://github.com/xippios/sdk-core/issues/313)
+  `InvalidRequestError`, which names the integer or the text to pass, or for another text the
+  codes the source's strategy names, else those whose name holds it, and then the reason.
+  `names`, `name_of` and `in` read the declared list as the check compares it.
+  (ADR-0045, §5, https://github.com/xippios/sdk-core/issues/313,
+  https://github.com/xippios/sdk-core/issues/418, https://github.com/xippios/sdk-core/issues/432)
   - Hand-apply: `src/xippios/usda/esr/params.py` (sdk-usda-esr) — `_codes` and
     `_validate_code` → a declaration per list and `check(param, value, closest=_closest,
-    reason=_REASON)`, `_closest` taking a `Mapping` — the copy core now holds, and the tests of
-    a text given for an integer code take core's wording.
+    reason=_REASON)`, `_closest` taking a `Mapping`, and a text, for which it returns no pair
+    so that core names the codes by name — the copy core now holds, and the tests of a text
+    given for an integer code take core's wording.
     `src/xippios/usda/psd/params.py` (sdk-usda-psd) — `_codes` and `_validate_code` → a
     declaration per list and `check(param, value, hints=COUNTRY_HINTS, reason=...)`, and
     `validate_attribute_id` → `check` on the integer list — the copy core now holds.

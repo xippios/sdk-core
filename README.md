@@ -784,9 +784,10 @@ only when one is passed (a fetch date is not a vintage), `total` `None`. A file 
 records of one field named by the upstream parameter (`[{"state_alpha": "AK"}, ...]`).
 `UnknownCode` names the value, the list and its fetch date, the closest codes (or a
 `hint=`), an optional `reason=`, and that the list is out of date if upstream added the
-code since. `closest` matches a code by its text and its name, with a `cutoff=` below
-0.6 for short codes, and `nearest(value, codes)` names the integer codes nearest by
-number.
+code since, which `outdated=False` leaves out for a value that is no code at all (ADR-0041,
+decision 8, amended 2026-11-22). `closest` matches a code by its text and its name, with a
+`cutoff=` below 0.6 for short codes, and `nearest(value, codes)` names the integer codes
+nearest by number.
 
 `PackagedList.codes(code, name=None, *, fold_case=False, list_name=None, source=None)`
 declares once which field holds a list's code, which its name and whether upstream compares
@@ -796,7 +797,10 @@ it, and records it in `meta.request`, as the caller gave it: under `fold_case=Tr
 caller's spelling, which upstream compares without case. A list's codes are text or integers,
 as its records hold them, and a value of the other type is refused with `InvalidRequestError`,
 never compared by its text: `"104"` for integer codes reads `Pass it as the integer 104.`, and
-a name names the codes by name.
+another text names the codes that the source's `closest=` strategy names for it, such as
+`842 (USA)` for `"US"`, else the codes by name (ADR-0045, decision 4, amended 2026-11-22). So
+a strategy of integer codes takes a text as well, and returns no pair for one it does not read.
+The refusal ends with the `reason=`, as `UnknownCode` does.
 
 ```python
 STATES = PackagedList.load("xippios.example", "state_alpha").codes(
@@ -814,9 +818,11 @@ COUNTRIES.check(
 ```
 
 A hint is read with the value stripped and without case, and before the list's type, so
-`"all"` given for integer codes reads its hint. By default the closest codes are
-`closest`'s for text codes and `nearest`'s for integer codes, and a strategy reads each name
-with its runs of white space collapsed, as the refusal shows it. `list_name="element_QCL"`
+`"all"` given for integer codes reads its hint. Such a value is no code, so its refusal
+leaves out that the list is out of date, which the refusal with `otherwise=` keeps (ADR-0045,
+decision 3, amended 2026-11-22). By default the closest codes are `closest`'s for text codes
+and `nearest`'s for integer codes, and a strategy reads each name with its runs of white space
+collapsed, as the refusal shows it. `list_name="element_QCL"`
 names the list where its file says more than its `param`. The declaration builds its index
 once and loads its file where the source makes it, so a large list is declared behind
 `functools.cache`, and a record without the code or the name field, codes of both types, or
