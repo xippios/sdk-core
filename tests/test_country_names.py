@@ -26,6 +26,7 @@ from xippios.core import (
     PackagedCodes,
     PackagedList,
     Result,
+    ResultCap,
     ResultMeta,
     TenantLock,
     Tenants,
@@ -494,6 +495,23 @@ async def test_an_mcp_tool_answers_with_the_names_and_keeps_its_schema(
         plain.description,
         plain.input_schema,
     )
+
+
+@pytest.mark.anyio
+async def test_a_paged_tool_keeps_its_schema_and_its_offset_and_names_each_page(
+    task: Callable[..., Any],
+) -> None:
+    # ADR-0047: the adapter adds offset to a paged tool and runs the task again for a page.
+    caps = {"get_data": ResultCap(paged=True)}
+    server = build_server("example", [task], caps=caps)
+    (tool,) = await server.list_tools()
+    (plain,) = await build_server("example", [sync(get_data_async)], caps=caps).list_tools()
+    assert tool.input_schema == plain.input_schema
+    assert "offset" in tool.input_schema["properties"]
+    first = await mcp_call(server, "example_get_data", {"country_code": "CN"})
+    again = await mcp_call(server, "example_get_data", {"country_code": "CN", "offset": 0})
+    for page in (first, again):
+        assert page["meta"]["names"] == {"country_code": {"CN": "Comoros"}}
 
 
 def test_an_http_route_answers_with_the_names_and_keeps_its_method(
