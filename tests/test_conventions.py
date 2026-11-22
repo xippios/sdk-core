@@ -1,4 +1,5 @@
-"""The sentences of `docs/conventions.md` that the cases of ADR-0043 stand on, and ADR-0055's.
+"""The sentences of `docs/conventions.md` that the cases of ADR-0043 stand on, and ADR-0055's,
+and the preview rule of ADR-0050.
 
 The organization's release check quotes the conventions from sdk-core's `main`, and a finding
 blocks only where it quotes the sentence that a change breaks
@@ -230,3 +231,79 @@ def test_both_questions_keep_the_record() -> None:
     found = next(r for r in records if r["id"] == RECORD)
     kept = [found["decided_by"], *(entry["by"] for entry in found["amended"])]
     assert kept == list(QUESTIONS)
+
+
+# §8: what a write tool's preview shows, and its check (sdk-core#182, decided by the human in
+# https://github.com/xippios/sdk-core/issues/369). The confirm rule stays ADR-0036's, decision 9.
+
+PREVIEW_RECORD = "ADR-0050"
+PREVIEW_QUESTION = "https://github.com/xippios/sdk-core/issues/369"
+
+PREVIEW_RULES = [
+    pytest.param(
+        "A write task's preview sends no write and shows the action as the confirmed call would "
+        "send it",
+        ("ADR-0036, decision 9", "ADR-0050, decision 1"),
+        id="s8-what-a-preview-shows",
+    ),
+    pytest.param(
+        "is the write task's choice, and its docstring says whether its preview reads and what "
+        "that read costs",
+        ("Whether a preview reads first", "ADR-0050, decision 2"),
+        id="s8-whether-a-preview-reads",
+    ),
+    pytest.param(
+        "The preview carries `reads: list[str]`",
+        ("the operations it read", "`[]` when it read nothing", "ADR-0050, decision 3"),
+        id="s8-the-preview-s-reads",
+    ),
+    pytest.param(
+        "fails a write task unless its `Result`'s data has exactly one member tagged "
+        "`performed: Literal[False]`",
+        ("preview_reads=True)`", "declares `reads`", "ADR-0050, decision 4"),
+        id="s8-the-check-of-the-annotations",
+    ),
+    pytest.param(
+        "calls each write tool without `confirm`",
+        (
+            "dry_run=...",
+            "no request but a read",
+            "`is_read`",
+            "`reads` is empty exactly when it sent no request",
+            "ADR-0050, decisions 5 and 6",
+        ),
+        id="s8-the-dry-run",
+    ),
+    pytest.param(
+        "passes `preview_reads=True` from its patch on core 0.4.1",
+        ("the dry run at its own choice", "off by default", "ADR-0050, decisions 4 and 5"),
+        id="s8-when-a-source-switches-them-on",
+    ),
+]
+
+
+@pytest.mark.parametrize(("phrase", "names"), PREVIEW_RULES)
+def test_each_rule_of_the_preview_is_one_sentence_that_cites_its_record(
+    phrase: str, names: tuple[str, ...]
+) -> None:
+    rule = sentence(section(8), phrase)
+    for name in names:
+        assert name in rule, f"§8: {rule!r} does not name {name!r}"
+
+
+def test_the_review_checklist_judges_a_write_task_s_preview_by_its_record() -> None:
+    item = checklist_item(18)
+    for name in (
+        "**Write tools**",
+        "whether its preview reads first and what the read costs",
+        "preview_reads=True)`",
+        "conventions §8",
+        PREVIEW_RECORD,
+    ):
+        assert name in item, f"item 18 does not name {name!r}"
+
+
+def test_the_preview_record_keeps_its_question() -> None:
+    records = json.loads(INDEX.read_text(encoding="utf-8"))["records"]
+    found = next(r for r in records if r["id"] == PREVIEW_RECORD)
+    assert (found["decided_by"], found["amended"]) == (PREVIEW_QUESTION, [])

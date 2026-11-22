@@ -1,12 +1,16 @@
 import typing
 from collections.abc import Callable
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
+import httpx
 import pytest
+import respx
 from mcp.client import Client
+from pydantic import Field
 
 from xippios.core import (
+    InvalidRequestError,
     NotFoundError,
     Result,
     ResultMeta,
@@ -289,3 +293,500 @@ async def test_assert_write_tools_names_tools_with_the_underscored_source() -> N
     with_write = router_from_tasks("usda-nass", WRITE)
     with pytest.raises(AssertionError, match=r"^usda_nass_create_thing: "):
         await assert_write_tools(write, WRITE, source="usda-nass", router=with_write)
+
+
+# What a write tool's preview shows (conventions §8; ADR-0050) ------------------------
+# A write task's answer holds one member tagged performed: Literal[False], the preview,
+# which declares reads, the operations it read. preview_reads=True holds the annotations;
+# the dry run calls each tool without confirm and compares reads with what the router saw.
+# sdk-cashctrl's previews read with GET, as rename_item's does, and sdk-google-mail's read
+# nothing but a reply's, as add_item's reads nothing.
+
+ITEMS = "https://items.example.test"
+
+
+class Item(UpstreamModel):
+    id: int
+    name: str
+
+
+class ItemPreview(UpstreamModel):
+    """What an item's write would send; nothing was written."""
+
+    performed: Literal[False] = False
+    endpoint: str
+    payload: dict[str, str]
+    reads: list[str]
+
+
+class RecordPreview[T](UpstreamModel):
+    """A preview generic in the record it shows, as sdk-cashctrl's ``WritePreview[T]`` is."""
+
+    performed: Literal[False] = False
+    endpoint: str
+    payload: dict[str, str]
+    reads: list[str]
+    before: T | None = None
+
+
+class BarePreview(UpstreamModel):
+    """A preview tagged as one that says nothing of what it read."""
+
+    performed: Literal[False] = False
+    endpoint: str
+
+
+class ItemWritten(UpstreamModel):
+    performed: Literal[True] = True
+    id: int
+
+
+type ItemOutcome = ItemPreview | ItemWritten
+"""A ``type`` alias of the union, which the check reads through as it reads the union."""
+
+
+def _meta(endpoint: str) -> ResultMeta:
+    return ResultMeta(source="example", endpoint=endpoint)
+
+
+def _shown(data: ItemPreview | ItemWritten) -> Result[ItemPreview | ItemWritten]:
+    endpoint = data.endpoint if isinstance(data, ItemPreview) else "item/create.json"
+    return Result[ItemPreview | ItemWritten](data=data, meta=_meta(endpoint))
+
+
+async def add_item_async(name: str, confirm: bool = False) -> Result[ItemPreview | ItemWritten]:
+    """Add an item; without confirm=true it shows the payload and reads nothing.
+
+    Args:
+        name: The item's name, e.g. ``"Corn"``.
+        confirm: ``true`` adds it; ``false`` (the default) only previews it.
+    """
+    if not name.strip():
+        raise InvalidRequestError("name is empty; nothing was sent", source="example")
+    payload = {"name": name}
+    if confirm is not True:
+        return _shown(ItemPreview(endpoint="item/create.json", payload=payload, reads=[]))
+    async with httpx.AsyncClient(base_url=ITEMS) as client:
+        answer = await client.post("/item/create.json", data=payload)
+    return _shown(ItemWritten(id=answer.json()["id"]))
+
+
+async def rename_item_async(
+    item_id: int, name: str, confirm: bool = False
+) -> Result[RecordPreview[Item] | ItemWritten]:
+    """Rename an item; without confirm=true it reads the item, one GET, and shows it.
+
+    Args:
+        item_id: The item's id, e.g. ``4``.
+        name: The new name, e.g. ``"Wheat"``.
+        confirm: ``true`` renames it; ``false`` (the default) only previews it.
+    """
+    endpoint = "item/update.json"
+    payload = {"id": str(item_id), "name": name}
+    async with httpx.AsyncClient(base_url=ITEMS) as client:
+        stored = Item(**(await client.get("/item/read.json", params={"id": item_id})).json())
+        if confirm is not True:
+            preview = RecordPreview[Item](
+                endpoint=endpoint, payload=payload, reads=["item/read.json"], before=stored
+            )
+            return Result[RecordPreview[Item] | ItemWritten](data=preview, meta=_meta(endpoint))
+        await client.post(f"/{endpoint}", data=payload)
+    return Result[RecordPreview[Item] | ItemWritten](
+        data=ItemWritten(id=item_id), meta=_meta(endpoint)
+    )
+
+
+add_item = sync(add_item_async)
+rename_item = sync(rename_item_async)
+PREVIEWED: list[Callable[..., Any]] = [add_item, rename_item]
+
+
+async def tag_items(tag: str, confirm: bool = False) -> Result[ItemOutcome]:
+    """Tag the items a search finds; the preview reads them with a POST, as some upstreams do.
+
+    Args:
+        tag: The tag, e.g. ``"grain"``.
+        confirm: ``true`` tags them; ``false`` (the default) only previews it.
+    """
+    async with httpx.AsyncClient(base_url=ITEMS) as client:
+        await client.post("/item/search.json", json={"tag": tag})
+    return _shown(ItemPreview(endpoint="item/tag.json", payload={}, reads=["item/search.json"]))
+
+
+async def add_item_posting(name: str, confirm: bool = False) -> Result[ItemOutcome]:
+    """A preview that writes.
+
+    Args:
+        name: The item's name.
+        confirm: Ignored.
+    """
+    async with httpx.AsyncClient(base_url=ITEMS) as client:
+        await client.post("/item/create.json", data={"name": name})
+    return _shown(ItemPreview(endpoint="item/create.json", payload={"name": name}, reads=[]))
+
+
+async def rename_item_quietly(item_id: int, confirm: bool = False) -> Result[ItemOutcome]:
+    """A preview that read and says it did not.
+
+    Args:
+        item_id: The item's id.
+        confirm: Ignored.
+    """
+    async with httpx.AsyncClient(base_url=ITEMS) as client:
+        await client.get("/item/read.json", params={"id": item_id})
+    return _shown(ItemPreview(endpoint="item/update.json", payload={}, reads=[]))
+
+
+async def rename_item_claiming(item_id: int, confirm: bool = False) -> Result[ItemOutcome]:
+    """A preview that says it read and sent nothing.
+
+    Args:
+        item_id: The item's id.
+        confirm: Ignored.
+    """
+    return _shown(ItemPreview(endpoint="item/update.json", payload={}, reads=["item/read.json"]))
+
+
+async def add_item_at_once(name: str, confirm: bool = False) -> Result[ItemOutcome]:
+    """A task whose call without confirm answers as a confirmed one does.
+
+    Args:
+        name: The item's name.
+        confirm: Ignored.
+    """
+    return _shown(ItemWritten(id=5))
+
+
+async def add_item_unpreviewed(name: str, confirm: bool = False) -> Result[ItemWritten]:
+    """A write task with no preview member."""
+    return Result[ItemWritten](data=ItemWritten(id=5), meta=_meta("item/create.json"))
+
+
+async def add_item_bare(name: str, confirm: bool = False) -> Result[BarePreview | ItemWritten]:
+    """A preview without reads."""
+    preview = BarePreview(endpoint="item/create.json")
+    return Result[BarePreview | ItemWritten](data=preview, meta=_meta("item/create.json"))
+
+
+async def add_item_twice(name: str, confirm: bool = False) -> Result[ItemPreview | BarePreview]:
+    """Two members tagged as the preview."""
+    preview = BarePreview(endpoint="item/create.json")
+    return Result[ItemPreview | BarePreview](data=preview, meta=_meta("item/create.json"))
+
+
+async def add_item_unannotated(name: str, confirm: bool = False):  # type: ignore[no-untyped-def]
+    """A write task whose return is not annotated."""
+    return _shown(ItemPreview(endpoint="item/create.json", payload={}, reads=[]))
+
+
+async def add_item_long(name: str, confirm: bool = False) -> Result[ItemOutcome]:
+    """A preview past the byte bound of the default cap, which the tool answers cut.
+
+    Args:
+        name: The item's name.
+        confirm: Ignored.
+    """
+    payload = {"name": name, "notes": "x" * 70_000}
+    return _shown(ItemPreview(endpoint="item/create.json", payload=payload, reads=[]))
+
+
+class UnshownPreview(UpstreamModel):
+    """A preview that declares reads and leaves it out of its JSON."""
+
+    performed: Literal[False] = False
+    reads: list[str] = Field(default_factory=list, exclude=True)
+
+
+async def add_item_unshown(name: str, confirm: bool = False) -> Result[UnshownPreview]:
+    """A preview whose answer over MCP carries no reads.
+
+    Args:
+        name: The item's name.
+        confirm: Ignored.
+    """
+    return Result[UnshownPreview](data=UnshownPreview(), meta=_meta("item/create.json"))
+
+
+@pytest.mark.anyio
+async def test_preview_reads_holds_one_preview_that_declares_reads() -> None:
+    # Both previews pass, the generic one through the sync facade's annotations too, and so
+    # does a Result whose data is a type alias of the union.
+    write = build_server("example", PREVIEWED, read_only=False)
+    await assert_write_tools(write, PREVIEWED, source="example", preview_reads=True)
+    tagging = build_server("example", [tag_items], read_only=False)
+    await assert_write_tools(tagging, [tag_items], source="example", preview_reads=True)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("task", "problem"),
+    [
+        pytest.param(
+            add_item_unpreviewed,
+            r"no member of its Result's data is tagged performed: Literal\[False\], the preview",
+            id="no-preview-member",
+        ),
+        pytest.param(
+            add_item_bare,
+            r"the preview BarePreview declares no reads: list\[str\], the operations it read",
+            id="no-reads",
+        ),
+        pytest.param(
+            add_item_twice,
+            r"2 members of its Result's data are tagged performed: Literal\[False\]: "
+            r"ItemPreview, BarePreview; one is the preview",
+            id="two-previews",
+        ),
+        pytest.param(
+            create_thing,
+            r"returns dict\[str, str\], not a Result whose data holds the preview",
+            id="no-result",
+        ),
+        pytest.param(
+            add_item_unannotated,
+            r"its return is not annotated; a write task returns a Result that holds its preview",
+            id="not-annotated",
+        ),
+    ],
+)
+async def test_preview_reads_fails_a_write_task_without_its_preview(
+    task: Callable[..., Any], problem: str
+) -> None:
+    write = build_server("example", [task], read_only=False)
+    # Off by default: a source that calls the check as on core 0.4.0 passes.
+    await assert_write_tools(write, [task], source="example")
+    with pytest.raises(AssertionError, match=f"^example_{task.__name__}: {problem}$"):
+        await assert_write_tools(write, [task], source="example", preview_reads=True)
+
+
+@pytest.mark.anyio
+async def test_a_dry_run_passes_a_preview_that_reads_and_one_that_does_not(
+    respx_mock: respx.MockRouter,
+) -> None:
+    read = respx_mock.get(f"{ITEMS}/item/read.json").respond(200, json={"id": 4, "name": "Corn"})
+    write = build_server("example", PREVIEWED, read_only=False)
+    await assert_write_tools(
+        write,
+        PREVIEWED,
+        source="example",
+        dry_run={
+            "add_item": {"name": "Corn"},
+            "rename_item": [{"item_id": 4, "name": "Wheat"}, {"item_id": 4, "name": "Rye"}],
+        },
+        sent=respx_mock,
+    )
+    assert read.call_count == 2, "one read for each call of rename_item, none for add_item"
+
+
+@pytest.mark.anyio
+async def test_a_dry_run_fails_a_preview_that_writes(respx_mock: respx.MockRouter) -> None:
+    created = respx_mock.post(f"{ITEMS}/item/create.json").respond(200, json={"id": 5})
+    write = build_server("example", [add_item_posting], read_only=False)
+    with pytest.raises(
+        AssertionError,
+        match=(
+            r"^example_add_item_posting: the preview sent a request that is no read, "
+            r"POST /item/create\.json; a preview sends no write$"
+        ),
+    ):
+        await assert_write_tools(
+            write,
+            [add_item_posting],
+            source="example",
+            dry_run={"add_item_posting": {"name": "Corn"}},
+            sent=respx_mock,
+        )
+    assert created.called
+
+
+@pytest.mark.anyio
+async def test_a_dry_run_fails_a_preview_that_read_and_says_it_did_not(
+    respx_mock: respx.MockRouter,
+) -> None:
+    respx_mock.get(f"{ITEMS}/item/read.json").respond(200, json={"id": 4, "name": "Corn"})
+    write = build_server("example", [rename_item_quietly], read_only=False)
+    with pytest.raises(
+        AssertionError,
+        match=(
+            r"^example_rename_item_quietly: the preview sent GET /item/read\.json "
+            r"and its reads is empty$"
+        ),
+    ):
+        await assert_write_tools(
+            write,
+            [rename_item_quietly],
+            source="example",
+            dry_run={"rename_item_quietly": {"item_id": 4}},
+            sent=respx_mock,
+        )
+
+
+@pytest.mark.anyio
+async def test_a_dry_run_fails_a_preview_that_says_it_read_and_sent_nothing(
+    respx_mock: respx.MockRouter,
+) -> None:
+    write = build_server("example", [rename_item_claiming], read_only=False)
+    with pytest.raises(
+        AssertionError,
+        match=(
+            r"^example_rename_item_claiming: the preview's reads names "
+            r"\['item/read\.json'\] and it sent no request$"
+        ),
+    ):
+        await assert_write_tools(
+            write,
+            [rename_item_claiming],
+            source="example",
+            dry_run={"rename_item_claiming": {"item_id": 4}},
+            sent=respx_mock,
+        )
+
+
+@pytest.mark.anyio
+async def test_a_dry_run_fails_a_write_task_without_a_preview_member() -> None:
+    # The dry run reads reads, so it holds the preview's annotation first.
+    write = build_server("example", [add_item_unpreviewed], read_only=False)
+    with pytest.raises(AssertionError, match=r"^example_add_item_unpreviewed: no member "):
+        await assert_write_tools(
+            write,
+            [add_item_unpreviewed],
+            source="example",
+            dry_run={"add_item_unpreviewed": {"name": "Corn"}},
+            sent=respx.MockRouter(),
+        )
+
+
+@pytest.mark.anyio
+async def test_a_dry_run_fails_an_answer_that_is_no_preview(
+    respx_mock: respx.MockRouter,
+) -> None:
+    write = build_server("example", [add_item_at_once], read_only=False)
+    with pytest.raises(
+        AssertionError,
+        match=r"^example_add_item_at_once: the dry run's answer is no preview, performed is True$",
+    ):
+        await assert_write_tools(
+            write,
+            [add_item_at_once],
+            source="example",
+            dry_run={"add_item_at_once": {"name": "Corn"}},
+            sent=respx_mock,
+        )
+
+
+@pytest.mark.anyio
+async def test_a_dry_run_fails_a_refused_call_with_its_answer(
+    respx_mock: respx.MockRouter,
+) -> None:
+    write = build_server("example", [add_item], read_only=False)
+    with pytest.raises(
+        AssertionError,
+        match=(
+            r"^example_add_item: the dry run answered "
+            r"error: InvalidRequestError: name is empty; nothing was sent$"
+        ),
+    ):
+        await assert_write_tools(
+            write,
+            [add_item],
+            source="example",
+            dry_run={"add_item": {"name": " "}},
+            sent=respx_mock,
+        )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("task", "problem"),
+    [
+        pytest.param(
+            add_item_long,
+            r"the result cap cut the dry run's answer: result is \d+ bytes, over the cap of "
+            r"65536; narrow the query to see the rest",
+            id="cut-by-the-cap",
+        ),
+        pytest.param(
+            add_item_unshown,
+            r"the preview carries no reads, the list of the operations it read",
+            id="reads-not-in-the-answer",
+        ),
+    ],
+)
+async def test_a_dry_run_judges_the_answer_the_tool_gives(
+    respx_mock: respx.MockRouter, task: Callable[..., Any], problem: str
+) -> None:
+    # The dry run reads the tool's text, as an agent does, not the task's model.
+    write = build_server("example", [task], read_only=False)
+    with pytest.raises(AssertionError, match=f"^example_{task.__name__}: {problem}$"):
+        await assert_write_tools(
+            write,
+            [task],
+            source="example",
+            dry_run={task.__name__: {"name": "Corn"}},
+            sent=respx_mock,
+        )
+
+
+@pytest.mark.anyio
+async def test_a_source_declares_a_read_that_upstream_takes_by_post(
+    respx_mock: respx.MockRouter,
+) -> None:
+    respx_mock.post(f"{ITEMS}/item/search.json").respond(200, json=[])
+    write = build_server("example", [tag_items], read_only=False)
+    arguments: dict[str, Any] = {"dry_run": {"tag_items": {"tag": "grain"}}, "sent": respx_mock}
+    with pytest.raises(AssertionError, match=r"no read, POST /item/search\.json; "):
+        await assert_write_tools(write, [tag_items], source="example", **arguments)
+
+    def is_read(request: httpx.Request) -> bool:
+        return request.method == "GET" or request.url.path == "/item/search.json"
+
+    await assert_write_tools(write, [tag_items], source="example", is_read=is_read, **arguments)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("dry_run", "problem"),
+    [
+        pytest.param(
+            {"add_item": {"name": "Corn"}},
+            r"^dry_run gives no arguments for the write tasks \['rename_item'\]; "
+            r"the dry run calls each write tool$",
+            id="a-task-left-out",
+        ),
+        pytest.param(
+            {"add_item": {"name": "Corn"}, "rename_item": [], "rename": {"item_id": 4}},
+            r"^dry_run names no write task: \['rename'\]; a key is the task function's __name__$",
+            id="a-key-of-no-task",
+        ),
+        pytest.param(
+            {"add_item": {"name": "Corn"}, "rename_item": []},
+            r"^example_rename_item: dry_run gives it no arguments$",
+            id="an-empty-list",
+        ),
+        pytest.param(
+            {"add_item": {"name": "Corn", "confirm": False}, "rename_item": {"item_id": 4}},
+            r"^example_add_item: a dry run calls without confirm; drop it from dry_run$",
+            id="confirm-given",
+        ),
+    ],
+)
+async def test_a_dry_run_wants_arguments_for_each_write_task_and_no_confirm(
+    respx_mock: respx.MockRouter, dry_run: dict[str, Any], problem: str
+) -> None:
+    write = build_server("example", PREVIEWED, read_only=False)
+    with pytest.raises(AssertionError, match=problem):
+        await assert_write_tools(
+            write, PREVIEWED, source="example", dry_run=dry_run, sent=respx_mock
+        )
+    assert not respx_mock.calls, "the arguments are checked before any tool is called"
+
+
+@pytest.mark.anyio
+async def test_the_dry_run_s_keywords_go_together() -> None:
+    write = build_server("example", PREVIEWED, read_only=False)
+    with pytest.raises(TypeError, match=r"^dry_run needs sent=, the respx router"):
+        await assert_write_tools(write, PREVIEWED, source="example", dry_run={})
+    with pytest.raises(TypeError, match=r"^sent= and is_read= serve the dry run; pass dry_run="):
+        await assert_write_tools(write, PREVIEWED, source="example", sent=respx.MockRouter())
+    with pytest.raises(TypeError, match=r"^sent= and is_read= serve the dry run; pass dry_run="):
+        await assert_write_tools(write, PREVIEWED, source="example", is_read=bool)
