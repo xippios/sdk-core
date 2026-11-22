@@ -1,6 +1,6 @@
 # Handover — from planning to Claude Code
 
-Date: 2026-10-20 · Author: Johannes Didaskalu (with Claude) · Refreshed 2026-10-22 with the state after sessions 1 and 2, 2026-10-25 with the state after the core 0.2.0 release PR, 2026-10-26 with core 0.2.1, the release train and the family check (the sections from "Core 0.2.1" on), 2026-10-27 with `sdk-core`'s state line at the core 0.2.1 release PR, and 2026-10-27 at the core 0.3.0 release PR (the State block, the session model, the sections from "Core 0.3.0" on, and notes where 0.3.0 changed an earlier line), 2026-11-13, when the process of the work left this file (the session model, the standing gates, the plan for issue-driven work and the switch of the retired gates) and the documents' own rules stayed, 2026-11-17 at the core 0.3.2 release PR (the State block's `sdk-core` line), 2026-11-18 at the core 0.4.0 release PR (the State block's `sdk-core` line and the sections from "Core 0.4.0" on), and 2026-11-22 before the core 0.4.1 release PR (the State block's `sdk-core` line and the sections from "Core 0.4.1" on).
+Date: 2026-10-20 · Author: Johannes Didaskalu (with Claude) · Refreshed 2026-10-22 with the state after sessions 1 and 2, 2026-10-25 with the state after the core 0.2.0 release PR, 2026-10-26 with core 0.2.1, the release train and the family check (the sections from "Core 0.2.1" on), 2026-10-27 with `sdk-core`'s state line at the core 0.2.1 release PR, and 2026-10-27 at the core 0.3.0 release PR (the State block, the session model, the sections from "Core 0.3.0" on, and notes where 0.3.0 changed an earlier line), 2026-11-13, when the process of the work left this file (the session model, the standing gates, the plan for issue-driven work and the switch of the retired gates) and the documents' own rules stayed, 2026-11-17 at the core 0.3.2 release PR (the State block's `sdk-core` line), 2026-11-18 at the core 0.4.0 release PR (the State block's `sdk-core` line and the sections from "Core 0.4.0" on), and 2026-11-22 before and at the core 0.4.1 release PR (the State block's `sdk-core` line and the sections from "Core 0.4.1" on).
 
 ## State
 
@@ -1334,8 +1334,8 @@ keeps a source's package and its callers compatible, and every name that
 `tests/test_public_surface.py` pinned at v0.4.0 stays pinned, while a check of
 `xippios.core.testing` that a record makes stricter may fail a source's own test at the lock's
 move, each listed under "Every source" below (conventions §12; ADR-0058, decision 2). Steps 1
-to 19 and their follow-ups, one PR each, merged with a merge commit between 2026-11-21 18:31
-and 2026-11-22 16:35 UTC, so their own commits are on `main` too. Each step that changes a rule
+to 20 and their follow-ups, one PR each, merged with a merge commit between 2026-11-21 18:31
+and 2026-11-22 18:31 UTC, so their own commits are on `main` too. Each step that changes a rule
 brings its record, decided by its question, ADR-0043 to ADR-0057, and amends a record where a
 question changed one: steps 2 and 9 amend their own, ADR-0043 and ADR-0053, step 17 amends
 ADR-0037 and ADR-0042, step 7.1 ADR-0041 and ADR-0045, steps 16.2 and 16.3 ADR-0046, step 5.1
@@ -1372,6 +1372,8 @@ names the text that the release publishes.
 | 18 | #409 `step/0.4.1-18` | this section and "Adopting core 0.4.1" with its two lists, which the definition of done's Adoption PR block and the review checklist's item 12 hold an adoption against | — | the version line, 1.29 | `9b53282d0a64095aa70cdb95a20790ae25e3a0b0` |
 | 18.1 | #448 `step/0.4.1-18.1` | the handover's parts and the Hand-apply notes as the trial's six ports corrected them | — | — | `cddef41a007148162c96a397759bd6398b45307d` |
 | 19 | #413 `step/0.4.1-19` | `conventions.yml` and `adr-index.yml` in place of `organization.yml`; `publish.yml` titled `Publish` | — | — | `ee39ad1727f34db2013e57b9c62a7d9078f99f48` |
+| 20 | #463 `step/0.4.1-20` | a fourth reason for code with one consumer and what a core patch keeps compatible; three records name the maintainer's answer on a question's URL | ADR-0058; ADR-0023, ADR-0052 and ADR-0057 amendments | §12 | `b30ba186480c8ad31fd0bca5a21f10eab8fef3a4` |
+| Release | `release/0.4.1` | version 0.4.1 and the lock; the README's install lines and Status at 0.4.1, with the new surface in its table; the CHANGELOG's `[0.4.1]` section, assembled from the 25 fragments with their Hand-apply notes; `CLAUDE.md`'s layout, its six surfaces and its command for the ADR index; the last two rows of this table and the title `Publish` in three lists of "Adopting core 0.4.1" | — | — | — |
 
 Step 18 wrote this section, "Adopting core 0.4.1" and the conventions' version line 1.29 from
 the merged text of the steps above it, the follow-ups merged after it and step 20 brought both
@@ -1945,8 +1947,10 @@ the rules of 1.28.
   (api.example.org: 15)`, from which the source's release PR reads its count of live calls,
   and a run that built a `Tenants` registry names no host; the source changes no file for it
   (https://github.com/xippios/sdk-core/issues/335).
-- The first line of `.github/workflows/publish.yml` cites ADR-0039, decision 6, by `copier
-  update` (https://github.com/xippios/sdk-core/issues/323).
+- The first line of `.github/workflows/publish.yml` cites ADR-0039, decision 6, and the
+  workflow is titled `Publish`, both by `copier update`
+  (https://github.com/xippios/sdk-core/issues/323,
+  https://github.com/xippios/sdk-core/issues/407).
 
 ### sdk-cashctrl
 
@@ -2601,8 +2605,9 @@ the rules of 1.28.
 
 ### xippios-mcp
 
-- The host takes the first line of `publish.yml` by its copy of the file
-  (https://github.com/xippios/sdk-core/pull/356, Consumers), and its adoption's fragment names
+- The host takes the first line of `publish.yml` and its title `Publish` by its copy of the
+  file (https://github.com/xippios/sdk-core/pull/356 and
+  https://github.com/xippios/sdk-core/pull/413, Consumers), and its adoption's fragment names
   the core bound and conventions 1.29 as they stand after it, and no template tag (§15;
   ADR-0043, decision 1). Where it adopts core 0.4.0 and 0.4.1 in one PR, the adoption brings a
   core minor, and its fragment is `breaking` (§15 item 9; ADR-0043, decision 3).
@@ -2622,8 +2627,9 @@ sdk-template 0.4.1 follows core's tag and renders what the sources' adoption tak
   its own (https://github.com/xippios/sdk-core/pull/386, Consumers).
 - `tests/test_built_answers.py` with the collecting line of the built-answer check
   (https://github.com/xippios/sdk-core/issues/344).
-- The first line of `.github/workflows/publish.yml`, copied from core's
-  (https://github.com/xippios/sdk-core/issues/323).
+- The first line of `.github/workflows/publish.yml` and its title `Publish`, copied from
+  core's (https://github.com/xippios/sdk-core/issues/323,
+  https://github.com/xippios/sdk-core/issues/407).
 - `scripts/adr_index.py`, the version the organization's repositories share
   (https://github.com/xippios/sdk-template/issues/246).
 - The rendered `ci.yml` comment on item 9, which still words the versions adopted
