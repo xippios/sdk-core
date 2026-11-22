@@ -1,6 +1,6 @@
 # ADR-0054: One helper for a series over periods
 
-Status: Accepted · Date: 2026-11-22 · Decided by https://github.com/xippios/sdk-core/issues/373
+Status: Accepted · Date: 2026-11-22 · Decided by https://github.com/xippios/sdk-core/issues/373 · Amended 2026-11-22 by https://github.com/xippios/sdk-core/issues/438
 
 ## Context
 
@@ -109,3 +109,32 @@ and decisions 5 to 7 are those of the pull request that built the helper.
   the failure stay spent: nothing is returned.
 - The order of a range, a start after its end, stays each source's refusal in its own
   parameters' names: the decision gives core the ceiling's check alone.
+
+## Amendment 2026-11-22
+
+https://github.com/xippios/sdk-core/issues/438 amends decisions 5 and 6, from two misfits that
+the trial of core 0.4.1 met in sdk-usda-nass (https://github.com/xippios/sdk-core/issues/410,
+https://github.com/xippios/sdk-usda-nass/issues/86 and
+https://github.com/xippios/sdk-core/issues/443). No release printed either sentence before it.
+
+(a) **The ceiling's refusal says that nothing was sent** (decision 5). `check` refuses before
+any request, by decision 1, so its refusal is one that the package makes of the call as given,
+which conventions §5 ask to say that nothing was sent (ADR-0030, decision 4; ADR-0043). The
+sentence `Nothing was sent.` stands after the ceiling and before the advice, the source's own or
+the default: `2024-08 to 2026-08 is 25 months; one call fetches at most 24 months. Nothing was
+sent. Ask for fewer months.` Its words are those of sdk-cashctrl's refusals before a write,
+which §5 cites, and of core's quota policy, whose refusal says `nothing was sent for` the request
+it holds back. The advice stays last, since it is what the caller does next.
+
+(b) **The periods before a failure are named as answered** (decision 6). The sentence added to
+the message reads `The series stopped at 2023 after 2 periods answered, 2021 to 2022, and returns
+nothing.`, and `after 1 period answered, 2020` for one. sdk-usda-nass's split runs
+`fetch_periods` twice, over its counts and then over its data, and a failed count named a year
+that was only counted as fetched. Answered is true of a pass that counts, of a pass that fetches
+and of a period passed over without data, which the sentence counted already because upstream
+answered it. `fetch_periods` takes no argument for the word of a pass, which would be one more
+argument of a public function for one source's pass, where one word holds for every pass.
+
+Decisions 1 to 4 and 7 stand as written, as does the rest of decisions 5 and 6. Where decisions 3
+and 7 speak of the periods fetched before a failure, or of the sentence, they mean the sentence as
+(b) words it.
