@@ -36,10 +36,13 @@
     core's, and a step that returns the fixture alone raises `TypeError`.
     `tests/test_record_fixture.py` (sdk-cashctrl) — `test_the_recording_client_never_retries`
     goes with `recording_client`, `test_a_5xx_is_recorded_after_one_request` sends through
-    the demo organisation's own client, and `test_secrets_are_redacted_plain_and_percent_encoded`,
+    the demo organisation's own client, `test_secrets_are_redacted_plain_and_percent_encoded`,
     `test_the_host_then_the_secrets_then_the_rewrite` and
-    `test_the_verify_passes_a_clean_fixture` unpack the pair that `apply` returns — the
-    recorder builds no client of its own, and
+    `test_the_verify_passes_a_clean_fixture` unpack the pair that `apply` returns, and the
+    redirect of `test_a_file_path_writes_no_answer_but_an_error_or_a_refusal` asserts the
+    refusal of `send_once`, which names the method, the path and the status, where the
+    recorder's own check of a file path's answer named the file path — the recorder builds no
+    client of its own, `send_once` refuses the 302 before that check reads it, and
     `test_an_order_write_naming_an_unmarked_or_unreadable_order_is_refused` holds one read of
     each order, which a guard that reads through the retrying client exceeds
     (https://github.com/xippios/sdk-cashctrl/issues/134).

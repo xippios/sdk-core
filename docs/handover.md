@@ -1878,11 +1878,13 @@ the rules of 1.28.
     (https://github.com/xippios/sdk-cashctrl/issues/134);
   - its refusal of a 1xx or 3xx on its five file paths becomes core's on every path, and its
     refusal of another 2xx and of a binary body at a file path stays (ADR-0048,
-    Consequences), so in `tests/test_record_fixture.py`
+    Consequences). In `tests/test_record_fixture.py`,
     `test_the_host_then_the_secrets_then_the_rewrite`, which hands a built 302 to
-    `fixture_from_response`, builds a 200, and the redirect of
-    `test_a_file_path_writes_no_answer_but_an_error_or_a_refusal` meets core's message, which
-    names the method, the path and the status, where the recorder's named the file path
+    `fixture_from_response`, fails from the lock's move and builds a 200; the redirect of
+    `test_a_file_path_writes_no_answer_but_an_error_or_a_refusal` fails once the recorder
+    sends with `send_once`, which refuses the 302 before the recorder's own check of a file
+    path's answer reads it, and asserts that refusal, which names the method, the path and the
+    status, where the recorder's named the file path
     (https://github.com/xippios/sdk-core/issues/364,
     https://github.com/xippios/sdk-cashctrl/issues/134);
   - in `tests/test_observed.py`, `test_every_file_the_notes_cite_exists`,
