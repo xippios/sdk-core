@@ -19,10 +19,10 @@ check finds the package, ``tests/fixtures/`` left out, with ``ast`` and its comm
 **A place** is:
 
 - an ``httpx.Response`` that a test builds, or another ``*.Response``, which no route serves:
-  a bare ``Response`` is httpx's where the import that binds the name nearest the call, in a
-  function that encloses it or at the module's top, brings it from ``httpx`` or one of its
-  modules, and where no import binds it; one imported from elsewhere, the frame's of
-  ``xippios.core.refresh`` among them, is another;
+  a bare ``Response`` is httpx's unless it is the frame's record of a page, where every
+  binding of the name in the module is an import from ``xippios.core.refresh`` and no star
+  import stands beside it, so a re-export, another library's, an assignment, a parameter or
+  a class of that name reads as httpx's;
 - a route's ``.respond(...)``;
 - a body written in the test (a dict, list or tuple display, a string, an f-string or bytes)
   given as a positional argument to ``classify``, to a model's ``model_validate`` or
@@ -41,8 +41,8 @@ docstring or one block of comments, usually as ``NOT RECORDED: ... (conventions 
 2)``. A value that no route serves and no ``classify`` reads, handed to the code under test,
 may instead say that it is an input of the test, in the sentence ``... is an input of the
 test, not an answer from <upstream>.``, whose words up to "test" are fixed; a served answer
-takes a kind. Such a value is a literal given to a model, a scrub or a reader, a ``Response``
-that is not httpx's, or an ``httpx.Response`` handed to the recorder: one that reaches
+takes a kind. Such a value is a literal given to a model, a scrub or a reader, the frame's
+``Response``, or an ``httpx.Response`` handed to the recorder: one that reaches
 ``fixture_from_response`` alone as a positional argument, directly or by a local name that
 nothing else reads, of ``fixture_from_response`` itself or of a function of the module that
 gives that parameter to ``fixture_from_response`` and reads it nowhere else.
@@ -53,9 +53,12 @@ above takes the sentence, and one that is not is served and takes a kind. The se
 helper's reach covers each call that hands its exchange on, and a kind there covers every
 call. Nothing further is followed: an exchange that travels by a keyword, a container, a
 second function that returns it or hands it on, a conditional expression or a function of
-another module is built in the test or takes a kind, as is the exchange of a helper whose
-name the module reads otherwise than to call it, ``side_effect=helper`` among them, and of a
-fixture, which pytest hands on and no call does (ADR-0049, decision 10).
+another module is built in the test or takes a kind. So is the exchange of a helper, and the
+exchange given to a function, that could reach a route unseen: a function that a decorator
+receives, whose name the module binds again or reads otherwise than to call it
+(``side_effect=helper``), or that stands in a module with a star import; a name that a
+``global`` or ``nonlocal`` statement names; and a fixture, which pytest hands on and no call
+does (ADR-0049, decision 10).
 
 **Its reach.** A mark covers a place from the docstring of a function or class that encloses
 it, from a comment on the place's own lines, from a block of comments that ends right above
@@ -100,9 +103,8 @@ says why; the other two tests read files and run under it alike.
 - a body built in another module than the one that serves it, a fixture of ``conftest.py``
   that another module uses among them, or under a name the rules above do not list;
 - httpx's ``Response`` called under another name, ``Answer(...)`` after ``from httpx import
-  Response as Answer``, which is no place, or through another name of ``httpx`` or a module
-  that imports it, ``h.Response(...)`` or a ``Response`` that ``tests/helpers.py``
-  re-exports, which it reads as served by no route; a star import binds no name it reads;
+  Response as Answer``, which is no place, or through another name of ``httpx``,
+  ``h.Response(...)`` after ``import httpx as h``, which it reads as served by no route;
 - a body passed by keyword or by a name, ``classify(response)`` or
   ``Model.model_validate(obj={...})``, and a recording changed by assignment, a loaded
   recording's header replaced and the response then handed on by its name;
@@ -145,6 +147,8 @@ _INPUT = re.compile(r"\binputs?\s+of\s+the\s+test\b", re.IGNORECASE)
 _SCRUB = re.compile(r"^scrub(?:_\w+)?$")
 _READS = ("classify", "model_validate", "model_validate_json")
 _REPLAYS = ("replay_fixture", "replay", "mount_fixture")
+_FRAME = "xippios.core.refresh"
+"""The module whose ``Response`` is the frame's record of a page, which no route serves."""
 _FUNCTIONS = (ast.FunctionDef, ast.AsyncFunctionDef)
 _DEFINITIONS = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
 _SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
@@ -204,9 +208,10 @@ class Place:
 class _Module:
     """One test module's tree, its parents, its comments and its top-level definitions.
 
-    With the names it reads, each to its nodes, the names that its ``from ... import`` lines
-    bind in each function and at its top, and the positions of each top-level function's
-    parameters that the function gives to ``fixture_from_response`` alone.
+    With the names it reads, each to its nodes; every binding of each name anywhere in the
+    module, each with the module an import brings it from, ``None`` for any other binding;
+    whether a star import may bind any name; and the positions of the parameters of each
+    function that can be followed that it gives to ``fixture_from_response`` alone.
     """
 
     def __init__(self, source: str, readers: Collection[str] = ()) -> None:
@@ -225,21 +230,69 @@ class _Module:
             node.name: node for node in self.tree.body if isinstance(node, _DEFINITIONS)
         }
         self.names: dict[str, list[ast.Name]] = {}
-        self.imports: dict[ast.AST, dict[str, set[str]]] = {}
+        self.bindings: dict[str, list[tuple[ast.AST, str | None, ast.AST]]] = {}
+        self.star = False
         for node in ast.walk(self.tree):
             if isinstance(node, ast.Name):
                 self.names.setdefault(node.id, []).append(node)
-            elif isinstance(node, ast.ImportFrom):
-                bound = self.imports.setdefault(next(iter(self.scopes(node)), self.tree), {})
-                origin = "." * node.level + (node.module or "")
-                for alias in node.names:
-                    if alias.name != "*":  # a star import binds no name that the check reads
-                        bound.setdefault(alias.asname or alias.name, set()).add(origin)
+            for name, origin in self._binds(node):
+                # A global or nonlocal statement may bind the name anywhere: the module's.
+                local = not isinstance(node, (ast.Global, ast.Nonlocal))
+                scope = next(iter(self.scopes(node)), self.tree) if local else self.tree
+                self.bindings.setdefault(name, []).append((node, origin, scope))
         self.handing = {
             name: self._handing(node)
             for name, node in self.defs.items()
-            if isinstance(node, _FUNCTIONS)
+            if isinstance(node, _FUNCTIONS) and self.followed(name)
         }
+
+    def _binds(self, node: ast.AST) -> list[tuple[str, str | None]]:
+        """The names that ``node`` binds, each with the module an import brings it from.
+
+        A star import binds names that no text shows, so it sets ``star`` and binds none here.
+        """
+        if isinstance(node, ast.Name):
+            return [] if isinstance(node.ctx, ast.Load) else [(node.id, None)]
+        if isinstance(node, ast.arg):
+            return [(node.arg, None)]
+        if isinstance(node, _DEFINITIONS):
+            return [(node.name, None)]
+        if isinstance(node, (ast.ExceptHandler, ast.MatchAs, ast.MatchStar)):
+            return [(node.name, None)] if node.name else []
+        if isinstance(node, ast.MatchMapping):
+            return [(node.rest, None)] if node.rest else []
+        if isinstance(node, (ast.Global, ast.Nonlocal)):
+            return [(name, None) for name in node.names]
+        if isinstance(node, ast.Import):
+            return [(a.asname or a.name.split(".")[0], f"import {a.name}") for a in node.names]
+        if isinstance(node, ast.ImportFrom):
+            self.star = self.star or any(alias.name == "*" for alias in node.names)
+            origin = "." * node.level + (node.module or "")
+            return [(a.asname or a.name, origin) for a in node.names if a.name != "*"]
+        return []
+
+    def followed(self, name: str) -> bool:
+        """Whether ``name`` at the module's top is its function, which no route reaches unseen.
+
+        Nothing else binds the name at the module's top, a star import, a ``global`` or a
+        ``nonlocal`` statement included, and no decorator receives the function. A call is
+        the function's where, further, no function that encloses it binds the name
+        (``shadowed``).
+        """
+        function = self.defs.get(name)
+        top = [node for node, _, scope in self.bindings.get(name, []) if scope is self.tree]
+        return (
+            isinstance(function, _FUNCTIONS)
+            and not function.decorator_list
+            and not self.star
+            and len(top) == 1
+            and top[0] is function
+        )
+
+    def shadowed(self, node: ast.AST, name: str) -> bool:
+        """Whether a function, lambda or class that encloses ``node`` binds ``name`` itself."""
+        enclosing = set(self.scopes(node))
+        return any(scope in enclosing for _, _, scope in self.bindings.get(name, []))
 
     def scopes(self, node: ast.AST) -> list[ast.AST]:
         """The functions, lambdas and classes that enclose ``node``, innermost first."""
@@ -372,30 +425,60 @@ class _Module:
             return False
         if use not in call.args or any(isinstance(arg, ast.Starred) for arg in call.args):
             return False
+        if self.shadowed(call, call.func.id):  # the calling function's own, not the module's
+            return False
         return call.args.index(use) in self.handing.get(call.func.id, frozenset())
+
+    def _escapes(self, node: ast.expr) -> bool:
+        """Whether ``node`` is assigned to a name that other functions may read unseen.
+
+        A name that a ``global`` or ``nonlocal`` statement names in the function that holds
+        the assignment, where ``uses`` reads that function alone.
+        """
+        parent = self.parent.get(node)
+        if not (
+            isinstance(parent, ast.Assign)
+            and len(parent.targets) == 1
+            and isinstance(parent.targets[0], ast.Name)
+        ):
+            return False
+        name = parent.targets[0].id
+        scope = next((s for s in self.scopes(node) if isinstance(s, _FUNCTIONS)), None)
+        return scope is not None and any(
+            isinstance(n, (ast.Global, ast.Nonlocal)) and name in n.names for n in ast.walk(scope)
+        )
 
     def handed(self, node: ast.expr) -> bool:
         """Whether the exchange ``node`` gives reaches ``fixture_from_response`` alone.
 
         Directly, or by a local name that nothing else reads, as a positional argument of
-        ``fixture_from_response`` or of a function of the module that gives that parameter to
-        it alone: an exchange handed to the recorder's code, which no route serves.
+        ``fixture_from_response``, as before; or so to a function of the module that gives
+        that parameter to it alone, where no other function can read the name: an exchange
+        handed to the recorder's code, which no route serves.
         """
         uses = self.uses(node)
-        return bool(uses) and all(self._hands(use) for use in uses)
+        if not uses:
+            return False
+        if all(self._to_recorder(use) for use in uses):
+            return True
+        return not self._escapes(node) and all(self._hands(use) for use in uses)
 
     def returned_by(self, node: ast.Call) -> str | None:
         """The top-level function whose every call receives the ``Response`` ``node`` builds.
 
-        The function returns it, directly or by a local name that nothing else reads, and the
-        module reads the function's name only to call it, so each call can be judged on its
-        own. ``None`` for anything else: a conditional expression, a fixture, which pytest
-        hands on, or a function that a second one returns.
+        The function returns it, directly or by a local name that nothing else reads, no
+        ``global`` or ``nonlocal`` statement names that name, the function can be followed
+        (``followed``) and the module reads its name only to call it, so each call can be
+        judged on its own. ``None`` for anything else: a conditional expression, a fixture,
+        which pytest hands on, or a function that a second one returns.
         """
         scopes = self.scopes(node)
         function = scopes[0] if scopes else None
         if _called(node.func) != "Response" or not (
-            isinstance(function, _FUNCTIONS) and function in self.tree.body
+            isinstance(function, _FUNCTIONS)
+            and function in self.tree.body
+            and self.followed(function.name)
+            and not self._escapes(node)
         ):
             return None
         uses = self.uses(node)
@@ -416,9 +499,15 @@ class _Module:
         """Whether a helper's returned exchange is served at ``site``, one of its call sites.
 
         A test that takes the helper as a fixture serves it, and so does a call that does not
-        hand it to the recorder.
+        hand it to the recorder, hands it on by a name that other functions may read, or calls
+        a name that its own function binds again.
         """
-        return not (isinstance(site, ast.expr) and self.handed(site))
+        if not isinstance(site, ast.expr) or self._escapes(site):
+            return True
+        called = site.func if isinstance(site, ast.Call) else None
+        if isinstance(called, ast.Name) and self.shadowed(site, called.id):
+            return True
+        return not self.handed(site)
 
     def served_at(self, place: ast.AST, helper: str, site: ast.AST, served: set[ast.AST]) -> bool:
         """Whether ``place``, inside ``helper``, is served at ``site``, a call of the helper.
@@ -434,18 +523,15 @@ class _Module:
     def from_httpx(self, node: ast.Call) -> bool:
         """Whether the ``Response`` that ``node`` builds is httpx's.
 
-        ``httpx.Response`` by its attribute; the bare name where the import that binds it
-        nearest the call, in an enclosing function or at the module's top, brings it from
-        ``httpx`` or one of its modules, or where no import binds it.
+        ``httpx.Response`` by its attribute, as before. The bare name is httpx's, as before,
+        unless it is the frame's: every binding of the name in the module an import from
+        ``xippios.core.refresh``, and no star import beside it.
         """
         if not isinstance(node.func, ast.Name):
             return ast.unparse(node.func) == "httpx.Response"
-        enclosing = [scope for scope in self.scopes(node) if isinstance(scope, _FUNCTIONS)]
-        for scope in [*enclosing, self.tree]:
-            origins = self.imports.get(scope, {}).get(node.func.id)
-            if origins:
-                return any(origin == "httpx" or origin.startswith("httpx.") for origin in origins)
-        return True
+        bound = self.bindings.get(node.func.id, [])
+        frame = bool(bound) and not self.star and all(origin == _FRAME for _, origin, _ in bound)
+        return not frame
 
     def serves(self, node: ast.Call) -> bool:
         """Whether the place serves an answer, which a kind of §10 alone marks.
