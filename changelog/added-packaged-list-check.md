@@ -23,8 +23,10 @@
     `validate_customs_district_id` → `check(param, value, closest=..., otherwise=...,
     reason=...)` — the copy core now holds.
     `src/xippios/comtrade/params.py` (sdk-comtrade) — the `UnknownCode` branches of
-    `_check_list` and `_check_areas` → `check` with `fold_case=True` for `flowCode` and
-    `customsCode`, the area codes converted to integers first — the copy core now holds.
+    `_check_list` and `_check_areas` → `check`, with `fold_case=True` for `customsCode` and
+    without it for `motCode`, the area codes converted to integers first, while an unknown
+    `flowCode` stays one of the problems gathered into one `InvalidRequestError` — the copy
+    core now holds (https://github.com/xippios/sdk-comtrade/issues/60).
     `src/xippios/faostat/tasks.py` (sdk-faostat) — `_check_codes` → `check(dimension, code,
     reason=...)` on a declaration with `list_name=` of its table — the copy core now holds.
     `src/xippios/eurostat/tasks.py` (sdk-eurostat) — `_labels` and `_check_code` → `check(param,

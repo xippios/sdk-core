@@ -26,14 +26,26 @@
     `scripts/record_fixture.py` (sdk-cashctrl) — deletes `recording_client`, sends with
     `send_once_sync(client_for(DEMO), ...)`, `--wrong-key` as `auth=`, and passes
     `TenantScrub(...).apply` as the step of `fixture_from_response(..., rewrite=...)`, which
-    returns no value of its own, since its verify by pattern refuses what survives, the
-    subdomain in any case among them. It keeps `TenantScrub` with its verify by
-    pattern, `check`, the reminder after a write, the guards, whose reads go to the demo
-    organisation's own client, and its refusal of another 2xx and of a binary body at a file
-    path — the one-attempt client and the refusal of a 1xx or 3xx are core's.
+    returns the pair of the rewritten fixture and no value of its own, `(rewritten, [])`, since
+    its verify by pattern refuses what survives, the subdomain in any case among them. It
+    keeps `TenantScrub` with its verify by pattern, `check`, the reminder after a write, the
+    guards, whose reads of `order/read.json` and `order/bookentry/read.json` are sent once by
+    `send_once` through the demo organisation's own client, which retries a 5xx, a read that
+    core refuses as a 1xx or 3xx refusing the write, and its refusal of another 2xx and of a
+    binary body at a file path — the one-attempt client and the refusal of a 1xx or 3xx are
+    core's, and a step that returns the fixture alone raises `TypeError`.
     `tests/test_record_fixture.py` (sdk-cashctrl) — `test_the_recording_client_never_retries`
-    goes with `recording_client`, and `test_a_5xx_is_recorded_after_one_request` sends through
-    the demo organisation's own client — the recorder builds no client of its own.
+    goes with `recording_client`, `test_a_5xx_is_recorded_after_one_request` sends through
+    the demo organisation's own client, `test_secrets_are_redacted_plain_and_percent_encoded`,
+    `test_the_host_then_the_secrets_then_the_rewrite` and
+    `test_the_verify_passes_a_clean_fixture` unpack the pair that `apply` returns, and the
+    redirect of `test_a_file_path_writes_no_answer_but_an_error_or_a_refusal` asserts the
+    refusal of `send_once`, which names the method, the path and the status, where the
+    recorder's own check of a file path's answer named the file path — the recorder builds no
+    client of its own, `send_once` refuses the 302 before that check reads it, and
+    `test_an_order_write_naming_an_unmarked_or_unreadable_order_is_refused` holds one read of
+    each order, which a guard that reads through the retrying client exceeds
+    (https://github.com/xippios/sdk-cashctrl/issues/134).
     `scripts/cut_sample.py` (sdk-usda-wasde) — `fetch` sends with
     `send_once(AsyncClient(config), chosen.url)` in place of the client built for one attempt
     and `client.request(..., raise_on_error=False)`, and keeps its refusal of every status but

@@ -14,29 +14,49 @@
   - Hand-apply: `scripts/refresh_upstream.py` — ported to a `Snapshot` declaration run by
     `xippios.core.refresh.run`, its `# /// script` block dropped, its frame code deleted
     and its own code kept as hooks: sdk-comtrade
-    `linked` for the bundle and its products, `reduce` for the Help Center articles and
-    `sections` for "Products found", sdk-eurostat `quota_wait`, `keep_recorded` with
+    `linked` for the bundle and its products, `reduce` for the Help Center articles, `note`
+    for the note that each article's and product file's answer gives and `sections` for
+    "Products found", sdk-eurostat `quota_wait`, `keep_recorded` with
     `canonical` for its WADL, `pause=5.0` and `reduce`, sdk-faostat `credentials` with its
     samples `keyed`, `reduce` for the terms, `note` for its checks and notes and `canonical`
-    for `processing_time`, sdk-google-mail `reduce` and `note`, sdk-usda-esmis `linked` for
+    for `processing_time`, sdk-google-mail `reduce` alone, every note of its pages static,
+    sdk-usda-esmis `linked` for
     the newest release and `reduce` for the calendar excerpt, its followed redirect to
     another host recorded by its status, sdk-usda-esr, sdk-usda-gats and sdk-usda-psd
-    `note` and `linked` for the FAS portal kit and `reduce` for their part of the shared
-    document, sdk-usda-nass `reduce`, sdk-usda-wasde `origin` for USDA's CDN origin,
-    `linked` and `reduce`, and sdk-x `canonical` for its scope lists and `reduce` — the
-    frame's rules reach a source through core and no longer through twelve copies, and the
-    source's page files stay byte for byte as its hooks make them.
+    `note` and `linked` for the FAS portal kit, `reduce` for their part of the shared
+    document and `sections` for how their parts of the two documents compare, which needs
+    both rows, sdk-usda-nass `reduce` and a `vocabulary` of the phrases on its api page that
+    state nothing new, sdk-usda-wasde `origin` for USDA's CDN origin,
+    `linked` and `reduce`, and sdk-x `canonical` for its scope lists and `reduce`, its
+    footer's page declared without a file and with `stable=False`, since the frame searches a
+    page whole. sdk-google-mail, sdk-usda-wasde and sdk-x check each page's title in `reduce`
+    from a table of their own, since core's `Page` holds no title, and sdk-faostat and
+    sdk-usda-esmis keep their check of their YAML document's `info` in a hook, since the
+    frame parses a JSON document alone. Each `info.license`, `info.termsOfService` and
+    `info.contact` that a JSON document holds is recorded as a `Statement` from it, sdk-x's
+    `info.contact` among them — the
+    frame's rules reach a source through core and no longer through twelve copies, the
+    source's page files stay byte for byte as its hooks make them, and the frame stops on
+    such an `info` field that the attribution does not record
+    (https://github.com/xippios/sdk-core/issues/435).
     `scripts/refresh_upstream.py` (sdk-cashctrl) — ported with `split` for its one page,
-    its word check inside it, and four things of its script given up: `--from-file`, its
+    its word check inside it, `note` for the files that keep a nested table as HTML and
+    `sections` for its vendor examples, its attribution recording "Terms of Service" from
+    its page with its link to https://cashctrl.com/en/about/terms, which the error handling's
+    text links, and five things of its script given up: `--from-file`, its
     run from a saved copy of the page that spends no request, since the frame takes no
     option of a source's own, its own User-Agent, which names its repository, for the
     family's, its request for the page gzipped, since the frame asks for each page as it
-    is, at the cost of a larger transfer and no byte of its files, and the removal of an
+    is, at the cost of a larger transfer and no byte of its files, the removal of an
     entry's file at the top of `docs/upstream/` once the table of contents drops the entry,
     which the frame makes in the subdirectories it writes to alone, so the port puts its
-    entries under one or removes such a file by hand, `--check` naming no leftover — the
-    frame carries none of the four while one source alone needs it (ADR-0023, decision 2,
-    ADR-0046, decision 2).
+    entries under one or removes such a file by hand, `--check` naming no leftover, and the
+    fragment of its entry in each split file's row of `FETCHED.md`, `index.html#/order`,
+    since the frame's row of a file split from a page names the page's URL, the file's
+    first line keeping the fragment — the frame carries none of the five while one source
+    alone needs it, and stops on the link while the attribution does not record it
+    (ADR-0023, decision 2, ADR-0046, decision 2,
+    https://github.com/xippios/sdk-cashctrl/issues/134).
     `docs/upstream/FETCHED.md` — rewritten once by the first run of the ported script, in
     the frame's form, every row with an ETag gaining the code span and the mark and the
     403 rows moving to `Not fetched` — the frame writes it alone (ADR-0028, decision 4).
