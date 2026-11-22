@@ -16,6 +16,7 @@ from pydantic import (
     TypeAdapter,
     field_serializer,
     field_validator,
+    model_serializer,
     model_validator,
 )
 from pydantic.fields import FieldInfo
@@ -208,6 +209,11 @@ class ResultMeta(BaseModel):
         tenant: The tenant the data came from, by name, e.g. ``"acme"``; never a
             credential, nor a host or another value of the tenant's (conventions §7).
             ``None`` for a single-tenant source and for the list of tenant names.
+        names: Each country parameter of the request to its codes and the names their
+            packaged list holds, e.g. ``{"country_code": {"CN": "Comoros"}}``, a code under
+            its text as the caller gave it; ``names_codes`` fills it (ADR-0056). Empty for a
+            task without such a parameter, and left out of a dump while it is empty, so such
+            an answer dumps as it did before the field.
 
     Raises:
         pydantic.ValidationError: A field the model does not define; a naive
@@ -227,6 +233,18 @@ class ResultMeta(BaseModel):
     request: dict[str, Any] = Field(default_factory=dict)
     total: int | None = None
     tenant: str | None = None
+    names: dict[str, dict[str, str]] = Field(default_factory=dict)
+
+    # No return annotation, on purpose: pydantic then reads the schema of a dump from the
+    # fields, ``names`` an optional property, where ``-> Any`` would make it a dump of any
+    # shape, and an HTTP route's response and an MCP tool's output read that schema.
+    @model_serializer(mode="wrap")
+    def _names_once_named(self, handler: SerializerFunctionWrapHandler):  # type: ignore[no-untyped-def]  # noqa: ANN202
+        """The dump, ``names`` left out while it is empty (ADR-0056, decision 1)."""
+        dumped = handler(self)
+        if not self.names and isinstance(dumped, dict):
+            dumped.pop("names", None)
+        return dumped
 
     @field_validator("retrieved_at")
     @classmethod

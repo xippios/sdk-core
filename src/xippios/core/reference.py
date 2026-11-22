@@ -7,9 +7,10 @@ A packaged list, the records of one upstream operation as the refresh script fet
 them, is a ``PackagedList``: it loads the file, builds the ``ResultMeta`` of an answer
 from it (ADR-0041), parses its records and writes the file. ``PackagedList.codes``
 declares its code field, its name field and its folding once, a ``PackagedCodes``, whose
-``check`` returns an argument as given or raises ``UnknownCode`` (ADR-0045). ``matches`` is
-the ``search`` filter of the ``list_*`` tasks; ``closest``, by text, and ``nearest``, by
-number, find the known codes near a value that ``UnknownCode`` refuses.
+``check`` returns an argument as given or raises ``UnknownCode`` (ADR-0045), and from which
+``names_codes`` names each country code of a task's call in ``meta.names`` (ADR-0056).
+``matches`` is the ``search`` filter of the ``list_*`` tasks; ``closest``, by text, and
+``nearest``, by number, find the known codes near a value that ``UnknownCode`` refuses.
 
 ``render_enums`` writes a source's generated ``enums.py``, ``StrEnum`` for a value list and
 ``IntEnum`` for a list of integer ids and names in one module (conventions §3, ADR-0031):
@@ -20,6 +21,7 @@ plain, ASCII-only Python that the refresh script formats with ``ruff format`` an
 import csv
 import difflib
 import functools
+import inspect
 import io
 import json
 import keyword
@@ -27,6 +29,7 @@ import os
 import re
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Set as AbstractSet
 from datetime import UTC, date, datetime, time
 from enum import Enum
 from importlib import resources
@@ -38,7 +41,7 @@ import pydantic
 from pydantic import BaseModel, ConfigDict, TypeAdapter, field_validator
 
 from xippios.core.errors import InvalidRequestError, UnknownCode, ValidationError, _raise
-from xippios.core.models import ResultMeta, _validation_text, parse
+from xippios.core.models import Result, ResultMeta, _validation_text, parse
 
 __all__ = [
     "PackagedCodes",
@@ -50,6 +53,7 @@ __all__ = [
     "load_json",
     "load_table",
     "matches",
+    "names_codes",
     "nearest",
     "render_enums",
 ]
@@ -552,6 +556,233 @@ class PackagedCodes:
             f"{self._packaged.fetched:%Y-%m-%d}){such}.{tail}",
             source=self._source,
         )
+
+
+_DECLARED = "_xippios_names_codes"
+"""The attribute of a task that ``names_codes`` wraps: its parameters to their lists."""
+
+_WITHHELD = (
+    "Upstream was asked, but an answer names the country of each code it is for, and the "
+    "packaged list holds no name for this one, so the answer is withheld."
+)
+"""The reason of a refusal after the call, for a code that reached the answer unchecked."""
+
+
+def names_codes[F: Callable[..., Any]](
+    *, separator: str | None = None, **codes: PackagedCodes
+) -> Callable[[F], F]:
+    """Name each country code of a call in ``meta.names`` of the answer (ADR-0056).
+
+    A task that takes a country, an area, a reporter or a partner declares, per parameter,
+    the list that names its codes, ``PackagedList.codes`` (ADR-0045), and every ``Result``
+    it returns carries the name of each code it was called with, as the family check holds
+    (conventions §4)::
+
+        COUNTRIES = PackagedList.load("xippios.example", "countries").codes(
+            "countryCode", "countryName", source="example"
+        )
+
+
+        @names_codes(country_code=COUNTRIES)
+        async def get_data_async(country_code: str | None = None) -> Result[list[Row]]: ...
+
+
+        get_data = sync(get_data_async)
+        get_data("CN").meta.names  # {"country_code": {"CN": "Comoros"}}
+
+    The decorator wraps an ``async def``, a plain function or a ``sync`` facade, whose async
+    twin it wraps too, so the MCP adapter, the HTTP router and ``bind_tasks``, which await
+    that twin, answer with the names as a direct call does. The task keeps its name, module,
+    docstring, signature and annotations, and so a tool's schema and a route's.
+
+    The codes are read from the call's arguments, defaults applied, once the task returned:
+
+    - ``None`` names nothing: the task asked for every country;
+    - a text is one code, or several split on ``separator``; a list, a tuple or a set holds
+      several, each text in it split the same way; an enum member is read by its value;
+    - a text of digits is read as the integer for a list of integer codes, and an integer as
+      its text for a list of text codes, as a task whose parameter takes upstream's text or
+      its integers sends them;
+    - each code stands once, under its text as the caller gave it, with the name its list
+      holds, runs of white space collapsed as a refusal shows it.
+
+    Names the answer carries already are kept, those of a composed answer say, and the
+    decorator's own replace them for its parameters, so two decorators stack, one per
+    separator. The task checks its codes before the call with its own hints and reason, so a
+    code the list lacks never reaches the decorator; one that does, sent unchecked, is
+    refused with ``check``'s refusal, its reason saying that the answer is withheld. What
+    the task raises passes as raised, and the answer's own object is not changed.
+
+    Args:
+        separator: The text between several codes in one text, e.g. ``","`` for
+            ``"757,842"``; ``None`` reads a text as one code.
+        **codes: Each country parameter of the task to the list that names its codes, e.g.
+            ``country_code=COUNTRIES``.
+
+    Returns:
+        The decorator, which returns the task wrapped.
+
+    Raises:
+        TypeError: No parameter is named, a value is no ``PackagedCodes``, and, when the
+            task is decorated, a name is no parameter of it, or its ``**`` parameter, or is
+            named by a decorator of the task already; a decorated task's answer that is no
+            ``Result``.
+        ValueError: ``separator`` is empty or no text.
+        UnknownCode: A code that its list lacks reached the answer.
+        InvalidRequestError: A value that is neither a code of its list's type nor its
+            digits or its text reached the answer.
+    """
+    if not codes:
+        raise TypeError("names_codes names no parameter")
+    for param, listed in codes.items():
+        if not isinstance(cast(object, listed), PackagedCodes):  # a caller mypy does not check
+            kind = type(listed).__name__
+            raise TypeError(
+                "names_codes takes a PackagedCodes per parameter, PackagedList.codes(...), and "
+                f"{param} is {_article(kind)} {kind}"
+            )
+    if separator is not None and (not isinstance(separator, str) or not separator):
+        raise ValueError("separator is a text of one character or more, or None")
+    declared = MappingProxyType(dict(codes))
+
+    def decorate(task: F) -> F:
+        return cast(F, _naming(task, declared, separator))
+
+    return decorate
+
+
+def _naming(
+    task: Callable[..., Any], codes: Mapping[str, PackagedCodes], separator: str | None
+) -> Callable[..., Any]:
+    """``task`` wrapped to name its codes; see ``names_codes``."""
+    signature = inspect.signature(task)
+    name = getattr(task, "__name__", repr(task))
+    parameters = signature.parameters
+    for param in codes:
+        found = parameters.get(param)
+        if found is None:
+            raise TypeError(
+                f"names_codes names {param}, which {name} does not take: it takes "
+                f"{_and(list(parameters)) or 'no parameter'}"
+            )
+        if found.kind is inspect.Parameter.VAR_KEYWORD:
+            raise TypeError(
+                f"names_codes names {param}, the **{param} of {name}, which holds no code by "
+                "its name"
+            )
+    inner = _named_parameters(task)
+    twice = [param for param in codes if param in inner]
+    if twice:
+        raise TypeError(f"names_codes names {_and(twice)} of {name} twice")
+
+    def answer(result: object, args: tuple[Any, ...], kwargs: dict[str, Any]) -> Any:
+        return _with_names(result, name, signature.bind(*args, **kwargs), codes, separator)
+
+    wrapper: Callable[..., Any]
+    if inspect.iscoroutinefunction(task):
+
+        @functools.wraps(task)
+        async def named_async(*args: Any, **kwargs: Any) -> Any:
+            return answer(await task(*args, **kwargs), args, kwargs)
+
+        wrapper = named_async
+    else:
+
+        @functools.wraps(task)
+        def named(*args: Any, **kwargs: Any) -> Any:
+            return answer(task(*args, **kwargs), args, kwargs)
+
+        twin = getattr(task, "async_fn", None)  # a sync facade's, which the adapters await
+        if twin is not None and inspect.iscoroutinefunction(twin):
+            named.async_fn = _naming(twin, codes, separator)  # type: ignore[attr-defined]
+        wrapper = named
+    setattr(wrapper, _DECLARED, MappingProxyType({**inner, **codes}))
+    return wrapper
+
+
+def _named_parameters(fn: Callable[..., Any]) -> dict[str, PackagedCodes]:
+    """The parameters of ``fn`` that ``names_codes`` names, each with its list.
+
+    Read from ``fn`` and each ``__wrapped__`` below it, as ``functools.wraps`` leaves them,
+    so a ``sync`` facade of a decorated async function, a decorated facade and two stacked
+    decorators all count; the family check reads it (ADR-0056, decision 5).
+    """
+    found: dict[str, PackagedCodes] = {}
+    seen: set[int] = set()
+    layer: Any = fn
+    while layer is not None and id(layer) not in seen:
+        seen.add(id(layer))
+        for param, listed in getattr(layer, _DECLARED, {}).items():
+            found.setdefault(param, listed)
+        layer = getattr(layer, "__wrapped__", None)
+    return found
+
+
+def _with_names(
+    result: object,
+    task: str,
+    call: inspect.BoundArguments,
+    codes: Mapping[str, PackagedCodes],
+    separator: str | None,
+) -> Result[Any]:
+    """``result`` with the names of the codes of ``call`` in its ``meta.names``."""
+    if not isinstance(result, Result):
+        kind = type(result).__name__
+        raise TypeError(
+            f"{task} returned {_article(kind)} {kind}, not a Result: names_codes names the codes "
+            "of an answer's meta (conventions §4, ADR-0056)"
+        )
+    call.apply_defaults()
+    named: dict[str, dict[str, str]] = {}
+    for param, listed in codes.items():
+        found: dict[str, str] = {}
+        for member in _members(call.arguments.get(param), separator):
+            text, label = _name(param, member, listed)
+            found.setdefault(text, label)
+        if found:
+            named[param] = found
+    if not named:
+        return result
+    meta = result.meta
+    fields = {field: getattr(meta, field) for field in type(meta).model_fields}
+    fields["names"] = {**meta.names, **named}
+    return result.model_copy(update={"meta": type(meta)(**fields)})
+
+
+def _members(value: object, separator: str | None) -> list[object]:
+    """The codes ``value`` holds: none for ``None``, a text's parts, a collection's members."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return list(value.split(separator)) if separator else [value]
+    if isinstance(value, Sequence | AbstractSet) and not isinstance(value, bytes | bytearray):
+        return [code for member in value for code in _members(member, separator)]
+    return [value]
+
+
+def _name(param: str, member: object, listed: PackagedCodes) -> tuple[str, str]:
+    """``member``'s text as given and the name ``listed`` holds for it, or the list's refusal."""
+    plain = _plain(member)
+    if listed.integer and isinstance(plain, str) and plain.isascii() and plain.isdigit():
+        read: object = int(plain)
+    elif not listed.integer and isinstance(plain, int) and not isinstance(plain, bool):
+        read = str(plain)
+    else:
+        read = plain
+    listed.check(param, read, reason=_WITHHELD)  # a code the list lacks withholds the answer
+    text = str(plain)
+    return text, " ".join((listed.name_of(read) or text).split()) or text
+
+
+def _article(word: str) -> str:
+    return "an" if word[:1].lower() in set("aeiou") else "a"
+
+
+def _and(words: Sequence[str]) -> str:
+    """``a``, ``a and b``, ``a, b and c``; empty for no word."""
+    if len(words) < 2:
+        return "".join(words)
+    return f"{', '.join(words[:-1])} and {words[-1]}"
 
 
 def _plain(value: object) -> object:

@@ -72,7 +72,16 @@ than one fails every test here, naming the option. The repository's files (``REA
   root, since under ``--import-mode=importlib`` no test module stands on an import path, and
   a source with no packaged list and no declaration passes. A module that does not import,
   or skips, fails or exits at its import, fails the check, which is never skipped: a test
-  that needs an optional dependency or a key skips in itself or in its fixture.
+  that needs an optional dependency or a key skips in itself or in its fixture;
+- every task, read and write, bulk or not, with a parameter whose name holds ``country``,
+  ``countries``, ``area``, ``reporter`` or ``partner``, in any case, names its codes in the
+  answer's ``meta.names`` by ``names_codes`` for that parameter, or the module it is listed
+  in exempts it in ``UNNAMED_CODES``, a mapping of the task's name to its parameters, each
+  with the reason (conventions §4, ADR-0056). An entry that names a task outside that
+  module's ``__all__``, a parameter the task does not take or that holds none of the words,
+  a parameter that ``names_codes`` names as well, or that gives no reason fails, so a stale
+  exemption does not pass. The check reads signatures: a country inside a free-form mapping
+  is the review's.
 
 A write server is its source's to test: the family check reads ``tasks_write`` for the
 task checks and the status table only (ADR-0042).
@@ -112,7 +121,7 @@ from packaging.version import Version
 
 from xippios.core._tasks import touches_no_tenant
 from xippios.core.models import Result
-from xippios.core.reference import PackagedCodes, PackagedList
+from xippios.core.reference import PackagedCodes, PackagedList, _named_parameters
 from xippios.core.tenants import Tenants, _lists_tenants
 from xippios.core.testing.live import _LIVE, _NO_LIVE, _NO_PAIR, _a, _is_entry
 from xippios.core.testing.plugin import PACKAGE_INI
@@ -121,6 +130,7 @@ __all__ = [
     "family_source",
     "test_family_copier_answers_name_a_template_tag",
     "test_family_core_is_bound_to_one_minor",
+    "test_family_country_codes_are_named_in_the_answer",
     "test_family_every_packaged_list_is_declared_for_the_live_run",
     "test_family_fetched_md_lists_observed_md_in_a_row_of_its_own",
     "test_family_http_router_routes_the_tasks",
@@ -473,6 +483,109 @@ def test_family_tasks_take_one_tenant(family_source: FamilySource) -> None:
         "its Tenants registry declares, required; the tenant list and the tasks named in "
         "NO_TENANT_TASKS of their module are excepted (conventions §7):",
     )
+
+
+_COUNTRY = re.compile(r"country|countries|area|reporter|partner", re.IGNORECASE)
+"""The words of a parameter that takes a country's code, as part of its name (ADR-0056).
+
+The six sources name their 37 country parameters with them: ``country_code``, ``area``,
+``reporter``, ``reporters``, ``reporter_code``, ``partner``, ``partners``, ``partner_code`` and
+``partner2_code``. A wider word would catch parameters that take no country's code,
+``region_code``, ``state``, ``geo_level`` and ``market_year`` among them.
+"""
+_UNNAMED = "UNNAMED_CODES"
+"""A tasks module's exemption: a task's name to its parameters, each with the reason."""
+_NAMES_INTRO = (
+    "every task parameter whose name holds country, area, reporter or partner is named in the "
+    f"answer's meta by names_codes, or stands in {_UNNAMED} of its tasks module with the reason "
+    "it is not (conventions §4, ADR-0056):"
+)
+
+
+def _country_parameters(fn: Callable[..., Any]) -> list[str]:
+    """The parameters of ``fn`` whose name holds one of the words, in the signature's order."""
+    return [name for name in inspect.signature(fn).parameters if _COUNTRY.search(name)]
+
+
+def _exemptions(
+    module: ModuleType, tasks: Mapping[str, Callable[..., Any]], problems: list[str]
+) -> dict[str, Mapping[str, object]]:
+    """The module's ``UNNAMED_CODES`` by task, each entry that is stale adding its problem.
+
+    Args:
+        module: A source's ``tasks`` or ``tasks_write`` module.
+        tasks: Its ``__all__`` by name.
+        problems: The check's problems, which this adds to.
+    """
+    declared = getattr(module, _UNNAMED, {})
+    where = f"{_UNNAMED} of {module.__name__}"
+    if not isinstance(declared, Mapping):
+        problems.append(
+            f"{where} is {_a(type(declared).__name__)}, not a mapping of tasks to their "
+            "parameters and reasons"
+        )
+        return {}
+    exempt: dict[str, Mapping[str, object]] = {}
+    for task, entry in declared.items():
+        if task not in tasks:
+            problems.append(f"{where} names {task}, not in its __all__")
+            continue
+        if not isinstance(entry, Mapping):
+            problems.append(
+                f"{where}: {task} is {_a(type(entry).__name__)}, not a mapping of its parameters "
+                "to their reasons"
+            )
+            continue
+        parameters = inspect.signature(tasks[task]).parameters
+        for param, reason in entry.items():
+            if param not in parameters:
+                problems.append(f"{where}: {task} takes no {param}")
+            elif not _COUNTRY.search(param):
+                problems.append(
+                    f"{where}: {task}'s {param} holds none of the words, so the check holds it "
+                    "to nothing"
+                )
+            elif not (isinstance(reason, str) and reason.strip()):
+                problems.append(
+                    f"{where}: {task}'s {param} gives no reason, a text that says why its codes "
+                    "are not named"
+                )
+        exempt[task] = entry
+    return exempt
+
+
+def test_family_country_codes_are_named_in_the_answer(family_source: FamilySource) -> None:
+    """Every task that takes a country's code names it in ``meta.names`` (conventions §4).
+
+    A parameter whose name holds ``country``, ``countries``, ``area``, ``reporter`` or
+    ``partner`` is named by ``names_codes``, or its module's ``UNNAMED_CODES`` exempts it
+    with the reason, ``{"get_data": {"area_cs": "The coding system of area, no code."}}``,
+    and a stale entry fails as well (ADR-0056). The check holds every task, read and write,
+    bulk or not, and fails at once from core 0.4.1 on, with no release that warns first
+    (https://github.com/xippios/sdk-core/issues/359, part 4).
+    """
+    problems: list[str] = []
+    modules = {"tasks": family_source.tasks, "tasks_write": family_source.tasks_write}
+    for prefix, module in modules.items():
+        if module is None:
+            continue
+        tasks = _named(module)
+        exempt = _exemptions(module, tasks, problems)
+        for name, fn in tasks.items():
+            named = _named_parameters(fn)
+            unnamed = exempt.get(name, {})
+            for param in _country_parameters(fn):
+                if param in named and param in unnamed:
+                    problems.append(
+                        f"{prefix}.{name}: {param} is named by names_codes and exempt in "
+                        f"{_UNNAMED}; keep one"
+                    )
+                elif param not in named and param not in unnamed:
+                    problems.append(
+                        f"{prefix}.{name} takes {param}, which names_codes does not name and "
+                        f"{_UNNAMED} does not exempt"
+                    )
+    _fail(problems, _NAMES_INTRO)
 
 
 def _cells(line: str) -> list[str]:
