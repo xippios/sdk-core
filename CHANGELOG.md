@@ -5,6 +5,818 @@ All notable changes to this project are documented here. The format follows
 [Semantic Versioning](https://semver.org/) (pre-1.0: only a breaking change bumps the
 minor, conventions §12).
 
+## [0.4.1] - 2026-11-22
+
+### Added
+
+- `UnknownCode(..., outdated=False)` leaves out the sentence that the packaged list is out of
+  date, for a value that is no code of upstream's at all, which no refresh would make one. The
+  check of a packaged list refuses every value of its hint table so, such as an ISO alpha-3 code
+  where upstream takes integers, and keeps the sentence on every other refusal.
+  (ADR-0041, ADR-0045, §5, https://github.com/xippios/sdk-core/issues/430,
+  https://github.com/xippios/sdk-core/issues/440)
+- `compare_fetched(snapshot)` of `xippios.core.refresh` compares a source's committed
+  `FETCHED.md` with its `Snapshot` and sends no request, returning the lines that differ, and
+  the family check holds every source to it through the declaration that its
+  `scripts/refresh_upstream.py` names `SNAPSHOT`. The frame ends `FETCHED.md` with a line that
+  names the file's form, and a file without it or of an older form passes, so an adoption
+  passes and a source is held from its first refresh on. What only a response knows, the times,
+  ETags, sizes, hashes and what the hooks made from answers, is read back from the file and not
+  judged. (ADR-0046, §3, https://github.com/xippios/sdk-core/issues/426,
+  https://github.com/xippios/sdk-core/issues/428)
+  - Hand-apply: `scripts/refresh_upstream.py` — its `Snapshot` named `SNAPSHOT` at the top
+    level, which imports and declares alone, sends no request and writes no file, its run
+    under `if __name__ == "__main__":`, and no `linked` where the script links no page — the
+    family check loads the script by that name and passes one that names its declaration
+    otherwise, so no test breaks without it and the committed `FETCHED.md` goes unheld, and a
+    `linked` hook makes the check read back every row that no declared page owns.
+- `ResultMeta.names` maps each country parameter of a request to its codes and the names that
+  its packaged list holds, `{"country_code": {"CN": "Comoros"}}`, and `names_codes(**codes,
+  separator=None)` fills it from the call's arguments on every answer of a task, one
+  `PackagedCodes` per parameter. A code the list lacks that reaches the answer unchecked
+  withholds the answer with the list's refusal, and an empty `names` is left out of a dumped
+  answer, so an answer of a task without such a parameter dumps as before. The family check
+  fails at once a task whose parameter holds `country`, `countries`, `area`, `reporter` or
+  `partner`, in any case, and is neither named nor exempt in `UNNAMED_CODES` of its tasks
+  module with the reason.
+  (ADR-0056, §4, https://github.com/xippios/sdk-core/issues/316)
+  - Hand-apply: `src/xippios/usda/psd/tasks.py` (sdk-usda-psd) —
+    `names_codes(country_code=COUNTRIES)` on `get_balance_sheet`, `get_data`,
+    `get_release_dates` and `get_time_series`, `COUNTRIES` declared from `countries` by
+    `countryCode` and `countryName` — `test_family_country_codes_are_named_in_the_answer`
+    fails without it.
+    `src/xippios/usda/gats/tasks.py` (sdk-usda-gats) — `names_codes(partner_code=COUNTRIES)`
+    on the six Census tasks and the three customs-district tasks, and
+    `names_codes(reporter_code=COUNTRIES, partner_code=COUNTRIES)` on `get_un_exports`,
+    `get_un_imports` and `get_un_reexports` and `names_codes(reporter_code=COUNTRIES)` on
+    `get_un_release_dates`, `COUNTRIES` declared from `countries` by `countryCode` and
+    `countryName` — the family check fails without it on all 13 tasks.
+    `src/xippios/usda/esr/tasks.py` (sdk-usda-esr) — `names_codes(country_code=COUNTRIES)` on
+    `get_exports` and `get_weekly_series`, `COUNTRIES` declared from `countries` by
+    `countryCode` and `countryDescription` — the family check fails without it.
+    `src/xippios/comtrade/tasks.py` (sdk-comtrade) — `names_codes(..., separator=",")` on
+    `get_data`, `get_counts`, `get_data_availability`, `get_metadata`, `get_trade_balance`,
+    `get_bilateral_data` and `get_world_share` and `names_codes(...)` on
+    `get_bilateral_flows`, `get_mirror_flows`, `get_commodity_series` and
+    `get_top_partners`, every reporter parameter with `Reporters` by `reporterCode` and
+    `reporterDesc` and every partner parameter with `partnerAreas` by `PartnerCode` and
+    `PartnerDesc`, and the four slice tasks' docstrings name the numeric code alone — the
+    family check fails without it on all 11 tasks.
+    `src/xippios/comtrade/params.py` (sdk-comtrade) — `_resolve_iso3` and the alpha-3 branch
+    of `_resolve_area` → the refusal of `check` with a hint table keyed by the alpha-3 codes
+    of `Reporters` and `partnerAreas`, each naming its code, so `"CHE"` is refused naming
+    `757 (Switzerland)` — the decision of https://github.com/xippios/sdk-core/issues/375, a
+    breaking change that makes its release a minor.
+    `tests/test_tasks.py` (sdk-comtrade) — `test_bilateral_flows_resolve_iso3_codes_before_the_call`,
+    `test_iso3_codes_resolve_to_the_codes_upstream_data_uses` and
+    `test_mirror_flows_resolve_iso3_codes_and_ask_monthly_data_for_months` → the refusal that
+    names the code, and every other test that passes an alpha-3 code to a slice task, the
+    end-to-end tests of the tools and the route among them, passes `"757"`, `"842"` and the
+    other numeric codes — each fails once `_resolve_iso3` goes, since an alpha-3 code is
+    refused.
+    `tests/test_live.py` (sdk-comtrade) — `test_get_bilateral_flows_live` and
+    `test_get_mirror_flows_live` pass `"757"` and `"842"` in place of `"CHE"` and `"USA"` —
+    both fail in the nightly run once `_resolve_iso3` goes.
+    `README.md` (sdk-comtrade) — the slice examples pass the numeric codes and the slice
+    tasks' paragraphs name UN Comtrade's codes alone — they name the alpha-3 codes that the
+    tasks refuse.
+    `src/xippios/eurostat/tasks.py` (sdk-eurostat) — `names_codes(reporters=COUNTRIES,
+    partners=COUNTRIES)` on `get_trade`, `get_trade_hs` and `download_trade` and
+    `names_codes(reporters=COUNTRIES)` on `get_sold_production` and `get_total_production`,
+    `COUNTRIES` declared from `cxt_free_iso` by `code` and `label` — the family check fails
+    without it on all 5 tasks, and a country inside `get_data`'s `filters` stays unnamed
+    until its row decides (https://github.com/xippios/sdk-eurostat/issues/52).
+    `src/xippios/faostat/tasks.py` (sdk-faostat) — `names_codes(area=..., separator=",")` on
+    `get_series` and `area` and `area_cs` of `get_data` in `UNNAMED_CODES` with their reasons,
+    since under `area_cs` an M49 code can be an FAO code of another country, until its row
+    decides (https://github.com/xippios/sdk-faostat/issues/34) — the family check fails
+    without it on both tasks.
+- `QueryTooLarge(count, *, limit, narrow, bound=False, request=None, source=None)`, an
+  `InvalidRequestError`, refuses a query over upstream's per-call record limit, and core words
+  its message from the count, the limit, what narrows the query and, for the error a source's
+  `classify` maps, the request it names. `fetch_counted(count, fetch, *, limit, empty,
+  narrow, source=None)` sends the count first, answers a count of 0 with the task's empty answer
+  and no data request, refuses a count over the limit before the data request and returns the
+  data with the count, for `meta.total`. A count that is no `int`, a float such as `1234.0`
+  included, raises `TypeError`, a fault of the source's code, which reads upstream's count into
+  an `int`.
+  (ADR-0053, §5, https://github.com/xippios/sdk-core/issues/317)
+  - Hand-apply: `src/xippios/comtrade/errors.py` (sdk-comtrade) — `QueryTooLarge` deleted,
+    `RECORD_LIMIT` and `MAX_PERIODS` kept, and its two pieces of advice kept as the texts its
+    tasks pass as `narrow` — core's class now.
+    `src/xippios/comtrade/tasks.py` (sdk-comtrade) — the gate of `get_data` →
+    `fetch_counted(count, fetch, limit=RECORD_LIMIT, empty=[], narrow=..., source=SOURCE)`,
+    which may set `meta.total` from the count, and `_bounded` → core's `QueryTooLarge(bound,
+    limit=RECORD_LIMIT, narrow=..., bound=True, source=SOURCE)` — the copy core now holds.
+    `tests/test_tasks.py` (sdk-comtrade) — `test_query_too_large_is_an_invalid_request_for_http_too`
+    and `test_a_refusal_that_names_another_task_names_a_served_tool` build the error with
+    `limit=` and `narrow=`, and the import of `QueryTooLarge` comes from `xippios.core` — the
+    class takes core's arguments.
+    `src/xippios/usda/nass/errors.py` (sdk-usda-nass) — `QueryTooLarge` → a subclass of core's
+    that keeps `year` and words it in `narrow`, its signature `(count, *, year=None,
+    request=None)`, `request` passed on to core's — core words the message.
+    `src/xippios/usda/nass/_client.py` (sdk-usda-nass) — the 413 in `classify` →
+    `QueryTooLarge(None, request=request_description(response))` — a message about an answer
+    names its request (§5).
+    `src/xippios/usda/nass/tasks.py` (sdk-usda-nass) — the gate of `get_data` → `fetch_counted`
+    in a `try` whose `except` of core's `QueryTooLarge` raises an error with a count of `None`,
+    upstream's 413 from the data request, as it is, and otherwise raises the subclass for the
+    whole query or for one year, or splits by year — the copy core now holds.
+    `tests/test_tasks.py` (sdk-usda-nass) — the prefix that
+    `test_split_refuses_a_year_over_the_limit_before_fetching` asserts → core's `query would
+    return 57,873,464 records`, the year named in `narrow` — core words the message.
+    `src/xippios/eurostat/_client.py` (sdk-eurostat) — its patch decides whether `classify`
+    maps upstream's refusal over its limit to `QueryTooLarge` with the count and the limit read
+    from upstream's own refusal and `request=request_description(response)`, or a task raises it
+    before the request with `bound=True` from
+    an estimate read from its arguments, and it takes no runner — it cannot count before it
+    asks.
+    `src/xippios/faostat/tasks.py` (sdk-faostat) — its patch decides whether `get_data` counts
+    with `no_records=true`, its float read into an `int`, against a limit of its own — its
+    upstream has no limit, and the runner takes an `int`.
+- `Ceiling(most, *, unit, mcp=None, option=None, help=None, source=None)` declares the ceiling
+  of a period series once, and its `check`, which a task calls before any request of the call,
+  refuses a range over the ceiling in force, naming the range, the ceiling and its unit and,
+  below `most`, the option that raises it, then saying that nothing was sent, before its advice,
+  and its `add_options` and `apply_options` are a tool set's two hooks for `main`.
+  `fetch_periods(periods, fetch, *, skip=())` sends one request per period in the order given,
+  passes over a period whose fetch raises one of `skip`, and returns the periods with their
+  answers for the task to assemble, its vintage included. When a fetch after the first fails,
+  it returns nothing and raises the same error, its message naming the periods answered before
+  it by their count, the first and the last.
+  (ADR-0054, §4, https://github.com/xippios/sdk-core/issues/315,
+  https://github.com/xippios/sdk-core/issues/438, https://github.com/xippios/sdk-core/issues/454)
+  - Hand-apply: `src/xippios/usda/esr/tasks.py` (sdk-usda-esr) — the ceiling of
+    `_series_range` → `Ceiling(10, unit="market years", source=SOURCE)` and its `check`, and
+    the loop of `get_weekly_series` → `fetch_periods(..., skip=(NoDataForYear,))`, the order
+    of the range and the release list kept — the copy core now holds.
+    `src/xippios/usda/psd/tasks.py` (sdk-usda-psd) — the ceiling of `get_time_series` →
+    `Ceiling(100, unit="market years", source=SOURCE)` and its `check`, and its loop →
+    `fetch_periods(..., skip=(NoDataForYear,))` — the copy core now holds.
+    `src/xippios/usda/gats/tasks.py` (sdk-usda-gats) — `series_ceiling`, `set_series_ceiling`,
+    `mcp_add_options`, `mcp_apply_options` and the span check of `_series_months` → one
+    `Ceiling(60, unit="months", mcp=24, option="--series-months", help=..., source=SOURCE)`,
+    its two hooks under the two names, and the month loop of `_series` → `fetch_periods` over
+    the month codes — the copy core now holds, and the removal of `series_ceiling` and
+    `set_series_ceiling`, which its changelog and its README name, breaks a caller's call, so
+    it takes a `breaking` entry and a minor (§12) unless the port keeps the two names.
+    `src/xippios/usda/nass/tasks.py` (sdk-usda-nass) — `split_ceiling`, `set_split_ceiling`,
+    `mcp_add_options`, `mcp_apply_options` and the check of `_split_by_year` → one
+    `Ceiling(20, unit="years", mcp=5, option="--split-years", help=..., source=SOURCE)`, its
+    two hooks under the two names, its `check` on the two-sided split before any call, and its
+    two passes → `fetch_periods`, while on the split of `year__GE` alone, which checks after
+    its count of the whole range, the port words a refusal of its own that says that the count
+    was sent and no data fetched (https://github.com/xippios/sdk-core/issues/454) — the copy
+    core now holds, and the removal of `split_ceiling` and `set_split_ceiling`, which its 0.2.0
+    entry named, breaks a caller's call, so it takes a `breaking` entry and a minor (§12)
+    unless the port keeps the two names (https://github.com/xippios/sdk-usda-nass/issues/86).
+    `tests/test_tasks.py` (sdk-usda-gats, sdk-usda-nass) — the refusal of a range over the
+    ceiling, the setter's refusal and the option's help → core's wording, the class
+    `InvalidRequestError` and the option's name unchanged, but for sdk-usda-nass's
+    `test_split_of_year_ge_alone_refuses_more_than_twenty_years_after_the_first_count`, whose
+    refusal after the first count stays the source's
+    (https://github.com/xippios/sdk-core/issues/454) — the refusals are core's wording now.
+    `tests/test_slices.py` (sdk-usda-esr, sdk-usda-psd) — the refusals of a range over the
+    ceiling → core's wording, the class `InvalidRequestError` unchanged, and the test that
+    lowers the ceiling by patching `SERIES_MAX_YEARS`, sdk-usda-esr's
+    `test_the_ceiling_counts_market_years_ends_included` and sdk-usda-psd's
+    `test_a_series_may_span_exactly_the_bound`, sets the `Ceiling` instead, neither source
+    having a setter or an option — the refusals are core's wording now, and the `Ceiling`
+    reads no module constant (https://github.com/xippios/sdk-usda-esr/issues/59).
+- `record_task` and `record_task_sync` record every exchange that a task makes, in order,
+  through every client the task reaches, each request sent once and none answered from the
+  cache, and write them under the task's name as `<case>.json`, `<case>_2.json` and so on. Each
+  exchange passes the refusal of a 1xx or a 3xx, the scrub, the rewrite step and the check of
+  `record`, and all are written or none, nothing for a task that raises or downloads. sdk-cashctrl
+  takes nothing now, since it records exchange by exchange into 44 fixture directories named
+  after wrappers, and nor does sdk-x, whose seven tasks make one call each.
+  (ADR-0057, §10, https://github.com/xippios/sdk-core/issues/174, https://github.com/xippios/sdk-core/issues/376)
+  - Hand-apply: `scripts/record_fixture.py` (sdk-google-mail) — deletes `recording_client`,
+    `task_exchanges_async`, `task_exchanges`, the seed of `TENANTS` with its guard and the loop
+    of its own `record_task` function that numbers, builds, checks and writes the fixtures, and
+    records with `record_task_sync(RECORDED_TASKS[name], DEMO, fixtures=FIXTURES,
+    case=args.case, scrub=scrub, rewrite=step, **arguments)`, its step running `rewrite` and
+    `check` as for a single exchange (ADR-0048). It keeps the command line, `TASKS`, `WRITE_TASKS`, `task_arguments`,
+    `prepare_write` with the write safety rule, `MessageScrub`, `rewrite`, `check` and the lines
+    it prints, read from the fixtures returned — core collects the task's exchanges through the
+    client the task fetches itself, numbers them and writes all or none.
+- `xippios.core.refresh` holds the frame of a source's `scripts/refresh_reference.py`: the
+  script declares one `Listed` per packaged list with its fetch, its `Enumeration` and its
+  origin and calls `run(lists, package=..., packaged=PACKAGED_LISTS, client=...)`, the one
+  `run` of both frames, which still takes a `Snapshot` as it did. The frame refuses lists
+  other than those the package declares it ships before a request, fetches every list before
+  it writes one, each request sent once and counted, and then writes the packaged files, the
+  provenance rows of `reference/README.md` in place under the header each README has and
+  `enums.py` in the declared order as one, each made and formatted first. `--only` and
+  `--render-only` are the frame's, and a hook before the first request and one after the
+  last write carry what a script writes beside its lists.
+  (ADR-0051, §3, https://github.com/xippios/sdk-core/issues/321,
+  https://github.com/xippios/sdk-core/issues/370)
+  - Hand-apply: `scripts/refresh_reference.py` (sdk-comtrade) — ported to fifteen `Listed`,
+    the ten value lists first in the order of their class names, its fetches building each
+    list as it does now with `_reconcile`, `SUPPLEMENTS`, `EVIDENCE`, the spec lists read
+    from the snapshot and the models' check, the origins its README keeps by hand declared,
+    `packaged=[*PACKAGED_LISTS, *PACKAGED_TABLES]` and its client passed to `run` — the frame
+    writes its files, its rows and its `enums.py` byte for byte as the script does today.
+    `scripts/refresh_reference.py` (sdk-eurostat) — ported to nineteen `Listed` whose fetches
+    build the TOC with `TocParser` and each codelist at the wrapper's `retrieved_at`,
+    `lists.json` and the samples written in `after`, `--samples` and `--only` by a codelist's
+    id read before the call, and `packaged=PACKAGED_LISTS` — as above, and its empty
+    `enums.py` stays as committed.
+    `scripts/refresh_reference.py` (sdk-faostat) — ported to fifteen `Listed` of
+    `getCodeList`, `param` the dimension and the origin its path, `packaged=PACKAGED_LISTS`,
+    and its count of logins kept around the call — as above, its empty `enums.py` as
+    committed.
+    `scripts/refresh_reference.py` (sdk-usda-esmis) — ported to two `Listed` whose fetches
+    build the agencies and the walk of the publications as now, stamped at their first
+    request, their origins made from the list and its note, its client passed to `run` and
+    `packaged=[*PACKAGED_LISTS, *PACKAGED_TABLES]` — as above, and it gains `--only`,
+    `--render-only` and the count of its requests.
+    `src/xippios/usda/esmis/params.py` (sdk-usda-esmis) — `PACKAGED_TABLES = ("agency",
+    "publication")` beside its empty `PACKAGED_LISTS` of value lists — the frame refuses
+    lists the package does not declare, and esmis declares its two tables nowhere today.
+    `scripts/refresh_reference.py` (sdk-usda-esr) — ported to four `Listed`, `unitsOfMeasure`
+    with `Enumeration(ids="unitId", names="unitNames")`, the origin made from the list,
+    `packaged=PACKAGED_LISTS` in place of its own check and
+    `quota_header="x-ratelimit-remaining"` — as above.
+    `scripts/refresh_reference.py` (sdk-usda-gats) — ported to five `Listed`, each endpoint its
+    `OPERATIONS` entry, the origin made from the list, `unitsOfMeasure` with
+    `Enumeration(ids="unitOfMeasureId", names="unitOfMeasureName")` and
+    `packaged=PACKAGED_LISTS` — as above, and without its origin a list's row names its
+    endpoint alone, where its README names the request and the operation.
+    `scripts/refresh_reference.py` (sdk-usda-nass) — ported to eleven `Listed`, `fetch_param`
+    building each parameter list at the wrapper's `retrieved_at` and `fetch_derived` each
+    derived list, each with its origin, `GET /api/get_param_values?param=<param>` for the
+    nine parameter lists and the query of each derived list, `CLASS_NAMES`, `_SPELLED_OUT`
+    and the dollar rule as `Enumeration` fields, `columns.csv` parsed in `before` and written
+    in `after` on a full run, its read timeout set around the call, and
+    `packaged=[*PACKAGED_PARAMS, *DERIVED_LISTS]` — as above, and without the origins
+    `--render-only` rewrites the eleven rows of `reference/README.md` to the bare endpoint
+    (https://github.com/xippios/sdk-usda-nass/issues/86).
+    `scripts/refresh_reference.py` (sdk-usda-psd) — ported to five `Listed`, the two id lists
+    with their `Enumeration(ids=..., names=...)`, the origin made from the list and
+    `packaged=PACKAGED_LISTS` in place of its own check — as above, and it gains `--only` and
+    the count of its requests.
+    `scripts/refresh_reference.py` (sdk-usda-wasde) — ported to four `Listed` whose fetches
+    build the lists from one download through xippios-usda-esmis, whose client it passes to
+    `run`, the origins made from each list's note, the manifest written in `after`, `--keep`
+    and `--from` read before the call, and `packaged=PACKAGED_LISTS` in place of its own
+    check — as above, and it gains `--only`, `--render-only` and the count of its requests.
+    `tests/test_scripts.py` (sdk-comtrade) — `test_refresh_reference_help_prints_usage_and_stops`
+    and `test_refresh_reference_render_only_changes_nothing` load the copy's parser and run,
+    and break with it gone: the first reads the frame's usage, the second runs `--render-only`
+    through `run` — core's tests hold the frame's command line and render.
+    `tests/test_refresh_reference.py` (sdk-eurostat, sdk-faostat, sdk-usda-esr,
+    sdk-usda-gats, sdk-usda-nass) — the tests that call the copy's `main`, `refresh`,
+    `render`, `module`, `metered`, `with_provenance` or `selected` break with it gone and are
+    dropped: the run, `--only`, `--render-only`, the meter, the render and the provenance
+    rows. The tests of a source's own fetches and hooks stay, sdk-eurostat's of `read_toc`,
+    `toc_list` and the codelists, sdk-faostat's of its login count and sdk-usda-nass's of
+    `columns_from_snapshot` and its read timeout — core's `tests/refresh/test_reference.py`
+    holds the frame's parts.
+    `tests/test_params.py` (sdk-usda-esr) —
+    `test_the_refresh_script_names_each_lists_upstream_operation` reads the copy's `LISTS`,
+    `TABLES` and `ID_LISTS` and breaks with them gone: it reads the port's `Listed`
+    endpoints in their place — the operation each list names stays held.
+- `xippios.core.testing.built_answers`, which a source collects with one line in
+  `tests/test_built_answers.py`, fails on each answer that a test builds or serves at another
+  URL, and each body it hands to the package's code, where no mark names its kind of §10 or
+  that it is an input of the test, and names the file and the line. Its census, in the same run
+  and after every other test, fails a test whose replay answered another request than the
+  recorded one without naming the third kind, compared through the recording's redaction. §10
+  states the mark, its reach, the input's sentence, which an exchange that a function of the
+  module returns to the recorder and the frame's `Response` take, and the census, and the
+  collecting module declares the source's own `READERS` and its table `ALLOWED`.
+  (ADR-0049, §10, https://github.com/xippios/sdk-core/issues/344, https://github.com/xippios/sdk-core/issues/439)
+  - Hand-apply: `tests/test_built_answers.py` — the collecting line,
+    `from xippios.core.testing.built_answers import *  # noqa: F403`, which sdk-template
+    renders, with `READERS` and `ALLOWED` where the source needs them — the check reaches no
+    source before it holds the line.
+    `tests/test_built_answers.py` (sdk-cashctrl) — its own check replaced by the collecting
+    line, with `READERS = frozenset({"merge_custom"})` and its one entry of `ALLOWED` as it
+    stands — core holds the check, and its reader finds the same places in every module.
+    `tests/replay_census.py` (sdk-cashctrl) — deleted — the plugin takes the census in the
+    same run.
+    `tests/*.py` (sdk-usda-esmis 10, sdk-eurostat 31, sdk-usda-psd 20, sdk-usda-nass 20,
+    sdk-comtrade 27, sdk-faostat 38, sdk-usda-wasde 14, sdk-usda-gats 40, sdk-usda-esr 34,
+    sdk-x 52, sdk-google-mail 49) — every place marked with `§10` and its kind, or as an input
+    of the test, the counts measured on 2026-11-21 and an upper bound of the places without a
+    mark alone, and every test that the census fails, whose replay answered another request,
+    marked as the third kind or narrowed, which those counts leave out: the trial of the
+    release counted 6 in sdk-google-mail, 4 in sdk-comtrade, 24 in sdk-usda-nass, 5 in
+    sdk-usda-esr, 11 in sdk-x and none in sdk-cashctrl. Of the places, an exchange that a
+    function of the module returns to the recorder, in sdk-google-mail's recorder tests, and
+    the frame's `Response`, in a test of a hook, may take the input's sentence, and four of
+    sdk-google-mail's six census tests answer their recordings once its two write fixtures are
+    recorded again (https://github.com/xippios/sdk-core/issues/439) — the collected check
+    fails on each place without its mark, and the census on each such test
+    (https://github.com/xippios/sdk-core/issues/435).
+- `assert_write_tools` holds what a write task's preview shows, in two parts, each off by
+  default: `preview_reads=True` fails a write task unless its `Result` has exactly one member
+  tagged `performed: Literal[False]`, the preview, that declares `reads: list[str]`, and
+  `dry_run=` with `sent=`, the `respx` router, calls each write tool without `confirm` and
+  fails a preview that sent a request other than a read, or whose `reads` is not empty exactly
+  when it sent none. A read is a `GET`, `HEAD` or `OPTIONS` request unless `is_read=` says
+  otherwise. Conventions §8 state that a preview sends no write, that whether it reads first
+  is the tool's, said in its docstring with the read's cost, and that it carries `reads`.
+  (ADR-0050, §8, https://github.com/xippios/sdk-core/issues/182, https://github.com/xippios/sdk-core/issues/369)
+  - Hand-apply: `src/xippios/cashctrl/models.py` (sdk-cashctrl) — the package's own
+    `WritePreview` declares `reads: list[str]`, the operations its preview read, and it and
+    `WriteResult` stay the package's, since core provides no preview model — the field that
+    `preview_reads=True` holds.
+    `src/xippios/cashctrl/tasks_write.py` (sdk-cashctrl) — `_preview` sets `reads` from the
+    read it made. The eight previews that read their record once with `GET`, the updates and
+    deletes of journal entries, persons, orders and order book entries, name its `read.json`,
+    such as `["journal/read.json"]`. The six that send no request, the four creates,
+    `update_order_status` and `create_order_payment`, set `[]`. Each of the fourteen
+    docstrings says whether its preview reads and what the read costs, the eight that their
+    preview reads the record once with its `read.json`, one request, and the six that their
+    preview sends no request — the rule of §8, which leaves whether a preview reads to the
+    source.
+    `tests/test_tasks_write.py` (sdk-cashctrl) — `test_the_write_server_serves_write_tasks_only`
+    passes `preview_reads=True`, and `dry_run=` with `sent=respx_mock` at the source's choice,
+    the eight reads served by their routes and no `is_read`, since it reads with `GET` and
+    writes with `POST` — it fails while `WritePreview` lacks `reads`.
+    `src/xippios/google/mail/models.py` (sdk-google-mail) — the package's own
+    `ComposePreview` and `ActionPreview` declare `reads: list[str]` and stay the package's,
+    since core provides no preview model — the field that `preview_reads=True` holds.
+    `src/xippios/google/mail/tasks_write.py` (sdk-google-mail) — each of the five previews
+    sets `reads` to the operations it read. As the code reads on 2026-11-21, that is
+    `["gmail.users.messages.get"]` for the preview of a reply by `create_draft` or
+    `send_message` and `[]` for the others, since the previews of `delete_draft`,
+    `modify_message` and `trash_message` are built from the arguments alone and send no
+    request. Each of the five docstrings says whether its preview reads and what the read
+    costs, the two that compose that a reply's preview reads the original once, 20 quota
+    units, and the other three that their preview reads nothing — the rule of §8, which
+    leaves whether a preview reads to the source.
+    `tests/test_tasks_write.py` (sdk-google-mail) —
+    `test_the_write_server_serves_the_write_tasks_only` passes `preview_reads=True`, and
+    `dry_run=` with `sent=respx_mock` at the source's choice, with an `is_read` that takes the
+    token request, a `POST`, that a reply's read sends first — it fails while the two previews
+    lack `reads`.
+- `xippios.core.testing.live` compares each packaged list with the list upstream serves now in
+  the nightly run, and a source collects it in `tests/test_live.py` with one line beside
+  `LIVE_LISTS`, each compared list with its `PackagedCodes` and the function that fetches it,
+  and `NO_LIVE_LIST`, each list left out with its reason. A code gone, new or changed fails the
+  run, the failure names codes and never records, and `assert_list_current(codes, current, *,
+  packaged=None)` is the assertion underneath. The family check fails at once a packaged list
+  that stands in neither declaration and an entry that names no packaged list.
+  (ADR-0055, §10, https://github.com/xippios/sdk-core/issues/319)
+  - Hand-apply: `tests/test_live.py` (sdk-usda-esr) — delete `LISTS` and
+    `test_packaged_list_equals_the_live_list`, collect `xippios.core.testing.live` and declare
+    `commodities`, `countries`, `regions` and `unitsOfMeasure` in `LIVE_LISTS`, each with its
+    `PackagedCodes` and its `api` wrapper — the copy core now holds, and
+    `test_family_every_packaged_list_is_declared_for_the_live_run` fails without the
+    declaration.
+    `tests/test_live.py` (sdk-usda-psd) — delete `LISTS` and
+    `test_packaged_list_equals_the_live_list`, collect the module and declare `commodities`,
+    `commodityAttributes`, `countries`, `regions` and `unitsOfMeasure` in `LIVE_LISTS` with
+    their `api` wrappers — the copy core now holds, and the family check fails without it.
+    `tests/test_live.py` (sdk-usda-gats) — delete `_keyed`, `LISTS` and
+    `test_packaged_list_equals_the_live_list`, collect the module and declare
+    `HS6Commodities`, `countries`, `customsDistricts`, `regions` and `unitsOfMeasure` in
+    `LIVE_LISTS` with their `api` wrappers — the copy core now holds, and the family check
+    fails without it.
+    `tests/test_live.py` (sdk-comtrade) — delete the comparisons of `test_list_reporters_live`,
+    `test_list_partners_live`, `test_list_codes_live` and `test_list_classifications_live`,
+    collect the module and declare `Reporters`, `partnerAreas`, `motCode` and
+    `ListofReferences` in `LIVE_LISTS`, each fetched from `api.reference_rows` and read
+    through its model, as `scripts/refresh_reference.py` writes the list, and not compared as
+    the payload, whose `id` stands where the packaged `motCode` list has `motCode` and whose
+    `"True"` the packaged `TradeDataItems` holds as `true`, and each of its eleven other lists
+    in `LIVE_LISTS` or in `NO_LIVE_LIST` with its reason, as its patch chooses, the four taken
+    from the specification in `NO_LIVE_LIST` — the copy core now holds, and the family check
+    fails without the declaration (https://github.com/xippios/sdk-comtrade/issues/60).
+    `tests/test_live.py` (sdk-usda-esmis) — delete
+    `test_the_packaged_agency_table_matches_upstream_live`, collect the module and declare
+    `agency` in `LIVE_LISTS` with `api.agency_find_all`, and `publication` in `LIVE_LISTS`, at
+    101 requests a fetch, or in `NO_LIVE_LIST` with its reason, as its patch chooses — the copy
+    core now holds, and the family check fails without the declaration.
+    `tests/test_live.py` (sdk-usda-wasde) — `vocabulary.differences` in `test_list_tables_live`,
+    `test_list_commodities_live` and `test_list_regions_live` → `assert_list_current(codes,
+    current, packaged=...)`, both sides masked as today, and `table`, `commodity`, `region` and
+    `attribute` in `NO_LIVE_LIST`, each reason naming the test that compares it or why none
+    does — the lists come from the session's release file, which no entry of `LIVE_LISTS`
+    fetches, and the family check fails without the declaration.
+    `src/xippios/usda/wasde/_vocabulary.py` (sdk-usda-wasde) — delete `differences` and the
+    functions that name its rows — the copy core now holds.
+    `tests/test_live.py` (sdk-faostat) — delete the removed-codes assertion of
+    `test_list_elements`, collect the module and declare `element_QCL` in `LIVE_LISTS` with a
+    fetch of `api.get_code_list.get_code_list("en", "element", "QCL")`, and each of its
+    fourteen other tables in `LIVE_LISTS`, 14 more keyed requests a night, or in `NO_LIVE_LIST`
+    with its reason, as its patch chooses — the family check fails without the declaration.
+    `tests/test_live.py` (sdk-usda-nass) — collect the module and declare the nine lists of
+    `PACKAGED_PARAMS` in `LIVE_LISTS`, 9 keyed requests a night, or in `NO_LIVE_LIST` with
+    their reasons, as its patch chooses, and `progress_stages` and `condition_categories` in
+    `NO_LIVE_LIST`, since no endpoint serves a derived list — the family check fails without
+    the declaration.
+    `tests/test_live.py` (sdk-eurostat) — collect the module and declare its nineteen packaged
+    lists in `LIVE_LISTS`, 15 more files a night, or in `NO_LIVE_LIST` with their reasons, as
+    its patch chooses — the family check fails without the declaration.
+- `newer_than(since, items, *, released, read)` keeps the items released strictly later than a
+  `since` that takes back a `meta.vintage`, read by the source's reader of its vintage text, and
+  `naive_time` is core's reader of a release time printed without a zone, a date alone its
+  midnight, which refuses a zone and an unreadable text with `InvalidRequestError`. The task
+  still sets `meta.vintage` and `meta.published_at` from the whole answer and reads `since`
+  before its request. An item without a release time is kept, since it cannot be shown to be
+  no newer, and a release that does not compare with what the reader gave raises `TypeError`
+  naming both, a fault of the source's code.
+  (ADR-0052, §4, https://github.com/xippios/sdk-core/issues/318)
+  - Hand-apply: `src/xippios/usda/esr/tasks.py` (sdk-usda-esr) — `_since` and `_SINCE_EXAMPLE`
+    → `read_since = partial(naive_time, source=SOURCE)`, called on `since` before the
+    request, and the filter of `get_release_dates` → `newer_than(since, releases,
+    released=lambda release: release.release_time_stamp, read=read_since)` — the copy core
+    now holds.
+    `tests/test_tasks.py` (sdk-usda-esr) — the prefix that
+    `test_since_is_refused_before_the_request` and `test_release_dates_since_over_mcp` assert
+    → core's, `since must be the meta.vintage text of an earlier call, an ISO date and time
+    without a time zone such as '2026-10-06T08:00:00'`, in place of the prefix that names
+    `get_release_dates` and ESR's example, the class still `InvalidRequestError` and the
+    reasons `it is not an ISO date and time` and `it carries a time zone` kept — the refusal
+    is core's wording now.
+    `src/xippios/usda/psd/tasks.py` (sdk-usda-psd) — the `since` test in the filter of
+    `get_release_dates` and the all-or-nothing check of `get_latest_release` →
+    `newer_than(since, ..., released=_release, read=validate_since)`, with `validate_since`
+    still called before the request — the copy core now holds, its wording unchanged.
+- `ResultCap(paged=True)` gives an MCP tool the adapter's own `offset`, the rows of the answer
+  already shown, so the task runs again and the note of a cut answer names the call for the
+  next rows, `continue with offset=200`. `ResultCap(keep="last")` keeps the newest rows of a
+  series ordered oldest first, and its `offset` counts from the last row, so a continuation
+  walks to older rows. Both default to what every cap does today, a tool without them
+  declares no `offset` and writes its notes as before, and a write task or a task that takes
+  `offset` itself is refused a paged cap.
+  (ADR-0047, §8, https://github.com/xippios/sdk-core/issues/314)
+  - Hand-apply: `src/xippios/cashctrl/tasks.py` (sdk-cashctrl) — `paged=True` in `MCP_CAPS`
+    for `list_accounts`, `list_cost_centers`, `list_custom_fields` and the other lists that
+    upstream returns whole, the four lists that record `start` left as they are — their cut
+    lists reach the last row over MCP (https://github.com/xippios/sdk-cashctrl/issues/87).
+    `src/xippios/comtrade/tasks.py` (sdk-comtrade) — `paged=True` in `MCP_CAPS` for
+    `get_world_trade`, `get_data`, `get_data_availability`, `get_bilateral_data` and
+    `get_mirror_flows` — each cut answer reaches its last row
+    (https://github.com/xippios/sdk-comtrade/issues/35).
+    `src/xippios/eurostat/tasks.py` (sdk-eurostat) — `paged=True, keep="last"` for
+    `get_series`, and `paged=True` for `get_data` where its answer is a list of rows or a
+    model of one list — a series shows its latest period first
+    (https://github.com/xippios/sdk-eurostat/issues/51).
+    `src/xippios/faostat/tasks.py` (sdk-faostat) — `paged=True` for `get_data`, `list_items`
+    and the other list tools, `keep="last"` for `get_series` — the notes that named
+    `page_number` or a raised bound shrink to the filters
+    (https://github.com/xippios/sdk-faostat/issues/32).
+    `src/xippios/google/mail/tasks.py` (sdk-google-mail) — no entry, since `get_thread` keeps
+    its `start` and `get_message` is one record, which a paged cap does not reach — its notes
+    stay as they read (https://github.com/xippios/sdk-google-mail/issues/38).
+    `src/xippios/usda/esmis/tasks.py` (sdk-usda-esmis) — `paged=True` for
+    `list_publications`, which reads the packaged table, the three tools that take `page`
+    left as they are — all 2,008 rows of one agency are reachable
+    (https://github.com/xippios/sdk-usda-esmis/issues/34).
+    `src/xippios/usda/esr/tasks.py` (sdk-usda-esr) — `paged=True, keep="last"` for
+    `get_exports`, whose every-country answer is one request, and `keep="last"` alone for
+    `get_weekly_series`, which stays unpaged since a second run spends one request per market
+    year, up to 11 — the newest weeks come first
+    (https://github.com/xippios/sdk-usda-esr/issues/28).
+    `src/xippios/usda/gats/tasks.py` (sdk-usda-gats) — `paged=True` for the sixteen cut tools
+    its issue counts, `get_census_exports` among them, and `keep="last"` for the three series
+    tools — each continuation downloads the answer again, since no data answer is cached
+    (https://github.com/xippios/sdk-usda-gats/issues/32).
+    `src/xippios/usda/nass/tasks.py` (sdk-usda-nass) — `paged=True` for `list_param_values`,
+    nine of whose lists are packaged and the rest one keyed call, `get_data` left unpaged,
+    whose second run split by year spends up to 41 keyed calls that are never cached, and
+    `get_county_yield`, `get_county_production` and `get_census_farms` paged only where one
+    run is one keyed call — a list past 1,000 values reaches its last value
+    (https://github.com/xippios/sdk-usda-nass/issues/55).
+    `src/xippios/usda/psd/tasks.py` (sdk-usda-psd) — `paged=True` for `get_latest_release`,
+    `get_data`, `get_release_dates` and `get_time_series`, and `keep="last"` for the two
+    ordered oldest first where the patch keeps the newest — every cut answer reaches its last
+    row (https://github.com/xippios/sdk-usda-psd/issues/31).
+    `src/xippios/x/tasks.py` (sdk-x) — no entry, since X bills every page that a second run
+    fetches, and a page with two lists stays a preview — its notes stay as they read
+    (https://github.com/xippios/sdk-x/issues/35).
+    `tests/test_org_lock.py` (sdk-cashctrl) —
+    `test_the_bound_read_server_reaches_the_bound_organisation_only` reads that
+    `cashctrl_list_currencies` takes `offset` where it read that it takes no arguments — the
+    refusal of an argument that a tool does not declare names those it takes, a paged tool's
+    `offset` among them (https://github.com/xippios/sdk-cashctrl/issues/134).
+    `tests/test_tasks.py` (sdk-usda-esr, sdk-usda-psd, sdk-usda-nass, sdk-usda-gats) — the
+    refusal of an undeclared argument names `offset` last among the arguments of a paged tool,
+    in `test_the_adapters_refuse_a_bad_argument_before_the_task_runs` for sdk-usda-esr's
+    `get_exports` and sdk-usda-psd's `get_data`, and in
+    `test_a_tool_error_answer_is_flagged_and_an_undeclared_argument_refused` for
+    sdk-usda-nass's `list_param_values` and, where it is paged, sdk-usda-gats's
+    `list_countries` — as above (https://github.com/xippios/sdk-usda-esr/issues/59,
+    https://github.com/xippios/sdk-usda-nass/issues/86).
+    `tests/test_contract.py` (sdk-faostat) —
+    `test_a_tool_refuses_an_argument_it_does_not_declare` reads that `list_domains` takes
+    `search, offset` where it is paged — as above.
+- `record`, `record_sync` and `fixture_from_response` take `rewrite=`, a source's own step, a
+  `Rewrite` of `xippios.core.testing`, that returns the scrubbed `Fixture` rewritten with the
+  values it replaced, and nothing is written
+  while one of those values is left in the URL, a header value, a body or a string decoded from
+  a JSON body. The order is the scrub, the step, the check and the one write, and `send_once`
+  and `send_once_sync` send a recording's one request without the write, so no recorder builds
+  a client for one attempt.
+  (ADR-0048, §10, https://github.com/xippios/sdk-core/issues/322, https://github.com/xippios/sdk-core/issues/281, https://github.com/xippios/sdk-core/issues/439)
+  - Hand-apply: `scripts/record_fixture.py` (sdk-x) — deletes the client built with
+    `RetryPolicy(max_attempts=1)`, `exchange`, `survivors`, `_strings`, `_masked` and its calls
+    of `fixture_from_response` and `write_fixture`, and records with
+    `record_sync(client, ..., rewrite=step)`, the step running `unknown_answered`, `rewrite` and
+    the 256 KiB test and returning the values `rewrite` replaced, stripped. It keeps the command
+    line, `refusal` with `ADMITTED` and `WRAPPERS`, the estimate, `--wrong-key` as `auth=`, the
+    summary and the rewrite rules — core runs the step and checks its values.
+    `tests/test_record_fixture.py` (sdk-x) — the two tests of `survivors` assert the refusal of
+    `fixture_from_response(..., rewrite=step)`, which names the place, `response body`, where
+    `survivors` named the key's path — the check and its message are core's.
+    `scripts/record_fixture.py` (sdk-google-mail) — the single exchange sends with
+    `send_once_sync` through the demo account's client, the token request with `auth=None` and
+    `--garbage-bearer` as `auth=`, and builds its fixture with
+    `fixture_from_response(response, scrub=..., rewrite=step)`, the step running `rewrite` and
+    `check` and raising `ValueError` on a leak, while a task's exchanges pass the same step
+    through `record_task_sync`. It keeps `MessageScrub`, the text rules, `check`, the command
+    line and the write safety rule, and deletes `recording_client` with its capture of a task,
+    as the note of `record_task` says (https://github.com/xippios/sdk-core/issues/174) — the
+    single exchange needs no client of its own, and core records the exchanges of a task.
+    `scripts/record_fixture.py` (sdk-cashctrl) — deletes `recording_client`, sends with
+    `send_once_sync(client_for(DEMO), ...)`, `--wrong-key` as `auth=`, and passes
+    `TenantScrub(...).apply` as the step of `fixture_from_response(..., rewrite=...)`, which
+    returns the pair of the rewritten fixture and no value of its own, `(rewritten, [])`, since
+    its verify by pattern refuses what survives, the subdomain in any case among them. It
+    keeps `TenantScrub` with its verify by pattern, `check`, the reminder after a write, the
+    guards, whose reads of `order/read.json` and `order/bookentry/read.json` are sent once by
+    `send_once` through the demo organisation's own client, which retries a 5xx, a read that
+    core refuses as a 1xx or 3xx refusing the write, and its refusal of another 2xx and of a
+    binary body at a file path — the one-attempt client and the refusal of a 1xx or 3xx are
+    core's, and a step that returns the fixture alone raises `TypeError`.
+    `tests/test_record_fixture.py` (sdk-cashctrl) — `test_the_recording_client_never_retries`
+    goes with `recording_client`, `test_a_5xx_is_recorded_after_one_request` sends through
+    the demo organisation's own client, `test_secrets_are_redacted_plain_and_percent_encoded`,
+    `test_the_host_then_the_secrets_then_the_rewrite` and
+    `test_the_verify_passes_a_clean_fixture` unpack the pair that `apply` returns, and the
+    redirect of `test_a_file_path_writes_no_answer_but_an_error_or_a_refusal` asserts the
+    refusal of `send_once`, which names the method, the path and the status, where the
+    recorder's own check of a file path's answer named the file path — the recorder builds no
+    client of its own, `send_once` refuses the 302 before that check reads it, and
+    `test_an_order_write_naming_an_unmarked_or_unreadable_order_is_refused` holds one read of
+    each order, which a guard that reads through the retrying client exceeds
+    (https://github.com/xippios/sdk-cashctrl/issues/134).
+    `scripts/cut_sample.py` (sdk-usda-wasde) — `fetch` sends with
+    `send_once(AsyncClient(config), chosen.url)` in place of the client built for one attempt
+    and `client.request(..., raise_on_error=False)`, and keeps its refusal of every status but
+    200, its samples, its sha256 test and `write_download_fixture` — the one send is core's.
+- `xippios.core.refresh` holds the frame of a source's `scripts/refresh_upstream.py`: the
+  script declares a `Snapshot` with its pages, its attribution and its hooks and calls
+  `run(snapshot)`, and the fetch, the attribution check, which reads an image's alternative
+  text and passes a statement recorded with a link only as the text of that link,
+  `FETCHED.md`, the write and `--check` are core's, in the standard library alone. Hooks
+  carry what some sources do beyond the template's skeleton: `Credentials` for keyed samples
+  with `--keyless`, a file kept as recorded, one page split into several files, a second
+  origin after a 403, a wait on a 429, a section of the source's own and a note made from
+  the answer. `FETCHED.md` takes one form in every source, each ETag in a code span on a row
+  with the allowlist mark and the table `Not fetched` under its heading even when it has no
+  row.
+  (ADR-0046, §3, https://github.com/xippios/sdk-core/issues/320,
+  https://github.com/xippios/sdk-core/issues/340,
+  https://github.com/xippios/sdk-core/issues/415,
+  https://github.com/xippios/sdk-core/issues/425,
+  https://github.com/xippios/sdk-core/issues/437)
+  - Hand-apply: `scripts/refresh_upstream.py` — ported to a `Snapshot` declaration run by
+    `xippios.core.refresh.run`, its `# /// script` block dropped, its frame code deleted
+    and its own code kept as hooks: sdk-comtrade
+    `linked` for the bundle and its products, `reduce` for the Help Center articles, `note`
+    for the note that each article's and product file's answer gives and `sections` for
+    "Products found", sdk-eurostat `quota_wait`, `keep_recorded` with
+    `canonical` for its WADL, `pause=5.0` and `reduce`, sdk-faostat `credentials` with its
+    samples `keyed`, `reduce` for the terms, `note` for its checks and notes and `canonical`
+    for `processing_time`, sdk-google-mail `reduce` alone, every note of its pages static,
+    sdk-usda-esmis `linked` for
+    the newest release and `reduce` for the calendar excerpt, its followed redirect to
+    another host recorded by its status, sdk-usda-esr, sdk-usda-gats and sdk-usda-psd
+    `note` and `linked` for the FAS portal kit, `reduce` for their part of the shared
+    document and `sections` for how their parts of the two documents compare, which needs
+    both rows, sdk-usda-nass `reduce` and a `vocabulary` of the phrases on its api page that
+    state nothing new, sdk-usda-wasde `origin` for USDA's CDN origin,
+    `linked` and `reduce`, and sdk-x `canonical` for its scope lists and `reduce`, its
+    footer's page declared without a file and with `stable=False`, since the frame searches a
+    page whole. sdk-google-mail, sdk-usda-wasde and sdk-x check each page's title in `reduce`
+    from a table of their own, since core's `Page` holds no title, and sdk-faostat and
+    sdk-usda-esmis keep their check of their YAML document's `info` in a hook, since the
+    frame parses a JSON document alone. Each `info.license`, `info.termsOfService` and
+    `info.contact` that a JSON document holds is recorded as a `Statement` from it, sdk-x's
+    `info.contact` among them — the
+    frame's rules reach a source through core and no longer through twelve copies, the
+    source's page files stay byte for byte as its hooks make them, and the frame stops on
+    such an `info` field that the attribution does not record
+    (https://github.com/xippios/sdk-core/issues/435).
+    `scripts/refresh_upstream.py` (sdk-cashctrl) — ported with `split` for its one page,
+    its word check inside it, `note` for the files that keep a nested table as HTML and
+    `sections` for its vendor examples, its attribution recording "Terms of Service" from
+    its page with its link to https://cashctrl.com/en/about/terms, which the error handling's
+    text links, and its footer's copyright notice from its page, which the frame reads in the
+    logo's alternative text and checks on every run, its own check of the notice in `split`
+    deleted, and six things of its script given up: `--from-file`, its
+    run from a saved copy of the page that spends no request, since the frame takes no
+    option of a source's own, its own User-Agent, which names its repository, for the
+    family's, its request for the page gzipped, since the frame asks for each page as it
+    is, at the cost of a larger transfer and no byte of its files, the removal of an
+    entry's file at the top of `docs/upstream/` once the table of contents drops the entry,
+    which the frame makes in the subdirectories it writes to alone, so the port puts its
+    entries under one or removes such a file by hand, `--check` naming no leftover, the
+    fragment of its entry in each split file's row of `FETCHED.md`, `index.html#/order`,
+    since the frame's row of a file split from a page names the page's URL, the file's
+    first line keeping the fragment, and its check that the notice stands in the footer's
+    logo, since the frame checks the notice on the page and tells no part of a page apart —
+    the frame carries none of the six while one source alone needs it, and stops on the link
+    while the attribution does not record it
+    (ADR-0023, decision 2, ADR-0046, decisions 2 and 7,
+    https://github.com/xippios/sdk-cashctrl/issues/134).
+    `docs/upstream/FETCHED.md` — rewritten once by the first run of the ported script, in
+    the frame's form, every row with an ETag gaining the code span and the mark and the
+    403 rows moving to `Not fetched`, a run that stops until the attribution records what it
+    finds in an image's alternative text or a linked statement's words outside its link,
+    which no offline run shows — the frame writes it alone (ADR-0028, decision 4,
+    ADR-0046, decision 7).
+    `tests/test_refresh_upstream.py` — its tests of what the frame now does, the render of
+    `FETCHED.md` with its sentences, the row of `OBSERVED.md` and the table `Not fetched`,
+    the write with the removal of a file no longer produced, and `--check` with its
+    comparison of the committed `FETCHED.md`, deleted with the copy, since core's
+    `tests/refresh/test_upstream.py` holds each, and its tests of the source's own hooks and
+    of what its `Snapshot` declares kept, calling the hooks or reading the declaration, as
+    `docs/handover.md` names each test per source — the tests call `render_fetched`, and
+    all but sdk-eurostat's `write_snapshot` and `Response`, which the port deletes from the
+    script, and §15, items 3 and 4, delete a copy with its tests.
+- Where a source keeps `docs/upstream/OBSERVED.md`, the family check holds it to three rules
+  and fails at once: `FETCHED.md` lists the file in a row of its own at any width, every note
+  ends with a paragraph that opens with `Probe: <date>` or `Observed: <date>`, and every file
+  that a code span of the file cites from the repository's root exists. A source without the
+  file passes all three. sdk-eurostat fails the row until its patch writes it.
+  (ADR-0044, §3, https://github.com/xippios/sdk-core/issues/348)
+  - Hand-apply: `tests/test_observed.py` (sdk-usda-esmis) — delete
+    `test_fetched_md_lists_observed_md_in_a_row_of_its_own` and
+    `test_every_note_ends_with_its_probe_and_its_date`, and keep
+    `test_every_recording_a_note_cites_is_a_fixture`, whose bare fixture names the family
+    check does not read — the family check holds the row and the probe's label and date.
+    `tests/test_observed.py` (sdk-usda-wasde) — delete
+    `test_fetched_md_lists_observed_md_in_a_row_of_its_own` and the label and date of
+    `test_every_note_ends_with_what_it_was_observed_in_and_its_date`, and keep its cited file
+    in each note, `test_every_file_a_note_was_observed_in_exists` for the release files and
+    the paths under `docs/upstream/`, `test_the_layouts_name_the_release_files_they_were_written_from`
+    and `test_the_notes_are_observed_md_and_no_layout_md_remains` — the family check holds the
+    row, the label and the date.
+    `tests/test_observed.py` (sdk-usda-esr) — delete `test_every_file_the_notes_cite_exists`,
+    `test_fetched_md_lists_observed_md_in_a_row_of_its_own` with its sentence of
+    `FETCHED.md`, the copy's "Nothing here was edited by hand", which the first run of the
+    ported snapshot script words as the frame does, and the label and date of
+    `test_every_note_ends_with_its_probe`, and keep each probe's operation, recording or
+    request and the dates of its recordings, the pointers of
+    `test_the_rules_point_to_the_notes` and `test_no_probe_stands_outside_the_notes` — the
+    family check holds the row, the label and date and the cited files, and the whole of
+    `FETCHED.md` from that first run on.
+    `tests/test_observed.py` (sdk-cashctrl) — delete `test_every_file_the_notes_cite_exists`,
+    `test_fetched_md_lists_observed_md_in_a_row_of_its_own` with its row as the file's last
+    line and its sentence, the copy's form, which the first run of the ported snapshot script
+    replaces with the frame's, its row standing before `Not fetched`, and the label and date
+    of `test_every_note_ends_with_its_probe`, and keep the count of 20 notes, each probe's
+    operation, recording or answer not kept and the dates of its recordings, the documented
+    operations, the pointers and `test_the_package_keeps_no_probe` — the family check holds
+    the row, the label and date and the cited files, and the whole of `FETCHED.md` from that
+    first run on.
+    `tests/test_refresh_upstream.py` (sdk-faostat) — delete
+    `test_every_file_a_note_cites_exists` and the label and date of
+    `test_every_note_ends_with_its_probe_its_date_and_its_operation`, and keep its count of 12
+    notes and each probe's operation or request — the family check holds the label and date and
+    the cited files.
+    `docs/upstream/FETCHED.md` (sdk-eurostat) — the row of `OBSERVED.md`, which
+    `scripts/refresh_upstream.py` writes at its next run —
+    `test_family_fetched_md_lists_observed_md_in_a_row_of_its_own` fails without it.
+- `PackagedList.codes(code, name=None, *, fold_case=False, list_name=None, source=None)`
+  declares a packaged list's code field, name field and folding once, and the `PackagedCodes`
+  it returns checks an argument in one call, `check(param, value, *, hints=None,
+  otherwise=None, closest=None, reason=None)`, which returns the value as given or raises
+  `UnknownCode`. A value of the other type than the list's codes is refused with
+  `InvalidRequestError`, which names the integer or the text to pass, or for another text the
+  codes the source's strategy names, else those whose name holds it, and then the reason.
+  `names`, `name_of` and `in` read the declared list as the check compares it.
+  (ADR-0045, §5, https://github.com/xippios/sdk-core/issues/313,
+  https://github.com/xippios/sdk-core/issues/418, https://github.com/xippios/sdk-core/issues/432)
+  - Hand-apply: `src/xippios/usda/esr/params.py` (sdk-usda-esr) — `_codes` and
+    `_validate_code` → a declaration per list and `check(param, value, closest=_closest,
+    reason=_REASON)`, `_closest` taking a `Mapping`, and a text, for which it returns no pair
+    so that core names the codes by name — the copy core now holds, and the tests of a text
+    given for an integer code take core's wording.
+    `src/xippios/usda/psd/params.py` (sdk-usda-psd) — `_codes` and `_validate_code` → a
+    declaration per list and `check(param, value, hints=COUNTRY_HINTS, reason=...)`, and
+    `validate_attribute_id` → `check` on the integer list — the copy core now holds.
+    `src/xippios/usda/nass/params.py` (sdk-usda-nass) — `_packaged` and `_check_value` → a
+    declaration per parameter with `fold_case=True` and `check(param, value,
+    otherwise=..., reason=...)` — the copy core now holds.
+    `src/xippios/usda/gats/params.py` (sdk-usda-gats) — `_codes`, `validate_country_code` and
+    `validate_customs_district_id` → `check(param, value, closest=..., otherwise=...,
+    reason=...)` — the copy core now holds.
+    `src/xippios/comtrade/params.py` (sdk-comtrade) — the `UnknownCode` branches of
+    `_check_list` and `_check_areas` → `check`, with `fold_case=True` for `customsCode` and
+    without it for `motCode`, the area codes converted to integers first, while an unknown
+    `flowCode` stays one of the problems gathered into one `InvalidRequestError` — the copy
+    core now holds (https://github.com/xippios/sdk-comtrade/issues/60).
+    `src/xippios/faostat/tasks.py` (sdk-faostat) — `_check_codes` → `check(dimension, code,
+    reason=...)` on a declaration with `list_name=` of its table — the copy core now holds.
+    `src/xippios/eurostat/tasks.py` (sdk-eurostat) — `_labels` and `_check_code` → `check(param,
+    value, hints=..., reason=...)` on a declaration with `list_name=` of its codelist — the
+    copy core now holds.
+    `src/xippios/usda/wasde/tasks.py` (sdk-usda-wasde) — the refusals of `table` and
+    `commodity` → `check(param, value, closest=..., reason=...)`, the closest codes described
+    as today — the copy core now holds.
+    `src/xippios/usda/esmis/tasks.py` (sdk-usda-esmis) — the check of `agency_acronym` in
+    `list_publications` → `check("agency_acronym", agency_acronym, reason=...)` — the copy core
+    now holds.
+- After a run of the live tests, the testing plugin's summary prints the requests that the
+  live tests sent, by host, `requests sent by the live run: 15 (api.example.org: 15)`, so a
+  release PR reads its count of live calls from the log of each run. A run that built a
+  `Tenants` registry names no host, since a tenant's host names the tenant. A run whose live
+  tests all skip at their setup prints a count of 0, and a run in which no live test was set
+  up with the gate open prints nothing new.
+  (ADR-0030, ADR-0035, https://github.com/xippios/sdk-core/issues/335)
+
+### Changed
+
+- Conventions §12 say what a core patch keeps compatible: a source's package and what its
+  callers see, while a check of `xippios.core.testing` that a record makes stricter, a test of
+  the family check or the recorder's refusal of an answer, may fail a source's own test at the
+  lock's move, and the handover lists each such check of a release. A core PR's ADR may name a
+  fourth reason for code with one consumer beside the three of ADR-0023, decision 3, the
+  maintainer's decision on the closed design question of the step that adds the code, which is
+  the reason of `naive_time` and `record_task`. The handover lists the checks of 0.4.1 that a
+  source meets at the lock's move, and three records name the maintainer's answer on their
+  questions.
+  (ADR-0058, ADR-0052, ADR-0057, §12, https://github.com/xippios/sdk-core/issues/455, https://github.com/xippios/sdk-core/issues/456)
+- A recorder writes `REDACTED` in place of the value of a field of a request that it must not
+  keep and drops none of them, as conventions §10 now say, so that the census of built answers
+  compares a replay with its recording key by key. Core's census compares what it compared,
+  as strict for every source. (ADR-0048, §10, https://github.com/xippios/sdk-core/issues/439)
+  - Hand-apply: `scripts/record_fixture.py` (sdk-google-mail) — `raw` in a write's request
+    body written as `REDACTED`, where `MessageScrub` dropped the key, and `check` refusing a
+    request's `raw` only where it holds another value — the census reads a key that the
+    recording lacks as another body.
+    `tests/test_record_fixture.py` (sdk-google-mail) — the assertions on a recorded write's
+    request body read `"raw": "REDACTED"` where they read no `raw` — the recorder keeps the
+    key.
+    `tests/test_tasks_write.py` (sdk-google-mail) — the assertions on the recorded bodies of
+    `send_message/ok.json` and `create_draft/ok.json` read `"raw": "REDACTED"` — the recorder
+    keeps the key.
+    `tests/fixtures/send_message/ok.json` (sdk-google-mail) — recorded again with the changed
+    recorder, in a pull request before the adoption, a keyed write on the demo mailbox that
+    needs the maintainer's go and a budget — the census names `test_send_message_sends_it` and
+    `test_send_message_over_mcp` as answering another body until then.
+    `tests/fixtures/create_draft/ok.json` (sdk-google-mail) — recorded again in the same pull
+    request and the same run — the census names `test_create_draft_stores_the_message_as_a_draft`
+    and `test_create_draft_over_mcp` as answering another body until then.
+- sdk-core's pull requests start the organization's checks from one trigger file each,
+  `conventions.yml` and `adr-index.yml`, in place of `organization.yml`, and keep their checks
+  `conventions / conventions` and `adr-index / adr-index`, while a push to `main` or a
+  dispatch starts the review of a range. A variable `WORKFLOW_CONVENTIONS` or
+  `WORKFLOW_ADR_INDEX` of `off` switches a check off, and CI and the release train take no
+  switch. The release train's workflow is titled `Publish`, which sdk-template copies into
+  every source with the rest of `publish.yml`.
+  (§13, https://github.com/xippios/sdk-core/issues/407)
+- The conventions read version 1.29, which a source's adoption of core 0.4.1 names in its
+  fragment. `docs/handover.md` gains "Core 0.4.1" and "Adopting core 0.4.1", which list the
+  changes of the release that a source's callers see, each with its issue and the entry that a
+  source's changelog takes, and the conventions' rules changed since 1.28, each with what a
+  source does for it, and the port of each source as the trial of the release on six sources
+  corrected it. The definition of done's Adoption PR block and the review checklist's item 12
+  hold an adoption of a core release against both lists of its section.
+  (§15, https://github.com/xippios/sdk-core/issues/334, https://github.com/xippios/sdk-core/issues/349,
+  https://github.com/xippios/sdk-core/issues/435)
+- The recorder refuses an answer of a 1xx or a 3xx status, which is no final answer of its
+  operation, on every path: `send_once`, `record` and `fixture_from_response` raise before
+  anything is written, the message naming the method, the path, the status and what to record
+  instead. A final answer is still kept whatever its status, a 4xx or a 5xx included, and no
+  fixture of the twelve sources holds a 1xx or a 3xx.
+  (ADR-0048, §10, https://github.com/xippios/sdk-core/issues/364)
+  - Hand-apply: `tests/test_record_fixture.py` (sdk-cashctrl) —
+    `test_the_host_then_the_secrets_then_the_rewrite`, which hands a built 302 to
+    `fixture_from_response` as its input, builds a 200 — `fixture_from_response` refuses a 1xx
+    or 3xx, so the test fails at the lock's move
+    (https://github.com/xippios/sdk-cashctrl/issues/134).
+- The conventions state the cases that the reviews of the sources' adoptions of core 0.4.0
+  settled, each as one sentence that cites ADR-0043. An adoption's entry names the core bound,
+  the template's tag and the conventions' version as they stand after it, under `breaking`
+  where it brings a core minor and `changed` where it brings none, and a release's pull request
+  rewords no entry and cites a green run of `live.yml` on the commit of `main` it starts from.
+  §10 settles three cases between the kinds of a body that a test serves where it was not
+  recorded, and §5 names the two kinds of a source's own messages that name no request.
+  (ADR-0043, §5, §10, §12, §15, https://github.com/xippios/sdk-core/issues/377)
+- `docs/adr.md` opens each record's line with its anchor, so a link to `docs/adr.md#0014` lands
+  on ADR-0014, and lists the records in force first and the superseded ones after them.
+  `docs/adr.json` keeps its order. `scripts/adr_index.py` is the version the organization's
+  repositories share, byte for byte, and runs as `python3 -I scripts/adr_index.py`.
+  (https://github.com/xippios/sdk-core/issues/350)
+
+### Fixed
+
+- The first line of `.github/workflows/publish.yml` cites the release train's standing record,
+  ADR-0039, decision 6, where it cited ADR-0018's amendment (b), which ADR-0039 supersedes. No
+  step of the workflow changes. sdk-template copies the file from core, so its next adoption of
+  core takes the line, and a source gets it from that template release by `copier update`.
+  (ADR-0039, §12, https://github.com/xippios/sdk-core/issues/323)
+
 ## [0.4.0] - 2026-11-18
 
 ### Added

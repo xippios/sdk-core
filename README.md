@@ -73,14 +73,15 @@ It gives a source package the things that should be identical across the family:
 ## Install
 
 ```bash
-uv add "xippios-core~=0.4.0"            # client, models, errors, reference, pagination
-uv add "xippios-core[mcp]~=0.4.0"       # + MCP server helpers (official mcp SDK 2.x)
-uv add "xippios-core[http]~=0.4.0"      # + FastAPI router helpers
-uv add "xippios-core[testing]~=0.4.0"   # + pytest plugin, respx replay, fixture recording
+uv add "xippios-core~=0.4.1"            # client, models, errors, reference, pagination
+uv add "xippios-core[mcp]~=0.4.1"       # + MCP server helpers (official mcp SDK 2.x)
+uv add "xippios-core[http]~=0.4.1"      # + FastAPI router helpers
+uv add "xippios-core[testing]~=0.4.1"   # + pytest plugin, respx replay, fixture recording
 ```
 
-Python 3.12 or later. A source package depends on one core minor, `~=0.4.0`, and each
-extra likewise (conventions §12); see the Alpha note under Status.
+Python 3.12 or later. A source package depends on one core minor, `~=0.4.1` from the patch
+that ships what it uses, and each extra likewise (conventions §12); see the Alpha note under
+Status.
 
 ## 30-second example
 
@@ -1982,7 +1983,7 @@ not read back, such as a sample without its size and sha256, and writes nothing.
 
 ## Status
 
-Release 0.4.0, alpha.
+Release 0.4.1, alpha.
 [CHANGELOG.md](https://github.com/xippios/sdk-core/blob/main/CHANGELOG.md) lists what
 changed in each release, and a change's entry waits under
 [changelog/](https://github.com/xippios/sdk-core/blob/main/changelog/README.md) as a
@@ -1991,22 +1992,25 @@ fragment until the release assembles it.
 | Module | What | Status |
 | --- | --- | --- |
 | `xippios.core.client` | httpx client, retries, rate limit, cache with a byte bound, quota policy, request hooks, env-key auth, the renewing bearer, `get_answer`, `download`, `decode_text`, `decode_csv` | alpha |
-| `xippios.core.errors` | taxonomy, `UnknownCode`, response classification, `request_description` | alpha |
+| `xippios.core.errors` | taxonomy, `UnknownCode`, `QueryTooLarge`, the refusal of a query over upstream's limit, response classification, `request_description` | alpha |
 | `xippios.core.data_gov` | `Gateway`: the api.data.gov key, the gateway's `classify` of its own answers with `NoDataForYear` on a data path, one quota policy per process | alpha |
 | `xippios.core.redaction` | the one credential rule of the envelope, the recorder and replay, `register_data_name`, signed links | alpha |
-| `xippios.core.models` | `UpstreamModel` with `dump_upstream`, `Result`, `ResultMeta` with `published_at_naive`, `ResultCap`, `parse` | alpha |
-| `xippios.core.reference` | packaged CSV/JSON loaders, `PackagedList`, `matches`, `closest`, `nearest`, generated `StrEnum`/`IntEnum` modules | alpha |
-| `xippios.core.pagination` | `paginate_offset` (a page-numbered endpoint maps the offset to its page), `collect` | alpha |
+| `xippios.core.models` | `UpstreamModel` with `dump_upstream`, `Result`, `ResultMeta` with `published_at_naive` and `names`, the name of each country code of a request, `ResultCap` with `paged` and `keep`, `parse`, `newer_than`, the filter of a vintage taken back, `naive_time` | alpha |
+| `xippios.core.reference` | packaged CSV/JSON loaders, `PackagedList`, its `codes` and their `check` of an argument (`PackagedCodes`), `names_codes`, `matches`, `closest`, `nearest`, generated `StrEnum`/`IntEnum` modules | alpha |
+| `xippios.core.pagination` | `paginate_offset` (a page-numbered endpoint maps the offset to its page), `collect`, `fetch_counted`, the count before a query over upstream's limit | alpha |
+| `xippios.core.series` | `Ceiling`, the ceiling of a series over periods with its option on the MCP server, and `fetch_periods`, its requests in order | alpha |
 | `xippios.core.tenants` | `Tenants`, a multi-tenant source's tenants declared in the environment with one client each, `list_task`, the tool that names them, and `TenantLock` with `bind_tasks` and `tenant_instructions`, a server bound to one of them | alpha |
 | `xippios.core.contract` | `EnvVar`, a variable of the package contract | alpha |
-| `xippios.core.mcp` | tool registration with the argument check and the write server's `confirm` rule, `tool_functions`, result caps, error text, CLI with option hooks and the loopback rule for write and `loopback_only` servers, `serve_tenants`, quiet request log, `ToolSet`, the package contract's tool set, built by `build_server` and registered by `register_tasks` | alpha |
+| `xippios.core.mcp` | tool registration with the argument check and the write server's `confirm` rule, `tool_functions`, result caps with the `offset` of a paged cap, error text, CLI with option hooks and the loopback rule for write and `loopback_only` servers, `serve_tenants`, quiet request log, `ToolSet`, the package contract's tool set, built by `build_server` and registered by `register_tasks` | alpha |
 | `xippios.core.http` | router factory, problem details | alpha |
-| `xippios.core.testing` | live gate, offline run, record (sent once, read up to `max_read_bytes`, with `max_bytes=`, `array_key=` and `keep=`), the fixture writer and the `sample` mark, replay with `sent_urls`, `sent_query` and `sent_bodies`, scrub of named secrets and of values read from the answer with a plain verify, `mcp_call`, `assert_write_tools`, `keep_reserved_tenants`, family check | alpha |
+| `xippios.core.refresh` | the frames of a source's scripts: the snapshot script's (`Snapshot`, `run`, and `compare_fetched`, the check of a committed `FETCHED.md` without a request) and the reference refresh script's (`Listed`, `Enumeration`) | alpha |
+| `xippios.core.testing` | live gate with the count of the requests that a live run sent, offline run, record (sent once, read up to `max_read_bytes`, with `max_bytes=`, `array_key=`, `keep=` and a source's `rewrite=` step, typed `Rewrite`), `send_once`, `record_task`, the fixture writer and the `sample` mark, replay with `sent_urls`, `sent_query` and `sent_bodies`, scrub of named secrets and of values read from the answer with a plain verify, `mcp_call`, `assert_write_tools` with what a preview reads, `keep_reserved_tenants`, `built_answers`, the check of a built answer's mark, `live` with `assert_list_current`, the nightly comparison of a packaged list, family check | alpha |
 
 Alpha: while core is 0.x, a new minor version may change the public surface, with no
-backward compatibility across minors; patch releases stay compatible. A source depends
-on one minor (`xippios-core~=0.4.0`) and adopts the next through conventions §15
-(ADR-0039).
+backward compatibility across minors. A patch release keeps a source's package and its
+callers compatible, while a check of `xippios.core.testing` that a record makes stricter
+may fail a source's own test (conventions §12; ADR-0058, decision 2). A source depends on
+one minor (`xippios-core~=0.4.1`) and adopts the next through conventions §15 (ADR-0039).
 
 ## Documents
 
