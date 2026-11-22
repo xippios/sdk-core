@@ -422,18 +422,20 @@ def test_query_too_large_from_classify_names_its_request_beside_upstream_s_count
         "GET /v1/thing would return 13,344,840 records; upstream serves at most 5,000,000 per "
         "call. Name fewer."
     )
-    bounded = QueryTooLarge(
-        100_008, limit=100_000, narrow="Name fewer.", bound=True, request=request
-    )
-    assert str(bounded) == (
-        "GET /v1/thing could return up to 100,008 records, a size read from its arguments with "
-        "nothing counted or sent; upstream serves at most 100,000 per call. Name fewer."
-    )
 
 
 def test_a_bound_without_a_count_is_refused() -> None:
     with pytest.raises(ValueError, match="bound"):
         QueryTooLarge(None, limit=100_000, narrow="Name fewer codes.", bound=True)
+
+
+def test_a_bound_with_a_request_is_refused() -> None:
+    # A size read from the arguments is the package's refusal before any request, which
+    # names none (conventions §5; ADR-0053, decision 7).
+    with pytest.raises(ValueError, match="bound=True names no request"):
+        QueryTooLarge(
+            100_008, limit=100_000, narrow="Name fewer.", bound=True, request="GET /v1/thing"
+        )
 
 
 def test_a_source_s_subclass_keeps_its_own_attribute_and_core_s_wording() -> None:
