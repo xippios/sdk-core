@@ -89,9 +89,12 @@ Decisions 1 to 3 are the answer of https://github.com/xippios/sdk-core/issues/37
   as raised, and splits on a counted refusal alone. The message for a year alone starts with
   core's form, and the year goes into `narrow`.
 - sdk-eurostat takes the error alone, from its `classify`, with the count and the limit read
-  from upstream's own refusal, and never the runner. sdk-faostat can take the runner only
-  against a limit of its own, its count read into an `int`. Each decides in its own patch, and
-  this record builds nothing for either.
+  from upstream's own refusal, and never the runner, since upstream offers no count request.
+  Its row, https://github.com/xippios/sdk-eurostat/issues/53, proposes an estimate from the
+  arguments before the request, which is the error's `bound=True`. sdk-faostat can take the
+  runner only against a limit of its own, its count read into an `int`
+  (https://github.com/xippios/sdk-faostat/issues/35). Each decides in its own patch, and this
+  record builds nothing for either.
 - The message names no request. That is right for the package's refusal before its data
   request (conventions §5). For upstream's refusal that a source's `classify` maps, which
   ADR-0043 asks to name its request, it stays as sdk-usda-nass's message is today, and a field

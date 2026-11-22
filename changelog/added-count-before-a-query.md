@@ -30,7 +30,9 @@
     return 57,873,464 records`, the year named in `narrow` — core words the message.
     `src/xippios/eurostat/_client.py` (sdk-eurostat) — its patch decides whether `classify`
     maps upstream's refusal over its limit to `QueryTooLarge` with the count and the limit read
-    from upstream's own refusal, and it takes no runner — it cannot count before it asks.
+    from upstream's own refusal, or a task raises it before the request with `bound=True` from
+    an estimate read from its arguments, and it takes no runner — it cannot count before it
+    asks.
     `src/xippios/faostat/tasks.py` (sdk-faostat) — its patch decides whether `get_data` counts
     with `no_records=true`, its float read into an `int`, against a limit of its own — its
     upstream has no limit, and the runner takes an `int`.
