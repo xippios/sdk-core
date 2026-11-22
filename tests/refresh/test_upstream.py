@@ -628,6 +628,9 @@ def test_an_image_s_alternative_text_alone_is_read(site: Site, out: Path) -> Non
         pytest.param(
             "Copy<img src='x.svg' alt='&copy; 2026 Example Ltd.'>right", id="a-recorded-alt-text"
         ),
+        pytest.param(
+            "Shared under CC <img src='l.svg' alt='logo'> BY 4.0.", id="space-on-both-sides"
+        ),
     ],
 )
 def test_an_alternative_text_between_words_of_the_search_does_not_part_them(
@@ -635,12 +638,47 @@ def test_an_alternative_text_between_words_of_the_search_does_not_part_them(
 ) -> None:
     """Finding 3 of the review of https://github.com/xippios/sdk-core/pull/451: the words that
     an image's alternative text stands between are searched as the text without it reads them,
-    as before the alternative text was read, so they stop the run, even where the alternative
-    text is a statement that the attribution records."""
+    as before the alternative text was read, its white space flattened (finding 1 of the second
+    review), so they stop the run, even where the alternative text is a statement that the
+    attribution records."""
     notice = Statement("\N{COPYRIGHT SIGN} 2026 Example Ltd.", "", "the footer, read by hand")
     url = site.page("index.html", f"<p>{words}</p>")
     with pytest.raises(SystemExit, match="read without its images' alternative text"):
         go(declare(out, Page(url, "pages/index.html"), attribution=(notice,)))
+
+
+def test_words_that_read_with_an_alternative_text_are_recorded_pass(site: Site, out: Path) -> None:
+    """Finding 1 of the second review of https://github.com/xippios/sdk-core/pull/451: words that,
+    read with an image's alternative text, are a statement that the attribution records or a word
+    of its vocabulary pass, as the decision reads the alternative text, where the words without
+    it stopped before it was read."""
+    url = site.page("index.html", "<p><img src='l.svg' alt='logo'>Copyright</p>")
+    page = Page(url, "pages/index.html")
+    assert go(declare(out, page, vocabulary=("logo Copyright",))) == 0
+    assert go(declare(out, page, attribution=(Statement("logo Copyright", url, "the logo"),))) == 0
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        pytest.param({"vocabulary": ("",)}, id="an-empty-word-of-the-vocabulary"),
+        pytest.param({"vocabulary": (" \N{NO-BREAK SPACE}",)}, id="a-blank-word-of-the-vocabulary"),
+        pytest.param(
+            {"attribution": (Statement(" ", "", "a blank line, read by hand"),)},
+            id="a-blank-statement",
+        ),
+    ],
+)
+def test_an_empty_word_or_statement_is_read_past_nowhere(
+    site: Site, out: Path, fields: dict[str, Any]
+) -> None:
+    """Finding 2 of the second review of https://github.com/xippios/sdk-core/pull/451: a statement
+    whose text is empty or white space, and such a word of the vocabulary, are read past nowhere,
+    where reading past the empty text parted every character of the page with a space, so that
+    no word of the search matched and any page passed."""
+    url = site.page("index.html", "<p>Copyright 2026</p>")
+    with pytest.raises(SystemExit, match="the page states 'Copyright'"):
+        go(declare(out, Page(url, "pages/index.html"), **fields))
 
 
 def test_an_alternative_text_inside_a_recorded_link_is_part_of_its_text(
