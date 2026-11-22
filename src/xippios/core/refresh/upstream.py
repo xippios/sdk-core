@@ -352,6 +352,8 @@ _STATEMENT = re.compile(
     re.IGNORECASE,
 )
 _HIDDEN = frozenset({"script", "style", "template"})
+_HTML_SPACE = " \t\n\f\r"
+"""HTML's white space, which a browser strips from around an ``href``."""
 _TEXT_TYPE = re.compile(r"text/.+|application/(?:[\w.-]+\+)?(?:json|xml|yaml|x-yaml)")
 _HTML_TYPES = frozenset({"text/html", "application/xhtml+xml"})
 _CHARSET = re.compile(r"""charset=["']?([\w.:-]+)""", re.IGNORECASE)
@@ -776,14 +778,16 @@ class _Reader(HTMLParser):
     """An HTML page's visible text and links: comments, scripts, styles and templates left out.
 
     An image's alternative text is text of the page where the image stands, set apart from the
-    words around it as the image is, and the text of a link it stands in. Nothing else of an
-    attribute is read, a title or an aria-label among them (ADR-0046, decision 7).
+    words around it as the image is, and the text of a link it stands in; ``alts`` holds the
+    parts that one gives. Nothing else of an attribute is read, a title or an aria-label among
+    them (ADR-0046, decision 7).
     """
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.parts: list[str] = []
         self.links: list[_Link] = []
+        self.alts: set[int] = set()
         self._hidden = 0
         self._open: list[tuple[str, int]] = []
 
@@ -796,6 +800,7 @@ class _Reader(HTMLParser):
         elif tag == "img" and not self._hidden:
             alt = dict(attrs).get("alt") or ""
             if alt.strip():
+                self.alts.add(len(self.parts))
                 self.parts.append(f" {alt} ")
 
     def handle_endtag(self, tag: str) -> None:
@@ -817,12 +822,14 @@ class _Reader(HTMLParser):
 class _Reading:
     """What the attribution check reads of a page.
 
-    ``parts`` is its text as read, an HTML page's in its pieces, and ``links`` an HTML page's
-    links, ``None`` for another text, which has none.
+    ``parts`` is its text as read, an HTML page's in its pieces, ``links`` an HTML page's links,
+    ``None`` for another text, which has none, and ``alts`` the parts that an image's
+    alternative text gives.
     """
 
     parts: tuple[str, ...]
     links: tuple[_Link, ...] | None
+    alts: frozenset[int] = frozenset()
 
     @property
     def text(self) -> str:
@@ -830,13 +837,22 @@ class _Reading:
         return _flat("".join(self.parts))
 
     def targets(self, page: Page) -> list[tuple[str, str]]:
-        """Each link's target, made absolute against the page's URL, and its text."""
-        return [(urljoin(page.url, link.href), link.text) for link in self.links or ()]
+        """Each link's target, made absolute against the page's URL, and its text.
 
-    def unlinked(self, page: Page, linked: Collection[tuple[str, str]]) -> str:
+        The target is taken without the white space around it, as a browser takes an ``href``.
+        """
+        return [
+            (urljoin(page.url, link.href.strip(_HTML_SPACE)), link.text)
+            for link in self.links or ()
+        ]
+
+    def unlinked(self, page: Page, linked: Collection[tuple[str, str]]) -> tuple[str, bytearray]:
         """The page's text without the text of each link whose target and text are ``linked``.
 
-        A page that is no HTML has no link, so its text is whole.
+        The text is flattened, each run of white space and each link left out one space, and
+        the marks hold a 1 for each character that an image's alternative text gives, a space
+        among them where all of its run does. A page that is no HTML has no link, so its text is
+        whole, and none has an alternative text.
         """
         dropped = {
             at
@@ -844,7 +860,48 @@ class _Reading:
             if target in linked
             for at in range(link.start, link.end)
         }
-        return _flat("".join(" " if at in dropped else part for at, part in enumerate(self.parts)))
+        parts = [" " if at in dropped else part for at, part in enumerate(self.parts)]
+        if not self.alts:
+            text = _flat("".join(parts))
+            return text, bytearray(len(text))
+        chars: list[str] = []
+        marks = bytearray()
+        run: int | None = None
+        for at, part in enumerate(parts):
+            mark = 1 if at in self.alts else 0
+            for char in part:
+                if char.isspace():
+                    run = mark if run is None else run & mark
+                    continue
+                if run is not None and chars:
+                    chars.append(" ")
+                    marks.append(run)
+                run = None
+                chars.append(char)
+                marks.append(mark)
+        return "".join(chars), marks
+
+
+def _read_past(text: str, marks: bytearray, words: str) -> tuple[str, bytearray]:
+    """``text`` with each of its ``words`` one space, as ``str.replace`` makes it, and its marks.
+
+    The space is marked where every character it takes the place of is, so the text without the
+    alternative text reads the words around them as before. No words leave the text whole.
+    """
+    if not words:
+        return text, marks
+    pieces: list[str] = []
+    kept = bytearray()
+    start = 0
+    while (found := text.find(words, start)) >= 0:
+        end = found + len(words)
+        pieces += [text[start:found], " "]
+        kept += marks[start:found]
+        kept.append(min(marks[found:end]))
+        start = end
+    pieces.append(text[start:])
+    kept += marks[start:]
+    return "".join(pieces), kept
 
 
 def _read_text(response: Response) -> _Reading | None:
@@ -873,7 +930,7 @@ def _read_text(response: Response) -> _Reading | None:
         reader = _Reader()
         reader.feed(text)
         reader.close()
-        return _Reading(tuple(reader.parts), tuple(reader.links))
+        return _Reading(tuple(reader.parts), tuple(reader.links), frozenset(reader.alts))
     return _Reading((text,), None)
 
 
@@ -900,15 +957,19 @@ def _api_document(response: Response) -> dict[str, Any] | None:
     return None
 
 
-def _searched(page: Page, response: Response, text: str, recorded: list[Statement]) -> str:
-    """The text the search reads: an API document's without its ``info``'s ``INFO_TERMS``.
+def _searched(
+    page: Page, response: Response, text: str, marks: bytearray, recorded: list[Statement]
+) -> tuple[str, bytearray]:
+    """The text the search reads and its marks, ``text`` and ``marks`` as they are but for one.
 
-    Each of them the document holds is checked first against the statements recorded from it.
+    An API document's text is the document without its ``info``'s ``INFO_TERMS``, which no
+    alternative text marks; each of them the document holds is checked first against the
+    statements recorded from it.
     """
     document = _api_document(response)
     info = document.get("info") if document else None
     if document is None or not isinstance(info, dict):
-        return text
+        return text, marks
     quoted = {value for item in recorded for value in (item.text, item.link) if value}
     for name in INFO_TERMS:
         value = info.get(name)
@@ -920,7 +981,8 @@ def _searched(page: Page, response: Response, text: str, recorded: list[Statemen
                 "attribution and update scripts/refresh_upstream.py. Nothing was written."
             )
     rest = {key: value for key, value in info.items() if key not in INFO_TERMS}
-    return _flat(json.dumps({**document, "info": rest}, ensure_ascii=False))
+    searched = _flat(json.dumps({**document, "info": rest}, ensure_ascii=False))
+    return searched, bytearray(len(searched))
 
 
 def _reading(page: Page, response: Response) -> _Reading | None:
@@ -942,7 +1004,10 @@ def check_attribution(snapshot: Snapshot, page: Page, response: Response) -> Non
     The search reads past a statement recorded with a link only where it stands as the text of
     a link to its target, on any page, and past a statement without a link and the vocabulary
     wherever they stand. A page that is no HTML has no link, so there a linked statement's words
-    are searched as any others (ADR-0046, decision 7).
+    are searched as any others. Where an image's alternative text stands, the search reads the
+    text twice, with it and without it, each read past where the text with it stands, so words
+    that an alternative text stands between are searched as before it was read (ADR-0046,
+    decision 7).
     """
     reading = _reading(page, response)
     if reading is None:
@@ -962,27 +1027,41 @@ def check_attribution(snapshot: Snapshot, page: Page, response: Response) -> Non
             )
         return
     linked = {link for statement in snapshot.attribution if (link := _linked(statement))}
-    text = _searched(page, response, reading.unlinked(page, linked), recorded)
+    text, marks = _searched(page, response, *reading.unlinked(page, linked), recorded)
     unlinked = (statement.text for statement in snapshot.attribution if not statement.link)
     for words in (*unlinked, *snapshot.vocabulary):
-        text = text.replace(_flat(words), " ")
-    match = _STATEMENT.search(text)
-    if match:
-        around = text[max(match.start() - 60, 0) : match.end() + 60]
-        named = next((s for s in snapshot.attribution if s.link and _flat(s.text) in around), None)
-        aside = (
-            f" The attribution records {named.text!r} as a link to {named.link}, and the check "
-            "reads past it only as the text of such a link."
-            if named
-            else ""
-        )
-        raise SystemExit(
-            f"GET {page.url}: the page states {match.group(0)!r} ({around!r}), a copyright, "
-            f"licence or terms of use that the attribution does not record.{aside}\nRead it "
-            "by hand and record it in the snapshot's attribution, or, where the words state "
-            "nothing, narrow the check: add them to its vocabulary, which FETCHED.md lists, and "
-            "say why in its capture. Nothing was written."
-        )
+        text, marks = _read_past(text, marks, _flat(words))
+    searches = [(text, "")]
+    if any(marks):
+        without = "".join(char for char, mark in zip(text, marks, strict=True) if not mark)
+        searches.append((without, ", read without its images' alternative text"))
+    for searched, read in searches:
+        if match := _STATEMENT.search(searched):
+            raise _unrecorded(snapshot, page, match, searched, read)
+
+
+def _unrecorded(
+    snapshot: Snapshot, page: Page, match: re.Match[str], searched: str, read: str
+) -> SystemExit:
+    """The stop on the words that ``match`` found in the text the search read, as ``read`` says.
+
+    Where a statement recorded with a link stands among them, the stop names it.
+    """
+    around = searched[max(match.start() - 60, 0) : match.end() + 60]
+    named = next((s for s in snapshot.attribution if s.link and _flat(s.text) in around), None)
+    aside = (
+        f" The attribution records {named.text!r} as a link to {named.link}, and the check "
+        "reads past it only as the text of such a link."
+        if named
+        else ""
+    )
+    return SystemExit(
+        f"GET {page.url}: the page states {match.group(0)!r} ({around!r}){read}, a copyright, "
+        f"licence or terms of use that the attribution does not record.{aside}\nRead it "
+        "by hand and record it in the snapshot's attribution, or, where the words state "
+        "nothing, narrow the check: add them to its vocabulary, which FETCHED.md lists, and "
+        "say why in its capture. Nothing was written."
+    )
 
 
 # --- FETCHED.md ----------------------------------------------------------------------

@@ -1535,9 +1535,10 @@ the rules of 1.28.
    the frame's, a converter its hooks use is the source's own dependency, and every file but
    `FETCHED.md` is written as its hooks make it. The source ports its script, its own code kept
    as hooks, as https://github.com/xippios/sdk-core/issues/320 names per source, and declares
-   the converter its hooks use itself. Its attribution check reads an image's alternative text,
-   passes a statement recorded with a link only as the text of that link, and holds an API
-   document's `info` as conventions §3 state it (ADR-0046, decision 7).
+   the converter its hooks use itself. Its attribution check reads an image's alternative text
+   and passes a statement recorded with a link only as the text of that link (ADR-0046,
+   decision 7), and it holds an API document's `info` as conventions §3 state it (ADR-0046,
+   Consequences).
 2. **`FETCHED.md` in one form** (ADR-0046, decisions 3 and 4). The frame writes `FETCHED.md`
    in one form for every source, and the first run of the ported script rewrites it once;
    every ETag stands in a code span on a row that ends in the secret scan's allowlist mark, and
@@ -1857,13 +1858,18 @@ the rules of 1.28.
   sdk-google-mail, sdk-usda-wasde and sdk-x keep their titles in a table that their `reduce`
   reads (below; https://github.com/xippios/sdk-google-mail/issues/72).
 - The ported script's attribution check reads an image's alternative text as text of the page,
-  and reads past a statement recorded with a link only as the text of a link to its target, on
-  any page that prints the link, while a statement without a link and the vocabulary pass
-  wherever they stand (ADR-0046, decision 7; https://github.com/xippios/sdk-core/issues/437).
-  An alternative text that holds a word of terms or copyright, or that stands inside the words
-  of a recorded statement, and a linked statement's words outside its link stop the source's
-  first run that fetches until the attribution records them, which no offline run shows: that
-  run's pull request records each, as a statement of its page or a word of the vocabulary.
+  searching the same text without it as well, and reads past a statement recorded with a link
+  only as the text of a link to its target, on any page that prints the link, while a
+  statement without a link and the vocabulary pass wherever they stand (ADR-0046, decision 7;
+  https://github.com/xippios/sdk-core/issues/437). An alternative text that holds a word of
+  terms or copyright, or that stands inside the words of a recorded statement, and a linked
+  statement's words outside its link stop the source's first run that fetches until the
+  attribution records them, which no offline run shows: that run's pull request records each,
+  as a statement of its page or a word of the vocabulary. An image with an alternative text
+  inside a recorded link, beside its words, is part of the link's text, so the page stops with
+  "no longer links" until the statement records the link's text as the page reads it, a link
+  `<a href="…"><img alt="icon"> Terms of Service</a>` as "icon Terms of Service" with its
+  target (ADR-0046, Consequences).
 - A live run prints the requests it sent by host, `requests sent by the live run: 15
   (api.example.org: 15)`, from which the source's release PR reads its count of live calls,
   and a run that built a `Tenants` registry names no host; the source changes no file for it

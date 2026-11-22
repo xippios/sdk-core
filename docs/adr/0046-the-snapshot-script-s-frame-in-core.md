@@ -38,11 +38,11 @@ their snapshots under that rule (https://github.com/xippios/sdk-google-mail/issu
 https://github.com/xippios/sdk-x/issues/57). sdk-cashctrl's page states its copyright in the
 alternative text of its footer's logo, which the frame did not read, so its statement could
 only be declared without a page, and `FETCHED.md` then said that no run checks it while the
-source's own hook did (https://github.com/xippios/sdk-cashctrl/issues/134). The trial of sdk-x
-found, too, that only the code and its tests said what the check asks of an API document's
-`info`. The human answered the question on 2026-11-22, prompted in the sdk-core panel: decision
-7, the second amendment of that day, is the answer of
-https://github.com/xippios/sdk-core/issues/437.
+source's own hook did (https://github.com/xippios/sdk-cashctrl/issues/134). Decision 7, the
+second amendment of 2026-11-22, is the maintainer's answer on
+https://github.com/xippios/sdk-core/issues/437. The trial of sdk-x found, too, that only the
+code and its tests said what the check asks of an API document's `info`, which no question
+decided: the Consequences state it as the frame has held it since it came.
 
 ## Decision
 
@@ -181,15 +181,16 @@ https://github.com/xippios/sdk-core/issues/437.
      top level, which imports and declares alone, sends no request and writes no file, its
      run under `if __name__ == "__main__":`, and that the family check holds the committed
      file to it as above.
-7. **What the attribution check reads and accepts.** By the human's answer to
-   https://github.com/xippios/sdk-core/issues/437, given in the sdk-core panel on 2026-11-22:
+7. **What the attribution check reads and accepts.** By the maintainer's answer on
+   https://github.com/xippios/sdk-core/issues/437, of 2026-11-22:
    - *A statement recorded with a link passes only as its link.* The search reads past the
      text of a statement recorded with a link only where it stands as the text of a link to
-     the recorded target, the link's target made absolute against the page's URL and its text
-     flattened, as the check of the statement on its own page compares them, on every page
-     that prints the link. The same words in prose, or as the text of a link to another
-     target, on another page or beside the recorded link on its own, stop the run, as the
-     scripts of sdk-google-mail and sdk-x had it. A statement without a link and every word of
+     the recorded target, the link's target taken without the white space around it, as a
+     browser takes it, and made absolute against the page's URL, and its text flattened, as
+     the check of the statement on its own page compares them, on every page that prints the
+     link. The same words in prose, or as the text of a link to another target, on another
+     page or beside the recorded link on its own, stop the run, as the scripts of
+     sdk-google-mail and sdk-x had it. A statement without a link and every word of
      the vocabulary are read past wherever they stand, as before, and after the links, so that
      a statement without a link that holds a linked one's words passes. A page that is no HTML
      has no link, so there a linked statement's words are searched as any others: sdk-x's
@@ -202,13 +203,16 @@ https://github.com/xippios/sdk-core/issues/437.
      `title` or an `aria-label` among them. So a statement held in an alternative text is
      recorded from its page and checked there, and an alternative text that holds a word of the
      search and that no statement records stops the run, as any text of the page does.
-   - *An API document's `info`, as the frame has asked it since decision 2.* A JSON body whose
-     top level holds `openapi` or `swagger` is an API document. Each of `license`,
-     `termsOfService` and `contact` that its `info` holds must be quoted by a statement recorded
-     from that document, the statement's text or link equal to the field's value or, for an
-     object, to one of its values, and the three then leave the document's text before the
-     search, its other keys searched as its text. A document in YAML, or in any form but JSON,
-     is not parsed and is searched as text whole.
+   - *What the search reads.* Where an image's alternative text stands on a page, the search
+     reads its text twice: as the reader reads it, the alternative text included, and the same
+     text with the alternative text left out. Both are read past the recorded links, the
+     statements without a link and the vocabulary where those stand in the text with the
+     alternative text, and words of the search in either stop the run. So the words that an
+     alternative text stands between are searched as they were before it was read,
+     `Copy<img alt="x">right` as "Copyright" and `Terms of<img alt="icon"> Service` as "Terms of
+     Service", and reading the alternative text lets no page pass that stopped before, but one
+     whose words, read with its alternative text, are a statement that the attribution records
+     (finding 3 of the review of https://github.com/xippios/sdk-core/pull/451).
    - *What does not change.* What a statement must show on its own page, its text and, with a
      link, a link of its text to its target; a terms page, which must print each statement
      recorded from it and is searched no further; a sample, a page that an anonymous client
@@ -252,7 +256,20 @@ https://github.com/xippios/sdk-core/issues/437.
   The second part is the cost of every word of the search: an alternative text
   on a source's page that holds a word of terms or copyright, or that stands inside the words
   of a recorded statement, stops its first run that fetches until the attribution records it,
-  and no offline run can show it before.
+  and no offline run can show it before. An alternative text inside a recorded link, beside
+  its words, is part of the link's text, so `<a href="…"><img alt="icon"> Terms of
+  Service</a>` no longer links the statement "Terms of Service": its page stops with "no
+  longer links", and the source records the statement as the page reads the link, "icon Terms
+  of Service" with its target, as it records one that an alternative text stands inside.
+- The frame has held an API document's `info` since decision 2, and no question decided the
+  rule, which only the code and its tests stated until the trial of sdk-x read it
+  (https://github.com/xippios/sdk-x/issues/57). A JSON body whose top level holds `openapi` or
+  `swagger` is an API document. Each of `license`, `termsOfService` and `contact` that its
+  `info` holds must be quoted by a statement recorded from that document, the statement's text
+  or link equal to the field's value or, for an object, to one of its values, and the three
+  then leave the document's text before the search, its other keys searched as its text. A
+  document in YAML, or in any form but JSON, is not parsed and is searched as text whole, so a
+  source that holds its YAML document's `info` checks it in a hook of its own.
 - A value that the frame writes into a cell of `FETCHED.md` keeps its row on one line: a line
   feed, with a carriage return before it, is written as a space, as the frame's paragraphs
   write one, and any other character that splits a text into lines as given. `--check` reads
