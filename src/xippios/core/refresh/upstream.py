@@ -26,9 +26,16 @@ does not record, or no longer prints one that it records.
 compared after the snapshot's ``canonical``, or when ``FETCHED.md`` would change in more than
 its rows' measures, Fetched, Bytes, sha256, ETag and Last-Modified. A measure that moved
 while the content stayed is an information line, never a change.
+
+The last line of ``FETCHED.md`` names the form of the file, ``FORM``. ``compare_fetched``
+compares a committed file of that form with the declaration and sends no request: every line
+that follows from the declaration and the frame's own text, each declared page's row, the form
+of an ETag's cell and each row's file on the disk. What only a response knows is read back
+from the file and not judged (ADR-0046, decision 6).
 """
 
 import argparse
+import difflib
 import hashlib
 import http.client
 import json
@@ -39,7 +46,7 @@ import time
 import urllib.error
 import urllib.request
 from collections import Counter
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from email.message import Message
@@ -68,6 +75,19 @@ INFO_TERMS = ("license", "termsOfService", "contact")
 each one it holds must be recorded in the attribution from that document."""
 HAND = "written by hand: what upstream does but never documents; not fetched or checked"
 """The note of ``OBSERVED.md``'s row, whose first cell is the file's name."""
+FORM = 1
+"""The form of the ``FETCHED.md`` this module writes, which the file's last line names.
+
+Every change of what the frame writes into the file raises it, so that ``compare_fetched``
+judges a file of this form alone (ADR-0046, decision 6)."""
+_MARK = "<!-- form {} of the FETCHED.md that xippios.core.refresh writes -->"
+_MARK_LINE = re.compile(
+    r"<!-- form (\d+) of the FETCHED\.md that xippios\.core\.refresh writes -->"
+)
+_NO_FILE = "(no file)"
+_NOT_REQUESTED = "(not requested)"
+_UNREAD = ", a page this script does not read, so no run checks it"
+"""The clause of a statement whose page the run did not read, which follows its answer."""
 
 
 @dataclass(frozen=True)
@@ -336,7 +356,9 @@ or a gzip file."""
 _MEASURES = ("Bytes", "sha256", "ETag", "Last-Modified")
 _CELL = re.compile(r"(?<!\\)\|")
 _FILES = "| File | URL | Fetched | HTTP | Bytes | sha256 | ETag | Last-Modified | Note |"
+_FILES_RULE = "| --- " * 9 + "|"
 _LEFT_OUT = "| URL | HTTP | Redirects to | Reason |"
+_LEFT_OUT_RULE = "| --- " * 4 + "|"
 
 
 def _log(message: str) -> None:
@@ -951,10 +973,13 @@ def _row(cells: Sequence[str]) -> str:
     return "| " + " | ".join(_cell(cell) for cell in cells) + " |"
 
 
-def _note(row: Row) -> str:
-    page, response = row.page, row.response
-    parts = [f"redirected ({code}) to {target}" for code, target in response.redirects]
-    if page.origin and response.url == page.origin:
+def _declared(page: Page, url: str) -> list[str]:
+    """The clauses of a row's note that its page's declaration gives, its row's URL being ``url``.
+
+    The clause of a second origin stands where the file was kept from it, ``url`` naming it.
+    """
+    parts = []
+    if page.origin and url == page.origin:
         parts.append(
             f"the copy of {page.url}, which answers 403, from the publisher's second origin"
         )
@@ -968,14 +993,25 @@ def _note(row: Row) -> str:
         parts.append(
             "kept as recorded while the answer is the same after the script's canonical form"
         )
-    if row.note:
-        parts.append(row.note)
-    return "; ".join(parts) or "-"
+    return parts
 
 
-def _attribution(snapshot: Snapshot, rows: Sequence[Row]) -> list[str]:
-    """``FETCHED.md``'s Attribution: every recorded statement, as printed, and where."""
-    read = {row.page.url for row in rows if _reading(row.page, row.response) is not None}
+def _note_cell(clauses: Sequence[str], note: str) -> str:
+    """A row's Note: the frame's clauses, then the row's own note, ``-`` where all are empty."""
+    return "; ".join([*clauses, note] if note else clauses) or "-"
+
+
+def _note(row: Row) -> str:
+    redirected = [f"redirected ({code}) to {target}" for code, target in row.response.redirects]
+    return _note_cell([*redirected, *_declared(row.page, row.response.url)], row.note)
+
+
+def _attribution(snapshot: Snapshot, read: Collection[str]) -> list[str]:
+    """``FETCHED.md``'s Attribution: every recorded statement, as printed, and where.
+
+    ``read`` holds the pages whose text the run read: a statement printed on another page is
+    one that no run checks.
+    """
     if not snapshot.attribution:
         return _paragraph(
             "None stated: no page this script reads states a copyright line, a licence or",
@@ -989,7 +1025,7 @@ def _attribution(snapshot: Snapshot, rows: Sequence[Row]) -> list[str]:
         if statement.source:
             text += f", printed at {statement.source}"
             if statement.source not in read:
-                text += ", a page this script does not read, so no run checks it"
+                text += _UNREAD
         else:
             text += ", which only a browser shows, so no run checks it"
         if statement.where:
@@ -1032,11 +1068,89 @@ def _how(snapshot: Snapshot) -> list[str]:
     return _paragraph(*sentences)
 
 
+def _captured(snapshot: Snapshot) -> list[str]:
+    """The lines under "How this is captured": the capture's paragraphs, then the frame's."""
+    capture = [part for part in snapshot.capture.split("\n\n") if part.strip()]
+    return [*(line for part in capture for line in _paragraph(part)), *_how(snapshot)]
+
+
+def _file_line(cells: Sequence[str]) -> str:
+    """A row of the table of files from its nine cells, the allowlist mark after an ETag."""
+    line = _row(cells)
+    return f"{line} {ALLOWLIST}" if cells[6] != "-" else line
+
+
+def _host(response: Response) -> str:
+    """The host the last redirect of an answer points to, ``-`` for none."""
+    return urlsplit(response.redirects[-1][1]).netloc if response.redirects else "-"
+
+
 def render_fetched(snapshot: Snapshot, rows: Sequence[Row], fetched: str, observed: bool) -> str:
     """The whole of ``FETCHED.md``, in the frame's one form.
 
     ``fetched`` is the UTC time the run started, and ``observed`` whether ``docs/upstream/``
     holds ``OBSERVED.md``.
+    """
+    sections = [
+        line
+        for section in snapshot.sections(rows)
+        for line in (f"## {section.heading}", "", *section.text.strip("\n").splitlines(), "")
+    ]
+    files = []
+    for row in rows:
+        if _unread(row.page):
+            continue
+        response, kept = row.response, row.page.stable
+        etag = response.etag if kept and response.etag else None
+        cells = [
+            row.page.file or _NO_FILE,
+            response.url,
+            fetched,
+            str(response.status),
+            str(len(response.body)) if kept else "-",
+            hashlib.sha256(response.body).hexdigest() if kept else "-",
+            _code(etag) if etag else "-",
+            _iso_http_date(response.last_modified),
+            _note(row),
+        ]
+        files.append(_file_line(cells))
+    left_out = [
+        _row([row.page.url, str(row.response.status), _host(row.response), row.note or "-"])
+        for row in rows
+        if _unread(row.page)
+    ]
+    return _compose(
+        snapshot,
+        read={row.page.url for row in rows if _reading(row.page, row.response) is not None},
+        sections=sections,
+        files=files,
+        observed=observed,
+        left_out=left_out,
+    )
+
+
+def _compose(
+    snapshot: Snapshot,
+    *,
+    read: Collection[str],
+    sections: Sequence[str],
+    files: Sequence[str],
+    observed: bool,
+    left_out: Sequence[str],
+) -> str:
+    """``FETCHED.md`` from the declaration and what a run gives beside it.
+
+    ``render_fetched`` writes the file through it and ``compare_fetched`` the file it
+    compares with, so the two never part.
+
+    Args:
+        snapshot: The declaration, which gives every other line.
+        read: The pages whose text the run read, for the attribution.
+        sections: The lines of the source's own sections.
+        files: The rows of the table of files, as written.
+        observed: Whether ``docs/upstream/`` holds ``OBSERVED.md``.
+        left_out: The rows of ``Not fetched`` of the pages that answered, before those of
+            ``snapshot.not_fetched``.
     """
     vocabulary = []
     if snapshot.vocabulary:
@@ -1045,7 +1159,6 @@ def render_fetched(snapshot: Snapshot, rows: Sequence[Row], fetched: str, observ
             f"The check reads past these words, which state none here: {words}. How this is",
             "captured says why.",
         )
-    capture = [part for part in snapshot.capture.split("\n\n") if part.strip()]
     lines = [
         f"# Upstream documentation snapshot \N{EM DASH} {snapshot.name}",
         "",
@@ -1059,7 +1172,7 @@ def render_fetched(snapshot: Snapshot, rows: Sequence[Row], fetched: str, observ
         ),
         "## Attribution",
         "",
-        *_attribution(snapshot, rows),
+        *_attribution(snapshot, read),
         *vocabulary,
         *_paragraph(
             "The script stops when a page it reads states one it does not record, or no",
@@ -1070,55 +1183,25 @@ def render_fetched(snapshot: Snapshot, rows: Sequence[Row], fetched: str, observ
         ),
         "## How this is captured",
         "",
-        *[line for part in capture for line in _paragraph(part)],
-        *_how(snapshot),
+        *_captured(snapshot),
+        *sections,
+        "## Files and pages",
+        "",
+        _FILES,
+        _FILES_RULE,
+        *files,
     ]
-    for section in snapshot.sections(rows):
-        lines += [f"## {section.heading}", "", *section.text.strip("\n").splitlines(), ""]
-    lines += ["## Files and pages", "", _FILES, "| --- " * 9 + "|"]
-    for row in rows:
-        if _unread(row.page):
-            continue
-        response, kept = row.response, row.page.stable
-        etag = response.etag if kept and response.etag else None
-        line = _row(
-            [
-                row.page.file or "(no file)",
-                response.url,
-                fetched,
-                str(response.status),
-                str(len(response.body)) if kept else "-",
-                hashlib.sha256(response.body).hexdigest() if kept else "-",
-                _code(etag) if etag else "-",
-                _iso_http_date(response.last_modified),
-                _note(row),
-            ]
-        )
-        lines.append(f"{line} {ALLOWLIST}" if etag else line)
     if observed:
         lines.append(_row([OBSERVED, *["-"] * 7, HAND]))
-    left_out = [
-        _row(
-            [
-                row.page.url,
-                str(row.response.status),
-                urlsplit(row.response.redirects[-1][1]).netloc if row.response.redirects else "-",
-                row.note or "-",
-            ]
-        )
-        for row in rows
-        if _unread(row.page)
-    ]
-    left_out += [
-        _row([page.url, "(not requested)", "-", page.reason]) for page in snapshot.not_fetched
-    ]
-    lines += ["", "## Not fetched", "", _LEFT_OUT, "| --- " * 4 + "|", *left_out, ""]
+    listed = [_row([page.url, _NOT_REQUESTED, "-", page.reason]) for page in snapshot.not_fetched]
+    lines += ["", "## Not fetched", "", _LEFT_OUT, _LEFT_OUT_RULE, *left_out, *listed, ""]
     credentials = snapshot.credentials
     if credentials is None:
         lines.append(f"Regenerate: `{COMMAND}`")
     else:
         names = " and ".join(f"`{name}`" for name in credentials.variables)
         lines.append(f"Regenerate, with {names} set: `{COMMAND}`")
+    lines += ["", _MARK.format(FORM)]
     return "\n".join(lines) + "\n"
 
 
@@ -1129,8 +1212,11 @@ def _files(rows: Sequence[Row]) -> dict[str, bytes]:
     return {row.page.file: row.content for row in rows if row.page.file and row.content is not None}
 
 
-def _stale(out: Path, files: dict[str, bytes]) -> list[str]:
-    """The files under the subdirectories the run writes to that it does not produce."""
+def _stale(out: Path, files: Collection[str]) -> list[str]:
+    """The files under the subdirectories the run writes to that it does not produce.
+
+    ``files`` names the files the run produces, by their names under ``out``.
+    """
     subdirs = sorted({name.split("/", 1)[0] for name in files if "/" in name})
     found = [path for subdir in subdirs for path in sorted((out / subdir).rglob("*"))]
     names = [path.relative_to(out).as_posix() for path in found if path.is_file()]
@@ -1241,6 +1327,402 @@ def compare(
         if steps:
             moved.append(f"{key}: {', '.join(steps)}")
     return differ, moved
+
+
+# --- the check without a request -----------------------------------------------------
+
+_REDIRECTED = re.compile(r"redirected \(\d{3}\) to \S+?(?=; |$)")
+_SPLIT_FILES = "(the files split from this page)"
+
+
+def _lines(text: str) -> list[str]:
+    """The lines of ``FETCHED.md`` as the frame joins them, at each line feed.
+
+    A line separator or a next-line mark inside a cell or a section stays in its line, as the
+    frame wrote it there, and the carriage return of a checkout that ends its lines in CRLF is
+    dropped.
+    """
+    return text.replace("\r\n", "\n").removesuffix("\n").split("\n")
+
+
+def _cells(row: str) -> list[str]:
+    """A row's cells as the frame writes them: the one space on each side off, pipes unescaped.
+
+    A value's own white space at its edges, which the frame writes as given, is kept.
+    """
+    parts = _CELL.split(row)[1:-1]
+    return [part.removeprefix(" ").removesuffix(" ").replace(r"\|", "|") for part in parts]
+
+
+def _table(lines: Sequence[str], heading: str, header: str, rule: str) -> list[list[str]]:
+    """The rows of the frame's table under ``heading``, each as its cells; none without it.
+
+    The table is the last one under its heading, its header and its rule: what follows the
+    frame's table of files is the frame's own, while a source's section before it may quote
+    any line. A row of another width than the table's is left out, so the comparison names it
+    as a line that the declaration does not give.
+    """
+    width = header.count("|") - 1
+    found = [
+        at
+        for at in range(len(lines) - 3)
+        if list(lines[at : at + 4]) == [heading, "", header, rule]
+    ]
+    if not found:
+        return []
+    rows = []
+    for row in lines[found[-1] + 4 :]:
+        if not row.startswith("| "):
+            break
+        cells = _cells(row)
+        if len(cells) == width:
+            rows.append(cells)
+    return rows
+
+
+def _heading_at(lines: list[str], heading: str, header: str) -> int:
+    """Where the frame's table under ``heading`` stands, the last such, or past the end."""
+    found = [
+        at
+        for at in range(len(lines) - 2)
+        if lines[at] == heading and lines[at + 1] == "" and lines[at + 2] == header
+    ]
+    return found[-1] if found else len(lines)
+
+
+def _between(lines: list[str], start: str, end: str) -> list[str]:
+    """The lines after the line ``start`` and before the line ``end``; none without both."""
+    try:
+        first = lines.index(start)
+        last = lines.index(end, first)
+    except ValueError:
+        return []
+    return lines[first + 1 : last]
+
+
+def _read_back(snapshot: Snapshot, lines: list[str]) -> set[str]:
+    """The pages whose text the run read, as the committed Attribution tells them.
+
+    A statement printed on a page that no run reads by its declaration, a sample or a page an
+    anonymous client cannot read, takes the clause of an unread page from the declaration. On
+    any other page the clause follows the page's answer, its type and its first bytes, so it
+    is read back from the file.
+    """
+    attribution = _flat(" ".join(_between(lines, "## Attribution", "## How this is captured")))
+    readable = {page.url for page in snapshot.pages if not (page.sample or _unread(page))}
+    unread = {page.url for page in snapshot.pages} - readable
+    return {
+        statement.source
+        for statement in snapshot.attribution
+        if statement.source
+        and statement.source not in unread
+        and f"printed at {statement.source}{_UNREAD}" not in attribution
+    }
+
+
+def _sections(snapshot: Snapshot, lines: list[str]) -> list[str]:
+    """The committed lines of the source's own sections, where its ``sections`` writes some.
+
+    They stand after the frame's paragraph of how it captures, which closes "How this is
+    captured" below the capture's own paragraphs, and before the frame's table of files. They
+    open with a section's heading, so lines before the first ``##`` heading there are none of
+    them, and a line of the capture that reads like a heading is the capture's. Where the
+    frame's paragraph is not found, its place is counted from the declaration.
+    """
+    if snapshot.sections is _no_sections:
+        return []
+    try:
+        heading = lines.index("## How this is captured")
+    except ValueError:
+        return []
+    end = _heading_at(lines, "## Files and pages", _FILES)
+    how = _how(snapshot)
+    start = next(
+        (at + len(how) for at in range(heading, end) if lines[at : at + len(how)] == how),
+        heading + 2 + len(_captured(snapshot)),
+    )
+    region = lines[start:end]
+    first = next((at for at, line in enumerate(region) if line.startswith("## ")), len(region))
+    return region[first:]
+
+
+def _redirects(note: str) -> tuple[list[str], str]:
+    """The redirect clauses that a committed note opens with, and the rest of the note."""
+    rest = "" if note == "-" else note
+    clauses = []
+    while (found := _REDIRECTED.match(rest)) is not None:
+        clauses.append(found.group(0))
+        rest = rest[found.end() :].removeprefix("; ")
+    return clauses, rest
+
+
+def _redirects_before(note: str, tail: str) -> list[str]:
+    """The redirect clauses of a committed note that ends in ``tail``, the declaration's part.
+
+    A page's own note may read like a redirect clause, so where the declaration gives the end
+    of the note the clauses are read before it; otherwise they are those the note opens with.
+    """
+    if tail != "-" and note == tail:
+        return []
+    if tail != "-" and note.endswith(f"; {tail}"):
+        clauses, rest = _redirects(note[: -len(tail) - 2])
+        if not rest:
+            return clauses
+    return _redirects(note)[0]
+
+
+def _own_note(rest: str, declared: Sequence[str]) -> str:
+    """The row's own note, read back from a committed note past the declaration's clauses."""
+    for clause in declared:
+        if rest == clause:
+            rest = ""
+        elif rest.startswith(f"{clause}; "):
+            rest = rest[len(clause) + 2 :]
+    return rest
+
+
+def _etag_cell(cell: str) -> str:
+    """The ETag cell in the frame's form: ``-``, or a value in the code span the frame writes.
+
+    A cell in that form is read back as it stands; any other is put in a code span, so the
+    comparison names the cell.
+    """
+    if cell == "-":
+        return cell
+    fence = len(cell) - len(cell.lstrip("`"))
+    inner = cell[fence:-fence] if 0 < 2 * fence < len(cell) and cell.endswith("`" * fence) else ""
+    for value in (inner, inner[1:-1]):
+        if value and _code(value) == cell:
+            return cell
+    return _code(cell)
+
+
+def _owners(pages: Sequence[Page], rows: Sequence[Sequence[str]]) -> list[int | None]:
+    """The declared page whose row each committed row of the table of files is, or ``None``.
+
+    A row is its page's by its file, or by its URL for a page recorded without a file, each
+    page taking one row; a page marked ``split`` takes every row with a file at its URL.
+    """
+    taken: set[int] = set()
+    owners: list[int | None] = []
+    for file, url, *_ in rows:
+        owner = next(
+            (
+                k
+                for k, page in enumerate(pages)
+                if k not in taken
+                and not page.split
+                and (page.file or _NO_FILE) == file
+                and (page.file is not None or page.url == url)
+            ),
+            None,
+        )
+        if owner is None:
+            split = (k for k, page in enumerate(pages) if page.split and page.url == url)
+            owner = next(split, None) if file != _NO_FILE else None
+        else:
+            taken.add(owner)
+        owners.append(owner)
+    return owners
+
+
+def _declared_row(snapshot: Snapshot, page: Page, cells: Sequence[str]) -> list[str]:
+    """The cells of a declared page's committed row as the declaration gives them.
+
+    The file is the declaration's, or read back for a file that ``split`` made; the URL is the
+    page's, or its second origin's where the row names that; the status is the declared one.
+    Fetched, Bytes, sha256, the ETag's value, Last-Modified, the redirects of the note and,
+    where the snapshot's ``note`` makes the row's note, that note are read back.
+    """
+    file, url, fetched, _, size, digest, etag, modified, note = cells
+    answered = url if page.origin and url in (page.url, page.origin) else page.url
+    declared = _declared(page, answered)
+    if snapshot.note is None:
+        own = page.note
+        redirected = _redirects_before(note, _note_cell(declared, own))
+    else:
+        redirected, rest = _redirects(note)
+        own = _own_note(rest, declared)
+    return [
+        file if page.split else page.file or _NO_FILE,
+        answered,
+        fetched,
+        str(page.status),
+        size,
+        digest,
+        _etag_cell(etag) if page.stable else "-",
+        modified,
+        _note_cell([*redirected, *declared], own),
+    ]
+
+
+def _missing_row(page: Page) -> list[str]:
+    """The cells of the row a declared page has in no row of the committed file."""
+    file = page.file or (_SPLIT_FILES if page.split else _NO_FILE)
+    note = _note_cell(_declared(page, page.url), page.note)
+    return [file, page.url, "-", str(page.status), "-", "-", "-", "-", note]
+
+
+def _expected_files(snapshot: Snapshot, rows: Sequence[Sequence[str]]) -> list[str]:
+    """The table of files as the declaration gives it, what only an answer knows read back.
+
+    A committed row that no declared page owns is read back, its ETag's cell in the frame's
+    form, as the row of a page that ``linked`` found, after the row it follows, where the
+    snapshot declares ``linked``; otherwise it is left out, so the comparison names it.
+    """
+    pages = [page for page in snapshot.pages if not _unread(page)]
+    linked = snapshot.linked is not _nothing_linked
+    owned: dict[int, list[Sequence[str]]] = {}
+    found: dict[int | None, list[Sequence[str]]] = {}
+    anchor: int | None = None
+    for cells, owner in zip(rows, _owners(pages, rows), strict=True):
+        if owner is not None:
+            owned.setdefault(owner, []).append(cells)
+            anchor = owner
+        elif linked:
+            found.setdefault(anchor, []).append(cells)
+
+    def read_back(anchor: int | None) -> list[str]:
+        return [
+            _file_line([*cells[:6], _etag_cell(cells[6]), *cells[7:]])
+            for cells in found.get(anchor, [])
+        ]
+
+    lines = read_back(None)
+    for k, page in enumerate(pages):
+        mine = owned.get(k)
+        if mine:
+            lines += [_file_line(_declared_row(snapshot, page, cells)) for cells in mine]
+        else:
+            lines.append(_file_line(_missing_row(page)))
+        lines += read_back(k)
+    return lines
+
+
+def _expected_left_out(snapshot: Snapshot, rows: Sequence[Sequence[str]]) -> list[str]:
+    """The rows of ``Not fetched`` of the pages requested, what only an answer knows read back.
+
+    A declared page that an anonymous client cannot read has its URL, its status and its
+    reason from the declaration, the reason read back where the snapshot's ``note`` makes it,
+    and the host it redirects to read back. The row of a page's 403 before its second origin
+    is read back whole, and a row that no declared page owns is read back as the row of a page
+    that ``linked`` found where the snapshot declares ``linked``. The rows of the pages not
+    requested are the declaration's alone and follow these.
+    """
+    linked = snapshot.linked is not _nothing_linked
+    owned: dict[int, Sequence[str]] = {}
+    found: dict[int | None, list[Sequence[str]]] = {}
+    anchor: int | None = None
+    for cells in rows:
+        url, status = cells[0], cells[1]
+        if status == _NOT_REQUESTED:
+            continue
+        owner = next(
+            (
+                k
+                for k, page in enumerate(snapshot.pages)
+                if k not in owned
+                and page.url == url
+                and (_unread(page) or (page.origin is not None and status == "403"))
+            ),
+            None,
+        )
+        if owner is not None:
+            owned[owner] = cells
+            anchor = owner
+        elif linked:
+            found.setdefault(anchor, []).append(cells)
+    lines = [_row(cells) for cells in found.get(None, [])]
+    for k, page in enumerate(snapshot.pages):
+        mine = owned.get(k)
+        if _unread(page):
+            host = mine[2] if mine else "-"
+            reason = mine[3] if mine and snapshot.note is not None else page.note or "-"
+            lines.append(_row([page.url, str(page.status), host, reason]))
+        elif mine is not None:
+            lines.append(_row(mine))
+        lines += [_row(cells) for cells in found.get(k, [])]
+    return lines
+
+
+def compare_fetched(snapshot: Snapshot, out: Path | None = None) -> list[str]:
+    """The lines in which the committed ``FETCHED.md`` differs from ``snapshot``, with no request.
+
+    A file of the form this module writes, ``FORM``, is compared with the file the frame would
+    write from the declaration, its committed files and what only an answer knows, which is read
+    back from the file and not judged (ADR-0046, decision 6). Judged are every line that follows
+    from the declaration and the frame's own text, each declared page's row with its file, URL,
+    status and the clauses of its note that its flags give, the rows of ``Not fetched`` that the
+    declaration gives, the row of ``OBSERVED.md`` where the file exists, the form of every ETag's
+    cell with the allowlist mark, and each row's file under ``out``, with no file there without
+    a row in the subdirectories that the frame writes to. Read back are the time of the fetch,
+    an ETag's value, Last-Modified, sizes and hashes, a redirect, a note that the snapshot's
+    ``note`` makes, the rows of the pages that ``linked`` found and of the files that ``split``
+    made, the sections of the source's own, the attribution's clause on a page whose answer the
+    run did not read, the host a page redirects to and the row of a page's 403 before its
+    second origin. A row that no declared page owns is a difference, unless the snapshot
+    declares ``linked``, whose pages no declaration names.
+
+    A missing file, a file without the mark of its form, such as a copy's or sdk-template's
+    stub, and a file of an older form are not judged, since the next run that fetches writes
+    the present form.
+
+    Args:
+        snapshot: The source's declaration, ``SNAPSHOT`` of its ``scripts/refresh_upstream.py``.
+        out: The snapshot's directory, ``snapshot.out`` by default.
+
+    Returns:
+        Each difference as one line, none where the file agrees or is not judged: ``line <n>
+        holds: <text>`` for a line of the file that the declaration does not give, ``line <n>
+        should hold: <text>`` for one that it gives in its place, and one line for each row
+        whose file is missing and each file without a row.
+    """
+    out = snapshot.out if out is None else out
+    path = out / FETCHED
+    if not path.is_file():
+        return []
+    lines = _lines(path.read_bytes().decode("utf-8", errors="replace"))
+    forms = [int(found[1]) for line in lines if (found := _MARK_LINE.fullmatch(line))]
+    if not forms or forms[-1] < FORM:
+        return []
+    if forms[-1] > FORM:
+        return [
+            f"{FETCHED} is of form {forms[-1]}, which a later xippios-core writes: this one writes "
+            f"and judges form {FORM}"
+        ]
+    table = _table(lines, "## Files and pages", _FILES, _FILES_RULE)
+    files = [cells for cells in table if cells[0] != OBSERVED]
+    left_out = _table(lines, "## Not fetched", _LEFT_OUT, _LEFT_OUT_RULE)
+    expected = _lines(
+        _compose(
+            snapshot,
+            read=_read_back(snapshot, lines),
+            sections=_sections(snapshot, lines),
+            files=_expected_files(snapshot, files),
+            observed=(out / OBSERVED).is_file(),
+            left_out=_expected_left_out(snapshot, left_out),
+        )
+    )
+    differing: list[str] = []
+    matcher = difflib.SequenceMatcher(None, lines, expected, autojunk=False)
+    for tag, start, end, first, last in matcher.get_opcodes():
+        if tag != "equal":
+            differing += [f"line {at + 1} holds: {lines[at]}" for at in range(start, end)]
+            differing += [
+                f"line {start + k + 1} should hold: {expected[at]}"
+                for k, at in enumerate(range(first, last))
+            ]
+    named = [cells[0] for cells in files if cells[0] != _NO_FILE]
+    outside = [name for name in named if Path(name).is_absolute() or ".." in Path(name).parts]
+    inside = [name for name in named if name not in outside]
+    differing += [f"{name}: a row names it, a file outside the snapshot" for name in outside]
+    differing += [
+        f"{name}: a row names it, and the file is missing"
+        for name in inside
+        if not (out / name).is_file()
+    ]
+    differing += [f"{name}: the file has no row" for name in _stale(out, inside)]
+    return differing
 
 
 def run(snapshot: Snapshot, argv: Sequence[str] | None = None) -> int:

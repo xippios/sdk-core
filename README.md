@@ -976,7 +976,7 @@ files, and compares with ``--check``. Run from the repository's root::
 
 from pathlib import Path
 
-from xippios.core.refresh import NotFetched, Page, Response, Row, Snapshot, Statement, run
+from xippios.core.refresh import NotFetched, Page, Response, Snapshot, Statement, run
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS_URL = "https://docs.example.org/api"
@@ -992,11 +992,6 @@ def reduce(page: Page, response: Response) -> bytes:
     such as markdownify in its dev group, a table with merged cells kept as HTML.
     """
     return response.body
-
-
-def linked(row: Row) -> tuple[Page, ...]:
-    """The pages whose URL a row's page gives, captured right after it: none here."""
-    return ()
 
 
 SNAPSHOT = Snapshot(
@@ -1018,7 +1013,6 @@ SNAPSHOT = Snapshot(
     capture="The API page is server-rendered HTML, converted to Markdown.",
     out=ROOT / "docs/upstream",
     reduce=reduce,
-    linked=linked,
 )
 
 if __name__ == "__main__":
@@ -1039,6 +1033,37 @@ in a code span on a row that ends in the secret scan's allowlist mark, a row for
 `OBSERVED.md` where it exists, and the table `Not fetched` under its heading, empty or not.
 `--check` exits 1 when a file differs from what upstream serves, compared after
 `canonical`, or when `FETCHED.md` would change in more than its rows' measures.
+
+The last line of `FETCHED.md` names the file's form, `<!-- form 1 of the FETCHED.md that
+xippios.core.refresh writes -->`, and every change of core that rewords what the frame writes
+raises it (`FORM`). `compare_fetched` compares a committed file of that form with the
+declaration, sends no request and returns the lines that differ (ADR-0046, decision 6):
+
+```python
+from xippios.core.refresh import compare_fetched
+
+compare_fetched(SNAPSHOT)  # [] where the file agrees
+# ["line 41 holds: | pages/api.md | https://docs.example.org/old | ...",
+#  "line 41 should hold: | pages/api.md | https://docs.example.org/api | ...",
+#  "pages/terms.md: a row names it, and the file is missing"]
+```
+
+It judges every line that follows from the declaration and the frame's own text, each declared
+page's row with its file, URL, status and the clauses of its flags, the rows of `Not fetched`
+that the declaration gives, the row of `OBSERVED.md`, the form of each ETag's cell, and each
+row's file under `docs/upstream/`, with no file without a row in the subdirectories that a row
+writes to. What only a response knows it reads back from the file and does not judge: the time
+of the fetch, an ETag's value, Last-Modified, sizes and hashes, a redirect, a note that `note`
+makes, the rows of the pages that `linked` found and of the files that `split` made, the
+sections of `sections`, the attribution's clause on a page whose answer the run did not read,
+the host a page redirects to and the row of a page's 403 before its second origin. A row that
+no declared page owns is a difference unless the snapshot declares `linked`, so a snapshot
+that links no page declares none. A missing file, one without the mark, a copy's or
+sdk-template's stub, and one of an older form are not judged, since the next run that fetches
+writes the present form. The family check calls it for every source, on the declaration that
+its script names `SNAPSHOT` at its top level, so the script imports and declares alone, sends
+no request and writes no file while it loads, its run under `if __name__ == "__main__":`
+(conventions §3).
 
 Beside `reduce`, `canonical` and `linked`, a snapshot declares the hooks for what some
 sources do beyond that, and every hook stops the run with `changed(url, what)` on a page

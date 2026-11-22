@@ -33,7 +33,7 @@ records in `docs/adr/`. A record changes, and this file follows when the script 
 - <a id="0043"></a>[ADR-0043](adr/0043-the-cases-that-the-reviews-of-the-sources-adoptions-settled.md): The cases that the reviews of the sources' adoptions settled · Accepted · 2026-11-21 · amended 2026-11-21
 - <a id="0044"></a>[ADR-0044](adr/0044-the-family-check-of-the-observed-behavior-file.md): The family check of the observed-behavior file · Accepted · 2026-11-21
 - <a id="0045"></a>[ADR-0045](adr/0045-one-check-of-an-argument-against-a-packaged-list.md): One check of an argument against a packaged list · Accepted · 2026-11-21
-- <a id="0046"></a>[ADR-0046](adr/0046-the-snapshot-script-s-frame-in-core.md): The snapshot script's frame in core · Accepted · 2026-11-21
+- <a id="0046"></a>[ADR-0046](adr/0046-the-snapshot-script-s-frame-in-core.md): The snapshot script's frame in core · Accepted · 2026-11-21 · amended 2026-11-22
 - <a id="0047"></a>[ADR-0047](adr/0047-the-adapter-s-offset-for-the-rest-of-a-cut-answer.md): The adapter's offset for the rest of a cut answer · Accepted · 2026-11-21
 - <a id="0048"></a>[ADR-0048](adr/0048-core-s-recorder-frame-around-a-source-s-rewrite-step.md): Core's recorder frame around a source's rewrite step · Accepted · 2026-11-21
 - <a id="0049"></a>[ADR-0049](adr/0049-the-mark-of-a-built-answer-and-its-check.md): The mark of a built answer and its check · Accepted · 2026-11-21
