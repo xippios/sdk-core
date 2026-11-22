@@ -48,18 +48,20 @@
     its page with its link to https://cashctrl.com/en/about/terms, which the error handling's
     text links, and its footer's copyright notice from its page, which the frame reads in the
     logo's alternative text and checks on every run, its own check of the notice in `split`
-    deleted, and five things of its script given up: `--from-file`, its
+    deleted, and six things of its script given up: `--from-file`, its
     run from a saved copy of the page that spends no request, since the frame takes no
     option of a source's own, its own User-Agent, which names its repository, for the
     family's, its request for the page gzipped, since the frame asks for each page as it
     is, at the cost of a larger transfer and no byte of its files, the removal of an
     entry's file at the top of `docs/upstream/` once the table of contents drops the entry,
     which the frame makes in the subdirectories it writes to alone, so the port puts its
-    entries under one or removes such a file by hand, `--check` naming no leftover, and the
+    entries under one or removes such a file by hand, `--check` naming no leftover, the
     fragment of its entry in each split file's row of `FETCHED.md`, `index.html#/order`,
     since the frame's row of a file split from a page names the page's URL, the file's
-    first line keeping the fragment — the frame carries none of the five while one source
-    alone needs it, and stops on the link while the attribution does not record it
+    first line keeping the fragment, and its check that the notice stands in the footer's
+    logo, since the frame checks the notice on the page and tells no part of a page apart —
+    the frame carries none of the six while one source alone needs it, and stops on the link
+    while the attribution does not record it
     (ADR-0023, decision 2, ADR-0046, decisions 2 and 7,
     https://github.com/xippios/sdk-cashctrl/issues/134).
     `docs/upstream/FETCHED.md` — rewritten once by the first run of the ported script, in

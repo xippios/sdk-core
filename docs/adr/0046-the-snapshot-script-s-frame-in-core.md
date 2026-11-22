@@ -205,14 +205,18 @@ decided: the Consequences state it as the frame has held it since it came.
      search and that no statement records stops the run, as any text of the page does.
    - *What the search reads.* Where an image's alternative text stands on a page, the search
      reads its text twice: as the reader reads it, the alternative text included, and the same
-     text with the alternative text left out. Both are read past the recorded links, the
-     statements without a link and the vocabulary where those stand in the text with the
-     alternative text, and words of the search in either stop the run. So the words that an
-     alternative text stands between are searched as they were before it was read,
-     `Copy<img alt="x">right` as "Copyright" and `Terms of<img alt="icon"> Service` as "Terms of
-     Service", and reading the alternative text lets no page pass that stopped before, but one
-     whose words, read with its alternative text, are a statement that the attribution records
-     (finding 3 of the review of https://github.com/xippios/sdk-core/pull/451).
+     text with the alternative text left out, its white space flattened again. Both are read
+     past the recorded links, the statements without a link and the vocabulary where those stand
+     in the text with the alternative text, and words of the search in either stop the run. So
+     the words that an alternative text stands between are searched as they were before it was
+     read, `Copy<img alt="x">right` as "Copyright", `Terms of<img alt="icon"> Service` as "Terms
+     of Service" and `CC <img alt="logo"> BY` as "CC BY", and reading the alternative text lets
+     no page pass that stopped before, but one whose words, read with its alternative text, are a
+     statement that the attribution records or a word of its vocabulary (findings 3 of the first
+     review and 1 of the second review of https://github.com/xippios/sdk-core/pull/451). A
+     statement whose text is empty or white space, and such a word of the vocabulary, are read
+     past nowhere, where reading past the empty text parted every character of the page with a
+     space and so passed any page (finding 2 of the second review).
    - *What does not change.* What a statement must show on its own page, its text and, with a
      link, a link of its text to its target; a terms page, which must print each statement
      recorded from it and is searched no further; a sample, a page that an anonymous client

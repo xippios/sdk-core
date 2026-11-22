@@ -886,7 +886,8 @@ def _read_past(text: str, marks: bytearray, words: str) -> tuple[str, bytearray]
     """``text`` with each of its ``words`` one space, as ``str.replace`` makes it, and its marks.
 
     The space is marked where every character it takes the place of is, so the text without the
-    alternative text reads the words around them as before. No words leave the text whole.
+    alternative text reads the words around them as before. No words leave the text whole, where
+    ``str.replace`` would part every character with a space and so pass any page.
     """
     if not words:
         return text, marks
@@ -1005,9 +1006,10 @@ def check_attribution(snapshot: Snapshot, page: Page, response: Response) -> Non
     a link to its target, on any page, and past a statement without a link and the vocabulary
     wherever they stand. A page that is no HTML has no link, so there a linked statement's words
     are searched as any others. Where an image's alternative text stands, the search reads the
-    text twice, with it and without it, each read past where the text with it stands, so words
-    that an alternative text stands between are searched as before it was read (ADR-0046,
-    decision 7).
+    text twice, with it and without it, each read past where the text with it stands, the text
+    without it flattened again, so words that an alternative text stands between are searched
+    as before it was read. A statement whose text is empty or white space, and such a word of
+    the vocabulary, are read past nowhere (ADR-0046, decision 7).
     """
     reading = _reading(page, response)
     if reading is None:
@@ -1033,7 +1035,7 @@ def check_attribution(snapshot: Snapshot, page: Page, response: Response) -> Non
         text, marks = _read_past(text, marks, _flat(words))
     searches = [(text, "")]
     if any(marks):
-        without = "".join(char for char, mark in zip(text, marks, strict=True) if not mark)
+        without = _flat("".join(char for char, mark in zip(text, marks, strict=True) if not mark))
         searches.append((without, ", read without its images' alternative text"))
     for searched, read in searches:
         if match := _STATEMENT.search(searched):

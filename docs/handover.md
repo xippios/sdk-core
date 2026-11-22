@@ -1957,23 +1957,23 @@ the rules of 1.28.
     it, `note` for the files that keep a nested table as HTML and `sections` for its vendor
     examples, its attribution recording "Terms of Service" from its page with its link to
     https://cashctrl.com/en/about/terms, which the error handling's text links, or the frame
-    stops the run (https://github.com/xippios/sdk-cashctrl/issues/134). It gives up five things
+    stops the run (https://github.com/xippios/sdk-cashctrl/issues/134). It gives up six things
     that the frame carries for no single source: `--from-file`, its own User-Agent, its request
     for the page gzipped, the removal of an entry's file at the top of `docs/upstream/` once
     the table of contents drops the entry, so its port puts its entries under a subdirectory or
-    removes such a file by hand, `--check` naming no leftover, and the fragment of its entry in
+    removes such a file by hand, `--check` naming no leftover, the fragment of its entry in
     each split file's row of `FETCHED.md`, `index.html#/order`, since the frame's row of a file
-    split from a page names the page's URL, the file's first line keeping the fragment
-    (ADR-0046, decision 2, and Consequences;
-    https://github.com/xippios/sdk-cashctrl/issues/134).
+    split from a page names the page's URL, the file's first line keeping the fragment, and its
+    check that the notice stands in the footer's logo, below (ADR-0046, decisions 2 and 7, and
+    Consequences; https://github.com/xippios/sdk-cashctrl/issues/134).
 - Its footer's copyright notice, `NOTICE`, is recorded from `PAGE_URL`, since the frame reads it
   in the alternative text of the footer's logo and checks it on every run, and its link to the
   terms passes as that link (ADR-0046, decision 7;
   https://github.com/xippios/sdk-cashctrl/issues/134). The check of the notice in `split`,
   `copyright_year` with `_COPYRIGHT` and the year it compares, goes as a copy of the frame's
-  check, giving up only that the notice stands in the footer's logo, a part of the page that the
-  frame does not tell apart, and a test of the port that held the notice to `split` holds it to
-  the declaration.
+  check, and with it the sixth thing of those above, the check that the notice stands in the
+  footer's logo, a part of the page that the frame does not tell apart; a test of the port that
+  held the notice to `split` holds it to the declaration.
 - Takes nothing of `record_task`: it records exchange by exchange into 44 directories named
   after wrappers, and three of its tasks download (ADR-0057, Consequences).
 - The first list: the rest of a cut answer and what a write task's preview shows.
