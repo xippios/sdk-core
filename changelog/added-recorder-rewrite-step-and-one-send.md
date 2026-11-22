@@ -18,12 +18,13 @@
     `survivors` named the key's path — the check and its message are core's.
     `scripts/record_fixture.py` (sdk-google-mail) — the single exchange sends with
     `send_once_sync` through the demo account's client, the token request with `auth=None` and
-    `--garbage-bearer` as `auth=`, and every exchange, a task's too, builds its fixture with
+    `--garbage-bearer` as `auth=`, and builds its fixture with
     `fixture_from_response(response, scrub=..., rewrite=step)`, the step running `rewrite` and
-    `check` and raising `ValueError` on a leak. It keeps `MessageScrub`, the text rules,
-    `check`, the command line, the write safety rule and `recording_client` for `record_task`
-    alone, until core records the exchanges of a task (https://github.com/xippios/sdk-core/issues/174)
-    — the single exchange needs no client of its own.
+    `check` and raising `ValueError` on a leak, while a task's exchanges pass the same step
+    through `record_task_sync`. It keeps `MessageScrub`, the text rules, `check`, the command
+    line and the write safety rule, and deletes `recording_client` with its capture of a task,
+    as the note of `record_task` says (https://github.com/xippios/sdk-core/issues/174) — the
+    single exchange needs no client of its own, and core records the exchanges of a task.
     `scripts/record_fixture.py` (sdk-cashctrl) — deletes `recording_client`, sends with
     `send_once_sync(client_for(DEMO), ...)`, `--wrong-key` as `auth=`, and passes
     `TenantScrub(...).apply` as the step of `fixture_from_response(..., rewrite=...)`, which
