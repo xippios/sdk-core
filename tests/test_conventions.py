@@ -1,7 +1,8 @@
 """The sentences of `docs/conventions.md` that the cases of ADR-0043 stand on, and ADR-0055's,
 the preview rule of ADR-0050, the recording of a task's exchanges of ADR-0057, the names of a
 request's country codes of ADR-0056, the check of the committed FETCHED.md of ADR-0046,
-decision 6, and the review checklist's sentence that holds an adoption against the two lists of
+decision 6, the refusal of a hinted value of ADR-0041's amendment of 2026-11-22, and the review
+checklist's sentence that holds an adoption against the two lists of
 the handover's section for the release.
 
 The organization's release check quotes the conventions from sdk-core's `main`, and a finding
@@ -229,6 +230,18 @@ def test_each_rule_of_the_names_of_codes_is_one_sentence_that_cites_adr_0056(
     rule = sentence(section(4), phrase)
     for name in ("ADR-0056", *names):
         assert name in rule, f"§4: {rule!r} does not name {name!r}"
+
+
+def test_the_refusal_of_a_hinted_value_is_one_sentence_that_cites_its_amendment() -> None:
+    # §5, beside the refusal of a code the packaged list lacks: a value of the check's hint
+    # table is no code, so its refusal leaves out the list's age, as the question that amended
+    # ADR-0041 decided (https://github.com/xippios/sdk-core/issues/440).
+    rule = sentence(section(5), "A refusal of a value of the check's hint table")
+    for name in (
+        "ADR-0041, decision 8, amendment 2026-11-22",
+        "leaves out that the packaged list is out of date",
+    ):
+        assert name in rule, f"§5: {rule!r} does not name {name!r}"
 
 
 def test_the_exemption_s_sentence_names_the_words_of_the_family_check_in_their_order() -> None:
