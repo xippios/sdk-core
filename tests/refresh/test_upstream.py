@@ -52,6 +52,8 @@ NOT_FETCHED_HEADER = "| URL | HTTP | Redirects to | Reason |"
 USER_AGENT = "xippios-example refresh_upstream (+https://github.com/xippios)"
 HAND = "written by hand: what upstream does but never documents; not fetched or checked"
 SPLIT = "one of the files split from one page; Bytes and sha256 are the page's"
+MARK = "<!-- form 1 of the FETCHED.md that xippios.core.refresh writes -->"
+UNREAD = ", a page this script does not read, so no run checks it"
 ROOT = Path(__file__).resolve().parents[2]
 
 Answer = tuple[int, dict[str, str], bytes]
@@ -572,11 +574,14 @@ def test_a_row_with_an_etag_passes_the_secret_scan(site: Site, out: Path, tmp_pa
     """sdk-template#42 carrying #47, and https://github.com/xippios/sdk-core/issues/340: the
     row of a quoted ETag of hex digits holds it in a code span and ends in the scan's
     allowlist mark, so the hook passes FETCHED.md against sdk-core's unchanged baseline;
-    without the mark the same row is flagged, the code span alone being no exemption."""
+    without the mark the same row is flagged, the code span alone being no exemption. The
+    file's last line, the mark of its form, passes the scan too
+    (https://github.com/xippios/sdk-core/issues/428)."""
     etag = '"' + hashlib.md5(b"an object store's ETag", usedforsecurity=False).hexdigest() + '"'
     site.page("openapi.json", '{"openapi": "3.1.0"}', {"ETag": etag})
     assert go(declare(out, Page(f"{BASE}/openapi.json", "openapi/openapi.json"))) == 0
     text = fetched(out)
+    assert text.endswith(f"\n{MARK}\n")
     (row,) = [line for line in text.splitlines() if etag in line]
     assert f"| `{etag}` |" in row
     assert row.endswith(f" | {ALLOWLIST}")
@@ -1183,6 +1188,497 @@ def test_a_rows_note_is_made_from_its_answer(site: Site, out: Path) -> None:
     assert fetched(out) == before
 
 
+# --- the check of the committed FETCHED.md without a request ----------------------------
+#
+# https://github.com/xippios/sdk-core/issues/428 (ADR-0046, decision 6): compare_fetched
+# compares a committed FETCHED.md of the frame's form with the declaration and sends no
+# request. Each kind it judges has a test that a change of the declaration fails, and each
+# kind it reads back a test that a changed value passes.
+
+FEED = "https://example.org/feed.xml"
+GUIDE = f"{BASE}/guide.html"
+SPEC = f"{BASE}/openapi.json"
+PDF = b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n<< /Producer (Copyright 2026 Example) >>\n%%EOF\n"
+
+
+def full_snapshot(site: Site, out: Path) -> Snapshot:
+    """A declaration with a row of every kind that the check judges, written by the frame."""
+    site.page(
+        "guide.html",
+        "<p>Guide</p><footer>&copy; 2026 Example Ltd.</footer>",
+        {"ETag": '"v1"', "Last-Modified": "Mon, 16 Nov 2026 10:00:00 GMT"},
+    )
+    site.page("openapi.json", '{"openapi": "3.1.0"}\n')
+    site.routes[f"{BASE}/admin"] = (302, {"Location": "https://login.example.net/sso"}, b"")
+    snapshot = declare(
+        out,
+        Page(GUIDE, "pages/guide.html", note="as served"),
+        Page(SPEC, "openapi/openapi.json", note="verbatim"),
+        Page(site.page("items.json", "[]"), "samples/items.json", sample=True),
+        Page(site.page("status.html", "<p>OK</p>"), stable=False, note="a nonce"),
+        Page(f"{BASE}/admin", status=302, note="a login on another host"),
+        attribution=(Statement("\N{COPYRIGHT SIGN} 2026 Example Ltd.", GUIDE, "the footer"),),
+        not_fetched=(NotFetched(FEED, "a feed, no documentation"),),
+        capture="The guide is kept as served.\n\nThe API document is kept verbatim.",
+    )
+    assert go(snapshot) == 0
+    site.requests.clear()
+    site.sleeps.clear()
+    return snapshot
+
+
+def compared(site: Site, snapshot: Snapshot, out: Path) -> list[str]:
+    """The lines that ``compare_fetched`` names, having sent no request and waited for none."""
+    lines = refresh.compare_fetched(snapshot, out)
+    assert not site.requests, "no request"
+    assert not site.sleeps, "no pause"
+    return lines
+
+
+def edit(out: Path, old: str, new: str) -> None:
+    """Edit the committed FETCHED.md by hand."""
+    text = fetched(out)
+    assert old in text, old
+    (out / "FETCHED.md").write_text(text.replace(old, new))
+
+
+def pages_replaced(snapshot: Snapshot, at: int, **fields: Any) -> Snapshot:
+    pages = list(snapshot.pages)
+    pages[at] = replace(pages[at], **fields)
+    return replace(snapshot, pages=tuple(pages))
+
+
+def test_the_check_passes_the_file_the_frame_wrote_and_sends_no_request(
+    site: Site, out: Path
+) -> None:
+    """A file as the frame wrote it agrees with its declaration, with OBSERVED.md and without
+    it; the check sends no request, and reads the snapshot's own directory by default."""
+    snapshot = full_snapshot(site, out)
+    assert compared(site, snapshot, out) == []
+    assert refresh.compare_fetched(snapshot) == []
+    (out / "OBSERVED.md").write_text("# Observed\n")
+    assert go(snapshot) == 0
+    site.requests.clear()
+    site.sleeps.clear()
+    assert compared(site, snapshot, out) == []
+
+
+@pytest.mark.parametrize(
+    ("change", "held", "given"),
+    [
+        pytest.param(
+            lambda s: pages_replaced(s, 1, url=f"{BASE}/v2/openapi.json"),
+            f"| openapi/openapi.json | {SPEC} |",
+            f"| openapi/openapi.json | {BASE}/v2/openapi.json |",
+            id="a-page-s-url",
+        ),
+        pytest.param(
+            lambda s: replace(
+                s,
+                attribution=(Statement("\N{COPYRIGHT SIGN} 2026 Example AG", GUIDE, "the footer"),),
+            ),
+            "- `\N{COPYRIGHT SIGN} 2026 Example Ltd.`",
+            "- `\N{COPYRIGHT SIGN} 2026 Example AG`",
+            id="a-statement-s-text",
+        ),
+        pytest.param(
+            lambda s: replace(s, not_fetched=(NotFetched(FEED, "an RSS feed"),)),
+            f"| {FEED} | (not requested) | - | a feed, no documentation |",
+            f"| {FEED} | (not requested) | - | an RSS feed |",
+            id="a-row-of-not-fetched",
+        ),
+        pytest.param(
+            lambda s: replace(s, capture="The guide is converted.\n\nThe API document is kept."),
+            "The guide is kept as served.",
+            "The guide is converted.",
+            id="the-capture",
+        ),
+        pytest.param(
+            lambda s: replace(s, pages=s.pages[:1] + s.pages[2:]),
+            f"| openapi/openapi.json | {SPEC} |",
+            None,
+            id="a-page-removed",
+        ),
+        pytest.param(
+            lambda s: replace(s, pages=(*s.pages, Page(f"{BASE}/terms.html", "pages/terms.html"))),
+            None,
+            f"| pages/terms.html | {BASE}/terms.html | - | 200 |",
+            id="a-page-added",
+        ),
+        pytest.param(
+            lambda s: pages_replaced(s, 0, note="as fetched"),
+            "| as served |",
+            "| as fetched |",
+            id="a-page-s-note",
+        ),
+        pytest.param(
+            lambda s: pages_replaced(s, 2, sample=False),
+            "| a sample: an answer of the API, kept verbatim; no test fixture |",
+            "| samples/items.json |",
+            id="a-page-s-flag",
+        ),
+        pytest.param(
+            lambda s: pages_replaced(s, 4, status=301),
+            f"| {BASE}/admin | 302 |",
+            f"| {BASE}/admin | 301 |",
+            id="an-unread-page-s-status",
+        ),
+    ],
+)
+def test_a_change_of_the_declaration_is_named_by_its_lines(
+    site: Site,
+    out: Path,
+    change: Any,
+    held: str | None,
+    given: str | None,
+) -> None:
+    """Each kind the check judges: the line the file holds and the line the declaration gives
+    in its place."""
+    snapshot = full_snapshot(site, out)
+    lines = compared(site, change(snapshot), out)
+    assert lines, "the change is named"
+    assert all(re.match(r"line \d+ (holds|should hold): ", line) for line in lines), lines
+    if held is not None:
+        assert any(" holds: " in line and held in line for line in lines), lines
+    if given is not None:
+        assert any(" should hold: " in line and given in line for line in lines), lines
+
+
+def test_a_new_observed_md_is_named_until_its_row_stands(site: Site, out: Path) -> None:
+    """The row of OBSERVED.md follows the disk: a file that the committed FETCHED.md does not
+    list yet is named."""
+    snapshot = full_snapshot(site, out)
+    (out / "OBSERVED.md").write_text("# Observed\n")
+    (line,) = compared(site, snapshot, out)
+    assert re.fullmatch(rf"line \d+ should hold: \| OBSERVED\.md \| (- \| ){{7}}{HAND} \|", line)
+
+
+def test_the_check_holds_each_row_s_file_to_the_disk(site: Site, out: Path) -> None:
+    """Each row's file stands under docs/upstream/, and no file of a subdirectory that a row
+    writes to lacks a row; a file at the top and one under another subdirectory are not the
+    frame's, as its removal of stale files is bounded."""
+    snapshot = full_snapshot(site, out)
+    (out / "pages/guide.html").unlink()
+    (out / "samples/extra.json").write_text("[]")
+    (out / "notes.txt").write_text("kept by hand")
+    (out / "old").mkdir()
+    (out / "old/page.md").write_text("an old page")
+    assert compared(site, snapshot, out) == [
+        "pages/guide.html: a row names it, and the file is missing",
+        "samples/extra.json: the file has no row",
+    ]
+
+
+def test_the_check_holds_the_form_of_an_etag_s_cell(site: Site, out: Path) -> None:
+    """An ETag's value is read back, its form judged: a code span on a row that ends in the
+    allowlist mark, and ``-`` for a page whose body changes on every request."""
+    snapshot = full_snapshot(site, out)
+    edit(out, '`"v1"`', '`"v2"`')
+    assert compared(site, snapshot, out) == []
+    edit(out, f" {ALLOWLIST}", "")
+    held, given = compared(site, snapshot, out)
+    assert " holds: | pages/guide.html |" in held
+    assert not held.endswith(ALLOWLIST)
+    assert given.endswith(f'| `"v2"` | 2026-11-16T10:00:00Z | as served | {ALLOWLIST}')
+    edit(out, '`"v2"` |', '"v2" |')
+    held, given = compared(site, snapshot, out)
+    assert '| "v2" |' in held
+    assert '| `"v2"` |' in given
+    assert go(snapshot) == 0
+    site.requests.clear()
+    site.sleeps.clear()
+    url, at = cells(file_row(fetched(out), "(no file)"))[1:3]
+    edit(out, f"| {url} | {at} | 200 | - | - | - |", f"| {url} | {at} | 200 | - | - | `x` |")
+    assert len(compared(site, snapshot, out)) == 2, "a page with stable=False has no ETag"
+
+
+def test_what_only_a_response_knows_is_read_back(site: Site, out: Path) -> None:
+    """The time of the fetch, Last-Modified, Bytes, sha256, an ETag's value and the host a page
+    redirects to are read back, and a changed value passes."""
+    snapshot = full_snapshot(site, out)
+    text = fetched(out)
+    measures = cells(file_row(text, "openapi/openapi.json"))[4:6]
+    moved = re.sub(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", "2020-01-02T03:04:05Z", text)
+    moved = moved.replace(" | ".join(measures), " | ".join(["7", "0" * 64]))
+    moved = moved.replace('`"v1"`', '`W/"other"`')
+    moved = moved.replace("| 302 | login.example.net |", "| 302 | sso.example.net |")
+    assert moved.count("2020-01-02T03:04:05Z") == 5, "four rows' Fetched, one Last-Modified"
+    (out / "FETCHED.md").write_text(moved)
+    assert compared(site, snapshot, out) == []
+
+
+def test_a_note_made_from_an_answer_is_read_back_and_a_flag_s_clause_is_judged(
+    site: Site, out: Path
+) -> None:
+    """With the snapshot's ``note``, a row's own note is read back, and the clauses of its
+    page's flags, which the declaration gives, are still judged."""
+
+    def note(row: Row) -> str:
+        return f"{row.note}; {len(row.response.body)} bytes"
+
+    snapshot = declare(
+        out,
+        Page(
+            site.page("openapi.json", '{"openapi": "3.1.0"}'), "openapi/openapi.json", note="as is"
+        ),
+        Page(site.page("items.json", "[]"), "samples/items.json", sample=True, note="two items"),
+        note=note,
+    )
+    assert go(snapshot) == 0
+    site.requests.clear()
+    site.sleeps.clear()
+    edit(out, "| as is; 20 bytes |", "| as is; 2,000 paths |")
+    assert compared(site, snapshot, out) == []
+    edit(out, "a sample: an answer of the API, kept verbatim; no test fixture; ", "")
+    held, given = compared(site, snapshot, out)
+    assert held.endswith("| two items; 2 bytes |")
+    assert given.endswith(
+        "| a sample: an answer of the API, kept verbatim; no test fixture; two items; 2 bytes |"
+    )
+
+
+def linked_and_split(site: Site, out: Path) -> Snapshot:
+    """A declaration whose ``linked`` finds a page and whose ``split`` makes two files."""
+    newest = site.page("release-7.html", "<p>Release 7</p>")
+    index = site.page("releases.html", f"<a href='{newest}'>Release 7</a>")
+    toc = site.page("toc.html", "<h1>A</h1><p>alpha</p><h1>B</h1><p>beta</p>")
+
+    def linked(row: Row) -> tuple[Page, ...]:
+        if row.page.url != index:
+            return ()
+        href = re.search(rb"href='([^']+)'", row.response.body)
+        assert href is not None
+        return (Page(href[1].decode(), "pages/release.html", note="the newest"),)
+
+    def split(page: Page, response: Response) -> dict[str, bytes]:
+        parts = re.findall(rb"<h1>(\w)</h1><p>(\w+)</p>", response.body)
+        return {f"entries/{name.decode().lower()}.md": text + b"\n" for name, text in parts}
+
+    snapshot = declare(
+        out,
+        Page(index, "pages/releases.html"),
+        Page(toc, split=True, note="one file per heading"),
+        linked=linked,
+        split=split,
+    )
+    assert go(snapshot) == 0
+    site.requests.clear()
+    site.sleeps.clear()
+    return snapshot
+
+
+def test_the_pages_linked_found_and_the_files_split_made_are_read_back(
+    site: Site, out: Path
+) -> None:
+    """A row of a page that ``linked`` found and a file that ``split`` made are read back; a
+    row that no declared page owns is named in a snapshot that declares no ``linked``."""
+    snapshot = linked_and_split(site, out)
+    assert compared(site, snapshot, out) == []
+    edit(
+        out,
+        f"| pages/release.html | {BASE}/release-7.html |",
+        f"| pages/release.html | {BASE}/release-8.html |",
+    )
+    edit(out, "| entries/b.md |", "| entries/beta.md |")
+    (out / "entries/b.md").rename(out / "entries/beta.md")
+    assert compared(site, snapshot, out) == []
+    unlinked = replace(snapshot, linked=Snapshot.linked)
+    (line,) = compared(site, unlinked, out)
+    assert re.match(rf"line \d+ holds: \| pages/release\.html \| {re.escape(BASE)}/release-8", line)
+
+
+def test_a_section_of_the_source_s_own_and_the_clause_of_an_unread_page_are_read_back(
+    site: Site, out: Path
+) -> None:
+    """What ``sections`` renders from answers is read back, and so is the clause of a
+    statement whose page the run did not read, which follows the page's answer; without the
+    hook a section is named."""
+    bundle = site.page("bundle.txt", "products: comtrade, tariffline")
+    layout = site.page("layout.pdf", PDF)
+
+    def sections(rows: Sequence[Row]) -> list[Section]:
+        names = rows[0].response.body.decode().split(": ")[1].split(", ")
+        return [Section("Products found", "\n".join(f"- {name}" for name in names))]
+
+    snapshot = declare(
+        out,
+        Page(bundle, note="the bundle"),
+        Page(layout, "files/layout.pdf"),
+        attribution=(Statement("Copyright 2026 Example", layout, "the PDF's producer"),),
+        sections=sections,
+    )
+    assert go(snapshot) == 0
+    site.requests.clear()
+    site.sleeps.clear()
+    assert UNREAD in flat(fetched(out))
+    edit(out, "- tariffline\n", "- tariffline\n- goods\n")
+    assert compared(site, snapshot, out) == []
+    lines = compared(site, replace(snapshot, sections=Snapshot.sections), out)
+    assert any(re.match(r"line \d+ holds: ## Products found$", line) for line in lines)
+    site.routes[layout] = (200, {"Content-Type": "text/plain"}, b"Copyright 2026 Example")
+    assert go(snapshot) == 0
+    site.requests.clear()
+    site.sleeps.clear()
+    assert UNREAD not in flat(fetched(out)), "the page is read now"
+    assert compared(site, snapshot, out) == []
+
+
+def test_a_refused_origin_and_a_redirect_are_read_back(site: Site, out: Path) -> None:
+    """The row of a page's 403 before its second origin and a redirect are read back; the row
+    of the file names one of the page's two URLs, or it is named."""
+    canonical = f"{BASE}/faq"
+    origin = "https://origin.example.net/faq"
+    site.routes[canonical] = (403, {"Content-Type": "text/html"}, b"<p>Access Denied</p>")
+    site.routes[origin] = (200, {"Content-Type": "text/html"}, b"<p>FAQ</p>")
+    site.routes[f"{BASE}/old.html"] = (301, {"Location": GUIDE}, b"")
+    site.page("guide.html", "<p>Guide</p>")
+    snapshot = declare(
+        out,
+        Page(canonical, "pages/faq.html", origin=origin, note="the FAQ"),
+        Page(f"{BASE}/old.html", "pages/guide.html"),
+    )
+    assert go(snapshot) == 0
+    site.requests.clear()
+    site.sleeps.clear()
+    assert compared(site, snapshot, out) == []
+    edit(out, f"redirected (301) to {GUIDE}", f"redirected (308) to {BASE}/guide/")
+    edit(out, f"| 403 | - | answers 403 to this script; kept from {origin} |", "| 403 | - | gone |")
+    assert compared(site, snapshot, out) == []
+    edit(
+        out, f"| pages/faq.html | {origin} |", "| pages/faq.html | https://mirror.example.net/faq |"
+    )
+    held, given = compared(site, snapshot, out)
+    assert "holds: | pages/faq.html | https://mirror.example.net/faq |" in held
+    assert given.endswith("| the FAQ |")
+    assert f"should hold: | pages/faq.html | {canonical} |" in given
+
+
+def test_a_file_the_frame_has_not_written_in_its_form_is_not_judged(site: Site, out: Path) -> None:
+    """A missing file, a file without the mark, as a copy's or sdk-template's stub, and a file
+    of an older form pass until the next run that fetches; a file of a later form is named,
+    since this core cannot judge it."""
+    snapshot = full_snapshot(site, out)
+    changed = fetched(out).replace("| as served |", "| as a copy wrote it |")
+    for text in (changed.replace(MARK, ""), changed.replace("form 1 of", "form 0 of")):
+        (out / "FETCHED.md").write_text(text)
+        assert compared(site, snapshot, out) == []
+    (out / "FETCHED.md").write_text(changed)
+    assert compared(site, snapshot, out) != [], "the present form is judged"
+    (out / "FETCHED.md").write_text(changed.replace("form 1 of", "form 2 of"))
+    assert compared(site, snapshot, out) == [
+        "FETCHED.md is of form 2, which a later xippios-core writes: this one writes and "
+        "judges form 1"
+    ]
+    (out / "FETCHED.md").unlink()
+    assert compared(site, snapshot, out) == []
+
+
+def test_fetched_md_ends_with_the_mark_of_its_form(site: Site, out: Path) -> None:
+    """The frame's last line of FETCHED.md names the file's form, one line that the check
+    tells exactly."""
+    assert upstream.FORM == 1
+    assert go(declare(out, Page(site.page("guide.html", "<p>Guide</p>"), "pages/guide.html"))) == 0
+    assert fetched(out).endswith(f"`\n\n{MARK}\n")
+
+
+def response(
+    url: str,
+    body: bytes = b"x",
+    *,
+    status: int = 200,
+    kind: str = "text/html",
+    etag: str | None = None,
+    modified: str | None = None,
+    redirects: tuple[tuple[int, str], ...] = (),
+) -> Response:
+    return Response(url, status, body, kind, etag, modified, redirects)
+
+
+def every_sentence_rendered() -> str:
+    """FETCHED.md rendered from made-up rows that reach every sentence and cell the frame
+    writes, with and without each option."""
+    plain = Snapshot(name="Plain", slug="plain", pages=(Page(f"{BASE}/a.html", "pages/a.html"),))
+    first = upstream.render_fetched(
+        plain,
+        [Row(plain.pages[0], response(f"{BASE}/a.html"), b"x")],
+        "2026-11-22T09:00:00Z",
+        False,
+    )
+    guide = Page(GUIDE, "pages/guide.md", note="converted")
+    part = Page(f"{BASE}/fas.json", "openapi/part.json", excerpt=True)
+    sample = Page(f"{API}/items", "samples/items.json", sample=True, keyed=True)
+    wadl = Page(f"{BASE}/api.wadl", "wadl/api.wadl", keep_recorded=True)
+    toc = Page(f"{BASE}/toc.html", split=True, note="one file per heading")
+    faq = Page(f"{BASE}/faq", "pages/faq.html", origin="https://origin.example.net/faq")
+    status = Page(f"{BASE}/status", stable=False, note="a nonce")
+    admin = Page(f"{BASE}/admin", status=302, note="a login")
+    pdf = Page(f"{BASE}/layout.pdf", "files/layout.pdf")
+    refused = replace(faq, file=None, status=403, origin=None, stable=False, note="kept elsewhere")
+    full = Snapshot(
+        name="Full",
+        slug="full",
+        pages=(guide, part, sample, wadl, toc, faq, status, admin, pdf),
+        attribution=(
+            Statement("\N{COPYRIGHT SIGN} 2026 Example Ltd.", GUIDE, "the footer"),
+            Statement("Terms of Service", GUIDE, "the footer", "https://example.org/tos"),
+            Statement("Copyright 2026 Example", pdf.url, "the PDF's producer"),
+            Statement("Copyright (c) Example", "", "the footer, read on 2026-11-18"),
+        ),
+        not_fetched=(NotFetched(FEED, "a feed"),),
+        vocabulary=("import license",),
+        capture="The first paragraph.\n\nThe second paragraph.",
+        pause=5.0,
+        sections=lambda rows: [Section("Products found", "| Product |\n| --- |\n| one |")],
+        quota_wait=lambda headers: 30.0,
+        credentials=Credentials(("EXAMPLE_ACCOUNT",), f"{API}/", lambda: dict[str, str]()),
+    )
+    modified = "Mon, 16 Nov 2026 10:00:00 GMT"
+    rows = [
+        Row(
+            guide,
+            response(GUIDE, etag='W/"5-abc"', modified=modified, redirects=((301, f"{GUIDE}/"),)),
+            b"# Guide\n",
+            guide.note,
+        ),
+        Row(part, response(part.url, b'{"whole": 1}', kind="application/json"), b'{"part": 1}'),
+        Row(sample, response(sample.url, b"[]", kind="application/json"), b"[]"),
+        Row(wadl, response(wadl.url, b"<a/>", kind="application/xml", modified="0"), b"<a/>"),
+        Row(replace(toc, file="entries/a.md"), response(toc.url), b"a", toc.note),
+        Row(replace(toc, file="entries/b.md"), response(toc.url), b"b", toc.note),
+        Row(refused, response(faq.url, b"", status=403), None, refused.note),
+        Row(faq, response("https://origin.example.net/faq"), b"x"),
+        Row(status, response(status.url, etag='"nonce"', modified=modified), None, status.note),
+        Row(
+            admin,
+            response(admin.url, b"", status=302, redirects=((302, "https://login.example.net/"),)),
+            None,
+            admin.note,
+        ),
+        Row(pdf, response(pdf.url, b"%PDF-1.4", kind="application/pdf"), b"%PDF-1.4"),
+    ]
+    return first + upstream.render_fetched(full, rows, "2026-11-22T09:00:00Z", True)
+
+
+FORMS = {
+    # pragma: allowlist nextline secret (a digest of the render, not a key)
+    1: "969ab954b6910825feaccddc075eb0550dc4e30f9178833d8760957456a1dd27",
+}
+"""The digest of ``every_sentence_rendered`` for each form of FETCHED.md, by its number."""
+
+
+def test_a_change_of_what_the_frame_writes_raises_the_form() -> None:
+    """https://github.com/xippios/sdk-core/issues/428: the check judges a file of the form the
+    frame writes, so a change of anything the frame writes into FETCHED.md raises FORM. A
+    change of the render fails here until FORM is raised and the new render's digest stands
+    under it, every earlier entry kept as it is."""
+    assert sorted(FORMS) == list(range(1, upstream.FORM + 1))
+    digest = hashlib.sha256(every_sentence_rendered().encode()).hexdigest()
+    assert digest == FORMS[upstream.FORM], (
+        f"the frame's render changed: raise FORM to {upstream.FORM + 1} in "
+        f"xippios/core/refresh/upstream.py and add {upstream.FORM + 1}: {digest!r} to FORMS"
+    )
+
+
 # --- the README's short script -----------------------------------------------------------
 
 
@@ -1223,3 +1719,7 @@ def test_the_readmes_short_script_runs_on_the_frame(site: Site, out: Path) -> No
         "terms.md",
     ]
     assert go(local, "--check") == 0
+    site.requests.clear()
+    assert refresh.compare_fetched(local) == [], "the family check holds what the frame wrote"
+    assert not site.requests
+    assert local.linked is Snapshot.linked, "a snapshot that links no page declares no linked"

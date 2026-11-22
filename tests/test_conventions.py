@@ -1,7 +1,8 @@
 """The sentences of `docs/conventions.md` that the cases of ADR-0043 stand on, and ADR-0055's,
 the preview rule of ADR-0050, the recording of a task's exchanges of ADR-0057, the names of a
-request's country codes of ADR-0056, and the review checklist's sentence that holds an adoption
-against the two lists of the handover's section for the release.
+request's country codes of ADR-0056, the check of the committed FETCHED.md of ADR-0046,
+decision 6, and the review checklist's sentence that holds an adoption against the two lists of
+the handover's section for the release.
 
 The organization's release check quotes the conventions from sdk-core's `main`, and a finding
 blocks only where it quotes the sentence that a change breaks
@@ -435,3 +436,54 @@ def test_each_rule_of_a_task_s_recording_is_one_sentence_that_cites_adr_0057(
     rule = sentence(section(10), phrase)
     for name in (TASK_RECORD, *names):
         assert name in rule, f"§10: {rule!r} does not name {name!r}"
+
+
+# §3, the snapshot: the check of the committed FETCHED.md without a request (sdk-core#426,
+# decided by the human in https://github.com/xippios/sdk-core/issues/428).
+
+SNAPSHOT_DECISION = "ADR-0046, decision 6"
+
+SNAPSHOT_RULES = [
+    pytest.param(
+        "names its `Snapshot` `SNAPSHOT` at its top level",
+        ("sends no request and writes no file", 'if __name__ == "__main__":', "the family check"),
+        id="s3-the-name-of-the-declaration",
+    ),
+    pytest.param(
+        "ends `FETCHED.md` with one line that names the file's form",
+        ("rewords what the frame writes into the file raises the form",),
+        id="s3-the-mark-of-the-form",
+    ),
+    pytest.param(
+        "The family check fails a source whose committed `FETCHED.md`",
+        ("differs from its `SNAPSHOT`", "the form of an ETag's cell", "a file without a row"),
+        id="s3-what-the-check-holds",
+    ),
+    pytest.param(
+        "What only a response knows is read back from the file and not judged",
+        ("sizes and hashes", "`linked`", "`split`", "`sections`", "second origin"),
+        id="s3-what-the-check-reads-back",
+    ),
+    pytest.param(
+        "A source passes the check while its script declares no `SNAPSHOT`",
+        ("no mark of the form its core writes", "held from its first refresh on"),
+        id="s3-what-the-check-passes",
+    ),
+]
+
+
+@pytest.mark.parametrize(("phrase", "names"), SNAPSHOT_RULES)
+def test_each_rule_of_the_check_of_fetched_md_is_one_sentence_that_cites_adr_0046(
+    phrase: str, names: tuple[str, ...]
+) -> None:
+    rule = sentence(section(3), phrase)
+    for name in (SNAPSHOT_DECISION, *names):
+        assert name in rule, f"§3: {rule!r} does not name {name!r}"
+
+
+def test_the_review_checklist_holds_the_name_the_family_check_reads() -> None:
+    # The family check passes a script that names its declaration otherwise, so the review
+    # holds the name (ADR-0046, decision 6).
+    item = checklist_item(2)
+    for name in ("`SNAPSHOT`", "`scripts/refresh_upstream.py`", SNAPSHOT_DECISION):
+        assert name in item, f"item 2 does not name {name!r}"
