@@ -28,7 +28,11 @@ the repository it reviews.
 2. **Fidelity** (ADR-0028; not the host's): upstream names and semantics, no cross-source
    normalisation; every parameter and default traceable to `docs/upstream/`, its
    hand-written `OBSERVED.md` included (conventions §3), or listed as an assumption in the
-   description.
+   description. A source's `scripts/refresh_upstream.py` on core's frame names its `Snapshot`
+   `SNAPSHOT` at its top level, which loads with no request and no write, its run under
+   `if __name__ == "__main__":`, since the family check holds the committed `FETCHED.md`
+   through that name alone and passes a script that names its declaration otherwise
+   (conventions §3; ADR-0046, decision 6).
 3. **Errors** (not the host's): mapped through the taxonomy (conventions §5) and the
    `classify` hook (§6); each shape `classify` maps is documented in `docs/upstream/` or
    recorded in a fixture that a test passes to it (ADR-0031, decision 2); a message names
