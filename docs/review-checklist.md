@@ -78,7 +78,8 @@ the repository it reviews.
     process holding its key draws on (ADR-0032, decision 7).
 11. **Core PR** (`sdk-core`, code added): it names the two consumers of what it adds (in
     its ADR, or in its description when it has none), or, in its ADR, the one-consumer
-    reason of ADR-0023 decision 3.
+    reason of ADR-0023 decision 3 or the fourth that ADR-0058, decision 1, adds: the
+    maintainer's decision on the closed design question of the step that adds the code.
 12. **Adoption PR** (conventions §15): judged against conventions §15 and nothing else,
     that is the definition of done's Adoption PR block with its Enforced by CI and
     Process blocks; it deletes only what the adoption itself makes dead (ADR-0039,

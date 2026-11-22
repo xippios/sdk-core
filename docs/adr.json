@@ -895,7 +895,12 @@
       "status": "Accepted",
       "date": "2026-11-21",
       "decided_by": "https://github.com/xippios/sdk-core/issues/371",
-      "amended": [],
+      "amended": [
+        {
+          "date": "2026-11-22",
+          "by": "https://github.com/xippios/sdk-core/issues/455"
+        }
+      ],
       "amends": [],
       "supersedes": [],
       "other": [],
@@ -979,6 +984,25 @@
       "status": "Accepted",
       "date": "2026-11-22",
       "decided_by": "https://github.com/xippios/sdk-core/issues/376",
+      "amended": [
+        {
+          "date": "2026-11-22",
+          "by": "https://github.com/xippios/sdk-core/issues/455"
+        }
+      ],
+      "amends": [],
+      "supersedes": [],
+      "other": [],
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-0058",
+      "number": 58,
+      "title": "A fourth reason for one consumer and what a core patch keeps compatible",
+      "path": "docs/adr/0058-a-fourth-reason-for-one-consumer-and-what-a-core-patch-keeps.md",
+      "status": "Accepted",
+      "date": "2026-11-22",
+      "decided_by": "https://github.com/xippios/sdk-core/issues/455",
       "amended": [],
       "amends": [],
       "supersedes": [],

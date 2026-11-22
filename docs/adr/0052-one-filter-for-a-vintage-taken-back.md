@@ -1,6 +1,6 @@
 # ADR-0052: One filter for a vintage taken back
 
-Status: Accepted · Date: 2026-11-21 · Decided by https://github.com/xippios/sdk-core/issues/371
+Status: Accepted · Date: 2026-11-21 · Decided by https://github.com/xippios/sdk-core/issues/371 · Amended 2026-11-22 by https://github.com/xippios/sdk-core/issues/455
 
 ## Context
 
@@ -83,3 +83,15 @@ request that built the helper.
   naive time with the helper.
 - The walk of a list bounded by `since` stays out, with one consumer
   (https://github.com/xippios/sdk-core/issues/149).
+
+## Amendment 2026-11-22
+
+https://github.com/xippios/sdk-core/issues/455 amends the third consequence, on `naive_time`'s one
+caller, from finding 2 of the organization's range review of core 0.4.1
+(https://github.com/xippios/sdk-core/pull/453#issuecomment-7082327015). `naive_time` enters core
+by reason (d), which ADR-0058, decision 1, adds to the three of ADR-0023, decision 3: the
+maintainer's decision on the closed design question of the step that added it, his answer on
+https://github.com/xippios/sdk-core/issues/371, part 1, that core ships the reader of a naive time
+with the helper. It is therefore no exception to ADR-0023, and the consequence's words that none
+of the three reasons admits it stay true of those three. Decisions 1 to 6 and the other
+consequences stand as written.
