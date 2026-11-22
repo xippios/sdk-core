@@ -293,6 +293,22 @@ def test_the_definition_of_done_words_an_adoption_s_fragment_as_item_9_does() ->
         assert name in lines[0], f"{lines[0]!r} does not name {name!r}"
 
 
+def test_the_definition_of_done_holds_an_adoption_against_the_handover_s_two_lists() -> None:
+    # The opener's list names what item 12 of the review checklist holds the adoption to, so
+    # an adoption meets before its review the two lists that its review reads.
+    block = DONE.read_text(encoding="utf-8").split("## Adoption PR", 1)[1].split("\n## ", 1)[0]
+    lines = [flat(line) for line in block.splitlines() if line.startswith("- [ ]")]
+    version = [line for line in lines if "the current conventions version applied" in line]
+    fragment = [line for line in lines if "changelog fragment" in line]
+    assert len(version) == len(fragment) == 1, "one line on the version, one on the fragment"
+    for line, names in (
+        (version[0], ("the conventions' rules changed since", HANDOVER_ROWS[1])),
+        (fragment[0], ("the changes that a source's callers see", HANDOVER_ROWS[0])),
+    ):
+        for name in ("`Adopting core X.Y.Z`", *names):
+            assert name in line, f"{line!r} does not name {name!r}"
+
+
 def test_both_questions_keep_the_record() -> None:
     # `coordinate decision show <question>` finds a record by its decider and its amendments.
     records = json.loads(INDEX.read_text(encoding="utf-8"))["records"]
