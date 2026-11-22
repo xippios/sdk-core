@@ -1,10 +1,11 @@
-- `record`, `record_sync` and `fixture_from_response` take `rewrite=`, a source's own step that
-  returns the scrubbed `Fixture` rewritten with the values it replaced, and nothing is written
+- `record`, `record_sync` and `fixture_from_response` take `rewrite=`, a source's own step, a
+  `Rewrite` of `xippios.core.testing`, that returns the scrubbed `Fixture` rewritten with the
+  values it replaced, and nothing is written
   while one of those values is left in the URL, a header value, a body or a string decoded from
   a JSON body. The order is the scrub, the step, the check and the one write, and `send_once`
   and `send_once_sync` send a recording's one request without the write, so no recorder builds
   a client for one attempt.
-  (ADR-0048, §10, https://github.com/xippios/sdk-core/issues/322, https://github.com/xippios/sdk-core/issues/281)
+  (ADR-0048, §10, https://github.com/xippios/sdk-core/issues/322, https://github.com/xippios/sdk-core/issues/281, https://github.com/xippios/sdk-core/issues/439)
   - Hand-apply: `scripts/record_fixture.py` (sdk-x) — deletes the client built with
     `RetryPolicy(max_attempts=1)`, `exchange`, `survivors`, `_strings`, `_masked` and its calls
     of `fixture_from_response` and `write_fixture`, and records with
