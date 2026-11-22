@@ -27,16 +27,19 @@
     `src/xippios/usda/nass/tasks.py` (sdk-usda-nass) — `split_ceiling`, `set_split_ceiling`,
     `mcp_add_options`, `mcp_apply_options` and the check of `_split_by_year` → one
     `Ceiling(20, unit="years", mcp=5, option="--split-years", help=..., source=SOURCE)`, its
-    two hooks under the two names, its `check` on the two-sided split before any call, the
-    split of `year__GE` alone keeping a refusal of its own after its count of the range
-    (https://github.com/xippios/sdk-core/issues/454), and its two passes → `fetch_periods` —
-    the copy core now holds, and the removal of `split_ceiling` and `set_split_ceiling`, which its 0.2.0 entry
-    named, breaks a caller's call, so it takes a `breaking` entry and a minor (§12) unless the
-    port keeps the two names (https://github.com/xippios/sdk-usda-nass/issues/86).
+    two hooks under the two names, its `check` on the two-sided split before any call, and its
+    two passes → `fetch_periods`, while on the split of `year__GE` alone, which checks after
+    its count of the whole range, the port words a refusal of its own that says that the count
+    was sent and no data fetched (https://github.com/xippios/sdk-core/issues/454) — the copy
+    core now holds, and the removal of `split_ceiling` and `set_split_ceiling`, which its 0.2.0
+    entry named, breaks a caller's call, so it takes a `breaking` entry and a minor (§12)
+    unless the port keeps the two names (https://github.com/xippios/sdk-usda-nass/issues/86).
     `tests/test_tasks.py` (sdk-usda-gats, sdk-usda-nass) — the refusal of a range over the
     ceiling, the setter's refusal and the option's help → core's wording, the class
-    `InvalidRequestError` and the option's name unchanged — the refusals are core's wording
-    now.
+    `InvalidRequestError` and the option's name unchanged, but for sdk-usda-nass's
+    `test_split_of_year_ge_alone_refuses_more_than_twenty_years_after_the_first_count`, whose
+    refusal after the first count stays the source's
+    (https://github.com/xippios/sdk-core/issues/454) — the refusals are core's wording now.
     `tests/test_slices.py` (sdk-usda-esr, sdk-usda-psd) — the refusals of a range over the
     ceiling → core's wording, the class `InvalidRequestError` unchanged, and the test that
     lowers the ceiling by patching `SERIES_MAX_YEARS`, sdk-usda-esr's

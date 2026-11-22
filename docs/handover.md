@@ -1501,18 +1501,19 @@ it does.
    answered, 2021 to 2022`, and sdk-usda-nass's pass over its counts may run on `fetch_periods`
    as its pass over its data does, since a year counted is a year answered
    (https://github.com/xippios/sdk-core/issues/443). sdk-usda-nass's split of `year__GE` alone
-   checks the range after its count of it and keeps a refusal of its own there, as its part
-   below says (https://github.com/xippios/sdk-core/issues/454). It reaches sdk-usda-esr,
-   sdk-usda-psd, sdk-usda-gats and sdk-usda-nass, and sdk-comtrade where its patch takes
-   `fetch_periods`
-   (https://github.com/xippios/sdk-comtrade/issues/36). Entry: under `changed`, the refusal's
-   wording, its class `InvalidRequestError` and the option's name unchanged, and the failure's
-   message. The port replaces sdk-usda-nass's `tasks.split_ceiling` and
-   `tasks.set_split_ceiling`, which its 0.2.0 entry named, and sdk-usda-gats's
-   `tasks.series_ceiling` and `tasks.set_series_ceiling`, which its changelog and its README
-   name, by one `Ceiling`: their removal breaks a caller's call, so it takes an entry of its own
-   under `breaking`, which makes the source's release a minor (§12), unless the port keeps the
-   two names (https://github.com/xippios/sdk-usda-nass/issues/86).
+   checks the range after its count of it, so on that path the port words a refusal of its own
+   that says that the count was sent, as its part below says, and its
+   `test_split_of_year_ge_alone_refuses_more_than_twenty_years_after_the_first_count` asserts
+   that refusal, not core's (https://github.com/xippios/sdk-core/issues/454). It reaches
+   sdk-usda-esr, sdk-usda-psd, sdk-usda-gats and sdk-usda-nass, and sdk-comtrade where its patch
+   takes `fetch_periods` (https://github.com/xippios/sdk-comtrade/issues/36). Entry: under
+   `changed`, the refusal's wording, its class `InvalidRequestError` and the option's name
+   unchanged, and the failure's message. The port replaces sdk-usda-nass's
+   `tasks.split_ceiling` and `tasks.set_split_ceiling`, which its 0.2.0 entry named, and
+   sdk-usda-gats's `tasks.series_ceiling` and `tasks.set_series_ceiling`, which its changelog
+   and its README name, by one `Ceiling`: their removal breaks a caller's call, so it takes an
+   entry of its own under `breaking`, which makes the source's release a minor (§12), unless
+   the port keeps the two names (https://github.com/xippios/sdk-usda-nass/issues/86).
 8. **What a write task's preview shows** (https://github.com/xippios/sdk-core/issues/182;
    ADR-0050). A write task's preview carries `reads`, the operations it read, `[]` for none,
    and the task's docstring says whether its preview reads first and what the read costs. It
@@ -2368,13 +2369,14 @@ the rules of 1.28.
     the check of `_split_by_year` → one `Ceiling(20, unit="years", mcp=5,
     option="--split-years", help=..., source=SOURCE)` and its two passes → `fetch_periods`
     (https://github.com/xippios/sdk-usda-nass/issues/56); the two-sided split takes
-    `Ceiling.check` before any call, while the split of `year__GE` alone, which checks the
-    range after its count of the whole range, keeps a refusal of its own for that path, which
-    says that the count was sent and no data was fetched, where core's says that nothing was
-    sent (https://github.com/xippios/sdk-core/issues/454); the removal of `split_ceiling` and
-    `set_split_ceiling`, which its 0.2.0 entry named, taking a `breaking` entry unless the port
-    keeps the two names, as the first list's seventh change says
-    (https://github.com/xippios/sdk-usda-nass/issues/86); `paged=True` for
+    `Ceiling.check` before any call, while on the split of `year__GE` alone, which checks the
+    range after its count of the whole range, the port words a refusal of its own that says
+    that the count was sent and no data was fetched, where core's says that nothing was sent,
+    and `test_split_of_year_ge_alone_refuses_more_than_twenty_years_after_the_first_count`
+    asserts the source's refusal, not core's (https://github.com/xippios/sdk-core/issues/454);
+    the removal of `split_ceiling` and `set_split_ceiling`, which its 0.2.0 entry named, taking
+    a `breaking` entry unless the port keeps the two names, as the first list's seventh change
+    says (https://github.com/xippios/sdk-usda-nass/issues/86); `paged=True` for
     `list_param_values`, `get_data` unpaged, and `get_county_yield`, `get_county_production`
     and `get_census_farms` paged only where one run is one keyed call
     (https://github.com/xippios/sdk-usda-nass/issues/55);
