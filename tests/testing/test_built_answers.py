@@ -441,6 +441,10 @@ def test_the_input_marks_an_exchange_that_a_helper_returns_to_the_recorder_alone
         f'def message_exchange(body, url=URL):\n    """The exchange {INPUT}"""\n',
     )
     assert lines(in_the_helpers) == [], "the helper's docstring reaches each call that hands it on"
+    # As in sdk-google-mail: another test's parameter binds the name in that test alone.
+    elsewhere = in_the_helpers + '\n\n@pytest.mark.parametrize("scrubbed", ["user@example.com"])\n'
+    elsewhere += "def test_an_address(scrubbed):\n    assert scrubbed\n"
+    assert lines(elsewhere) == [], "the module's function is followed at every other call"
     built_here = """
     import httpx
 
