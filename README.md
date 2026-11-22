@@ -1603,6 +1603,49 @@ print(response.json().get("insertId"))  # the record to delete after the recordi
 write_fixture(fixture_from_response(response, scrub=Scrub(secrets=[key])), path)
 ```
 
+A task that makes several calls, a search that lists messages and then reads each one, is
+recorded through the task itself with `record_task` (or `record_task_sync`). The task runs
+live as the MCP adapter runs it, a sync facade through its async twin, and every client it
+reaches, from a registry, a module or one it builds, hands over each answer it read, in the
+order the answers arrived, each request sent once and none answered from the cache, so the
+recorder needs no client of its own. Each exchange passes the frame above, the refusal of a
+1xx or a 3xx, the scrub, the step and the check, and only once every one passed are they
+written, under the task's name and numbered from the second (ADR-0057):
+
+```python
+from pathlib import Path
+
+from xippios.core.testing import Scrub, record_task_sync
+from xippios.example import tasks
+
+recorded = record_task_sync(
+    tasks.search_messages,
+    "demo",
+    q="newer_than:1y",
+    max_results=2,
+    fixtures=Path("tests/fixtures"),
+    case="ok",
+    scrub=Scrub(secrets=[key]),
+    rewrite=rewrite,
+)  # search_messages/ok.json, then ok_2.json and ok_3.json, a fixture each, in order
+```
+
+The task's own arguments go beside the helper's, and a task that takes `fixtures`, `case`,
+`scrub` or `rewrite` by keyword is refused before it runs, since those names are the
+helper's. A refusal of any exchange names its number, its file and the place, never the
+value, and writes nothing, nor does a task that raises; every request of the task was sent
+by then, so a write among them may have been applied. A task that raised on a 1xx or a 3xx
+answer, decoding a redirect's empty body say, or after one, is refused for that answer, its
+number and status named, the task's error as the cause. Answers are read whole, as the
+task's client reads them, so `max_read_bytes` bounds none of them. Two kinds of exchange
+are not recorded: a token request inside an auth flow, a login's or a refresh's, which keeps a
+fixture of its own (conventions §10), and a download, refused before it is sent, since its
+body goes to a file unread, so a task that downloads is recorded exchange by exchange with
+`record`. Requests that a task sends at once are numbered in the order their answers
+arrived. Where a numbered file of the case stands beyond the last exchange, as after a
+recording that made more, nothing is written and the error names the file, for the pull
+request to delete. `replay_fixture("search_messages", "ok_2")` replays each on its path.
+
 A download's replay fixture may carry as its body the sample its parser tests read, so
 the download replays that file. It is marked `sample`, with the whole file's size and
 sha256, and never `truncated`, which stays the recorder's cut:

@@ -1,5 +1,5 @@
 """The sentences of `docs/conventions.md` that the cases of ADR-0043 stand on, and ADR-0055's,
-and the preview rule of ADR-0050.
+the preview rule of ADR-0050, and the recording of a task's exchanges of ADR-0057.
 
 The organization's release check quotes the conventions from sdk-core's `main`, and a finding
 blocks only where it quotes the sentence that a change breaks
@@ -307,3 +307,47 @@ def test_the_preview_record_keeps_its_question() -> None:
     records = json.loads(INDEX.read_text(encoding="utf-8"))["records"]
     found = next(r for r in records if r["id"] == PREVIEW_RECORD)
     assert (found["decided_by"], found["amended"]) == (PREVIEW_QUESTION, [])
+
+
+# §10, the layout of fixtures and the recorder: the recording of every exchange of a task
+# (sdk-core#174, decided by the human in https://github.com/xippios/sdk-core/issues/376).
+
+TASK_RECORD = "ADR-0057"
+
+TASK_RULES = [
+    pytest.param(
+        "The exchanges of one recording of a task are numbered in the order the task made them",
+        (
+            "the first as `<case>.json`",
+            "from the second on, as `<case>_<k>.json`",
+            "beyond its last exchange writes nothing",
+            "ADR-0057, decision 6",
+        ),
+        id="s10-the-numbering",
+    ),
+    pytest.param(
+        "`record_task` records every exchange that a task makes through any client",
+        (
+            "each sent once",
+            "none answered from the cache",
+            "writes all of them or none",
+            "no token request inside an auth flow",
+            "refuses a task that downloads",
+        ),
+        id="s10-what-a-task-s-recording-holds",
+    ),
+    pytest.param(
+        "`record_task` reads every answer of a task whole",
+        ("as the task's client reads it", "`max_read_bytes` bounds none of them"),
+        id="s10-a-task-s-answers-read-whole",
+    ),
+]
+
+
+@pytest.mark.parametrize(("phrase", "names"), TASK_RULES)
+def test_each_rule_of_a_task_s_recording_is_one_sentence_that_cites_adr_0057(
+    phrase: str, names: tuple[str, ...]
+) -> None:
+    rule = sentence(section(10), phrase)
+    for name in (TASK_RECORD, *names):
+        assert name in rule, f"§10: {rule!r} does not name {name!r}"

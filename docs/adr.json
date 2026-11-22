@@ -885,6 +885,20 @@
       "supersedes": [],
       "other": [],
       "superseded_by": null
+    },
+    {
+      "id": "ADR-0057",
+      "number": 57,
+      "title": "The recording of every exchange of a task",
+      "path": "docs/adr/0057-the-recording-of-every-exchange-of-a-task.md",
+      "status": "Accepted",
+      "date": "2026-11-22",
+      "decided_by": "https://github.com/xippios/sdk-core/issues/376",
+      "amended": [],
+      "amends": [],
+      "supersedes": [],
+      "other": [],
+      "superseded_by": null
     }
   ]
 }
