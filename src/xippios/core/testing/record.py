@@ -24,8 +24,15 @@ import httpx
 
 from xippios.core._loop import as_async, sync
 from xippios.core.client import AsyncClient
-from xippios.core.client._core import _CLIENT_AUTH, Params, _ClientAuth, _collecting
+from xippios.core.client._core import (
+    _CLIENT_AUTH,
+    Params,
+    _ClientAuth,
+    _collecting,
+    _Collector,
+)
 from xippios.core.testing.fixtures import (
+    _WRITE_SENT,
     Fixture,
     Rewrite,
     _check_cut,
@@ -282,8 +289,12 @@ async def record_task(
     exchange passed is anything written: the first at ``fixture_path(fixtures, <task>,
     case)``, ``<task>`` the task's name without ``_async``, and the k-th, from the second
     on, at ``<case>_<k>.json`` beside it (decision 6). A refusal of any exchange, a task
-    that raises and a task that sends no request write nothing. Every request of the task
-    was sent by then: a write among them may have been applied.
+    that raises and a task that sends no request write nothing. A task's error is raised as
+    it came, unless an answer of a 1xx or a 3xx or a download came before it: the frame's
+    refusal of the first of them is raised then, the task's error as its cause, since the
+    recorder refuses such an answer on every path, whatever the task made of it (ADR-0048,
+    decision 4). Every request of the task was sent by then: a write among them may have
+    been applied.
 
     Args:
         task: The task, e.g. ``tasks.search_messages`` or ``tasks.search_messages_async``;
@@ -308,11 +319,14 @@ async def record_task(
         RuntimeError: A task is recorded inside another recording; the task does not run.
         ValueError: The task downloaded, the message naming the exchange's number and the
             request; it sent no request; a refusal of the frame for an exchange, the message
-            naming the exchange's number, its file and the place within the fixture, never a
-            value; or a numbered file of the case stands beyond the last exchange, as when a
-            task is recorded again with fewer exchanges, the message naming each: delete it
-            in the pull request, or record under another case. Nothing is written.
-        Exception: What the task raised, as it came; nothing is written.
+            naming the exchange's number, its file and the place within the fixture or the
+            status of a 1xx or a 3xx, never a value, also where the task raised on such an
+            answer or after it, its error the cause; or a numbered file of the case stands
+            beyond the last exchange, as when a task is recorded again with fewer exchanges,
+            the message naming each: delete it in the pull request, or record under another
+            case. Nothing is written.
+        Exception: What the task raised, as it came, where no 1xx or 3xx answer and no
+            download came before it; nothing is written.
     """
     _check_rewrite(rewrite)
     name = _task_name(task)
@@ -321,22 +335,22 @@ async def record_task(
     with _collecting() as collector:
         try:
             await target(*args, **kwargs)
-        except Exception:
-            if collector.download is None:
+        except Exception as exc:
+            refusal = _refusal_before_the_error(collector, fixtures, name, case)
+            if refusal is None:
                 raise
-            raise ValueError(_download_refusal(name, *collector.download)) from None
-        if collector.download is not None:
-            raise ValueError(_download_refusal(name, *collector.download))
-    answers = collector.answers
-    if not answers:
+            raise refusal from exc
+    answers, download = collector.answers, collector.download
+    before = answers if download is None else answers[: download[0] - 1]
+    if not answers and download is None:
         raise ValueError(
             f"the task {name} sent no request through a client, so there is nothing to "
             "record; nothing is written"
         )
     count = len(answers)
     built: list[tuple[Path, Fixture, str]] = []
-    for number, response in enumerate(answers, start=1):
-        path = fixture_path(fixtures, name, case if number == 1 else f"{case}_{number}")
+    for number, response in enumerate(before, start=1):
+        path = _fixture_file(fixtures, name, case, number)
         try:
             fixture = fixture_from_response(response, scrub=scrub, rewrite=rewrite)
             text = fixture_text(fixture)
@@ -345,6 +359,8 @@ async def record_task(
         except TypeError as exc:
             raise TypeError(_exchange_refusal(name, number, count, path, exc)) from None
         built.append((path, fixture, text))
+    if download is not None:
+        raise ValueError(_download_refusal(name, *download))
     _refuse_stale(fixtures / name, name, case, count)
     for path, _, text in built:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -353,6 +369,32 @@ async def record_task(
 
 
 record_task_sync = sync(record_task)
+
+
+def _fixture_file(fixtures: Path, name: str, case: str, number: int) -> Path:
+    """The file of exchange ``number``: ``<case>.json`` for the first, ``<case>_<k>.json`` after."""
+    return fixture_path(fixtures, name, case if number == 1 else f"{case}_{number}")
+
+
+def _refusal_before_the_error(
+    collector: _Collector, fixtures: Path, name: str, case: str
+) -> ValueError | None:
+    """The frame's refusal of the first 1xx or 3xx answer or download before a task's error.
+
+    The recorder refuses an answer that is no final answer of its operation on every path
+    (ADR-0048, decision 4), so a task that raised on one, decoding a redirect's empty body
+    say, or after one, is refused for it, the exchange's number and its status named, and
+    not by its own error alone; ``None`` when the task met neither.
+    """
+    answers, download = collector.answers, collector.download
+    last = len(answers) if download is None else download[0] - 1
+    for number, response in enumerate(answers[:last], start=1):
+        try:
+            _refuse_interim(response)
+        except ValueError as exc:
+            path = _fixture_file(fixtures, name, case, number)
+            return ValueError(_exchange_refusal(name, number, len(answers), path, exc))
+    return None if download is None else ValueError(_download_refusal(name, *download))
 
 
 def _task_name(task: Callable[..., Any]) -> str:
@@ -392,10 +434,15 @@ def _refuse_clash(task: Callable[..., Any], name: str) -> None:
 
 
 def _exchange_refusal(name: str, number: int, count: int, path: Path, exc: Exception) -> str:
-    """The message of a refused exchange: its number, its file and the frame's reason."""
+    """The message of a refused exchange: its number, its file and the frame's reason.
+
+    The reason's own clause that a write may have been applied gives way to the task's, which
+    says it of every request, so the message says it once.
+    """
+    reason = str(exc).removesuffix(_WRITE_SENT)
     return (
         f"the task {name}: exchange {number} of {count} ({name}/{path.name}) is refused, and "
-        f"no fixture of the task is written: {exc}; {_SENT} (ADR-0057)"
+        f"no fixture of the task is written: {reason}; {_SENT} (ADR-0057)"
     )
 
 

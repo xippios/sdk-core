@@ -460,6 +460,8 @@ _FINAL = (
     "or a 5xx, and writes nothing (ADR-0048)"
 )
 _SAFE = frozenset({"GET", "HEAD", "OPTIONS"})
+_WRITE_SENT = "; the request was sent, so a write may have been applied"
+"""The close of the refusal of a 1xx or a 3xx answer to a write, which ``record_task`` words."""
 
 
 def _refuse_interim(response: httpx.Response) -> None:
@@ -491,9 +493,7 @@ def _refuse_interim(response: httpx.Response) -> None:
     else:
         return
     phrase = f" {response.reason_phrase}" if response.reason_phrase else ""
-    sent = ""
-    if response.request.method not in _SAFE:
-        sent = "; the request was sent, so a write may have been applied"
+    sent = "" if response.request.method in _SAFE else _WRITE_SENT
     raise ValueError(
         f"{request_description(response)} answered HTTP {status}{phrase}, {_FINAL}; {instead}{sent}"
     )
