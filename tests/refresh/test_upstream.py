@@ -1553,6 +1553,150 @@ def test_a_refused_origin_and_a_redirect_are_read_back(site: Site, out: Path) ->
     assert f"should hold: | pages/faq.html | {canonical} |" in given
 
 
+# Findings 1 and 2 of the review of https://github.com/xippios/sdk-core/pull/429, and what more
+# the frame writes one way and the check could read another: each shape below is a file as the
+# frame wrote it, which the check passes.
+
+AWKWARD_NOTES = [
+    pytest.param("1 bytes ", id="a-space-at-the-end"),
+    pytest.param(" opening with a space", id="a-space-at-the-start"),
+    pytest.param("  ", id="spaces-alone"),
+    pytest.param("one line\N{LINE SEPARATOR}and a line separator", id="a-line-separator"),
+    pytest.param("one line\x85and a next-line mark", id="a-next-line-mark"),
+    pytest.param("a pipe | and a backslash \\", id="a-pipe-and-a-backslash"),
+]
+
+
+@pytest.mark.parametrize("note", AWKWARD_NOTES)
+def test_a_cell_is_read_as_the_frame_writes_it(site: Site, out: Path, note: str) -> None:
+    """Finding 1: a cell keeps its own white space and the characters that split a text into
+    lines but not a line of FETCHED.md, in a note that ``note`` makes and in the note of a page
+    that ``linked`` found, both read back."""
+    index = site.page("index.html", "<p>Index</p>")
+    found = site.page("found.html", "<p>Found</p>")
+
+    def made(row: Row) -> str:
+        return note
+
+    by_hook = declare(out, Page(index, "pages/index.html", note="the index"), note=made)
+    assert go(by_hook) == 0
+    site.requests.clear()
+    site.sleeps.clear()
+    assert compared(site, by_hook, out) == []
+
+    def linked(row: Row) -> tuple[Page, ...]:
+        return (Page(found, "pages/found.html", note=note),) if row.page.url == index else ()
+
+    by_link = declare(out, Page(index, "pages/index.html", note="the index"), linked=linked)
+    assert go(by_link) == 0
+    site.requests.clear()
+    site.sleeps.clear()
+    assert compared(site, by_link, out) == []
+
+
+def test_a_carriage_return_is_read_where_the_frame_or_the_checkout_put_it(
+    site: Site, out: Path
+) -> None:
+    """A note holding a carriage return stays one line, and a checkout that ends every line of
+    the file the frame wrote in CRLF passes."""
+
+    def note(row: Row) -> str:
+        return "one line\rand a carriage return"
+
+    snapshot = declare(out, Page(site.page("a.html", "<p>A</p>"), "pages/a.html"), note=note)
+    assert go(snapshot) == 0
+    site.requests.clear()
+    site.sleeps.clear()
+    assert compared(site, snapshot, out) == []
+    plain = declare(out, Page(site.page("a.html", "<p>A</p>"), "pages/a.html"))
+    assert go(plain) == 0
+    site.requests.clear()
+    site.sleeps.clear()
+    path = out / "FETCHED.md"
+    path.write_bytes(path.read_bytes().replace(b"\n", b"\r\n"))
+    assert compared(site, plain, out) == []
+
+
+def test_a_declared_note_that_reads_like_a_redirect_is_the_page_s(site: Site, out: Path) -> None:
+    """A page's own note that the frame's redirect clause could be read as, alone and after a
+    redirect the page followed, is judged as the declaration gives it."""
+    site.routes[f"{BASE}/old.html"] = (301, {"Location": GUIDE}, b"")
+    site.page("guide.html", "<p>Guide</p>")
+    own = f"redirected (301) to {BASE}/v2/guide.html"
+    snapshot = declare(
+        out,
+        Page(site.page("a.html", "<p>A</p>"), "pages/a.html", note=own),
+        Page(f"{BASE}/old.html", "pages/guide.html", note=own),
+    )
+    assert go(snapshot) == 0
+    site.requests.clear()
+    site.sleeps.clear()
+    assert compared(site, snapshot, out) == []
+    lines = compared(site, pages_replaced(snapshot, 1, note="moved"), out)
+    assert any(" should hold: " in line and line.endswith("; moved |") for line in lines), lines
+
+
+@pytest.mark.parametrize(
+    ("capture", "section"),
+    [
+        pytest.param(
+            "## A paragraph that opens like a heading\n\nThe second paragraph.",
+            "- one",
+            id="a-capture-that-opens-like-a-heading",
+        ),
+        pytest.param(
+            # 87 columns of words: the wrap at 88 puts "##" at the second line's start
+            " ".join(["eighty-six"] * 7) + " characters ## read like a heading once wrapped.",
+            "- one",
+            id="a-capture-wrapped-to-a-heading",
+        ),
+        pytest.param(
+            "## Files and pages\n\nA paragraph named as the frame's heading.",
+            "- one",
+            id="a-capture-named-as-the-table-s-heading",
+        ),
+        pytest.param(
+            "The capture.",
+            "\n".join(
+                [
+                    "## Files and pages",
+                    "",
+                    TABLE_HEADER,
+                    "| --- " * 9 + "|",
+                    "| quoted.md | https://example.org/q | - | 200 | - | - | - | - | - |",
+                ]
+            ),
+            id="a-section-that-quotes-the-frame-s-table",
+        ),
+    ],
+)
+def test_a_source_s_own_text_that_reads_like_the_frame_s_is_its_own(
+    site: Site, out: Path, capture: str, section: str
+) -> None:
+    """Finding 2: in a snapshot that declares ``sections``, a line of the capture or of a section
+    that reads like a heading or a table of the frame's is the source's own text, judged where
+    the declaration gives it and read back where an answer does; a paragraph added to the
+    capture by hand is still named."""
+
+    def sections(rows: Sequence[Row]) -> list[Section]:
+        return [Section("Found", section)]
+
+    snapshot = declare(
+        out,
+        Page(site.page("guide.html", "<p>Guide</p>"), "pages/guide.html", note="as served"),
+        not_fetched=(NotFetched(FEED, ""),),
+        capture=capture,
+        sections=sections,
+    )
+    assert go(snapshot) == 0
+    site.requests.clear()
+    site.sleeps.clear()
+    assert compared(site, snapshot, out) == []
+    edit(out, "\n## Found\n", "\nA paragraph added by hand.\n\n## Found\n")
+    lines = compared(site, snapshot, out)
+    assert any(re.match(r"line \d+ holds: A paragraph added by hand\.$", line) for line in lines)
+
+
 def test_a_file_the_frame_has_not_written_in_its_form_is_not_judged(site: Site, out: Path) -> None:
     """A missing file, a file without the mark, as a copy's or sdk-template's stub, and a file
     of an older form pass until the next run that fetches; a file of a later form is named,
@@ -1596,7 +1740,9 @@ def response(
 
 def every_sentence_rendered() -> str:
     """FETCHED.md rendered from made-up rows that reach every sentence and cell the frame
-    writes, with and without each option."""
+    writes, with and without each option: a pipe escaped in a cell, and an ETag in a longer
+    fence and in a padded one among them (finding 3 of the review of
+    https://github.com/xippios/sdk-core/pull/429)."""
     plain = Snapshot(name="Plain", slug="plain", pages=(Page(f"{BASE}/a.html", "pages/a.html"),))
     first = upstream.render_fetched(
         plain,
@@ -1640,7 +1786,12 @@ def every_sentence_rendered() -> str:
             b"# Guide\n",
             guide.note,
         ),
-        Row(part, response(part.url, b'{"whole": 1}', kind="application/json"), b'{"part": 1}'),
+        Row(
+            part,
+            response(part.url, b'{"whole": 1}', kind="application/json", etag="`x`"),
+            b'{"part": 1}',
+            "a pipe | and a backslash \\",
+        ),
         Row(sample, response(sample.url, b"[]", kind="application/json"), b"[]"),
         Row(wadl, response(wadl.url, b"<a/>", kind="application/xml", modified="0"), b"<a/>"),
         Row(replace(toc, file="entries/a.md"), response(toc.url), b"a", toc.note),
@@ -1661,9 +1812,12 @@ def every_sentence_rendered() -> str:
 
 FORMS = {
     # pragma: allowlist nextline secret (a digest of the render, not a key)
-    1: "969ab954b6910825feaccddc075eb0550dc4e30f9178833d8760957456a1dd27",
+    1: "e83f272985a1b77673b0fcd0a3784ea5270d2c86badab872e55313a17cebc5f3",
 }
-"""The digest of ``every_sentence_rendered`` for each form of FETCHED.md, by its number."""
+"""The digest of ``every_sentence_rendered`` for each form of FETCHED.md, by its number.
+
+An entry stands as it is once a release of core writes its form; form 1 took its digest again
+while unreleased, when the render gained its escaped pipe and its padded code span."""
 
 
 def test_a_change_of_what_the_frame_writes_raises_the_form() -> None:
