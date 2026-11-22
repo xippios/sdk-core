@@ -532,38 +532,52 @@ def test_each_rule_of_the_check_of_fetched_md_is_one_sentence_that_cites_adr_004
         assert name in rule, f"§3: {rule!r} does not name {name!r}"
 
 
-# §3, the snapshot: what the frame's attribution check reads and accepts (decided by the human in
-# https://github.com/xippios/sdk-core/issues/437), and the rule on an API document's `info` that
-# only the code and its tests stated (https://github.com/xippios/sdk-x/issues/57).
+# §3, the snapshot: what the frame's attribution check reads and accepts, by the maintainer's
+# answer on https://github.com/xippios/sdk-core/issues/437 (ADR-0046, decision 7), and the rule
+# on an API document's `info` that only the code and its tests stated
+# (https://github.com/xippios/sdk-x/issues/57), which no question decided and ADR-0046 states in
+# its Consequences (finding 2 of the review of https://github.com/xippios/sdk-core/pull/451).
 
 ATTRIBUTION_DECISION = "ADR-0046, decision 7"
+ATTRIBUTION_CONSEQUENCES = "ADR-0046, Consequences"
 
 ATTRIBUTION_RULES = [
     pytest.param(
         "The frame's attribution check reads an HTML page's visible text",
-        ("alternative text", "where the image stands", "no other attribute", "a sample"),
+        ATTRIBUTION_DECISION,
+        (
+            "alternative text",
+            "where the image stands",
+            "no other attribute",
+            "without the alternative text",
+            "a sample",
+        ),
         id="s3-what-the-attribution-check-reads",
     ),
     pytest.param(
         "A statement recorded with a link passes the check only as the text of a link",
+        ATTRIBUTION_DECISION,
         ("on any page", "without a link", "vocabulary", "no HTML"),
         id="s3-a-statement-recorded-with-a-link",
     ),
     pytest.param(
         "An API document in JSON names a licence, terms or a contact in its `info`",
+        ATTRIBUTION_CONSEQUENCES,
         ("`license`", "`termsOfService`", "`contact`", "YAML"),
         id="s3-an-api-document-s-info",
     ),
 ]
 
 
-@pytest.mark.parametrize(("phrase", "names"), ATTRIBUTION_RULES)
+@pytest.mark.parametrize(("phrase", "record", "names"), ATTRIBUTION_RULES)
 def test_each_rule_of_the_attribution_check_is_one_sentence_that_cites_adr_0046(
-    phrase: str, names: tuple[str, ...]
+    phrase: str, record: str, names: tuple[str, ...]
 ) -> None:
     rule = sentence(section(3), phrase)
-    for name in (ATTRIBUTION_DECISION, *names):
+    for name in (record, *names):
         assert name in rule, f"§3: {rule!r} does not name {name!r}"
+    others = {ATTRIBUTION_DECISION, ATTRIBUTION_CONSEQUENCES} - {record}
+    assert not any(other in rule for other in others), f"§3: {rule!r} cites another part"
 
 
 def test_the_review_checklist_holds_the_name_the_family_check_reads() -> None:

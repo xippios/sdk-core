@@ -487,11 +487,14 @@ def test_a_second_link_with_the_statement_s_text_on_its_page_stops_the_run(
 
 def test_the_recorded_link_passes_on_every_page_that_prints_it(site: Site, out: Path) -> None:
     """sdk-google-mail records the link of a footer that seven pages print from one of them: it
-    passes on every page, its target absolute or relative to the page, and only its text leaves
-    the page, so other words of the page are still searched."""
+    passes on every page, its target absolute or relative to the page and written with white
+    space around it, which a browser strips as sdk-google-mail's script did (finding 1 of the
+    review of https://github.com/xippios/sdk-core/pull/451), and only its text leaves the page,
+    so other words of the page are still searched."""
     terms = f"{BASE}/legal/tos"
-    index = site.page("index.html", f"<footer><a href='{terms}'>Terms of Service</a></footer>")
-    guide = site.page("guide.html", "<p>Guide</p><footer><a href='/legal/tos'>Terms of Service</a>")
+    index = site.page("index.html", f"<footer><a href='{terms} '>Terms of Service</a></footer>")
+    footer = "<footer><a href=' /legal/tos '>Terms of Service</a></footer>"
+    guide = site.page("guide.html", f"<p>Guide</p>{footer}")
     statement = Statement("Terms of Service", index, "a link in the footer", terms)
     snapshot = declare(
         out,
@@ -613,6 +616,46 @@ def test_an_image_s_alternative_text_alone_is_read(site: Site, out: Path) -> Non
     )
     url = site.page("index.html", quiet)
     assert go(declare(out, Page(url, "pages/index.html"), attribution=(linked_terms(url),))) == 0
+
+
+@pytest.mark.parametrize(
+    "words",
+    [
+        pytest.param(
+            "Read the Terms of<img src='i.svg' alt='icon'> Service.", id="terms-of-service"
+        ),
+        pytest.param("Copy<img src='x.svg' alt='x'>right 2026 Example", id="copyright"),
+        pytest.param(
+            "Copy<img src='x.svg' alt='&copy; 2026 Example Ltd.'>right", id="a-recorded-alt-text"
+        ),
+    ],
+)
+def test_an_alternative_text_between_words_of_the_search_does_not_part_them(
+    site: Site, out: Path, words: str
+) -> None:
+    """Finding 3 of the review of https://github.com/xippios/sdk-core/pull/451: the words that
+    an image's alternative text stands between are searched as the text without it reads them,
+    as before the alternative text was read, so they stop the run, even where the alternative
+    text is a statement that the attribution records."""
+    notice = Statement("\N{COPYRIGHT SIGN} 2026 Example Ltd.", "", "the footer, read by hand")
+    url = site.page("index.html", f"<p>{words}</p>")
+    with pytest.raises(SystemExit, match="read without its images' alternative text"):
+        go(declare(out, Page(url, "pages/index.html"), attribution=(notice,)))
+
+
+def test_an_alternative_text_inside_a_recorded_link_is_part_of_its_text(
+    site: Site, out: Path
+) -> None:
+    """Finding 3 of the review of https://github.com/xippios/sdk-core/pull/451: an image with an
+    alternative text inside a recorded link, beside its words, is part of the link's text, so
+    the page no longer links the statement as recorded, and the statement recorded as the page
+    reads the link, its alternative text included, passes on the page."""
+    url = site.page("index.html", f"<footer><a href='{TOS}'><img alt='icon'> Terms of Service</a>")
+    page = Page(url, "pages/index.html")
+    with pytest.raises(SystemExit, match="no longer links 'Terms of Service'"):
+        go(declare(out, page, attribution=(linked_terms(url),)))
+    as_read = Statement("icon Terms of Service", url, "a link in the footer, its icon first", TOS)
+    assert go(declare(out, page, attribution=(as_read,))) == 0
 
 
 def test_check_compares_content_after_canonical(
