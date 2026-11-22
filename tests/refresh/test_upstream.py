@@ -420,6 +420,201 @@ def test_an_api_documents_info_states_only_what_the_attribution_records(
     assert go(declare(out, page, attribution=(Statement(quoted, url, f"info.{name}"),))) == 0
 
 
+# --- a statement recorded with a link, and an image's alternative text --------------------
+#
+# https://github.com/xippios/sdk-core/issues/437 (ADR-0046, decision 7): a statement recorded
+# with a link passes the search only as the text of a link to its target, on any page, while a
+# statement without a link and the vocabulary pass anywhere, and an image's alternative text is
+# text of the page where the image stands. The trial of the release met both
+# (https://github.com/xippios/sdk-google-mail/issues/72, https://github.com/xippios/sdk-x/issues/57,
+# https://github.com/xippios/sdk-cashctrl/issues/134).
+
+TOS = "https://example.org/tos"
+FOOTER = f"<footer><a href='{TOS}'>Terms of Service</a></footer>"
+
+
+def linked_terms(url: str) -> Statement:
+    """The footer's link to the terms, recorded from the page at ``url``."""
+    return Statement("Terms of Service", url, "a link in the footer", TOS)
+
+
+@pytest.mark.parametrize(
+    "words",
+    [
+        pytest.param("<p>By using the API you accept the Terms of Service.</p>", id="in-prose"),
+        pytest.param(
+            "<p>Read the <a href='https://example.org/terms'>Terms of Service</a>.</p>",
+            id="a-link-to-another-target",
+        ),
+    ],
+)
+def test_a_linked_statement_s_words_on_another_page_stop_the_run(
+    site: Site, out: Path, words: str
+) -> None:
+    """Misfit 1 of sdk-google-mail's trial: the words of a statement recorded with a link stop the
+    run on another page, in prose or as the text of a link to another target, as its script had
+    it, the stop naming the link that the words pass as, and nothing is written."""
+    index = site.page("index.html", f"<p>Index</p>{FOOTER}")
+    guide = site.page("guide.html", f"{words}{FOOTER}")
+    snapshot = declare(
+        out,
+        Page(index, "pages/index.html"),
+        Page(guide, "pages/guide.html"),
+        attribution=(linked_terms(index),),
+    )
+    with pytest.raises(
+        SystemExit, match=f"GET {re.escape(guide)}: the page states 'Terms of"
+    ) as stop:
+        go(snapshot)
+    named = f"records 'Terms of Service' as a link to {TOS}, and the check reads past it only"
+    assert named in str(stop.value)
+    assert not out.exists(), "nothing written"
+
+
+def test_a_second_link_with_the_statement_s_text_on_its_page_stops_the_run(
+    site: Site, out: Path
+) -> None:
+    """On the statement's own page the recorded link passes, and a link beside it with the same
+    text and another target stops the run."""
+    url = site.page("index.html", f"<p>Index</p>{FOOTER}")
+    snapshot = declare(out, Page(url, "pages/index.html"), attribution=(linked_terms(url),))
+    assert go(snapshot) == 0
+    other = "<p>Index, <a href='https://example.org/terms'>Terms of Service</a></p>"
+    site.page("index.html", f"{other}{FOOTER}")
+    with pytest.raises(SystemExit, match="the page states 'Terms of Service'"):
+        go(snapshot)
+
+
+def test_the_recorded_link_passes_on_every_page_that_prints_it(site: Site, out: Path) -> None:
+    """sdk-google-mail records the link of a footer that seven pages print from one of them: it
+    passes on every page, its target absolute or relative to the page, and only its text leaves
+    the page, so other words of the page are still searched."""
+    terms = f"{BASE}/legal/tos"
+    index = site.page("index.html", f"<footer><a href='{terms}'>Terms of Service</a></footer>")
+    guide = site.page("guide.html", "<p>Guide</p><footer><a href='/legal/tos'>Terms of Service</a>")
+    statement = Statement("Terms of Service", index, "a link in the footer", terms)
+    snapshot = declare(
+        out,
+        Page(index, "pages/index.html"),
+        Page(guide, "pages/guide.html"),
+        attribution=(statement,),
+    )
+    assert go(snapshot) == 0
+    site.page(
+        "guide.html", "<p>All rights reserved.</p><footer><a href='legal/tos'>Terms of Service"
+    )
+    with pytest.raises(SystemExit, match="the page states 'All rights reserved'"):
+        go(snapshot)
+
+
+def test_a_statement_without_a_link_and_the_vocabulary_pass_anywhere(site: Site, out: Path) -> None:
+    """sdk-comtrade's and sdk-faostat's statements carry no link and pass on every page as
+    before, a word of the vocabulary too, and so does a statement without a link that holds a
+    linked one's words, as sdk-google-mail's step of enabling an API does."""
+    notice = "\N{COPYRIGHT SIGN} 2026 Example Ltd."
+    step = "If prompted, read and accept the API's Terms of Service."
+    footer = "<footer>&copy; 2026 Example Ltd.</footer>"
+    index = site.page("index.html", f"<p>Index</p>{footer}{FOOTER}")
+    guide = site.page("guide.html", f"<p>{step} An import license is required.</p>{footer}")
+    snapshot = declare(
+        out,
+        Page(index, "pages/index.html"),
+        Page(guide, "pages/guide.html"),
+        attribution=(
+            Statement(notice, index, "the footer"),
+            linked_terms(index),
+            Statement(step, guide, "a step of enabling the API"),
+        ),
+        vocabulary=("import license",),
+    )
+    assert go(snapshot) == 0
+
+
+def test_a_page_that_is_no_html_has_no_link_for_a_linked_statement(site: Site, out: Path) -> None:
+    """A page that is no HTML has no link, so the words of a statement recorded with a link stop
+    the run there wherever they stand, as sdk-x's script searched its Markdown pages whole; a
+    statement without a link passes there as on any page."""
+    index = site.page("index.html", f"<p>Index</p>{FOOTER}")
+    notes = f"{BASE}/notes.md"
+    markdown = f"# Notes\n\nSee [Terms of Service]({TOS}).\n".encode()
+    site.routes[notes] = (200, {"Content-Type": "text/markdown; charset=utf-8"}, markdown)
+    snapshot = declare(
+        out,
+        Page(index, "pages/index.html"),
+        Page(notes, "pages/notes.md"),
+        attribution=(linked_terms(index),),
+    )
+    with pytest.raises(SystemExit, match=f"GET {re.escape(notes)}: the page states 'Terms of"):
+        go(snapshot)
+    unlinked = Statement("Terms of Service", notes, "a link of the Markdown page")
+    assert go(replace(snapshot, attribution=(linked_terms(index), unlinked))) == 0
+
+
+def test_an_api_document_s_licence_recorded_with_its_link_passes(site: Site, out: Path) -> None:
+    """sdk-x records its document's licence by its name, its URL the link: the document is no HTML,
+    and the licence, the terms and the contact of its ``info`` leave its text before the search,
+    so the statement passes as before."""
+    licence = {"name": "Example License", "url": "https://example.org/license"}
+    info = {"title": "Example", "license": licence, "termsOfService": licence["url"]}
+    url = site.page("openapi.json", json.dumps({"openapi": "3.1.0", "info": info, "paths": {}}))
+    statement = Statement(licence["name"], url, "info.license", licence["url"])
+    assert go(declare(out, Page(url, "openapi/openapi.json"), attribution=(statement,))) == 0
+
+
+def test_a_statement_in_an_image_s_alternative_text_is_checked_on_its_page(
+    site: Site, out: Path
+) -> None:
+    """Misfit 6 of sdk-cashctrl's trial: a notice that stands in the alternative text of the
+    footer's logo is read where the image stands, so the statement names its page, which must
+    print it, and FETCHED.md quotes it as printed there."""
+    statement = "\N{COPYRIGHT SIGN} 2026 Example Ltd. All rights reserved."
+    footer = (
+        "<footer><img src='logo.svg' alt='&copy; {} Example Ltd.'>All rights reserved.</footer>"
+    )
+    url = site.page("index.html", "<p>Guide</p>" + footer.format(2026))
+    where = "the alternative text of the footer's logo and the line after it"
+    snapshot = declare(
+        out, Page(url, "pages/index.html"), attribution=(Statement(statement, url, where),)
+    )
+    assert go(snapshot) == 0
+    assert f"`{statement}`, printed at {url}: {where}" in flat(fetched(out))
+    site.page("index.html", "<p>Guide</p>" + footer.format(2027))
+    with pytest.raises(SystemExit, match="no longer prints"):
+        go(snapshot)
+
+
+@pytest.mark.parametrize(
+    "image",
+    [
+        "<img src='logo.svg' alt='Copyright Example'>",
+        "<img src='logo.svg' alt='&copy; 2026 Example' />",
+        "<a href='https://example.org/'><img src='logo.svg' alt='Licensed under CC BY 4.0'></a>",
+    ],
+)
+def test_an_alternative_text_that_no_statement_records_stops_the_run(
+    site: Site, out: Path, image: str
+) -> None:
+    """An image's alternative text that holds a word of the search and that no statement records
+    stops the run, as any text of the page does."""
+    url = site.page("index.html", f"<p>Guide {image}</p>")
+    with pytest.raises(SystemExit, match="attribution does not record"):
+        go(declare(out, Page(url, "pages/index.html")))
+
+
+def test_an_image_s_alternative_text_alone_is_read(site: Site, out: Path) -> None:
+    """The decision names an image's alternative text and nothing else: a title, an aria-label,
+    an image inside a template and an empty alternative text state nothing, and an image inside
+    the recorded link is the link's text."""
+    quiet = (
+        "<p title='Terms of Service'>Guide</p><span aria-label='Copyright'>x</span>"
+        "<template><img src='old.png' alt='&copy; 2019 Old Owner'></template>"
+        "<img src='spacer.png' alt=''>"
+        f"<footer><a href='{TOS}'><img src='tos.png' alt='Terms of Service'></a></footer>"
+    )
+    url = site.page("index.html", quiet)
+    assert go(declare(out, Page(url, "pages/index.html"), attribution=(linked_terms(url),))) == 0
+
+
 def test_check_compares_content_after_canonical(
     site: Site, out: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -1617,6 +1812,72 @@ def test_a_carriage_return_is_read_where_the_frame_or_the_checkout_put_it(
     assert compared(site, plain, out) == []
 
 
+# https://github.com/xippios/sdk-core/issues/434: the frame wrote a value into its cell as given,
+# so a line feed broke the table, and --check split the file at every character that splits a
+# text into lines, where the frame splits it at line feeds alone.
+
+LINE_FEEDS = [
+    pytest.param("one line\nand a line feed", id="a-line-feed"),
+    pytest.param("one line\r\nand a carriage return with it", id="a-carriage-return-and-line-feed"),
+]
+
+
+@pytest.mark.parametrize("note", LINE_FEEDS)
+def test_a_line_feed_in_a_note_or_a_reason_keeps_its_row_on_one_line(
+    site: Site, out: Path, note: str
+) -> None:
+    """A line feed in a page's note, in a note that ``note`` makes and in a reason of Not
+    fetched is written as a space, as a paragraph of the frame writes it, so every row stays one
+    line, and ``--check`` and ``compare_fetched`` pass the file right after the write."""
+    site.routes[f"{BASE}/admin"] = (401, {}, b"")
+
+    def made(row: Row) -> str:
+        return note if row.page.file == "pages/b.html" else row.note
+
+    snapshot = declare(
+        out,
+        Page(site.page("a.html", "<p>A</p>"), "pages/a.html", note=note),
+        Page(site.page("b.html", "<p>B</p>"), "pages/b.html", note="as served"),
+        Page(f"{BASE}/admin", status=401, note=note),
+        not_fetched=(NotFetched(FEED, note),),
+        note=made,
+    )
+    assert go(snapshot) == 0
+    written = " ".join(note.split())
+    lines = fetched(out).split("\n")
+    assert sum(line.startswith("| pages/") for line in lines) == 2
+    assert sum(line.endswith(f"| {written} |") for line in lines) == 4, "two rows and two reasons"
+    assert all(line.startswith("| ") for line in lines if written in line)
+    assert go(snapshot, "--check") == 0
+    site.requests.clear()
+    site.sleeps.clear()
+    assert compared(site, snapshot, out) == []
+
+
+@pytest.mark.parametrize(
+    "note",
+    [
+        pytest.param("one line\rand a carriage return", id="a-carriage-return"),
+        pytest.param("one line\x85and a next-line mark", id="a-next-line-mark"),
+        pytest.param("one line\N{LINE SEPARATOR}and a line separator", id="a-line-separator"),
+        pytest.param("one line\x0cand a form feed", id="a-form-feed"),
+        pytest.param("one line\x1eand a record separator", id="a-record-separator"),
+    ],
+)
+def test_check_reads_the_file_at_its_line_feeds_as_the_frame_wrote_it(
+    site: Site, out: Path, note: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A note that holds a character that splits a text into lines, but not a line of
+    FETCHED.md, is written as given, and ``--check`` passes the file right after the write,
+    reading it at its line feeds as ``compare_fetched`` does."""
+    snapshot = declare(out, Page(site.page("a.html", "<p>A</p>"), "pages/a.html", note=note))
+    assert go(snapshot) == 0
+    assert f"| {note} |" in (out / "FETCHED.md").read_bytes().decode()
+    capsys.readouterr()
+    assert go(snapshot, "--check") == 0
+    assert "differs" not in capsys.readouterr().out
+
+
 def test_a_declared_note_that_reads_like_a_redirect_is_the_page_s(site: Site, out: Path) -> None:
     """A page's own note that the frame's redirect clause could be read as, alone and after a
     redirect the page followed, is judged as the declaration gives it."""
@@ -1742,7 +2003,8 @@ def every_sentence_rendered() -> str:
     """FETCHED.md rendered from made-up rows that reach every sentence and cell the frame
     writes, with and without each option: a pipe escaped in a cell, and an ETag in a longer
     fence and in a padded one among them (finding 3 of the review of
-    https://github.com/xippios/sdk-core/pull/429)."""
+    https://github.com/xippios/sdk-core/pull/429), and a line feed in a note and in a reason,
+    each written as a space (https://github.com/xippios/sdk-core/issues/434)."""
     plain = Snapshot(name="Plain", slug="plain", pages=(Page(f"{BASE}/a.html", "pages/a.html"),))
     first = upstream.render_fetched(
         plain,
@@ -1756,8 +2018,8 @@ def every_sentence_rendered() -> str:
     wadl = Page(f"{BASE}/api.wadl", "wadl/api.wadl", keep_recorded=True)
     toc = Page(f"{BASE}/toc.html", split=True, note="one file per heading")
     faq = Page(f"{BASE}/faq", "pages/faq.html", origin="https://origin.example.net/faq")
-    status = Page(f"{BASE}/status", stable=False, note="a nonce")
-    admin = Page(f"{BASE}/admin", status=302, note="a login")
+    status = Page(f"{BASE}/status", stable=False, note="a nonce,\nnew in every body")
+    admin = Page(f"{BASE}/admin", status=302, note="a login\r\non another host")
     pdf = Page(f"{BASE}/layout.pdf", "files/layout.pdf")
     refused = replace(faq, file=None, status=403, origin=None, stable=False, note="kept elsewhere")
     full = Snapshot(
@@ -1812,12 +2074,14 @@ def every_sentence_rendered() -> str:
 
 FORMS = {
     # pragma: allowlist nextline secret (a digest of the render, not a key)
-    1: "e83f272985a1b77673b0fcd0a3784ea5270d2c86badab872e55313a17cebc5f3",
+    1: "4a19cba319af24e05fc71ebd50586fe9b9d891cf6beb661b0cee492bcf997cf7",
 }
 """The digest of ``every_sentence_rendered`` for each form of FETCHED.md, by its number.
 
 An entry stands as it is once a release of core writes its form; form 1 took its digest again
-while unreleased, when the render gained its escaped pipe and its padded code span."""
+while unreleased, when the render gained its escaped pipe and its padded code span, and again
+when a line feed in a cell came to be written as a space
+(https://github.com/xippios/sdk-core/issues/434)."""
 
 
 def test_a_change_of_what_the_frame_writes_raises_the_form() -> None:
