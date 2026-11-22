@@ -1492,9 +1492,15 @@ it does.
 7. **A series over periods** (https://github.com/xippios/sdk-core/issues/315; ADR-0054). A
    range over a series' ceiling is refused in core's wording before the first request, naming
    the range, the ceiling, its unit and, where the MCP server's ceiling is lower, the option
-   that raises it, and a request after the first that fails raises its error, its class kept,
-   naming the periods fetched before it by their count, the first and the last, with nothing
-   returned. It reaches sdk-usda-esr, sdk-usda-psd, sdk-usda-gats and sdk-usda-nass, and
+   that raises it, and then, before its advice, that nothing was sent. A request after the
+   first that fails raises its error, its class kept, naming the periods answered before it by
+   their count, the first and the last, with nothing returned (ADR-0054, amendment 2026-11-22).
+   The tests of sdk-usda-esr, sdk-usda-psd, sdk-usda-gats and sdk-usda-nass that assert a
+   refusal over the ceiling or a failed period read these words, `Nothing was sent.` and `after
+   2 periods answered, 2021 to 2022`, and sdk-usda-nass's pass over its counts may run on
+   `fetch_periods` as its pass over its data does, since a year counted is a year answered
+   (https://github.com/xippios/sdk-core/issues/443). It reaches sdk-usda-esr, sdk-usda-psd,
+   sdk-usda-gats and sdk-usda-nass, and
    sdk-comtrade where its patch takes `fetch_periods`
    (https://github.com/xippios/sdk-comtrade/issues/36). Entry: under `changed`, the refusal's
    wording, its class `InvalidRequestError` and the option's name unchanged, and the failure's
@@ -1588,11 +1594,12 @@ the rules of 1.28.
     and sdk-usda-psd filter with `newer_than`, and sdk-usda-esmis, sdk-usda-wasde, sdk-faostat
     and sdk-eurostat keep their inclusive bounds
     (https://github.com/xippios/sdk-usda-esmis/issues/35).
-11. **A series over periods** (ADR-0054). A task states a period series' ceiling with
-    `Ceiling`, whose `check` refuses a range over it before the first request and whose two
-    methods are the tool set's option hooks, and sends the series with `fetch_periods`, which
-    passes over a period whose fetch raises one of `skip` and, on a later failure, returns
-    nothing and raises the error naming the periods fetched. sdk-usda-esr, sdk-usda-psd,
+11. **A series over periods** (ADR-0054, amended 2026-11-22). A task states a period series'
+    ceiling with `Ceiling`, whose `check` refuses a range over it before the first request,
+    saying that nothing was sent, and whose two methods are the tool set's option hooks, and
+    sends the series with `fetch_periods`, which passes over a period whose fetch raises one of
+    `skip` and, on a later failure, returns nothing and raises the error naming the periods
+    answered. sdk-usda-esr, sdk-usda-psd,
     sdk-usda-gats and sdk-usda-nass replace their ceilings, setters and loops, and sdk-comtrade
     keeps its ceiling in `validate_slice` (ADR-0054, Consequences).
 
