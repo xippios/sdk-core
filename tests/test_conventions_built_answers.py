@@ -73,6 +73,17 @@ RULES = [
         id="the-input-s-sentence",
     ),
     pytest.param(
+        "An exchange given to a recorder's step takes that sentence",
+        (
+            "where it reaches `fixture_from_response` alone",
+            "returned by a function of its module, each call of which is judged on its own",
+            "a function of the module that gives it to `fixture_from_response` alone",
+            "built in the test or takes a kind",
+            "decision 10",
+        ),
+        id="a-helper-s-exchange",
+    ),
+    pytest.param(
         "A replay that answers another request than its recording",
         (
             "its host, its path, its query or its body",
