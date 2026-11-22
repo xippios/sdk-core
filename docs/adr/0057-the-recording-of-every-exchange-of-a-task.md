@@ -63,9 +63,14 @@ not at all, and ADR-0048, decision 3, removes the client built for one attempt.
    through `fixture_from_response`, and its text is built in memory with `fixture_text`, before
    the first write. A refusal of any exchange raises, the message naming the exchange's number,
    the file it would have been written to and the place within the fixture, never a value, and no
-   file is written. A task that raises writes nothing, its error raised as it came, and neither
-   does a task that sends no request. Every request of the task was sent by the time a refusal
-   comes, so a write among them may have been applied.
+   file is written. A task that raises writes nothing, and neither does a task that sends no
+   request. The task's error is raised as it came, unless an answer of a 1xx or a 3xx or a
+   download came before it: the recording then raises the frame's refusal of the first of them,
+   the exchange's number and its status or request named, with the task's error as its cause,
+   since the recorder refuses such an answer on every path, whatever the task made of it
+   (ADR-0048, decision 4). The exchanges are judged in the order they were made. Every request of
+   the task was sent by the time a refusal comes, so a write among them may have been applied,
+   and the message says so once.
 6. **Numbering and place.** The fixtures stand under the task's name without `_async`, the first
    at `fixture_path(fixtures, <task>, case)` and the k-th, from the second on, at
    `<case>_<k>.json`. Where a numbered file of the case stands beyond the last exchange, as when a

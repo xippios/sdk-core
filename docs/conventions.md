@@ -1069,7 +1069,9 @@ standalone from the package. A task named in `BULK_TASKS` gets no route:
   task makes through any client, in order, each sent once, none answered from the cache and
   each through the frame of the next bullet, and writes all of them or none, but it records
   no token request inside an auth flow, which keeps a fixture of its own, and refuses a task
-  that downloads, whose body goes to a file unread (ADR-0057).
+  that downloads, whose body goes to a file unread (ADR-0057). `record_task` reads every
+  answer of a task whole, as the task's client reads it, so `max_read_bytes` bounds none of
+  them (ADR-0057).
 - The recorder scrubs in memory and writes once, so nothing unscrubbed touches disk, and
   names the values that must never be written (`xippios.core.testing.Scrub(secrets=...)`),
   or reads those known only from the answer, such as a login's or a refresh's tokens

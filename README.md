@@ -1634,8 +1634,11 @@ The task's own arguments go beside the helper's, and a task that takes `fixtures
 `scrub` or `rewrite` by keyword is refused before it runs, since those names are the
 helper's. A refusal of any exchange names its number, its file and the place, never the
 value, and writes nothing, nor does a task that raises; every request of the task was sent
-by then, so a write among them may have been applied. Two kinds of exchange are not
-recorded: a token request inside an auth flow, a login's or a refresh's, which keeps a
+by then, so a write among them may have been applied. A task that raised on a 1xx or a 3xx
+answer, decoding a redirect's empty body say, or after one, is refused for that answer, its
+number and status named, the task's error as the cause. Answers are read whole, as the
+task's client reads them, so `max_read_bytes` bounds none of them. Two kinds of exchange
+are not recorded: a token request inside an auth flow, a login's or a refresh's, which keeps a
 fixture of its own (conventions §10), and a download, refused before it is sent, since its
 body goes to a file unread, so a task that downloads is recorded exchange by exchange with
 `record`. Requests that a task sends at once are numbered in the order their answers
