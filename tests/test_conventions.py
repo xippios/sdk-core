@@ -6,8 +6,8 @@ the refusal of a hinted value of ADR-0041's amendment of 2026-11-22, the two sen
 period series that ADR-0054's amendment of 2026-11-22 words, a recorder's field of a request of
 ADR-0048, decision 7, the review checklist's sentence that holds an adoption against the two
 lists of the handover's section for the release, ADR-0058's decision 2, what a core patch keeps
-compatible, and ADR-0059's rule for code with one consumer, as the definition of done, the
-review checklist and §15 name it.
+compatible, ADR-0059's rule for code with one consumer, as the definition of done, the
+review checklist and §15 name it, and the publisher's shared package of ADR-0065 in §7 and §12.
 
 The organization's release check quotes the conventions from sdk-core's `main`, and a finding
 blocks only where it quotes the sentence that a change breaks
@@ -16,6 +16,7 @@ can be quoted alone, citing its record, and the review checklist's item that jud
 the record too. A later edit that splits a rule or drops its citation fails here.
 """
 
+import importlib.util
 import json
 import re
 from pathlib import Path
@@ -782,6 +783,113 @@ def test_section_6_repeats_a_read_alone_and_says_what_became_of_a_failed_write()
         "ADR-0011, amendment 2026-11-24",
     ):
         assert name in bearer, f"§7: {bearer!r} does not name {name!r}"
+
+
+# §7, §12 and the three records that ADR-0065 amends: core names no publisher, and a source
+# depends on its publisher's shared package (decided by the human in
+# https://github.com/xippios/sdk-core/issues/485).
+
+PUBLISHER_RECORD = "ADR-0065"
+PUBLISHER_QUESTION = "https://github.com/xippios/sdk-core/issues/485"
+
+
+def test_section_7_puts_a_shared_key_s_code_in_the_publisher_s_shared_package() -> None:
+    rule = sentence(section(7), "Code that several sources share for one key")
+    for name in (
+        "its reading",
+        "its issuer's documented answers",
+        "one `QuotaPolicy` per process for the key",
+        "their publisher's shared package and never in core",
+        "ADR-0065, decisions 1 and 3",
+    ):
+        assert name in rule, f"§7: {rule!r} does not name {name!r}"
+    for module in re.findall(r"`(xippios\.core(?:\.[a-z_]+)+)", section(7)):
+        assert importlib.util.find_spec(module), f"§7 names {module}, which core does not hold"
+
+
+SHARED_PACKAGE_RULES = [
+    pytest.param(
+        "A source may depend on its publisher's shared package",
+        (
+            "the rules that §11, §12 and §15 have for a dependency on another source package",
+            "public names in place of a task layer",
+            "on core and on no source",
+            "ADR-0021, amendment 2026-11-24",
+            "ADR-0065, decision 3",
+        ),
+        id="s12-the-dependency-on-a-publisher-s-shared-package",
+    ),
+    pytest.param(
+        "A publisher's shared package is held to",
+        (
+            "§1, §5, §6, §7, §10, §11, §12, §13 and §15",
+            "without `docs/upstream/`",
+            "to no other section",
+            "ADR-0065, decision 3",
+        ),
+        id="s12-the-sections-that-bind-a-publisher-s-shared-package",
+    ),
+]
+
+
+@pytest.mark.parametrize(("phrase", "names"), SHARED_PACKAGE_RULES)
+def test_each_rule_of_a_publisher_s_shared_package_is_one_sentence_of_section_12(
+    phrase: str, names: tuple[str, ...]
+) -> None:
+    rule = sentence(section(12), phrase)
+    for name in names:
+        assert name in rule, f"§12: {rule!r} does not name {name!r}"
+
+
+AMENDED_BY_PUBLISHER = {
+    "ADR-0032": ("decision 5 leaves core", "`xippios.usda.fas`", "one key variable"),
+    "ADR-0021": ("its publisher's shared package", "the task layer", "decision 2 binds nothing"),
+    "ADR-0025": (
+        "`xippios.core.google`",
+        "taken back",
+        "a shared package of their publisher",
+        # https://github.com/xippios/sdk-core/issues/524: the record's last amendment carries
+        # what ADR-0011's amendment changed of point (c), the resend after a status of renew_on.
+        "point (c)",
+        "holds for a read alone",
+        "a write refused with that status no second time",
+        "ADR-0011's amendment of 2026-11-24 (https://github.com/xippios/sdk-core/issues/480)",
+    ),
+}
+
+
+@pytest.mark.parametrize(("record", "names"), AMENDED_BY_PUBLISHER.items())
+def test_each_record_adr_0065_amends_takes_one_sentence_that_points_to_it(
+    record: str, names: tuple[str, ...]
+) -> None:
+    (amendment,) = amendments(record, "2026-11-24")
+    assert amendment.startswith(f"Amended by {PUBLISHER_RECORD} ({PUBLISHER_QUESTION}):")
+    assert amendment.endswith("."), f"{record}: the sentence ends its paragraph"
+    assert ". " not in amendment, f"{record}: one sentence"
+    for name in names:
+        assert name in amendment, f"{record}'s amendment does not name {name!r}"
+    records = json.loads(INDEX.read_text(encoding="utf-8"))["records"]
+    found = next(r for r in records if r["id"] == record)
+    assert found["amended"][-1] == {"date": "2026-11-24", "by": PUBLISHER_QUESTION}
+
+
+def test_the_record_that_core_names_no_publisher_keeps_its_question() -> None:
+    records = {r["id"]: r for r in json.loads(INDEX.read_text(encoding="utf-8"))["records"]}
+    found = records[PUBLISHER_RECORD]
+    assert (found["title"], found["decided_by"]) == ("Core names no publisher", PUBLISHER_QUESTION)
+
+
+def test_the_record_holds_the_organization_s_check_to_no_date_of_core_s_tag() -> None:
+    # The maintainer placed the organization's check after the sources' first wave
+    # (https://github.com/xippios/.github/issues/170), so core's own test holds the line alone.
+    checks = decisions(PUBLISHER_RECORD)[6]
+    for name in (
+        "https://github.com/xippios/.github/issues/169",
+        "https://github.com/xippios/.github/issues/170",
+        "after the sources' first wave",
+        "core's own test is the one check",
+    ):
+        assert name in checks, f"{PUBLISHER_RECORD}, decision 6, does not name {name!r}"
 
 
 # §8: what a write tool's preview shows, and its check (sdk-core#182, decided by the human in

@@ -29,9 +29,6 @@ It gives a source package the things that should be identical across the family:
   for an upstream that exchanges a login or a refresh token for a short-lived bearer. A
   source's documented error shapes go into `ClientConfig.classify`, consulted on every
   response.
-- **The api.data.gov gateway** (`xippios.core.data_gov`) for every source behind it:
-  the key from `DATA_GOV_API_KEY`, the gateway's error answers, and one quota policy per
-  process for that key.
 - **Tenants** (`xippios.core.tenants`) for a source whose upstream serves each tenant from
   a host or under a key of its own: `Tenants` declares them in the environment, one
   client each, `list_task` gives the tool that names them, and `TenantLock` binds a
@@ -239,7 +236,7 @@ answer (conventions §4, ADR-0054):
 
 ```python
 from xippios.core import Ceiling, InvalidRequestError, Result, ResultMeta, fetch_periods
-from xippios.core.data_gov import NoDataForYear
+from xippios.example.errors import NoDataForYear  # a NotFoundError of the source's own
 
 SERIES = Ceiling(10, unit="market years", source="example")  # the same over MCP
 
@@ -458,50 +455,11 @@ upstream is never longer than `window`. `install` sets the policy's two hooks on
 of the config and reads nothing else from it; a source that needs hooks of its own as
 well composes them itself.
 
-A source behind api.data.gov takes all of this from `xippios.core.data_gov`, together
-with its key and the gateway's documented answers. Every `Gateway` in a process shares
-one `QuotaPolicy`, `Gateway.policy`, since one key is one quota across every package that
-uses it:
-
-```python
-import re
-
-import httpx
-
-from xippios.core import AsyncClient, ClientConfig, NotFoundError, XippiosError
-from xippios.core.data_gov import Gateway
-
-DATA_PATH = re.compile(r"/api/psd/commodity/[^/]+/(?:country/[^/]+|world)/year/[^/]+")
-gateway = Gateway("usda-psd", data_path=DATA_PATH)
-
-
-def classify(response: httpx.Response) -> XippiosError | None:
-    error = gateway.classify(response)  # API_KEY_*, the 429, NOT_FOUND, NoDataForYear
-    if error is None and response.status_code == 404 and not response.content:
-        # the source's own documented answers follow the gateway's
-        error = NotFoundError(f"no data for {response.request.url.path}", source="usda-psd")
-    return error
-
-
-config = gateway.install(
-    ClientConfig(
-        source="usda-psd",
-        version="0.3.0",
-        base_url="https://api.fas.usda.gov",
-        classify=classify,
-    )
-)
-client = AsyncClient(config, auth=gateway.auth)  # X-Api-Key from DATA_GOV_API_KEY
-```
-
-The gateway's 429 is a `RateLimitError` in the source's name whose `retry_after` is the
-wait the shared policy keeps the quota spent for; once it is spent, the next request of
-any source in the process waits within the policy's cap or is refused before sending, as
-`api.data.gov`. FAS's answer for a market year it holds no data for, HTTP 404 with an
-empty `text/plain` body, is `NoDataForYear` of `xippios.core.data_gov`, a `NotFoundError`
-with the request's `path`, on the paths `data_path` matches and nowhere else. The gateway
-reads the answers of the base URL's origin alone: a file host's 429 is core's plain
-`RateLimitError`, not the gateway's.
+Clients that draw on one quota share one policy, as the sources that one key serves do in
+one process: the code that they share for that key, its reading, its issuer's documented
+answers and the one policy, stands in their publisher's shared package, which they depend on,
+and never in core (ADR-0065). A `classify` that words the refusal of a 429 reads `snapshot()`,
+which `observe` has updated from that answer before `classify` runs (ADR-0037, decision 1).
 
 A request the cache answers never waits: `before_request` runs after the cache lookup,
 and a cache hit carries the time its entry was stored in
@@ -2055,7 +2013,6 @@ fragment until the release assembles it.
 | --- | --- | --- |
 | `xippios.core.client` | httpx client, retries, rate limit, cache with a byte bound, quota policy, request hooks, the one key class, the renewing bearer, `get_answer`, `download`, `decode_csv` | alpha |
 | `xippios.core.errors` | taxonomy, `UnknownCode`, `QueryTooLarge`, the refusal of a query over upstream's limit, response classification, `request_description` | alpha |
-| `xippios.core.data_gov` | `Gateway`: the api.data.gov key, the gateway's `classify` of its own answers with `NoDataForYear` on a data path, one quota policy per process | alpha |
 | `xippios.core.redaction` | the one credential rule of the envelope, the recorder and replay, `REDACTED`, which a source's package imports from `xippios.core`, `register_data_name`, signed links | alpha |
 | `xippios.core.models` | `UpstreamModel` with `dump_upstream`, `Result`, `ResultMeta` with `published_at_naive` and `names`, the name of each country code of a request, `ResultCap` with `paged` and `keep`, `parse`, `newer_than`, the filter of a vintage taken back | alpha |
 | `xippios.core.reference` | the packaged JSON loader, `PackagedList`, its `codes` and their `check` of an argument (`PackagedCodes`), `names_codes`, `matches`, `closest`, `nearest`, generated `StrEnum`/`IntEnum` modules | alpha |

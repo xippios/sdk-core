@@ -165,7 +165,7 @@ def test_scrub_headers() -> None:
 
 
 def test_register_data_name_is_the_module_s() -> None:
-    # Imported by its path, as xippios.core.data_gov is (ADR-0032, decision 5).
+    # Imported by its path, from the module's own list (ADR-0059, decision 3).
     assert "register_data_name" in redaction.__all__
 
 

@@ -10,15 +10,15 @@ records in `docs/adr/`. A record changes, and this file follows when the script 
 - <a id="0011"></a>[ADR-0011](adr/0011-retries-and-non-idempotent-methods.md): Retries — a 429 for every method, a 5xx and a transport failure for idempotent ones · Accepted · 2026-10-23 · amended 2026-11-24
 - <a id="0017"></a>[ADR-0017](adr/0017-sensitive-upstream-fields.md): Sensitive upstream fields — personal identifiers stay out of task projections · Accepted · 2026-10-25
 - <a id="0020"></a>[ADR-0020](adr/0020-file-distributed-sources.md): File-distributed sources · Accepted · 2026-10-26 · amended 2026-11-24
-- <a id="0021"></a>[ADR-0021](adr/0021-dependencies-between-source-packages.md): Dependencies between source packages · Accepted · 2026-10-26
-- <a id="0025"></a>[ADR-0025](adr/0025-google-mail.md): Google Mail — loopback, the renewing bearer, scopes, the kit's return and the decoded view · Accepted · 2026-10-29 · amended 2026-11-18
+- <a id="0021"></a>[ADR-0021](adr/0021-dependencies-between-source-packages.md): Dependencies between source packages · Accepted · 2026-10-26 · amended 2026-11-24
+- <a id="0025"></a>[ADR-0025](adr/0025-google-mail.md): Google Mail — loopback, the renewing bearer, scopes, the kit's return and the decoded view · Accepted · 2026-10-29 · amended 2026-11-24
 - <a id="0026"></a>[ADR-0026](adr/0026-the-host-xippios-mcp.md): The host xippios-mcp · Accepted · 2026-10-29 · amended 2026-11-24
 - <a id="0027"></a>[ADR-0027](adr/0027-x-metered-content-source.md): X as a metered, content-bearing source · Accepted · 2026-10-30
 - <a id="0028"></a>[ADR-0028](adr/0028-upstream-fidelity.md): Upstream fidelity — no cross-source normalization in SDK packages · Accepted · 2026-11-18 · amended 2026-11-24
 - <a id="0029"></a>[ADR-0029](adr/0029-core-layout-and-mcp-sdk.md): Core internal layout, dependency direction and MCP SDK choice · Accepted · 2026-11-18
 - <a id="0030"></a>[ADR-0030](adr/0030-no-credentials-in-envelope.md): Credentials never enter the result envelope; core is exempt from the upstream snapshot · Accepted · 2026-11-18
 - <a id="0031"></a>[ADR-0031](adr/0031-hardening-from-the-first-source.md): Hardening core from the first source package · Accepted · 2026-11-18
-- <a id="0032"></a>[ADR-0032](adr/0032-one-key-per-issuer-for-shared-gateways.md): One key variable per issuer when one key serves several sources · Accepted · 2026-11-18
+- <a id="0032"></a>[ADR-0032](adr/0032-one-key-per-issuer-for-shared-gateways.md): One key variable per issuer when one key serves several sources · Accepted · 2026-11-18 · amended 2026-11-24
 - <a id="0033"></a>[ADR-0033](adr/0033-rate-limit-policy.md): Rate-limit policy — a fast pace, quotas spent, the 429 interpreted · Accepted · 2026-11-18
 - <a id="0034"></a>[ADR-0034](adr/0034-upstream-totals-in-the-result-envelope.md): Upstream totals in the result envelope · Accepted · 2026-11-18 · amended 2026-11-24
 - <a id="0035"></a>[ADR-0035](adr/0035-offline-tests-guaranteed-by-the-plugin.md): Offline tests guaranteed by the plugin · Accepted · 2026-11-18 · amended 2026-11-24
@@ -48,6 +48,7 @@ records in `docs/adr/`. A record changes, and this file follows when the script 
 - <a id="0062"></a>[ADR-0062](adr/0062-the-two-refresh-frames-one-declaration-one-table-header-the.md): The two refresh frames: one declaration, one table header, the fetch through the client and no check without a request · Accepted · 2026-11-24
 - <a id="0063"></a>[ADR-0063](adr/0063-the-server-from-a-tool-set.md): The server from a tool set · Accepted · 2026-11-24 · amended 2026-11-24
 - <a id="0064"></a>[ADR-0064](adr/0064-the-built-answer-check-its-mark-and-its-census-without.md): The built-answer check: its mark and its census, without following a body or the module's declarations · Accepted · 2026-11-24 · amended 2026-11-24
+- <a id="0065"></a>[ADR-0065](adr/0065-core-names-no-publisher.md): Core names no publisher · Accepted · 2026-11-24
 
 The superseded records follow, kept as written: the record that each status names holds its decision now.
 

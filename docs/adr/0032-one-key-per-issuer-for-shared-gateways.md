@@ -1,7 +1,8 @@
 # ADR-0032: One key variable per issuer when one key serves several sources
 
 Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under
-https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0009
+https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0009 · Amended 2026-11-24 by
+https://github.com/xippios/sdk-core/issues/485
 
 ## Context
 
@@ -90,3 +91,11 @@ and changes no decision; their history stays in ADR-0009.
 Conventions §1, §7 and §10, the review checklist's item 10, the definition of done's Process
 block, the README and the docstrings of `xippios.core.data_gov` state its decisions from
 1.28 on.
+
+## Amendment 2026-11-24
+
+Amended by ADR-0065 (https://github.com/xippios/sdk-core/issues/485): decision 5 leaves core
+with `xippios.core.data_gov`, which goes to the shared package `sdk-usda-fas` of the sources
+behind api.data.gov, import `xippios.usda.fas`, and whose first record takes the decision as it
+stands here, while decisions 1 to 4, 6 and 7, one key variable for each issuer among them, stand
+in core as written.

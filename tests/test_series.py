@@ -24,7 +24,6 @@ from xippios.core import (
     XippiosError,
     fetch_periods,
 )
-from xippios.core.data_gov import NoDataForYear
 from xippios.core.mcp import ToolSet, build_parser, main
 
 SOURCE = "example"
@@ -67,8 +66,12 @@ class Upstream:
             self.running -= 1
 
 
+class NoDataForYear(NotFoundError):
+    """The source's own error for a year that holds no data upstream, which its tasks skip."""
+
+
 def no_data(year: int) -> NoDataForYear:
-    return NoDataForYear(f"/api/example/year/{year}", source=SOURCE)
+    return NoDataForYear(f"no data for /api/example/year/{year}", source=SOURCE)
 
 
 def unavailable(year: int) -> UpstreamError:
@@ -353,7 +356,7 @@ async def test_a_pass_that_counts_names_the_periods_counted_as_answered() -> Non
 
 @pytest.mark.anyio
 async def test_only_the_classes_of_skip_are_passed_over() -> None:
-    """The gateway's own 404, a ``NotFoundError`` that is no ``NoDataForYear``, is raised."""
+    """A 404 for a wrong request, a ``NotFoundError`` but no ``NoDataForYear``, is raised."""
     gone = NotFoundError("404 from GET /api/example/year/2022: NOT_FOUND", source=SOURCE)
     upstream = Upstream({2022: gone})
     with pytest.raises(NotFoundError) as info:

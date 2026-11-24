@@ -4,7 +4,8 @@ Status: Accepted · Date: 2026-10-29 · Decided by Johannes on 2026-10-29 (D108,
 D110 (4) for the claude.ai edge, D111; drafted by the family from the investigation of
 2026-10-29; the host as the loopback option's second consumer the session's
 recommendation, queue row 296) · Amended 2026-11-18 by
-https://github.com/xippios/sdk-core/issues/240
+https://github.com/xippios/sdk-core/issues/240 · Amended 2026-11-24 by
+https://github.com/xippios/sdk-core/issues/485
 
 ## Context
 
@@ -277,3 +278,16 @@ registry's tenants, variables and prefix, never its source, so under the registr
 declares, `Tenants("google-mail", var_prefix="GOOGLE", param="account", ...)`
 (https://github.com/xippios/sdk-core/issues/279), they read as they did under the copy's
 `Tenants("google", ...)`.
+
+## Amendment 2026-11-24
+
+Amended by ADR-0065 (https://github.com/xippios/sdk-core/issues/485): the sentence of D-d that
+has what the Google sources share move to core as `xippios.core.google` once sdk-google-drive is
+its second consumer, and the account registry that point (b) of the amendment of 2026-11-18
+names for that module, are taken back, since core holds no code that knows one publisher, so
+that what two Google sources come to share stands in a shared package of their publisher, which
+a closed question makes, and point (c)'s exchange and resend on a status of `renew_on` holds for
+a read alone, since ADR-0011's amendment of 2026-11-24
+(https://github.com/xippios/sdk-core/issues/480) sends a write refused with that status no second
+time and has the next request exchange first, while the rest of the record and of its first
+amendment stands as written.

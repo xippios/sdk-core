@@ -18,8 +18,8 @@ otherwise refuses without sending::
 The snapshot belongs to the policy: clients that draw on one quota, one key say, share
 one policy. A cache hit never waits and never updates the snapshot. Nor does a request
 outside the quota: one sent with ``auth=None``, or to an origin other than the client's
-base URL's, which the client marks (``xippios_auth``, ``xippios_origin``). The sources
-behind api.data.gov share one policy per process through ``xippios.core.data_gov``.
+base URL's, which the client marks (``xippios_auth``, ``xippios_origin``). The sources that
+one key serves share one policy per process for it.
 """
 
 import asyncio
@@ -31,7 +31,7 @@ import weakref
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import ClassVar, Final
+from typing import Final
 
 import httpx
 
@@ -213,9 +213,6 @@ class QuotaPolicy:
         ValueError: A ``window`` that is negative, NaN or longer than ten years.
     """
 
-    _subject: ClassVar[str] = "quota"
-    """What the refusal and the log line call the quota; a gateway's policy names its key."""
-
     def __init__(
         self,
         *,
@@ -333,16 +330,15 @@ class QuotaPolicy:
         where = f"{request.method} {request.url.path}"
         if wait > _PAUSE_CAP:
             raise RateLimitError(
-                f"{self._subject} spent ({snapshot.describe()}); nothing was sent for "
+                f"quota spent ({snapshot.describe()}); nothing was sent for "
                 f"{where}: the quota is expected back at {_utc(snapshot.resumes_at)}, later "
                 f"than a call waits ({_PAUSE_CAP:g} s)",
                 retry_after=wait,
                 source=self.source,
             )
         logger.warning(
-            "%s%s spent (%s); waiting %.0f s before %s",
+            "%squota spent (%s); waiting %.0f s before %s",
             f"{self.source}: " if self.source else "",
-            self._subject,
             snapshot.describe(),
             wait,
             where,

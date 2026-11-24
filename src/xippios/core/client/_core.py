@@ -201,8 +201,8 @@ class AsyncClient:
     ``xippios_auth`` is ``"client"`` for the default, ``"none"`` for ``auth=None`` and
     ``"own"`` for an ``httpx.Auth`` of the call's own; ``xippios_origin`` is ``"base"`` for
     the base URL's origin and ``"other"`` for any other. ``QuotaPolicy`` skips a request
-    marked ``"none"`` or ``"other"``, and the api.data.gov gateway's ``classify`` reads no
-    answer marked ``"other"``.
+    marked ``"none"`` or ``"other"``, and a ``classify`` can leave an answer marked
+    ``"other"`` to core's status mapping.
 
     While ``xippios.core.testing.record_task`` records a task, every client the task's
     context reaches hands each answer it read whole to the recording, in the order the

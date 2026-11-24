@@ -6,17 +6,17 @@ request, and sends the requests with ``fetch_periods``, which returns each perio
 answer for the task to assemble, its vintage included::
 
     from xippios.core import Ceiling, fetch_periods
-    from xippios.core.data_gov import NoDataForYear
+    from xippios.example.errors import NoDataForYear  # a NotFoundError of the source's own
 
-    SERIES = Ceiling(10, unit="market years", source="usda-esr")
+    SERIES = Ceiling(10, unit="market years", source="example")
 
 
-    async def get_weekly_series_async(...) -> Result[list[CommodityData]]:
+    async def get_series_async(...) -> Result[list[Week]]:
         SERIES.check(end_year - start_year + 1, asked=f"{start_year} to {end_year}")
         ...  # a release list, or a count, may come between the two
         fetched = await fetch_periods(
             range(start_year, end_year + 1),
-            lambda year: api.get_country_data(commodity_code, country_code, year),
+            lambda year: api.get_weeks(region_code, year),
             skip=(NoDataForYear,),
         )
         records = [record for _, answer in fetched for record in answer]
@@ -321,8 +321,8 @@ async def fetch_periods[P, T](
             sends no request.
         fetch: The request of one period, e.g. ``lambda year: api.get_country_data(104,
             1220, year)``.
-        skip: The errors that say a period holds no data, e.g. ``(NoDataForYear,)``; empty,
-            the default, passes over no period.
+        skip: The errors that say a period holds no data, e.g. a source's own
+            ``(NoDataForYear,)``; empty, the default, passes over no period.
 
     Returns:
         Each period that was not passed over with its answer, in the order given, e.g.

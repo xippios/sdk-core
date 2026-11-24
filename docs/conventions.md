@@ -875,15 +875,10 @@ its `expires_in` runs out, and on a status of `renew_on`, 401 by
 default, exchanges once more and sends a read again, once, while a write's refusal goes back to
 its caller and the next request exchanges first (ADR-0025, amendment 2026-11-18, point c;
 ADR-0011, amendment 2026-11-24). No config files, no dotenv loading inside the package — the
-environment is the contract (direnv in development, secrets in CI). A source behind
-api.data.gov takes its key, its gateway answers and its
-quota from `xippios.core.data_gov`: `Gateway(SOURCE)` gives the `auth` on
-`DATA_GOV_API_KEY`, the `classify` its own `classify` asks first, and `install`, which puts
-the one `QuotaPolicy` per process for that key on its config (ADR-0032, decision 5). The
-gateway's `classify` reads the answers of the base URL's origin alone, and
-`Gateway(SOURCE, data_path=...)` maps FAS's empty `text/plain` 404 on the source's data
-paths to `xippios.core.data_gov.NoDataForYear`, a `NotFoundError` that says the year holds
-no data (ADR-0032, decision 5).
+environment is the contract (direnv in development, secrets in CI). Code that several
+sources share for one key, its reading, its issuer's documented answers and one `QuotaPolicy`
+per process for the key, stands in their publisher's shared package and never in core (§12;
+ADR-0032, decision 1; ADR-0065, decisions 1 and 3).
 
 Whoever works in a repository of the family, a person or an agent, never reads or prints
 `.envrc`, `.env` or a variable that holds a credential: each one the package reads a
@@ -1503,6 +1498,13 @@ which §12 bounds to one minor.
   decision 6). A patch reaches the dependent inside its bound, so the adoption release
   follows a breaking minor only (ADR-0021, amendment 2026-10-29). The dependent's
   servers register its own tasks only; no cycles, one level only.
+- A source may depend on its publisher's shared package, which holds code that knows one
+  publisher and that two or more of its sources share, by the rules that §11, §12 and §15 have
+  for a dependency on another source package, with the shared package's public names in place
+  of a task layer, and the shared package depends on core and on no source (ADR-0021,
+  amendment 2026-11-24; ADR-0065, decision 3). A publisher's shared package is held to §1, §5,
+  §6, §7, §10, §11, §12, §13 and §15 where it holds what their rules name, without
+  `docs/upstream/`, and to no other section (ADR-0065, decision 3).
 
 ## 13. Repository hygiene
 
