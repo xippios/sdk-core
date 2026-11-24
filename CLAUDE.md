@@ -15,71 +15,86 @@ follows. Read them before you change a file.
 
 ```
 src/xippios/core/
-  __init__.py        public surface, re-exports only; adapters are NOT re-exported
-  py.typed           PEP 561 marker; without it mypy --strict fails in every source repo
-  _version.py        __version__ from distribution metadata
-  _loop.py           one background event loop; sync() derives sync functions from async
-  _tasks.py          what core reads from a source's tasks.py: tool_functions (tasks.__all__ minus
-                     BULK_TASKS), BULK_TASKS for the adapters, NO_TENANT_TASKS for bind_tasks
-  contract.py        EnvVar, a variable of the package contract; imports nothing of core's
-  errors.py          error taxonomy (UnknownCode: a code a packaged list lacks; QueryTooLarge: a
-                     query over upstream's limit), response/exception classifiers,
-                     request_description (the method and path a message names)
-  redaction.py       the one credential rule (REDACTED, the names QueryKeyAuth registers,
-                     register_data_name for a cursor that is data), scrub_params/url/headers;
-                     imports nothing of core's
-  models.py          UpstreamModel (dump_upstream), ResultMeta (unknown fields refused,
-                     published_at_naive, names, request without None and redacted by
-                     redaction), Result[T], ResultCap (paged, keep), parse(), newer_than
-                     and naive_time; re-exports REDACTED
-  pagination.py      paginate_offset (page numbers map onto offsets), collect(), fetch_counted
-                     (the count before a query over upstream's limit)
-  reference.py       loader for packaged reference data (CSV, JSON); PackagedList (load, meta, parse,
-                     write, codes), PackagedCodes (check), names_codes, matches, closest,
-                     nearest; render_enums (StrEnum and IntEnum in one module)
-  series.py          a series over periods: Ceiling (its check, its option on the MCP server),
-                     fetch_periods
-  data_gov.py        the api.data.gov gateway: Gateway (key, classify, one QuotaPolicy per process),
-                     NoDataForYear (FAS's empty 404 on a data path)
-  tenants.py         Tenants (one client per tenant), list_task; TenantLock, bind_tasks and
-                     tenant_instructions, a server bound to one tenant
-  client/            httpx client: config, retry, ratelimit, cache, quota, auth (env-key helpers,
-                     the renewing bearer), download (Downloaded, streaming), _core (AsyncClient
-                     with post_json, delete_json, download and get_answer, the generic Answer,
-                     decode_json/decode_text/decode_csv)
-  mcp/               MCP server helpers: server (register_tasks, tool_functions, the loopback
-                     option), toolset (ToolSet), results (caps), errors (to text), cli (main,
-                     serve_tenants, LOOPBACK_HOSTS)                                 [extra: mcp]
-  http/              FastAPI helpers: router (from tasks), problems (RFC 9457)          [extra: http]
-  refresh/           the frames of a source's scripts, imported by the scripts alone: upstream
-                     (Snapshot, run, compare_fetched: the snapshot under docs/upstream/ with
-                     its FETCHED.md), reference (Listed, Enumeration: the packaged lists and
-                     enums.py)
-  testing/           pytest plugin (live gate, offline guarantees, anyio_backend), fixtures (the
-                     writer, the sample mark, max_bytes truncation), record (a source's rewrite
-                     step, send_once, record_task), replay (sent_bodies),
-                     scrub (Scrub: named secrets and response_secrets, plain verify; credentials
-                     by redaction), adapters (mcp_call, mcp_call_text, assert_write_tools),
-                     environment (keep_reserved_tenants), clock (slack for wall-clock reads),
-                     built_answers (the mark of a built answer and its census), live (the nightly
-                     comparison of a packaged list), family (the conformance check)
-                                                                                [extra: testing]
-tests/               mirrors the tree: tests/client/, tests/mcp/, tests/http/, tests/refresh/,
-                     tests/testing/
+  __init__.py           the public surface, re-exports only; the adapters are NOT re-exported
+  py.typed              PEP 561 marker; without it mypy --strict fails in every consumer
+  _version.py           __version__ from the distribution's metadata
+  _loop.py              one background event loop; sync() derives a sync function from an async one
+  _tasks.py             what core reads from a source's tasks.py: tool_functions, tool_name and
+                        BULK_TASKS, which the adapters skip
+  contract.py           EnvVar, a variable of the package contract; imports nothing of core's
+  errors.py             the error taxonomy (UnknownCode, QueryTooLarge), the classifiers of a
+                        response and an exception, request_description
+  redaction.py          the one credential rule: REDACTED, the credential and data names,
+                        scrub_params, scrub_url, scrub_headers; imports nothing of core's
+  models.py             UpstreamModel, ResultMeta, Result, NamedBy, ResultCap, parse,
+                        parse_decimal, newer_than
+  pagination.py         fetch_pages, the one walk of pages, and fetch_counted, the count first
+  reference.py          the packaged lists: load_json, PackagedList, PackagedCodes, names_codes,
+                        matches, closest, nearest
+  series.py             a series over periods: Ceiling and fetch_periods
+  tenants.py            Tenants, list_task; TenantLock, bind_tasks and tenant_instructions, a
+                        server bound to one tenant
+  client/
+    __init__.py         the client's public names
+    _core.py            AsyncClient and its one request path, get_answer, post_json, download,
+                        Answer, decode_csv
+    auth.py             KeyAuth, the one key class, BearerToken, RenewingBearerAuth, EnvKeyAuth
+    cache.py            MemoryCache, a lifetime per path prefix and a bound on its bytes
+    config.py           ClientConfig, RetryPolicy, RateLimit
+    download.py         Downloaded, check_dest and the streaming of a file to disk
+    quota.py            QuotaPolicy, the quota headers observed and no request into a spent quota
+    ratelimit.py        TokenBucket, the rate limiter of any thread or event loop
+    retry.py            the retry loop: backoff, Retry-After, a write sent once
+  mcp/                                                                        [extra: mcp]
+    __init__.py         the adapter's public names
+    toolset.py          ToolSet, the package contract's tool set, checked when it is built
+    server.py           build_server, register_tasks, quiet_request_logging
+    cli.py              main, the one entry; build_parser, LOOPBACK_HOSTS
+    results.py          the result caps: cap_result
+    errors.py           error_to_text
+  http/                                                                       [extra: http]
+    __init__.py         the adapter's public names
+    router.py           router_from_tasks
+    problems.py         RFC 9457 problem details: status_for
+  refresh/              the frames of a source's two refresh scripts, imported by them alone
+    __init__.py         the frames' public names, run among them
+    upstream.py         Snapshot, Page: the snapshot under docs/upstream/ with its FETCHED.md
+    reference.py        Lists, Listed, Enumeration, run: the packaged lists and enums.py, with
+                        render_enums, the renderer that the frame alone calls
+  testing/                                                                    [extra: testing]
+    __init__.py         the test support's public names
+    plugin.py           the pytest plugin: the live gate, the offline guarantees, replay_fixture
+    fixtures.py         the fixture format, its writer, the sample mark, the cut by max_bytes
+    record.py           record and send_once, sync, with a source's rewrite step
+    replay.py           replay, sent_urls, sent_query, sent_bodies
+    scrub.py            Scrub: named secrets and those read from the answer, in every encoded form
+    adapters.py         mcp_call, mcp_call_text, assert_projection, assert_write_tools
+    environment.py      keep_reserved_tenants
+    clock.py            assert_time_between and CLOCK_SLACK, for wall-clock reads
+    built_answers.py    the mark of a built answer and its census
+    live.py             the nightly comparison of a packaged list
+    family.py           the family conformance check
+tests/                  mirrors the tree: tests/client/, tests/mcp/, tests/http/, tests/refresh/,
+                        tests/testing/
 scripts/
-  adr_index.py       writes docs/adr.md and docs/adr.json from the records; --check writes nothing
-changelog/           one fragment per change, assembled into CHANGELOG.md by the release (README.md)
+  adr_index.py          writes docs/adr.md and docs/adr.json from the records; --check only checks
+  count_surface.py      counts core's surface in two parts and the consumers of each piece
+changelog/
+  README.md             the form of a fragment, one per change, which the release assembles
+CHANGELOG.md            each release's section
 docs/
-  conventions.md  definition-of-done.md  review-checklist.md  handover.md  roadmap.md
-  adr/  adr.md  adr.json  reports/
-.github/workflows/
-  ci.yml             job name MUST be `ci` (the org ruleset requires that check); pull requests, and
-                     called by publish.yml; no push trigger of its own
-  publish.yml        every push to main: tags vX.Y.Z from pyproject.toml when a release PR merged,
-                     builds, waits in environment `pypi` for a maintainer's approval
-  conventions.yml    the organization's conventions check from xippios/.github: the review of a
-                     release PR, and of main's range once a package's steps are merged
-  adr-index.yml      the organization's check that docs/adr.md and docs/adr.json are current
+  conventions.md        the rules every source package is held to
+  definition-of-done.md what a change satisfies before its pull request opens
+  review-checklist.md   what the review of a pull request checks, in order
+  handover.md           what a source's adoption of a core release does
+  adr/                  the architecture decision records
+  adr.md, adr.json      their index, written by scripts/adr_index.py
+  reports/              dated reports, the evidence of a record
+.github/
+  PULL_REQUEST_TEMPLATE.md  the frame of a pull request's description
+  CODEOWNERS            the paths that a maintainer reviews
+  workflows/            ci.yml, publish.yml, conventions.yml and adr-index.yml, each told by its
+                        paragraph under the README's ## Workflows
 ```
 
 `src/xippios/` has **no** `__init__.py` — it is a PEP 420 namespace package shared
@@ -91,9 +106,9 @@ Rules of the tree (ADR-0029):
 - A concern is a subpackage when it has an optional dependency or more than one
   internal module; otherwise it is a single module. Do not add empty directories.
 - Imports point downward only: `errors`, `redaction`, `_tasks`, `contract` and `models` at
-  the bottom; `client`, `pagination`, `reference`, `series`, `data_gov` and `tenants`
-  above; `mcp`, `http`, `testing` and `refresh` on top (ADR-0046, decision 1). Nothing
-  below an adapter imports an adapter.
+  the bottom; `client`, `pagination`, `reference`, `series` and `tenants` above; `mcp`,
+  `http`, `testing` and `refresh` on top (ADR-0062, decision 1). Nothing below an adapter
+  imports an adapter.
 - The MCP adapter targets the official `mcp` SDK 2.x (`mcp.server.mcpserver.MCPServer`).
   `FastMCP` no longer exists there; the standalone `fastmcp` package is not used.
 - Constructing an `MCPServer` configures root logging at `INFO`, and httpx, as the `mcp`
@@ -103,11 +118,11 @@ Rules of the tree (ADR-0029):
   loggers to `WARNING`. Keep both calls; the tests in `tests/mcp/` guard them, and the
   testing plugin restores the logger levels per test.
 - The public surface is the `__all__` of the six `__init__.py` files and nothing else:
-  each exports what consumers import (ADR-0023, decision 5), and
+  each exports what consumers import (ADR-0059, decision 3), and
   `tests/test_public_surface.py` pins all six. A helper core calls itself stays
   importable from its own module, outside the surface. `xippios.core.mcp`,
   `xippios.core.http`, `xippios.core.testing` and `xippios.core.refresh` are imported
-  explicitly by their users, the last by a source's scripts (ADR-0046, decision 1).
+  explicitly by their users, the last by a source's scripts (ADR-0062, decision 1).
 
 ## Commands
 
