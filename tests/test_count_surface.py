@@ -330,20 +330,32 @@ def test_the_surface_counts_names_and_lines_in_two_parts(trees: dict[str, Path])
 def test_each_pinned_name_names_its_consumers_by_kind_of_code(trees: dict[str, Path]) -> None:
     names = report(trees, "example", "host")["names"]
 
+    # A class that two lists pin is one object: a consumer of either entry counts for both,
+    # by the other list's path, and the second entry names the first, which it repeats.
     assert names["xippios.core:AsyncClient"] == {
-        "count": 1,
+        "count": 2,
         "consumers": {"example": ["package"]},
-        "by_other_path": {},
+        "by_other_path": {"example": ["xippios.core.client"], "host": ["xippios.core.client"]},
+        "repeats": None,
     }
-    assert names["xippios.core.client:AsyncClient"]["consumers"] == {
-        "example": ["tests"],
-        "host": ["package"],
+    assert names["xippios.core.client:AsyncClient"] == {
+        "count": 2,
+        "consumers": {"example": ["tests"], "host": ["package"]},
+        "by_other_path": {"example": ["xippios.core"]},
+        "repeats": "xippios.core:AsyncClient",
+    }
+    assert names["xippios.core.client:ClientConfig"] == {
+        "count": 1,
+        "consumers": {},
+        "by_other_path": {"example": ["xippios.core"]},
+        "repeats": "xippios.core:ClientConfig",
     }
     # A module alias reaches a name too, from a pinned list or from the module that defines it.
     assert names["xippios.core:closest"] == {
         "count": 2,
         "consumers": {"example": ["package"], "host": ["package"]},
         "by_other_path": {"example": ["xippios.core.models"]},
+        "repeats": None,
     }
     assert names["xippios.core.testing:record_sync"]["consumers"] == {
         "example": ["commands", "tests"]
@@ -352,6 +364,7 @@ def test_each_pinned_name_names_its_consumers_by_kind_of_code(trees: dict[str, P
         "count": 1,
         "consumers": {},
         "by_other_path": {"example": ["xippios.core.client.config"]},
+        "repeats": None,
     }
     assert names["xippios.core:load_json"]["consumers"] == {"example": ["commands"]}
     assert names["xippios.core.refresh:load_json"]["by_other_path"] == {
@@ -457,7 +470,7 @@ def test_the_report_fails_nothing_and_names_what_it_could_not_read(
         "host": {"files": 2, "unread": []},
     }
     assert got["summary"] == {
-        "names": {"none": 4, "one": 10, "two_or_more": 2},
+        "names": {"none": 3, "one": 9, "two_or_more": 2, "repeats": 2},
         "parameters": {"none": 4, "one": 12, "two_or_more": 1},
     }
 
@@ -479,6 +492,9 @@ def test_the_text_report_gives_one_line_per_item(trees: dict[str, Path]) -> None
         "name xippios.core:closest: 2 consumers: example (package; by xippios.core.models),"
         " host (package)",
         "name xippios.core:sync: 0 consumers",
+        "name xippios.core:AsyncClient: 2 consumers: example (package; by xippios.core.client),"
+        " host (by xippios.core.client)",
+        "name xippios.core.client:AsyncClient: 2 consumers; repeats xippios.core:AsyncClient",
         "parameter xippios.core:closest(cutoff=): 1 consumer: example (package)",
         "parameter xippios.core:AsyncClient(cache=): 1 consumer: host (package)",
         "parameter xippios.core.mcp:main(apply_options=): 0 consumers",
@@ -486,7 +502,8 @@ def test_the_text_report_gives_one_line_per_item(trees: dict[str, Path]) -> None
         "outside xippios.core.client.config:RetryPolicy: 1 consumer: example (package);"
         " pinned as xippios.core.client:RetryPolicy",
         "unread example: tests/test_broken.py",
-        "names by consumers: 4 with none, 10 with one, 2 with two or more",
+        "names by consumers: 3 with none, 9 with one, 2 with two or more,"
+        " and 2 that repeat an entry of another list",
         "parameters by consumers: 4 with none, 12 with one, 1 with two or more",
     ):
         assert line in lines
