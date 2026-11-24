@@ -820,6 +820,12 @@ def test_each_record_the_two_touch_takes_one_sentence_that_points_to_them(
 # https://github.com/xippios/sdk-core/issues/480).
 
 WALK_QUESTION = "https://github.com/xippios/sdk-core/issues/480"
+DECIDED_QUESTION = "https://github.com/xippios/sdk-core/issues/555"
+DECIDED = "ADR-0059, amendment 2026-11-24"
+"""A piece that a maintainer's answer adds enters with fewer than two consumers when that answer
+decided it, as the human decided in https://github.com/xippios/sdk-core/issues/555."""
+LEAVING = "ADR-0059, decision 6"
+"""The count of consumers is a report by which no piece leaves: no reason for a piece to enter."""
 
 
 def test_adr_0034_names_the_one_walk_in_one_sentence_after_the_ways() -> None:
@@ -835,19 +841,67 @@ def test_adr_0034_names_the_one_walk_in_one_sentence_after_the_ways() -> None:
         "at or past upstream's count",
         "returns nothing",
         "stop rule",
-        "has one consumer",
+        "has one consumer, sdk-usda-esmis",
         "key",
         "no consumer",
         "ADR-0061, decision 8",
-        "ADR-0059, decision 6",
+        DECIDED,
     ):
         assert name in walk, f"ADR-0034's amendment does not name {name!r}"
+    # Decision 6 of ADR-0059 speaks of a piece leaving, never of one entering (the organization's
+    # check, https://github.com/xippios/sdk-core/pull/552#issuecomment-7138691721, finding 1).
+    assert LEAVING not in walk, f"ADR-0034's amendment still cites {LEAVING!r}"
     records = json.loads(INDEX.read_text(encoding="utf-8"))["records"]
     found = next(r for r in records if r["id"] == "ADR-0034")
     assert found["amended"][-2:] == [
         {"date": "2026-11-24", "by": WAYS_QUESTION},
         {"date": "2026-11-24", "by": WALK_QUESTION},
     ]
+
+
+def test_fetch_pages_s_docstring_cites_the_decided_addition_for_stop_and_key() -> None:
+    from xippios.core import fetch_pages
+
+    doc = flat(fetch_pages.__doc__ or "")
+    assert DECIDED in doc, f"fetch_pages's docstring does not cite {DECIDED!r}"
+    assert LEAVING not in doc, f"fetch_pages's docstring still cites {LEAVING!r}"
+
+
+def test_adr_0059_admits_a_decided_piece_with_fewer_than_two_consumers_in_one_sentence() -> None:
+    (amendment,) = amendments("ADR-0059", "2026-11-24")
+    assert amendment.startswith(f"Amended by {DECIDED_QUESTION}:"), amendment[:60]
+    assert amendment.endswith("."), "the sentence ends the record"
+    assert ". " not in amendment, "one sentence"
+    for name in (
+        "a maintainer's answer adds",
+        "fewer than two consumers",
+        "when that answer decided it",
+        "with its one consumer or with none",
+        "the release's statement of core's surface",
+        "ADR-0068, decision 6",
+        "https://github.com/xippios/sdk-core/issues/485, part 6",
+        "decision 8's review",
+        "`fetch_pages(stop=, key=)`",
+        "`download(headers=)`",
+        "the rest of decisions 4, 5 and 8",
+    ):
+        assert name in amendment, f"ADR-0059's amendment does not name {name!r}"
+    records = json.loads(INDEX.read_text(encoding="utf-8"))["records"]
+    found = next(r for r in records if r["id"] == "ADR-0059")
+    assert found["amended"] == [{"date": "2026-11-24", "by": DECIDED_QUESTION}]
+
+
+def test_adr_0040_admits_download_s_headers_with_no_consumer_by_the_decided_addition() -> None:
+    # The amendment that https://github.com/xippios/sdk-core/issues/479 opens gave `headers` no
+    # reason (the organization's check on the range, finding 2); the answer on #555 admits it.
+    (path,) = (ROOT / "docs" / "adr").glob("0040-*.md")
+    opening = "Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/479:"
+    (paragraph,) = (
+        flat(part) for part in path.read_text(encoding="utf-8").split("\n\n") if opening in part
+    )
+    for name in ("`headers`", "no consumer", DECIDED_QUESTION, DECIDED):
+        assert name in paragraph, f"ADR-0040's amendment does not name {name!r}"
+    assert "no caller yet" not in paragraph, "ADR-0040's amendment still gives headers no reason"
 
 
 def test_section_4_holds_the_walk_and_its_refusal_in_one_sentence() -> None:
@@ -1338,15 +1392,41 @@ SCOPE_QUESTION = "https://github.com/xippios/sdk-core/issues/473"
 def test_a_core_pr_s_consumers_are_judged_by_the_record_of_core_s_scope() -> None:
     # The definition of done's line on consumers and the review checklist's item 11 judge a core
     # PR by ADR-0059: who a consumer is, what the rule binds and the family's contract, the one
-    # reason for one consumer. Neither names a reason that the record ended.
+    # reason for one consumer, and its amendment's piece that a maintainer's answer decided with
+    # fewer than two. Neither names a reason that the record ended.
     done = DONE.read_text(encoding="utf-8").splitlines()
     lines = [flat(line) for line in done if "the two consumers of each piece it adds" in line]
     assert len(lines) == 1, "the definition of done has one line on a core PR's consumers"
     for where, rule in (("the definition of done", lines[0]), ("item 11", checklist_item(11))):
-        for name in ("the family's contract", f"{SCOPE_RECORD}, decisions 1, 2 and 4"):
+        for name in (
+            "the family's contract",
+            f"{SCOPE_RECORD}, decisions 1, 2 and 4",
+            "a maintainer's answer adds",
+            "fewer than two consumers",
+            "one consumer or none",
+            DECIDED,
+        ):
             assert name in rule, f"{where}: {rule!r} does not name {name!r}"
         for gone in ("ADR-0023", "ADR-0058", "the maintainer's decision"):
             assert gone not in rule, f"{where}: {rule!r} still names {gone!r}"
+
+
+def test_the_definition_of_done_points_core_s_surface_to_the_release_s_two_counts() -> None:
+    # Core's README keeps no status table, so its surface stands in the release's statement in
+    # two counts (ADR-0068, decision 6; the organization's check on the range, finding 10).
+    done = DONE.read_text(encoding="utf-8").splitlines()
+    lines = [flat(line) for line in done if "public surface changes are reflected" in line]
+    assert len(lines) == 1, "the definition of done has one line on the public surface"
+    for name in (
+        "`__init__.py`",
+        "a source's README status table (conventions §13)",
+        "in core",
+        "the release's statement of the surface",
+        "`scripts/count_surface.py`",
+        "ADR-0068, decision 6",
+    ):
+        assert name in lines[0], f"the definition of done: {lines[0]!r} does not name {name!r}"
+    assert "exports and the README status table" not in lines[0], "core keeps no status table"
 
 
 @pytest.mark.parametrize(
