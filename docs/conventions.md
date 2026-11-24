@@ -944,16 +944,15 @@ with sdk-template 0.4.0, which renders it (ADR-0063, decision 2).
   what that read costs (ADR-0050, decision 2). The preview carries `reads: list[str]`, the
   operations it read, each by the upstream name that `meta.endpoint` gives an operation
   (§4), and `[]` when it read nothing (ADR-0050, decision 3).
-  `assert_write_tools(..., preview_reads=True)` fails a write task unless its `Result`'s
-  data has exactly one member tagged `performed: Literal[False]`, the preview, and that
-  member declares `reads` (ADR-0050, decision 4). `assert_write_tools(..., dry_run=...,
-  sent=respx_mock)` calls each write tool without `confirm` and fails it unless its answer
-  is the preview, it sent no request but a read, a `GET`, `HEAD` or `OPTIONS` request where
-  the source's `is_read` does not say otherwise, and its `reads` is empty exactly when it
-  sent no request (ADR-0050, decisions 5 and 6). A source declares `reads` and passes
-  `preview_reads=True` from its patch on core 0.4.1, and the dry run at its own choice;
-  both are off by default, so a source on core 0.4.0 passes as it stands (ADR-0050,
-  decisions 4 and 5).
+  `assert_write_tools` fails a write task unless its `Result`'s data has exactly one member
+  tagged `performed: Literal[False]`, the preview, and that member declares `reads`, in every
+  call (ADR-0050, decision 4, and its amendment of 2026-11-24).
+  `assert_write_tools(..., dry_run=..., sent=respx_mock)` calls each write tool without
+  `confirm` and fails it unless its answer is the preview, it sent no request but a read, a
+  `GET`, `HEAD` or `OPTIONS` request where the source's `is_read` does not say otherwise, and
+  its `reads` is empty exactly when it sent no request (ADR-0050, decisions 5 and 6). A source declares `reads` on its preview
+  from its adoption of core 0.5.0, and the dry run at its own choice, which is off by
+  default (ADR-0050, decisions 4 and 5).
 - Server names (ADR-0026): a source with a write server names its servers
   `xippios-<source>-mcp-read` and `xippios-<source>-mcp-write`, with no alias for the
   old name; a read-only source keeps `xippios-<source>-mcp`. `server.name` stays the

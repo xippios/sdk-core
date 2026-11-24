@@ -92,7 +92,6 @@ async def assert_write_tools(
     *,
     read_server: Any = None,
     router: Any = None,
-    preview_reads: bool = False,
     dry_run: DryRun | None = None,
     sent: respx.Router | None = None,
     is_read: Callable[[httpx.Request], bool] | None = None,
@@ -107,7 +106,8 @@ async def assert_write_tools(
       for ``--http`` reads (ADR-0063, decision 5);
     - the write server's tools are exactly ``tool_name(write_tools.source, fn)`` for the
       write tasks, no more and no fewer;
-    - every write task takes ``confirm: bool = False`` as its last parameter, so a call
+    - every write task takes ``confirm`` as its last parameter, ``confirm: bool = False``
+      as the write tool set checked when it was built (ADR-0063, decision 3), so a call
       without it is a dry run;
     - no write tool is on ``read_server``, and no route of ``router`` serves a write
       task (matched by the route name and path ``router_from_tasks`` gives it), when
@@ -119,17 +119,15 @@ async def assert_write_tools(
     ``confirm`` stay. Async: the tools are listed on the test's own loop, so a test calls
     it as ``await assert_write_tools(...)`` under ``@pytest.mark.anyio``.
 
-    The preview is held in two parts, each off by default (ADR-0050). With
-    ``preview_reads=True`` every write task's return annotation is a ``Result`` whose
-    data has exactly one member tagged ``performed: Literal[False]``, the preview, a
-    union's member or a ``type`` alias's, and that member declares ``reads: list[str]``,
-    the operations the preview read. With ``dry_run`` each write tool is called on the
-    write server without ``confirm``, as an agent calls it, once for each set of
-    arguments, and its answer must be the preview, ``performed`` false, that sent no
-    request but a read, with ``reads`` empty exactly when it sent no request at all. The
-    dry run holds ``preview_reads`` too, and every argument set is checked before the
-    first tool is called. A request the router does not answer fails its call with
-    ``respx``'s error.
+    The preview is held in two parts (ADR-0050). In every call, every write task's return
+    annotation is a ``Result`` whose data has exactly one member tagged ``performed:
+    Literal[False]``, the preview, a union's member or a ``type`` alias's, and that member
+    declares ``reads: list[str]``, the operations the preview read. With ``dry_run``, off
+    by default, each write tool is called on the write server without ``confirm``, as an
+    agent calls it, once for each set of arguments, and its answer must be the preview,
+    ``performed`` false, that sent no request but a read, with ``reads`` empty exactly
+    when it sent no request at all. Every argument set is checked before the first tool
+    is called. A request the router does not answer fails its call with ``respx``'s error.
 
     Args:
         write_tools: The ``ToolSet`` behind ``xippios-<source>-mcp-write``,
@@ -139,8 +137,6 @@ async def assert_write_tools(
             ``[getattr(tasks_write, name) for name in tasks_write.__all__]``.
         read_server: The source's read server, ``xippios-<source>-mcp-read``, if any.
         router: The source's FastAPI router from ``router_from_tasks``, if any.
-        preview_reads: Hold each write task's annotations to one preview that declares
-            ``reads``.
         dry_run: The arguments of a call of each write task, without ``confirm``, keyed
             by the task function's ``__name__``, one mapping or a list of them, e.g.
             ``{"create_entry": {"org": "demo", "amount": "1.00"}, "update_entry":
@@ -159,7 +155,6 @@ async def assert_write_tools(
     """
     from xippios.core._tasks import tool_name
     from xippios.core.mcp import ToolSet, build_server
-    from xippios.core.mcp.toolset import _confirm_problem
 
     if not isinstance(write_tools, ToolSet):
         raise TypeError(
@@ -186,10 +181,11 @@ async def assert_write_tools(
     missing = sorted(expected.keys() - listed)
     assert not missing, f"write tasks missing from the write server: {missing}"
     for name, fn in expected.items():
-        problem = _confirm_problem(fn)
-        if problem is None and list(inspect.signature(fn).parameters)[-1] != "confirm":
-            problem = "confirm is not the last parameter"
-        assert problem is None, f"{name}: {problem}; a write tool takes confirm: bool = False last"
+        last = list(inspect.signature(fn).parameters)[-1:]
+        assert last == ["confirm"], (
+            f"{name}: confirm is not the last parameter; a write tool takes confirm: bool = False "
+            "last"
+        )
     if read_server is not None:
         on_read = sorted(expected.keys() & await _tool_names(read_server))
         assert not on_read, f"write tools on the read server: {on_read}"
@@ -200,10 +196,9 @@ async def assert_write_tools(
                 methods = " ".join(sorted(getattr(route, "methods", None) or ()))
                 served = _serves(route, source, fn)
                 assert not served, f"{name}: a write task has an HTTP route, {methods} {path}"
-    if preview_reads or dry_run is not None:
-        for name, fn in expected.items():
-            problem = _preview_problem(fn)
-            assert problem is None, f"{name}: {problem}"
+    for name, fn in expected.items():
+        problem = _preview_problem(fn)
+        assert problem is None, f"{name}: {problem}"
     if dry_run is not None and sent is not None:
         calls = _dry_run_calls(expected, dry_run)
         for name, arguments in calls:

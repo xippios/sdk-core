@@ -1564,23 +1564,22 @@ the router. A source whose adapters drop a task, or whose README table is stale,
 before a reviewer looks. The package under test is the one `tasks.py` under
 `src/xippios/`.
 
-`assert_write_tools` holds the preview of each write task too, in two parts, each off by
-default (ADR-0050):
+`assert_write_tools` holds the preview of each write task too, in two parts (ADR-0050):
 
-- `preview_reads=True` reads the annotations: each write task returns a `Result` whose data
-  has exactly one member tagged `performed: Literal[False]`, the preview, and that member
+- Every call reads the annotations: each write task returns a `Result` whose data has
+  exactly one member tagged `performed: Literal[False]`, the preview, and that member
   declares `reads: list[str]`.
-- `dry_run=`, the arguments of a call of each write task keyed by the task's name, one
-  mapping or a list of them, with `sent=`, the `respx` router the test's routes are mounted
-  on, calls each tool of the write server without `confirm`, as an agent does. It fails a
+- `dry_run=`, off by default, the arguments of a call of each write task keyed by the task's
+  name, one mapping or a list of them, with `sent=`, the `respx` router the test's routes are
+  mounted on, calls each tool of the write server without `confirm`, as an agent does. It fails a
   call unless the answer is the preview, no request but a read was sent and `reads` is empty
   exactly when no request was, and names the tool and each request by its method and path. A
   read is a `GET`, `HEAD` or `OPTIONS` request, the methods core's retry rule repeats, unless
   `is_read=`, a function of the `httpx.Request`, says otherwise, for an upstream that reads
   through `POST` or a read that sends a token request first.
 
-A source switches `preview_reads` on in its patch on core 0.4.1, with the field, and the dry
-run where its tests serve what its previews read:
+A source declares `reads` on its preview from its adoption of core 0.5.0, and runs the dry run
+where its tests serve what its previews read:
 
 ```python
 @pytest.mark.anyio
@@ -1594,7 +1593,6 @@ async def test_the_write_server(
         source="example",
         read_server=read_server,
         router=router,
-        preview_reads=True,
         dry_run={
             "create_thing": {"name": "Corn"},  # reads nothing: reads == []
             "update_thing": {"thing_id": 4, "name": "Wheat"},  # reads == ["thing/read.json"]
