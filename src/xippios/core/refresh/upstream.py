@@ -639,12 +639,16 @@ class _Capture:
     def report(self) -> str:
         """The requests sent, one line, which names an auth's own where the client logs in.
 
-        It is printed after the last request of a run that compares or writes, so a token
-        request whose answer the auth refused, which stops the run, never stands in it.
+        The run prints it last, a failed run's too, so where the client's auth is a
+        ``RenewingBearerAuth`` it says that a refused login, whose error stops the run with
+        no answer to count, is not counted.
         """
         line = f"{self.sent} requests sent, each redirect and retry counted"
         if _logs_in(self.client):
-            line += ", and each token request and resend of the client's auth"
+            line += (
+                ", and each token request and resend of the client's auth, a refused login "
+                "not counted"
+            )
         return line
 
     def _get(self, url: str, expect: tuple[int, ...], keyed: bool) -> Response:
@@ -1511,7 +1515,10 @@ def run(snapshot: Snapshot, argv: Sequence[str] | None = None) -> int:
     The command line takes ``--check``, and ``--keyless`` where the snapshot names the
     variables of its client's credentials: it fetches and compares the pages that send
     none, needs no variable and writes nothing. Every request goes through the snapshot's
-    client, or one built from its slug, which the run closes after its last request.
+    client, or one built from its slug, which the run closes once it compared or wrote. The
+    run prints the requests it sent as its last line, a failed run's too once it began to
+    fetch, each token request and resend of a renewing auth counted and a refused login not
+    (ADR-0062, decisions 4 and 14).
 
     Args:
         snapshot: The source's declaration.
@@ -1532,7 +1539,6 @@ def run(snapshot: Snapshot, argv: Sequence[str] | None = None) -> int:
             help="fetch and compare the pages that send no credential; write nothing",
         )
     args = parser.parse_args(argv)
-    out = snapshot.out
     keyless: bool = getattr(args, "keyless", False)
     if not snapshot.pages:
         raise SystemExit("Nothing to fetch: declare the snapshot's pages, the API document's too.")
@@ -1552,10 +1558,19 @@ def run(snapshot: Snapshot, argv: Sequence[str] | None = None) -> int:
     capture = _Capture(snapshot, client, keyless=keyless)
     try:
         rows = capture.capture_all()
+        return _settle(snapshot, rows, fetched, compared=args.check or keyless, keyless=keyless)
     finally:
+        _log(capture.report())  # a failed run's too, as the reference frame prints it
         if snapshot.client is None:
             _run_coroutine(client.aclose())
-    if args.check or keyless:
+
+
+def _settle(
+    snapshot: Snapshot, rows: Sequence[Row], fetched: str, *, compared: bool, keyless: bool
+) -> int:
+    """Compare the rows with the snapshot, or write them; the run's exit status."""
+    out = snapshot.out
+    if compared:
         differ, moved = compare(snapshot, out, rows, keyless=keyless)
         for line in moved:
             _log(f"  moved, no change: {line}")
@@ -1566,10 +1581,8 @@ def run(snapshot: Snapshot, argv: Sequence[str] | None = None) -> int:
             if differ
             else "The snapshot is current: upstream serves what it records."
         )
-        _log(capture.report())
         return 1 if differ else 0
     write_snapshot(out, rows, render_fetched(snapshot, rows, fetched, (out / OBSERVED).is_file()))
     written = sum(1 for row in rows if row.content is not None)
     _log(f"Wrote {written} files and {FETCHED} under {out} (Fetched {fetched})")
-    _log(capture.report())
     return 0

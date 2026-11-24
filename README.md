@@ -1078,8 +1078,9 @@ them itself, a login's included; it follows no redirect, is never retried by the
 renewing auth sending it once more after a refused bearer (ADR-0025), and the frame prints
 nothing of it. The run's count of the requests it sent holds each token request and resend
 of the client's auth, which the client's answer keeps in its `history` as statuses alone,
-and its last line says so; a token request whose answer the auth refuses stops the run,
-uncounted. It lies on the origin of the client's base URL, its scheme, host and
+and not a token request whose answer the auth refuses, which stops the run. The run
+prints the count as its last line, a failed run's too once it began to fetch, as the
+reference frame does, and that line says what it counted. It lies on the origin of the client's base URL, its scheme, host and
 port, where alone the client sends its credentials (ADR-0037, decision 4), so
 `https://api.example.org/v2/items` is a keyed sample of a client on
 `https://api.example.org/v1` and `https://api.example.org.elsewhere.example.net/v1/items` none.

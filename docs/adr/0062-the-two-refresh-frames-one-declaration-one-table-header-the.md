@@ -97,8 +97,9 @@ had judged no source.
    never their values (ADR-0028, decision 7). The run counts each request that the client sent
    for a page, the token requests of a renewing auth and its resend among them, which the
    client's answer keeps in its `history` as statuses alone, with no body, header or request,
-   and a token request whose answer the auth refuses ends the run uncounted
-   (https://github.com/xippios/sdk-core/issues/579). The frame's reader of a JSON answer takes a name of its own, since the
+   and a token request whose answer the auth refuses ends the run uncounted; the run prints
+   the count as its last line, a failed run's too, as decision 14 has the reference frame
+   print it (https://github.com/xippios/sdk-core/issues/579). The frame's reader of a JSON answer takes a name of its own, since the
    root's `load_json` is another function, and the `indent` of that reader and of the frame's
    JSON writer leaves (https://github.com/xippios/sdk-core/issues/475, part 7). A second reader,
    `parse_json`, parses a JSON answer, refuses a key twice and returns the document as served,
