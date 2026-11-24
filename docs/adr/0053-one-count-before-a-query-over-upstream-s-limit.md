@@ -1,6 +1,6 @@
 # ADR-0053: One count before a query over upstream's limit
 
-Status: Accepted · Date: 2026-11-22 · Decided by https://github.com/xippios/sdk-core/issues/372 · Amended 2026-11-22 by https://github.com/xippios/sdk-core/issues/405
+Status: Accepted · Date: 2026-11-22 · Decided by https://github.com/xippios/sdk-core/issues/372 · Amended 2026-11-22 by https://github.com/xippios/sdk-core/issues/405 · Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/481
 
 ## Context
 
@@ -115,3 +115,14 @@ that day.
   record builds nothing for either.
 - The two consumers of ADR-0023 are sdk-comtrade and sdk-usda-nass, which delete their copies of
   the gate in their patches.
+
+## Amendment 2026-11-24
+
+Amended by https://github.com/xippios/sdk-core/issues/481: the form of decision 1 for a size
+read from the arguments leaves with `bound`, its attribute and the two `ValueError`s of decisions
+1 and 7, since its one caller, sdk-comtrade's `_bounded`, serves four tasks that the boundary of
+a source package takes out of sdk-comtrade, so that `QueryTooLarge(count, *, limit, narrow,
+request=None, source=None)` words two forms, a count that upstream gave and upstream's own
+refusal without a count, which sdk-usda-nass's HTTP 413 takes, and a source that refuses a size
+read from its arguments before any request words that refusal itself and says that nothing was
+sent, as conventions §5 ask of a refusal of the call as given.

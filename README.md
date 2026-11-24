@@ -311,7 +311,7 @@ answer and sends no data request, and a count over the limit raises `QueryTooLar
 the data request (ADR-0053):
 
 ```python
-from xippios.core import QueryTooLarge, Result, ResultMeta, fetch_counted
+from xippios.core import Result, ResultMeta, fetch_counted
 
 RECORD_LIMIT = 100_000  # the most records upstream serves per call
 NARROW = "Split by period, then by reporter, and count each part with get_counts."
@@ -331,14 +331,6 @@ async def get_data_async(period: str, reporter: str | None = None) -> Result[lis
     )
     meta = ResultMeta(source="example", endpoint="get", request=request, total=total)
     return Result(data=rows, meta=meta)
-
-
-def check_slice(codes: list[str], periods: list[str]) -> None:
-    rows = len(codes) * len(periods)  # one row per code and period at most: nothing to count
-    if rows > RECORD_LIMIT:
-        raise QueryTooLarge(
-            rows, limit=RECORD_LIMIT, narrow="Name fewer codes or periods.", bound=True
-        )
 ```
 
 `fetch_counted(count, fetch, *, limit, empty, narrow, source=None)` returns the data with
@@ -349,13 +341,13 @@ raises passes as raised. `count` gives an `int`: a float, a whole one such as `1
 included, or a `bool` raises `TypeError`, and a negative count `ValueError`, before the data
 request, since a source reads upstream's count into an `int` where it parses the answer, as
 a pydantic `int` field reads `1234.0` and refuses `1234.5`. `QueryTooLarge(count, *, limit,
-narrow, bound=False, source=None)` carries the four fields, and core words its message from
-them, `narrow` last: `query would return 5,006,385 records; upstream serves at most 100,000
-per call. Split by period, ...`; with `bound=True`, for a size read from the arguments, `query
-could return up to 100,008 records, a size read from its arguments with nothing counted or
-sent; ...`; and with a count of `None`, for upstream's own refusal of the query that a
-source's `classify` maps, `upstream refused the query as too large; it serves at most 50,000
-records per call. ...`. That `classify` passes `request=request_description(response)`, since a
+narrow, request=None, source=None)` carries the fields, and core words its message from them,
+`narrow` last: `query would return 5,006,385 records; upstream serves at most 100,000 per
+call. Split by period, ...`; and with a count of `None`, for upstream's own refusal of the
+query that a source's `classify` maps, `upstream refused the query as too large; it serves at
+most 50,000 records per call. ...`. A size that a source reads from the arguments, with nothing
+counted, is the source's own refusal, which says that nothing was sent (ADR-0053, amendment
+2026-11-24). That `classify` passes `request=request_description(response)`, since a
 message about an answer names its request, and the message names it in place of the query:
 `upstream refused GET /v1/data as too large; ...`. A refusal before the data request names
 none. A source subclasses it only for an attribute of its own, worded in `narrow`, as
@@ -674,7 +666,25 @@ with (
 
 Core ships no XML, spreadsheet or PDF parser. A `dest` that is a directory, or whose
 directory does not exist, is refused with `InvalidRequestError` before anything is sent,
-and the file is written with mode `0600`, its owner's alone. `register_tasks` and
+`dest is a directory; name the file to write. Nothing was sent.`, and the file is written
+with mode `0600`, its owner's alone. `check_dest(dest, *, source=None)` is that check alone,
+which returns `dest` as a `Path`: a task that sends a request of its own before its download,
+a listing that finds the file say, calls it before that first request, so a bad `dest` sends
+nothing (ADR-0045, amendment 2026-11-24):
+
+```python
+from xippios.core import check_dest
+
+
+async def download_report_async(report_id: int, dest: Path) -> Result[Downloaded]:
+    target = check_dest(dest, source="example")  # before the listing's request
+    listing = await client.get_answer(f"/reports/{report_id}")
+    got = await client.download(listing.payload["file"], target)
+    meta = ResultMeta(source="example", endpoint="reports", request={"report_id": report_id})
+    return Result(data=got, meta=meta)
+```
+
+`register_tasks` and
 `router_from_tasks` skip a task its `tasks.py` names in `BULK_TASKS`, so no tool or route
 returns a file path. A body over `ClientConfig.cache_max_bytes` (8 MiB by default) is
 returned and not cached.
@@ -835,19 +845,23 @@ only when one is passed (a fetch date is not a vintage), `total` `None`. A file 
 `fetched` is a bare date, as refresh scripts wrote it before template v0.3.0, reads as
 00:00 UTC of that day; `write` writes `fetched` to the second. A list of values is
 records of one field named by the upstream parameter (`[{"state_alpha": "AK"}, ...]`).
-`UnknownCode` names the value, the list and its fetch date, the closest codes (or a
-`hint=`), an optional `reason=`, and that the list is out of date if upstream added the
-code since, which `outdated=False` leaves out for a value that is no code at all (ADR-0041,
-decision 8, amended 2026-11-22). `closest` matches a code by its text and its name, with a
-`cutoff=` below 0.6 for short codes, and `nearest(value, codes)` names the integer codes
-nearest by number.
+`UnknownCode` names the value, the list and its fetch date, says that nothing was sent,
+then names the closest codes (or a `hint=`), an optional `reason=`, and that the list is
+out of date if upstream added the code since, which `outdated=False` leaves out for a value
+that is no code at all (ADR-0041, decision 8, amended 2026-11-22; ADR-0045, amendment
+2026-11-24). `closest` matches a code by its text and its name at `difflib`'s similarity of
+0.6, and `nearest(value, codes)` names the integer codes nearest by number.
 
 `PackagedList.codes(code, name=None, *, fold_case=False, list_name=None, source=None)`
 declares once which field holds a list's code, which its name and whether upstream compares
 it without case, and the `PackagedCodes` it returns checks an argument in one call, conventions
-§5's refusal of an unknown code (ADR-0045). `check` returns the value itself, so the task sends
-it, and records it in `meta.request`, as the caller gave it: under `fold_case=True` the
-caller's spelling, which upstream compares without case. A list's codes are text or integers,
+§5's refusal of an unknown code (ADR-0045). `check` takes one code or a list of codes, several
+values of one filter, and returns the value itself, so the task sends it, and records it in
+`meta.request`, as the caller gave it: under `fold_case=True` the caller's spelling, which
+upstream compares without case. A list is checked in its order and refused for its first code
+that the check refuses, and an empty list is refused, naming the codes the parameter takes. A
+task calls `check` before any request of the call, and each refusal says `Nothing was sent.`
+after its first sentence (ADR-0045, amendment 2026-11-24). A list's codes are text or integers,
 as its records hold them, and a value of the other type is refused with `InvalidRequestError`,
 never compared by its text: `"104"` for integer codes reads `Pass it as the integer 104.`, and
 another text names the codes that the source's `closest=` strategy names for it, such as
@@ -860,6 +874,7 @@ STATES = PackagedList.load("xippios.example", "state_alpha").codes(
     "state_alpha", fold_case=True, source="example"
 )  # a list of values: each value its own name
 STATES.check("state_alpha", "va")  # "va", as given: upstream compares without case
+STATES.check("state_alpha", ["va", "IA"])  # several values of one filter, in one call
 COUNTRIES.check(
     "country_code",
     country_code,
@@ -880,9 +895,9 @@ names the list where its file says more than its `param`. The declaration builds
 once and loads its file where the source makes it, so a large list is declared behind
 `functools.cache`, and a record without the code or the name field, codes of both types, or
 codes that differ in case alone in a folded list are refused there with `ValueError`.
-`names` maps each code to its name in upstream order, `name_of(value)` and `value in codes`
-compare as the check does, and `code`, `name` and `packaged` give the fields and the list, for
-a task's own reading of the list.
+`name_of(value)` gives the name of a code, compared as the check compares it, and `code`,
+`list_name`, `integer` and `packaged` give the code's field, the list's name, its type and the
+list, which the live comparison and `names_codes` read.
 
 Other code lists are read with `load_json`, and a source that packages a CSV file reads
 it itself (ADR-0059, decision 2). The refresh
@@ -998,9 +1013,11 @@ decorators stack, one per separator.
 
 The task checks its codes before the call, with its hints and its reason, so a code the list
 lacks never reaches the decorator. One that does, a code sent unchecked, is refused after the
-call with the list's own refusal, `UnknownCode`, whose reason says that the answer is
-withheld: an answer whose country no list names is never returned. The name is the one the
-source's own list holds for the code, so nothing is mapped between sources (ADR-0028).
+call with the list's own refusal, `UnknownCode`, whose reason says that upstream was asked
+and that the answer is withheld, without the `Nothing was sent.` of a refusal before the call
+(ADR-0045, amendment 2026-11-24): an answer whose country no list names is never returned. The
+name is the one the source's own list holds for the code, so nothing is mapped between sources
+(ADR-0028).
 
 A task whose codes no packaged list can name, or a parameter whose name holds one of the
 family check's words while it takes no code, is exempt with the reason, in `UNNAMED_CODES`
@@ -2030,7 +2047,7 @@ A `fixtures` folder is recorded data and is not read. The report gives one line 
 
 ```text
 name xippios.core:closest: 2 consumers: example (package; by xippios.core.models), host (package)
-parameter xippios.core:closest(cutoff=): 1 consumer: example (package)
+parameter xippios.core:closest(n=): 1 consumer: example (package)
 outside xippios.core.testing.plugin: 1 consumer: example (tests)
 ```
 
