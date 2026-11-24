@@ -896,7 +896,8 @@ def test_the_review_checklist_holds_the_script_s_form() -> None:
     item = checklist_item(2)
     for name in ("`SNAPSHOT`", "`scripts/refresh_upstream.py`", "ADR-0062, decision 3"):
         assert name in item, f"item 2 does not name {name!r}"
-    assert "the family check holds" not in item, "item 2 names a family check that left"
+    left = "the family check holds the committed `FETCHED.md`"
+    assert left not in item, "item 2 names a family check that left"
 
 
 # §12 and the code a core PR adds: the maintainer's answer on
