@@ -1,8 +1,8 @@
 """The sentences of `docs/conventions.md` §10 that the check of a built answer's mark stands on.
 
 As `tests/test_conventions.py` holds the cases of ADR-0043, each rule here is one sentence that
-can be quoted alone and cites ADR-0049, the review checklist's item on fixtures cites the record,
-and the README's section on testing a source shows the line that collects the check.
+can be quoted alone and cites ADR-0064, the review checklist's item on fixtures cites the record,
+and the README's section on testing a source shows the line that collects the check, alone.
 """
 
 import json
@@ -16,8 +16,8 @@ CONVENTIONS = ROOT / "docs" / "conventions.md"
 CHECKLIST = ROOT / "docs" / "review-checklist.md"
 README = ROOT / "README.md"
 INDEX = ROOT / "docs" / "adr.json"
-RECORD = "ADR-0049"
-QUESTION = "https://github.com/xippios/sdk-core/issues/367"
+RECORD = "ADR-0064"
+QUESTION = "https://github.com/xippios/sdk-core/issues/483"
 
 
 def flat(text: str) -> str:
@@ -73,15 +73,9 @@ RULES = [
         id="the-input-s-sentence",
     ),
     pytest.param(
-        "An exchange given to a recorder's step takes that sentence",
-        (
-            "where it reaches `fixture_from_response` alone",
-            "returned by a function of its module, each call of which is judged on its own",
-            "a function of the module that gives it to `fixture_from_response` alone",
-            "built in the test or takes a kind",
-            "decision 10",
-        ),
-        id="a-helper-s-exchange",
+        "The check takes a kind or the input's sentence as the mark of any place",
+        ("a served answer takes a kind", "held by the review", "decision 9"),
+        id="any-mark-covers-any-place",
     ),
     pytest.param(
         "A replay that answers another request than its recording",
@@ -95,7 +89,12 @@ RULES = [
     ),
     pytest.param(
         "`xippios.core.testing.built_answers`, which a source collects with one line",
-        ("names its file and its line", "after every other test", "the tests that ran"),
+        (
+            "and no declaration beside it",
+            "names its file and its line",
+            "after every other test",
+            "the tests that ran",
+        ),
         id="the-check",
     ),
 ]
@@ -118,16 +117,17 @@ def test_the_review_checklist_judges_a_served_body_by_its_mark() -> None:
         assert name in item.group(0), f"item 4 does not say {name!r}"
 
 
-def test_the_readme_shows_the_collecting_line_and_the_table() -> None:
+def test_the_readme_shows_the_collecting_line_alone() -> None:
     section = block(README, "## Testing a source package")
     for name in (
         "from xippios.core.testing.built_answers import *  # noqa: F403",
-        "READERS = frozenset(",
-        "ALLOWED = {",
         "A partial run judges only the tests that ran",
         "pytest-xdist",
+        RECORD,
     ):
         assert name in section, f"the README's testing section does not show {name!r}"
+    for name in ("READERS", "ALLOWED"):
+        assert name not in section, f"the README's testing section still shows {name!r}"
 
 
 def test_the_record_keeps_its_question() -> None:

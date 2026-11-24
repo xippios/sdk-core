@@ -1,4 +1,4 @@
-"""The check of a built answer's mark, on small trees that these tests write (ADR-0049).
+"""The check of a built answer's mark, on small trees that these tests write (ADR-0064).
 
 The reader's rules run on one module's text through ``built_answers.uncovered``. What a source
 meets runs through pytester, on a tree laid out as a source's: ``tests/conftest.py`` enables
@@ -23,14 +23,9 @@ def clean(source: str) -> str:
     return textwrap.dedent(source).lstrip("\n")
 
 
-def lines(
-    source: str, *, readers: tuple[str, ...] = (), allowed: tuple[str, ...] = ()
-) -> list[int]:
+def lines(source: str) -> list[int]:
     """The lines of the places of ``source`` that no mark covers."""
-    places = built_answers.uncovered(
-        clean(source), "tests/test_x.py", readers=readers, allowed=allowed
-    )
-    return [place.line for place in places]
+    return [place.line for place in built_answers.uncovered(clean(source), "tests/test_x.py")]
 
 
 def at(source: str, text: str) -> int:
@@ -191,7 +186,7 @@ NO_PLACES = [
         def test_one():
             merge_custom("<values/>", {})
         """,
-        id="a-function-the-source-did-not-name",
+        id="a-literal-to-a-function-of-the-source",
     ),
 ]
 
@@ -199,18 +194,6 @@ NO_PLACES = [
 @pytest.mark.parametrize("source", NO_PLACES)
 def test_what_the_reader_does_not_take_for_a_place(source: str) -> None:
     assert lines(source) == []
-
-
-def test_a_source_names_its_own_readers() -> None:
-    source = """
-    def test_one():
-        merge_custom("<values/>", {})
-    """
-    assert lines(source, readers=("merge_custom",)) == [2]
-    handed = clean(source).replace(
-        "():\n", '():\n    """The stored text is an input of the test, not an answer."""\n'
-    )
-    assert lines(handed, readers=("merge_custom",)) == [], "a reader takes an input"
 
 
 # --- the reach of a mark ---
@@ -348,17 +331,13 @@ def test_a_method_that_takes_the_fixture_is_a_place_as_a_function_is() -> None:
 INPUT = "is an input of the test, not an answer from Example."
 
 
-def test_an_input_marks_a_value_handed_to_the_code_and_no_served_answer() -> None:
-    served = UNMARKED.replace("def test_one():\n", f'def test_one():\n    """The body {INPUT}"""\n')
-    assert lines(served) == [5], "a served answer takes a kind"
-    handed = served.replace("    answer = ", "    fixture = fixture_from_response(").replace(
-        "})\n", "}))\n"
-    )
-    assert lines(handed) == [], "an exchange handed to the recorder's code alone is an input"
-    by_name = clean(served) + "    step(fixture_from_response(answer))\n"
-    assert lines(by_name) == [], "handed on by its name, to fixture_from_response alone"
-    used_otherwise = clean(served) + "    step(fixture_from_response(answer), answer)\n"
-    assert lines(used_otherwise) == [5]
+@pytest.mark.parametrize(("source", "where"), PLACES)
+def test_the_input_s_sentence_marks_any_place(source: str, where: str) -> None:
+    # Served or handed to the code, the check no longer tells: whether a value marked as an
+    # input is served is the review's, as whether a mark is true is (ADR-0064, decision 9).
+    assert lines(source) == [at(source, where)]
+    docstring = f'):\n    """The body {INPUT}"""\n'
+    assert lines(clean(source).replace("):\n", docstring, 1)) == []
 
 
 def test_the_input_s_sentence_is_fixed_up_to_the_word_test() -> None:
@@ -376,92 +355,9 @@ def test_the_input_s_sentence_is_fixed_up_to_the_word_test() -> None:
     assert lines(commented) == []
 
 
-# --- an exchange that a helper of the module builds for the recorder ---
+# --- no following: where a body goes, and which Response a name calls ---
 
-# The shapes of sdk-google-mail's recorder tests: helpers that return a built exchange, and one
-# that gives its parameter to fixture_from_response alone, imported from core as the sources
-# import it.
-RECORDER_TESTS = """
-import json
-
-import httpx
-from xippios.core.testing import fixture_from_response
-
-URL = "https://api.example.test/v1/messages/1"
-
-
-def token_exchange():
-    request = httpx.Request("POST", "https://auth.example.test/token", data={"code": "c"})
-    return httpx.Response(200, json={"access_token": "made-up"}, request=request)
-
-
-def message_exchange(body, url=URL):
-    return httpx.Response(200, json=body, request=httpx.Request("GET", url))
-
-
-def scrubbed(recorder, response):
-    fixture = recorder.rewrite(fixture_from_response(response, scrub=SCRUB), SECRETS)
-    return fixture
-
-
-def test_the_token_is_scrubbed(recorder):
-    fixture = scrubbed(recorder, token_exchange())
-
-
-def test_core_alone_leaves_the_token(recorder):
-    fixture = fixture_from_response(token_exchange(), scrub=SCRUB)
-
-
-def test_a_message_by_its_name(recorder):
-    response = message_exchange({"id": "1"})
-    fixture = scrubbed(recorder, response)
-
-
-def test_a_message_s_body(recorder):
-    body = json.loads(scrubbed(recorder, message_exchange({"id": "1"})).response.body)
-"""
-
-CALLS = (
-    "scrubbed(recorder, token_exchange())",
-    "fixture_from_response(token_exchange(),",
-    "response = message_exchange(",
-    "json.loads(scrubbed(recorder, message_exchange(",
-)
-"""The calls of the helpers in ``RECORDER_TESTS``, each one place where no mark covers it."""
-
-
-def test_the_input_marks_an_exchange_that_a_helper_returns_to_the_recorder_alone() -> None:
-    assert lines(RECORDER_TESTS) == [at(RECORDER_TESTS, call) for call in CALLS]
-    in_the_tests = RECORDER_TESTS.replace(
-        "(recorder):\n", f'(recorder):\n    """The exchange {INPUT}"""\n'
-    )
-    assert lines(in_the_tests) == [], "each call is handed to the recorder alone"
-    in_the_helpers = RECORDER_TESTS.replace(
-        "def token_exchange():\n", f'def token_exchange():\n    """The exchange {INPUT}"""\n'
-    ).replace(
-        "def message_exchange(body, url=URL):\n",
-        f'def message_exchange(body, url=URL):\n    """The exchange {INPUT}"""\n',
-    )
-    assert lines(in_the_helpers) == [], "the helper's docstring reaches each call that hands it on"
-    # As in sdk-google-mail: another test's parameter binds the name in that test alone.
-    elsewhere = in_the_helpers + '\n\n@pytest.mark.parametrize("scrubbed", ["user@example.com"])\n'
-    elsewhere += "def test_an_address(scrubbed):\n    assert scrubbed\n"
-    assert lines(elsewhere) == [], "the module's function is followed at every other call"
-    built_here = """
-    import httpx
-    from xippios.core.testing import fixture_from_response
-
-    def scrubbed(recorder, response):
-        return fixture_from_response(response)
-
-    def test_one(recorder):
-        scrubbed(recorder, httpx.Response(200, json={}))
-    """
-    assert lines(built_here) == [at(built_here, "scrubbed(recorder, httpx")]
-    marked = clean(built_here).replace("(recorder):\n", f'(recorder):\n    """It {INPUT}"""\n')
-    assert lines(marked) == [], "an exchange the test builds, handed on by a function"
-
-
+# A helper's exchange that one test hands to the recorder and another serves at a route.
 SERVED_AND_RECORDED = f'''
 import httpx
 from xippios.core.testing import fixture_from_response
@@ -481,210 +377,12 @@ def test_served(respx_mock):
 '''
 
 
-def test_a_helper_s_exchange_is_judged_at_each_call_and_a_served_one_takes_a_kind() -> None:
-    served = at(SERVED_AND_RECORDED, "mock(return_value=exchange())")
-    assert lines(SERVED_AND_RECORDED) == [served], "the call that a route serves takes a kind"
+def test_a_helper_s_sentence_covers_each_call_served_or_handed_to_the_recorder() -> None:
+    assert lines(SERVED_AND_RECORDED) == [], "the check follows no exchange to where it goes"
     unmarked = SERVED_AND_RECORDED.replace(f'    """The exchange {INPUT}"""\n', "")
-    assert lines(unmarked) == [at(unmarked, "fixture_from_response(exchange())"), served - 1]
-    in_the_test = SERVED_AND_RECORDED.replace(
-        "(respx_mock):\n", f'(respx_mock):\n    """The exchange {INPUT}"""\n'
-    )
-    assert lines(in_the_test) == [served + 1], "the input's sentence marks no served answer"
-    kind = SERVED_AND_RECORDED.replace(
-        "(respx_mock):\n", '(respx_mock):\n    """Composed (conventions §10, kind 2)."""\n'
-    )
-    assert lines(kind) == []
+    calls = ("fixture_from_response(exchange())", "mock(return_value=exchange())")
+    assert lines(unmarked) == [at(unmarked, call) for call in calls]
 
-
-EXCHANGE = f'''
-import httpx
-from xippios.core.testing import fixture_from_response
-
-
-def exchange():
-    """The exchange {INPUT}"""
-    return httpx.Response(200)
-
-
-def scrubbed(recorder, response):
-    return fixture_from_response(response)
-
-
-'''
-"""A helper that returns an exchange, and one that gives its parameter to the recorder."""
-
-NOT_FOLLOWED = [
-    pytest.param(
-        "fixture_from_response(response=exchange())",
-        "fixture_from_response(response=exchange())",
-        id="a-keyword-of-the-recorder",
-    ),
-    pytest.param(
-        "scrubbed(recorder, response=exchange())",
-        "scrubbed(recorder, response=exchange())",
-        id="a-keyword-of-the-function",
-    ),
-    pytest.param(
-        "for response in [exchange()]:\n        fixture_from_response(response)",
-        "for response in [exchange()]:",
-        id="a-container",
-    ),
-    pytest.param(
-        "fixture_from_response(wrapped())\n\n\ndef wrapped():\n    return exchange()",
-        "fixture_from_response(wrapped())",
-        id="a-second-function-that-returns-it",
-    ),
-    pytest.param(
-        "checked(recorder, exchange())\n\n\n"
-        "def checked(recorder, response):\n    return scrubbed(recorder, response)",
-        "checked(recorder, exchange())",
-        id="a-second-function-that-hands-it-on",
-    ),
-    pytest.param(
-        "logged(recorder, exchange())\n\n\n"
-        "def logged(recorder, response):\n    print(response)\n"
-        "    return fixture_from_response(response)",
-        "logged(recorder, exchange())",
-        id="a-function-that-reads-it-otherwise",
-    ),
-    pytest.param(
-        "fixture_from_response(exchange())\n\n\n"
-        "def test_served(respx_mock):\n"
-        "    respx_mock.get('https://api.example.test').mock(side_effect=exchange)",
-        "fixture_from_response(exchange())",
-        id="a-helper-also-passed-by-its-name",
-    ),
-    pytest.param(
-        "scrubbed = lambda recorder, response: SERVED.append(response)\n"
-        "    scrubbed(recorder, exchange())",
-        "    scrubbed(recorder, exchange())",
-        id="a-name-of-the-function-that-the-test-binds-again",
-    ),
-]
-
-
-@pytest.mark.parametrize(("body", "where"), NOT_FOLLOWED)
-def test_an_exchange_that_travels_further_is_built_in_the_test_or_takes_a_kind(
-    body: str, where: str
-) -> None:
-    test = f'def test_one(recorder):\n    """The exchange {INPUT}"""\n    {body}\n'
-    source = clean(EXCHANGE) + test
-    assert lines(source) == [at(source, where)]
-
-
-HIDDEN = [
-    pytest.param("def exchange():", "@serving\ndef exchange():", id="a-decorated-helper"),
-    pytest.param(
-        "def scrubbed(", "@serving\ndef scrubbed(", id="a-decorated-function-that-hands-it-on"
-    ),
-    pytest.param(
-        "    return httpx.Response(200)",
-        "    global LAST\n    LAST = httpx.Response(200)\n    return LAST",
-        id="a-helper-that-keeps-it-in-a-global",
-    ),
-    pytest.param("import httpx\n", "import httpx\nfrom helpers import *\n", id="a-star-import"),
-]
-"""What could hand the helper or its exchange elsewhere than its calls see, unread by the check."""
-
-
-@pytest.mark.parametrize(("old", "new"), HIDDEN)
-def test_a_helper_whose_exchange_could_go_elsewhere_unseen_is_not_followed(
-    old: str, new: str
-) -> None:
-    # A decorator receives the function, a global is read by any function, and a star import
-    # may bind the names of both functions again: a route could serve the exchange unseen.
-    docstring = f'    """The exchange {INPUT}"""\n'
-    test = f"def test_one(recorder):\n{docstring}    scrubbed(recorder, exchange())\n"
-    source = clean(EXCHANGE).replace(old, new) + test
-    assert lines(source) == [at(source, "    scrubbed(recorder, exchange())")]
-
-
-CORE_RECORDER = "from xippios.core.testing import fixture_from_response\n"
-
-REBOUND = [
-    pytest.param(
-        "    scrubbed(recorder, exchange())\n",
-        "    fixture_from_response = lambda response: SERVED.append(response)\n"
-        "    scrubbed(recorder, exchange())\n",
-        id="a-lambda-in-the-test",
-    ),
-    pytest.param(
-        CORE_RECORDER, CORE_RECORDER + "fixture_from_response = SERVED.append\n", id="at-the-top"
-    ),
-    pytest.param(
-        "    return fixture_from_response(response)",
-        "    fixture_from_response = SERVED.append\n    return fixture_from_response(response)",
-        id="inside-the-handing-function",
-    ),
-    pytest.param(
-        CORE_RECORDER,
-        "from tests.serving import serve as fixture_from_response\n",
-        id="imported-from-another-module",
-    ),
-    pytest.param(CORE_RECORDER, "", id="not-imported"),
-]
-"""Bindings of ``fixture_from_response`` that make it another function than core's recorder."""
-
-
-@pytest.mark.parametrize(("old", "new"), REBOUND)
-def test_a_helper_s_exchange_reaches_core_s_recorder_only_by_its_import_from_core(
-    old: str, new: str
-) -> None:
-    # A route could serve what a rebound name receives: a helper's exchange given to it, or a
-    # handing function's parameter, is served as on main, as an exchange built in the test and
-    # given to the name directly is judged as on main.
-    test = f'def test_one(recorder):\n    """The exchange {INPUT}"""\n'
-    test += "    scrubbed(recorder, exchange())\n    fixture_from_response(exchange())\n"
-    source = clean(EXCHANGE) + test
-    assert lines(source) == [], "imported from xippios.core.testing, both calls are handed"
-    rebound = source.replace(old, new)
-    calls = ("    scrubbed(recorder, exchange())", "    fixture_from_response(exchange())")
-    assert lines(rebound) == [at(rebound, call) for call in calls]
-
-
-def test_a_return_inside_an_if_statement_is_followed_at_each_call() -> None:
-    source = f'''
-    import httpx
-    from xippios.core.testing import fixture_from_response
-
-    def exchange(ok=True):
-        """The exchange {INPUT}"""
-        if ok:
-            return httpx.Response(200)
-        return None
-
-    def test_recorded():
-        fixture_from_response(exchange())
-
-    def test_served(respx_mock):
-        respx_mock.get("https://api.example.test").mock(return_value=exchange(True))
-    '''
-    assert lines(source) == [at(source, "mock(return_value=exchange(True))")]
-
-
-def test_an_exchange_chosen_by_a_conditional_expression_is_not_followed() -> None:
-    source = f'''
-    import httpx
-    from xippios.core.testing import fixture_from_response
-
-    def exchange(ok):
-        """The exchange {INPUT}"""
-        return httpx.Response(200) if ok else httpx.Response(404)
-
-    def test_one():
-        """The exchange {INPUT}"""
-        fixture_from_response(exchange(True))
-    '''
-    assert lines(source) == [at(source, "fixture_from_response(exchange(True))")]
-
-
-def test_a_helper_that_nothing_in_its_module_calls_is_judged_as_served() -> None:
-    # A helper of conftest.py, whose calls stand in other modules, among them.
-    source = clean(EXCHANGE).split("\n\ndef scrubbed")[0]
-    assert lines(source) == [at(source, "return httpx.Response(200)")]
-
-
-# --- the module's imports: which Response a bare name calls ---
 
 HOOK = f'''
 def test_reduce():
@@ -695,81 +393,26 @@ def test_reduce():
 
 
 @pytest.mark.parametrize(
-    ("imports", "served"),
+    "imports",
     [
-        pytest.param("from xippios.core.refresh import Response\n", False, id="the-frame-s"),
-        pytest.param("from xippios.core.refresh import Page, Response\n", False, id="among-others"),
-        pytest.param("from httpx import Response\n", True, id="httpx-s"),
-        pytest.param("from httpx._models import Response\n", True, id="a-module-of-httpx"),
-        pytest.param("", True, id="a-name-the-module-does-not-import"),
-        pytest.param("from xippios.core.refresh import *\n", True, id="a-star-import"),
-        pytest.param("from tests.helpers import Response\n", True, id="a-re-export"),
-        pytest.param("from .helpers import Response\n", True, id="a-relative-re-export"),
-        pytest.param("from respx.models import Response\n", True, id="another-library-s"),
+        pytest.param("from xippios.core.refresh import Response\n", id="the-frame-s"),
+        pytest.param("from httpx import Response\n", id="httpx-s"),
+        pytest.param("", id="a-name-the-module-does-not-import"),
+        pytest.param("from helpers import *\n", id="a-star-import"),
     ],
 )
-def test_a_bare_response_is_the_frame_s_only_where_its_module_imports_it_from_the_frame(
-    imports: str, served: bool
+def test_a_bare_response_is_a_place_that_any_mark_covers_whatever_binds_the_name(
+    imports: str,
 ) -> None:
     source = imports + clean(HOOK)
-    assert lines(source) == ([at(source, "reduce(Response(")] if served else [])
+    assert lines(source) == [], "the check reads no import to tell one Response from another"
     unmarked = source.replace(f'    """The page {INPUT}"""\n', "")
-    assert lines(unmarked) == [at(unmarked, "reduce(Response(")], "the frame's Response is a place"
-
-
-FRAME = "from xippios.core.refresh import Response\n"
-
-
-def inside(statement: str) -> str:
-    """``HOOK`` with ``statement`` as the first line of its test, after the docstring."""
-    return clean(HOOK).replace('"""\n', f'"""\n    {statement}\n', 1)
-
-
-@pytest.mark.parametrize(
-    "source",
-    [
-        pytest.param(FRAME + "import httpx\n" + inside("Response = httpx.Response"), id="assigned"),
-        pytest.param(FRAME + clean(HOOK).replace("():", "(Response):"), id="a-parameter"),
-        pytest.param(
-            FRAME
-            + "import httpx\n\n\nclass Response(httpx.Response):\n    pass\n\n\n"
-            + clean(HOOK),
-            id="a-class",
-        ),
-        pytest.param(FRAME + inside("from httpx import Response"), id="httpx-s-in-the-function"),
-        pytest.param(
-            "from httpx import Response\n" + inside(FRAME.strip()), id="httpx-s-at-the-top"
-        ),
-        pytest.param(FRAME + "from helpers import *\n" + clean(HOOK), id="beside-a-star-import"),
-    ],
-)
-def test_the_frame_s_import_names_the_response_only_where_nothing_else_binds_the_name(
-    source: str,
-) -> None:
-    assert lines(source) == [at(source, "reduce(Response(")], "read as httpx's, as before"
-
-
-def test_the_frame_s_import_in_a_function_and_at_the_top_names_the_frame_s_response() -> None:
-    assert lines(FRAME + inside(FRAME.strip())) == []
+    assert lines(unmarked) == [at(unmarked, "reduce(Response(")]
 
 
 def test_httpx_s_response_under_another_name_is_no_place() -> None:
     alias = "from httpx import Response as Answer\n\ndef test_one():\n    Answer(200)\n"
     assert lines(alias) == [], "a call the check reads by its name, Answer, is no place"
-
-
-def test_an_allowed_definition_covers_its_places_and_its_calls() -> None:
-    source = """
-    import httpx
-
-    def serve(respx_mock):
-        respx_mock.get("https://api.example.test/v1/a").respond(200)
-
-    def test_one(respx_mock):
-        serve(respx_mock)
-    """
-    assert lines(source) == [at(source, "    serve(respx_mock)")]
-    assert lines(source, allowed=("serve",)) == []
 
 
 # --- the census's comparison, through the recording's redaction ---
@@ -879,8 +522,8 @@ def test_the_census_compares_a_request_s_body(
 PYPROJECT = '[tool.pytest.ini_options]\naddopts = "-ra --strict-markers --import-mode=importlib"\n'
 CONFTEST = 'pytest_plugins = ["xippios.core.testing.plugin"]\n'
 COLLECTING = "from xippios.core.testing.built_answers import *  # noqa: F403\n"
-CHECKS = 3
-"""The tests that the collecting line collects."""
+CHECKS = 2
+"""The tests that the collecting line collects: the reader and the census."""
 
 RECORDED = {
     "recorded_at": "2026-11-21T00:00:00Z",
@@ -899,7 +542,6 @@ TREE: dict[str, str] = {
 }
 
 STATIC = "test_built_answers_carry_their_mark"
-STALE = "test_built_answers_allowed_entries_are_not_stale"
 CENSUS = "test_built_answers_replays_for_another_request_name_the_third_kind"
 
 
@@ -977,7 +619,7 @@ def test_a_source_that_collects_the_check_fails_on_an_unmarked_answer_and_names_
     pytester: pytest.Pytester,
 ) -> None:
     result = run_tree(pytester, {"tests/test_tasks.py": TASKS_UNMARKED})
-    result.assert_outcomes(passed=3, failed=1)  # the source's own test and two checks pass
+    result.assert_outcomes(passed=2, failed=1)  # the source's own test and the census pass
     assert outcome(result, STATIC) == "failed"
     failure = message(result, STATIC)
     assert "names its kind of conventions §10, or that it is an input of the test" in failure
@@ -1010,12 +652,14 @@ def test_the_check_reads_the_tests_under_the_root_and_not_beside_its_module(
     assert "scripts/test_elsewhere.py" not in failure, "only tests/ is read"
 
 
-ALLOWING = (
+DECLARING = (
     COLLECTING
-    + "\nALLOWED = {\n"
+    + '\nREADERS = frozenset({"merge_custom"})\n'
+    + "ALLOWED = {\n"
     + '    ("tests/test_tasks.py", "serve"): "each page served where and as it was recorded",\n'
     + "}\n"
 )
+"""The two declarations that a collecting module held beside its line up to core 0.4.1."""
 
 TASKS_SERVING = """
 import httpx
@@ -1030,86 +674,32 @@ def serve(respx_mock, pages):
 
 def test_journal(respx_mock):
     serve(respx_mock, {})
+
+
+def merged():
+    return merge_custom("<values/>", {"a": "1"})
 """
-
-
-def test_the_table_of_the_collecting_module_covers_a_helper_with_its_reason(
-    pytester: pytest.Pytester,
-) -> None:
-    result = run_tree(pytester, {"tests/test_tasks.py": TASKS_SERVING})
-    assert outcome(result, STATIC) == "failed"
-    assert "tests/test_tasks.py:12 in test_journal: serve(respx_mock, {})" in message(
-        result, STATIC
-    )
-    result = run_tree(
-        pytester, {"tests/test_tasks.py": TASKS_SERVING, "tests/test_built_answers.py": ALLOWING}
-    )
-    result.assert_outcomes(passed=CHECKS + 1)
-
-
-def test_a_stale_entry_of_the_table_fails_and_names_it(pytester: pytest.Pytester) -> None:
-    marked = TASKS_SERVING.replace(
-        "def serve(respx_mock, pages):\n",
-        'def serve(respx_mock, pages):\n    """Pages composed (conventions §10, kind 2)."""\n',
-    )
-    result = run_tree(
-        pytester, {"tests/test_tasks.py": marked, "tests/test_built_answers.py": ALLOWING}
-    )
-    assert outcome(result, STATIC) == "passed"
-    assert outcome(result, STALE) == "failed"
-    assert "('tests/test_tasks.py', 'serve'): it covers no place" in message(result, STALE)
-    gone = ALLOWING.replace("tests/test_tasks.py", "tests/test_gone.py")
-    result = run_tree(
-        pytester, {"tests/test_tasks.py": marked, "tests/test_built_answers.py": gone}
-    )
-    assert outcome(result, STALE) == "failed"
-    assert "('tests/test_gone.py', 'serve'): no such module" in message(result, STALE)
 
 
 @pytest.mark.parametrize(
-    "declaration",
+    "collecting",
     [
-        pytest.param('ALLOWED = {"serve": "a reason"}\n', id="a-key-that-is-no-pair"),
-        pytest.param('ALLOWED = {("tests/test_tasks.py", "serve"): ""}\n', id="no-reason"),
-        pytest.param('READERS = "merge_custom"\n', id="readers-as-one-text"),
+        pytest.param(COLLECTING, id="the-line-alone"),
+        pytest.param(DECLARING, id="the-two-declarations-beside-it"),
+        pytest.param(COLLECTING + 'READERS = "merge_custom"\n', id="a-declaration-of-any-form"),
     ],
 )
-def test_a_declaration_of_another_form_fails_and_says_the_form(
-    pytester: pytest.Pytester, declaration: str
+def test_the_check_reads_no_declaration_beside_the_collecting_line(
+    pytester: pytest.Pytester, collecting: str
 ) -> None:
-    result = run_tree(
-        pytester,
-        {
-            "tests/test_tasks.py": TASKS_SERVING,
-            "tests/test_built_answers.py": COLLECTING + declaration,
-        },
-    )
-    assert outcome(result, STATIC) == "failed"
-    assert "the collecting module declares" in message(result, STATIC)
-
-
-TASKS_READING = """
-from example import merge_custom
-
-
-def test_merged():
-    assert merge_custom("<values/>", {"a": "1"})
-"""
-
-
-def test_a_source_names_its_readers_in_the_collecting_module(pytester: pytest.Pytester) -> None:
-    files = {
-        "tests/test_tasks.py": TASKS_READING,
-        "tests/example.py": "def merge_custom(*a): return a\n",
-    }
-    result = run_tree(pytester, files, "tests/test_built_answers.py")
-    assert outcome(result, STATIC) == "passed"
-    reading = COLLECTING + 'READERS = frozenset({"merge_custom"})\n'
-    result = run_tree(
-        pytester, {**files, "tests/test_built_answers.py": reading}, "tests/test_built_answers.py"
-    )
-    assert outcome(result, STATIC) == "failed"
-    assert "tests/test_tasks.py:5 in test_merged: merge_custom(" in message(result, STATIC)
+    # READERS and ALLOWED left with the test of a stale entry (ADR-0064, decision 7): a name
+    # that the module still declares is neither read nor refused.
+    files = {"tests/test_tasks.py": TASKS_SERVING, "tests/test_built_answers.py": collecting}
+    result = run_tree(pytester, files)
+    result.assert_outcomes(passed=2, failed=1)  # the source's own test and the census pass
+    failure = message(result, STATIC)
+    assert "tests/test_tasks.py:12 in test_journal: serve(respx_mock, {})" in failure
+    assert "merge_custom" not in failure, "a literal to a source's own function is no place"
 
 
 TASKS_REPLAYING = '''

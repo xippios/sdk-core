@@ -891,7 +891,7 @@
       "number": 49,
       "title": "The mark of a built answer and its check",
       "path": "docs/adr/0049-the-mark-of-a-built-answer-and-its-check.md",
-      "status": "Accepted",
+      "status": "Superseded by ADR-0064",
       "date": "2026-11-21",
       "decided_by": "https://github.com/xippios/sdk-core/issues/367",
       "amended": [
@@ -903,7 +903,7 @@
       "amends": [],
       "supersedes": [],
       "other": [],
-      "superseded_by": null
+      "superseded_by": "ADR-0064"
     },
     {
       "id": "ADR-0050",
@@ -1121,6 +1121,22 @@
       "supersedes": [
         "ADR-0046",
         "ADR-0051"
+      ],
+      "other": [],
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-0064",
+      "number": 64,
+      "title": "The built-answer check: its mark and its census, without following a body or the module's declarations",
+      "path": "docs/adr/0064-the-built-answer-check-its-mark-and-its-census-without.md",
+      "status": "Accepted",
+      "date": "2026-11-24",
+      "decided_by": "https://github.com/xippios/sdk-core/issues/483",
+      "amended": [],
+      "amends": [],
+      "supersedes": [
+        "ADR-0049"
       ],
       "other": [],
       "superseded_by": null

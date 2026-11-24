@@ -59,8 +59,9 @@ the repository it reviews.
    the test with no kind, and a recording replayed at its own path for other parameters of
    the third, naming its condition (ADR-0043); each such body marked as §10 states the mark,
    within its reach, an input by its sentence and a replay for another request as the third
-   kind, which `xippios.core.testing.built_answers` holds in a source that collects it
-   (ADR-0049); a recorded fixture that no test
+   kind, which `xippios.core.testing.built_answers` holds in a source that collects it, while
+   whether a value marked as an input is served, and so takes a kind, is the review's
+   (ADR-0064); a recorded fixture that no test
    replays after the change, and no test or document cites, deleted and named in the
    description (ADR-0039, decision 8).
 5. **Checks green**: the PR's `ci` check passes; a reviewer who runs the checks runs

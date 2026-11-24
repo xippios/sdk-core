@@ -199,7 +199,7 @@ def pytest_configure(config: pytest.Config) -> None:
     """Register the markers and refuse the network for the session (``_NetworkGuard``).
 
     It registers the census of replays too, which listens only in a run that collects the
-    census test of ``xippios.core.testing.built_answers`` (ADR-0049).
+    census test of ``xippios.core.testing.built_answers`` (ADR-0064).
     """
     for marker in _MARKERS:
         config.addinivalue_line("markers", marker)

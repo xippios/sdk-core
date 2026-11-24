@@ -1,6 +1,6 @@
 # ADR-0049: The mark of a built answer and its check
 
-Status: Accepted · Date: 2026-11-21 · Decided by https://github.com/xippios/sdk-core/issues/367 · Amended 2026-11-22 by https://github.com/xippios/sdk-core/issues/439
+Status: Superseded by ADR-0064 · Date: 2026-11-21 · Decided by https://github.com/xippios/sdk-core/issues/367 · Amended 2026-11-22 by https://github.com/xippios/sdk-core/issues/439
 
 ## Context
 

@@ -17,7 +17,7 @@ source's environment (``keep_reserved_tenants``); the family conformance check,
 ``xippios.core.testing.family``, which a source collects by importing it into
 ``tests/test_family.py``; and the check of a built answer's mark,
 ``xippios.core.testing.built_answers``, collected likewise into
-``tests/test_built_answers.py`` (ADR-0049). Neither check is imported here. The nightly
+``tests/test_built_answers.py`` (ADR-0064). Neither check is imported here. The nightly
 comparison of a packaged list with the list upstream serves now,
 ``xippios.core.testing.live``, a source collects the same way into ``tests/test_live.py``,
 beside its ``LIVE_LISTS`` and ``NO_LIVE_LIST``; its assertion, ``assert_list_current``,
