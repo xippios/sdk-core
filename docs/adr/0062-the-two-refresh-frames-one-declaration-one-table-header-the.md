@@ -196,7 +196,13 @@ had judged no source.
     wrappers, async or not; the upstream operation and parameter its file records; its
     `Enumeration`, if any; and its origin. A fetch answers records, a model's by
     `dump_upstream` and a mapping as it is, or a finished `PackagedList`, written as built, whose
-    `param` and `endpoint` must be those its `Listed` declares where it declares them. The fetch
+    `param` and `endpoint` must be those its `Listed` declares where it declares them. Since
+    every `api/` wrapper answers an `Answer` by `get_answer`
+    (https://github.com/xippios/sdk-core/issues/479), a fetch may answer the wrapper's `Answer`
+    whose `payload` is those records, which the frame reads as the records, so a wrapper is a
+    fetch as it stands and a source needs no function of its own that only takes the payload;
+    an `Answer` of anything else, the body that holds the records say, stops the run and says to
+    hand the records (https://github.com/xippios/sdk-core/issues/577). The fetch
     that answers plain values leaves, with `Enumeration.values` and `Enumeration.key`
     (https://github.com/xippios/sdk-core/issues/475, part 7), which reverses that part of
     ADR-0051, decision 2. `Lists.package` is the source's import path, as `PackagedList.load`
@@ -206,8 +212,8 @@ had judged no source.
     request and names the lists declared on one side alone; the frame takes the names from the
     source and reads no `params` of its own.
 12. **When a list was fetched.** Carried from ADR-0051, decision 3, without the values that
-    leave. The fetch carries the moment: records are stamped when their fetch returned, and a
-    finished list keeps its own `fetched`, the wrapper's `retrieved_at`, the time of its first
+    leave. The fetch carries the moment: records are stamped when their fetch returned, an
+    `Answer`'s too, and a finished list keeps its own `fetched`, the wrapper's `retrieved_at`, the time of its first
     request or the time its file was complete, so no source's `fetched` changes its meaning.
 13. **The packaged files, `enums.py` and one table header.** Carried from ADR-0051, decision 4,
     but for its second header. The packaged files are `PackagedList.write`'s. `enums.py` is one
