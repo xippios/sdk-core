@@ -826,7 +826,7 @@
       "number": 46,
       "title": "The snapshot script's frame in core",
       "path": "docs/adr/0046-the-snapshot-script-s-frame-in-core.md",
-      "status": "Accepted",
+      "status": "Superseded by ADR-0062",
       "date": "2026-11-21",
       "decided_by": "https://github.com/xippios/sdk-core/issues/363",
       "amended": [
@@ -842,7 +842,7 @@
       "amends": [],
       "supersedes": [],
       "other": [],
-      "superseded_by": null
+      "superseded_by": "ADR-0062"
     },
     {
       "id": "ADR-0047",
@@ -920,14 +920,14 @@
       "number": 51,
       "title": "The reference refresh script's frame in core",
       "path": "docs/adr/0051-the-reference-refresh-script-s-frame-in-core.md",
-      "status": "Accepted",
+      "status": "Superseded by ADR-0062",
       "date": "2026-11-22",
       "decided_by": "https://github.com/xippios/sdk-core/issues/370",
       "amended": [],
       "amends": [],
       "supersedes": [],
       "other": [],
-      "superseded_by": null
+      "superseded_by": "ADR-0062"
     },
     {
       "id": "ADR-0052",
@@ -1101,6 +1101,23 @@
       "amended": [],
       "amends": [],
       "supersedes": [],
+      "other": [],
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-0062",
+      "number": 62,
+      "title": "The two refresh frames: one declaration, one table header, the fetch through the client and no check without a request",
+      "path": "docs/adr/0062-the-two-refresh-frames-one-declaration-one-table-header-the.md",
+      "status": "Accepted",
+      "date": "2026-11-24",
+      "decided_by": "https://github.com/xippios/sdk-core/issues/482",
+      "amended": [],
+      "amends": [],
+      "supersedes": [
+        "ADR-0046",
+        "ADR-0051"
+      ],
       "other": [],
       "superseded_by": null
     }

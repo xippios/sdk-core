@@ -1,6 +1,6 @@
 # ADR-0046: The snapshot script's frame in core
 
-Status: Accepted · Date: 2026-11-21 · Decided by https://github.com/xippios/sdk-core/issues/363 · Amended 2026-11-22 by https://github.com/xippios/sdk-core/issues/428 · Amended 2026-11-22 by https://github.com/xippios/sdk-core/issues/437
+Status: Superseded by ADR-0062 · Date: 2026-11-21 · Decided by https://github.com/xippios/sdk-core/issues/363 · Amended 2026-11-22 by https://github.com/xippios/sdk-core/issues/428 · Amended 2026-11-22 by https://github.com/xippios/sdk-core/issues/437
 
 ## Context
 
