@@ -1418,9 +1418,13 @@ standalone from the package. A task named in `BULK_TASKS` gets no route:
     `demo`; the fixture `placeholder_api_key` returns it, `None` in a live test. A source
     declares there, `secret=True`, every variable that holds a credential of its own, its
     key's or several, a refresh token with a client id and secret say (ADR-0035, decision
-    3, and its amendment of 2026-11-24), and carries no placeholder fixture of its own. A
-    fixture of its own that sets one of those variables, a reserved tenant's recorded host
-    say, runs after the plugin's. Every credential that a `RenewingBearerAuth` reads
+    3, and its amendment of 2026-11-24), and carries no placeholder fixture of its own. The
+    plugin reads the one package with a `_client.py` under the repository's own
+    `src/xippios/`, a source or a publisher's shared package that holds a key, and a
+    repository with none, a package with a `tasks.py` and no `_client.py` say, or with several
+    sets no variable and raises no error (ADR-0035, decision 3, and its second amendment of
+    2026-11-24). A fixture of its own that sets one of those variables, a reserved tenant's
+    recorded host say, runs after the plugin's. Every credential that a `RenewingBearerAuth` reads
     through `credential` is the placeholder too, one given to the constructor included,
     and a variable unset or empty is still its `ConfigError`, so a source declares each
     variable of its token request secret (ADR-0035, decision 3).

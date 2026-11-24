@@ -763,6 +763,22 @@ def shell_keys(monkeypatch: pytest.MonkeyPatch) -> None:
 PLUGIN_CONFTEST = 'pytest_plugins = ["xippios.core.testing.plugin"]\n'
 
 
+WRITTEN_PACKAGES = (["xippios", "example"], ["xippios", "other"])
+"""The packages that the inner runs below write, each imported afresh by the next run."""
+
+
+def write_repository(pytester: pytest.Pytester, files: dict[str, str]) -> None:
+    """A repository's files, each by its path from the root, with its ``src/`` importable."""
+    for path, content in files.items():
+        target = pytester.path / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+    pytester.syspathinsert(pytester.path / "src")
+    for name in [m for m in sys.modules if m.split(".")[:2] in WRITTEN_PACKAGES]:
+        del sys.modules[name]  # a second run in one test imports the changed files
+    importlib.invalidate_caches()
+
+
 def write_source(
     pytester: pytest.Pytester, client: str, tests: str, conftest: str = PLUGIN_CONFTEST
 ) -> None:
@@ -771,21 +787,16 @@ def write_source(
     ``client`` is its ``_client.py``, which the plugin reads ``ENV_VARS`` from, ``tests``
     its ``tests/test_source.py`` and ``conftest`` its ``tests/conftest.py``.
     """
-    files = {
-        "src/xippios/example/__init__.py": "",
-        "src/xippios/example/tasks.py": "__all__: list[str] = []\n",
-        "src/xippios/example/_client.py": client,
-        "tests/conftest.py": conftest,
-        "tests/test_source.py": tests,
-    }
-    for path, content in files.items():
-        target = pytester.path / path
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content, encoding="utf-8")
-    pytester.syspathinsert(pytester.path / "src")
-    for name in [m for m in sys.modules if m.split(".")[:2] == ["xippios", "example"]]:
-        del sys.modules[name]  # a second run in one test imports the changed files
-    importlib.invalidate_caches()
+    write_repository(
+        pytester,
+        {
+            "src/xippios/example/__init__.py": "",
+            "src/xippios/example/tasks.py": "__all__: list[str] = []\n",
+            "src/xippios/example/_client.py": client,
+            "tests/conftest.py": conftest,
+            "tests/test_source.py": tests,
+        },
+    )
 
 
 def secret_client(*names: str) -> str:
@@ -897,24 +908,127 @@ def test_a_pattern_holds_the_placeholder_for_each_reserved_tenant(
     result.assert_outcomes(passed=2)
 
 
-OTHER_PACKAGE_TESTS = """
+SHARED_TESTS = """
 import os
 
+from xippios.core.testing.plugin import PLACEHOLDER_KEY
 
-def test_no_variable_holds_the_placeholder():
-    assert os.environ["EXAMPLE_API_KEY"] == "shell-key"  # pragma: allowlist secret
+SHELL = dict(os.environ)
+
+
+def test_the_shared_package_s_secret_variable_holds_the_placeholder():
+    assert os.environ["EXAMPLE_API_KEY"] == PLACEHOLDER_KEY
+    assert os.environ["OTHER_TOKEN"] == SHELL["OTHER_TOKEN"]  # not declared
 """
 
 
 @pytest.mark.usefixtures("shell_keys")
-def test_a_repository_without_one_source_package_sets_no_variable(
+def test_a_shared_package_s_secret_variables_hold_the_placeholder(
     pytester: pytest.Pytester,
 ) -> None:
-    # The source is the one package with a tasks.py under src/xippios/, as the family check
-    # finds it; core's own repository has none, and two leave the plugin none to read.
-    write_source(pytester, KEY_CLIENT, OTHER_PACKAGE_TESTS)
-    (pytester.path / "src" / "xippios" / "other").mkdir()
-    (pytester.path / "src" / "xippios" / "other" / "tasks.py").write_text("__all__ = []\n")
+    # https://github.com/xippios/sdk-core/issues/538: a publisher's shared package holds a key
+    # and no tasks.py (ADR-0065, decision 3), and declares the key's variable in a _client.py
+    # of its own, as a source does; the plugin finds the package by that file.
+    write_repository(
+        pytester,
+        {
+            "src/xippios/example/shared/__init__.py": "",
+            "src/xippios/example/shared/_client.py": secret_client("EXAMPLE_API_KEY"),
+            "tests/conftest.py": PLUGIN_CONFTEST,
+            "tests/test_shared.py": SHARED_TESTS,
+        },
+    )
+    result = pytester.runpytest("tests", "--strict-markers", "--strict-config")
+    result.assert_outcomes(passed=1)
+
+
+NO_VARIABLE_TESTS = """
+import os
+
+from xippios.core.client import KeyAuth
+from xippios.core.testing.plugin import PLACEHOLDER_KEY
+
+SHELL = dict(os.environ)
+
+
+def test_no_variable_holds_the_placeholder(placeholder_api_key):
+    assert os.environ["EXAMPLE_API_KEY"] == SHELL["EXAMPLE_API_KEY"]
+    assert os.environ["OTHER_TOKEN"] == SHELL["OTHER_TOKEN"]
+    auth = KeyAuth("EXAMPLE_API_KEY", location="query", name="key", source="example")
+    assert auth.key() == placeholder_api_key == PLACEHOLDER_KEY  # the pin on the class stands
+"""
+
+
+@pytest.mark.usefixtures("shell_keys")
+def test_a_package_with_a_tasks_py_and_no_client_sets_no_variable_and_fails_nothing(
+    pytester: pytest.Pytester,
+) -> None:
+    # https://github.com/xippios/sdk-core/issues/538: a package that holds no key has no
+    # _client.py to declare one, and its tests run as any other's.
+    write_repository(
+        pytester,
+        {
+            "src/xippios/example/__init__.py": "",
+            "src/xippios/example/tasks.py": "__all__: list[str] = []\n",
+            "tests/conftest.py": PLUGIN_CONFTEST,
+            "tests/test_source.py": NO_VARIABLE_TESTS,
+        },
+    )
+    result = pytester.runpytest("tests", "--strict-markers", "--strict-config")
+    result.assert_outcomes(passed=1)
+
+
+@pytest.mark.usefixtures("shell_keys")
+def test_a_repository_without_one_package_with_a_client_sets_no_variable(
+    pytester: pytest.Pytester,
+) -> None:
+    # The package is the one with a _client.py under src/xippios/
+    # (https://github.com/xippios/sdk-core/issues/538): core's own repository has none, and two
+    # leave the plugin none to read, whichever of them holds a tasks.py.
+    write_source(pytester, KEY_CLIENT, NO_VARIABLE_TESTS)
+    write_repository(
+        pytester,
+        {
+            "src/xippios/other/__init__.py": "",
+            "src/xippios/other/_client.py": secret_client("OTHER_TOKEN"),
+        },
+    )
+    result = pytester.runpytest("tests", "--strict-markers", "--strict-config")
+    result.assert_outcomes(passed=1)
+
+
+BESIDE_TESTS = """
+import os
+
+from xippios.core.testing.plugin import PLACEHOLDER_KEY
+from xippios.other._client import ENV_VARS  # installed beside the source
+
+SHELL = dict(os.environ)
+
+
+def test_the_source_s_own_variables_alone_hold_the_placeholder():
+    assert [entry.name_or_pattern for entry in ENV_VARS] == ["OTHER_TOKEN"]
+    assert os.environ["EXAMPLE_API_KEY"] == PLACEHOLDER_KEY
+    assert os.environ["OTHER_TOKEN"] == SHELL["OTHER_TOKEN"]
+"""
+
+
+@pytest.mark.usefixtures("shell_keys")
+def test_a_package_installed_beside_the_source_is_not_read(pytester: pytest.Pytester) -> None:
+    # A source that depends on its publisher's shared package (ADR-0065, decision 3) has a
+    # second _client.py in its environment, here xippios.other installed in the repository's
+    # .venv. The plugin reads the repository's own src/xippios/ alone, so the source's ENV_VARS
+    # name each variable that its tests need, the shared key's among them.
+    write_source(pytester, secret_client("EXAMPLE_API_KEY"), BESIDE_TESTS)
+    site = ".venv/lib/site-packages"
+    write_repository(
+        pytester,
+        {
+            f"{site}/xippios/other/__init__.py": "",
+            f"{site}/xippios/other/_client.py": secret_client("OTHER_TOKEN"),
+        },
+    )
+    pytester.syspathinsert(pytester.path / site)
     result = pytester.runpytest("tests", "--strict-markers", "--strict-config")
     result.assert_outcomes(passed=1)
 

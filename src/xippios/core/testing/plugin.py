@@ -180,31 +180,46 @@ def _pool_guard_async(guard: _NetworkGuard, original: _AsyncPoolSend) -> _AsyncP
     return handle_async_request
 
 
+def _packages_with(root: Path, module: str) -> list[Path]:
+    """Each directory under ``<root>/src/xippios/`` that holds the file ``module``, in order.
+
+    Only the repository's own tree: a package installed beside it, in its ``.venv`` say, is
+    not among them.
+
+    Args:
+        root: pytest's rootdir, the repository's root.
+        module: the file's name, ``tasks.py`` or ``_client.py``.
+    """
+    return sorted(path.parent for path in (root / "src" / "xippios").rglob(module))
+
+
 def _source_packages(root: Path) -> list[Path]:
     """Each directory under ``<root>/src/xippios/`` that holds a ``tasks.py``, in order.
 
     The layout every source has, ``src/xippios/example/tasks.py`` for ``xippios.example``;
-    one of them is the source package that the plugin and the family check read.
+    one of them is the source package that the family check reads.
 
     Args:
         root: pytest's rootdir, the repository's root.
     """
-    return sorted(path.parent for path in (root / "src" / "xippios").rglob("tasks.py"))
+    return _packages_with(root, "tasks.py")
 
 
 def _secret_variables(root: Path) -> tuple[str, ...]:
     """The variables that hold ``PLACEHOLDER_KEY`` in a test not marked ``live`` (ADR-0035).
 
-    Each secret entry of the source's ``_client.ENV_VARS``: a name as it stands, and a
+    Each secret entry of the package's ``_client.ENV_VARS``: a name as it stands, and a
     pattern such as ``EXAMPLE_<NAME>_API_KEY`` once for each reserved tenant of the
     ``Tenants`` that ``_client`` holds, ``EXAMPLE_DEMO_API_KEY`` for ``demo``, since a test
-    reaches no other tenant. The source is the one package with a ``tasks.py`` under
-    ``src/xippios/``; a repository with none, core's own say, or with several names none.
+    reaches no other tenant. The package is the one with a ``_client.py`` under the
+    repository's own ``src/xippios/``, a source or a publisher's shared package that holds a
+    key; a repository with none, core's own or a package with a ``tasks.py`` and no
+    ``_client.py`` say, or with several names none.
 
     Args:
         root: pytest's rootdir, the repository's root.
     """
-    found = _source_packages(root)
+    found = _packages_with(root, "_client.py")
     if len(found) != 1:
         return ()
     package = ".".join(found[0].relative_to(root / "src").parts)
@@ -402,7 +417,7 @@ def placeholder_api_key(
 ) -> str | None:
     """Every test but a live one sends ``PLACEHOLDER_KEY``, whatever the shell holds.
 
-    ADR-0035, decision 3: the secret variables of the source's ``_client.ENV_VARS`` hold
+    ADR-0035, decision 3: the secret variables of the package's ``_client.ENV_VARS`` hold
     it, a pattern's once for each reserved tenant (``_secret_variables``),
     ``EnvKeyAuth.key`` returns it, and ``RenewingBearerAuth.credential`` returns it for
     every credential a token request reads, one given to the constructor included, and
