@@ -2035,10 +2035,10 @@ its `## [X.Y.Z] - ` heading; any other push ends there quietly, with a notice wh
 merge commit `vX.Y.Z` with the version's section as the tag's message, builds the package and,
 once a maintainer approves the run at the environment `pypi`, uploads it by trusted
 publishing. It is one workflow, since a tag pushed with the job's token starts no other, and
-PyPI's trusted publisher names its file. It is handed no secret: `release-check` reads the
-tags with the job's token, the job `tag` pushes the tag with that token from the one checkout
-that keeps its credentials (conventions §13), and PyPI trusts the workflow itself. No variable
-switches it off.
+PyPI's trusted publisher names its file. It is handed no secret, and each job takes the token
+it needs: `release-check` reads the tags with the job's token, the job `tag` pushes the tag
+with that token from the one checkout that keeps its credentials (conventions §13), and PyPI
+trusts the workflow itself. No variable switches it off.
 
 A release run that fails is finished by its own jobs, never by a push. The tag comes before
 the build, so a build that fails for good leaves a tag without a release, which a patch
