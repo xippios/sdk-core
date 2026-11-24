@@ -58,7 +58,7 @@ async def mcp_call_text(server: Any, name: str, arguments: dict[str, Any]) -> st
     Args:
         server: The ``MCPServer`` under test, e.g. from ``build_server``.
         name: The tool name, e.g. ``"example_get_series"``.
-        arguments: The tool arguments, e.g. ``{"series_id": "CORN"}``.
+        arguments: The tool arguments, e.g. ``{"series_id": "RAINFALL"}``.
     """
     from mcp.client import Client
     from mcp.types import TextContent

@@ -228,9 +228,9 @@ class AsyncClient:
             method: HTTP method.
             path: Path joined onto the base URL, e.g. ``"/series"``.
             params: Query parameters.
-            json: JSON body for write methods, e.g. ``{"name": "Corn"}``.
+            json: JSON body for write methods, e.g. ``{"name": "First thing"}``.
             data: Form body for write methods, sent form-encoded
-                (``application/x-www-form-urlencoded``), e.g. ``{"id": 4, "name": "Corn"}``.
+                (``application/x-www-form-urlencoded``), e.g. ``{"id": 4, "name": "First thing"}``.
                 For upstreams whose writes take form fields, not JSON.
             headers: Extra headers for this request only.
             auth: Credentials for this request only, every retry included: left at its
@@ -546,9 +546,9 @@ class AsyncClient:
         decodes it.
 
         Args:
-            path: Path joined onto the base URL, e.g. ``"/drafts"``.
-            json: JSON body, e.g. ``{"message": {"raw": raw}}``.
-            data: Form body, sent form-encoded, e.g. ``{"title": "Corn"}``, for an
+            path: Path joined onto the base URL, e.g. ``"/things"``.
+            json: JSON body, e.g. ``{"name": "First thing"}``.
+            data: Form body, sent form-encoded, e.g. ``{"title": "First thing"}``, for an
                 upstream whose writes take form fields; never with ``json``.
             params: Query parameters.
             headers: Extra headers for this request only.
@@ -610,7 +610,7 @@ class AsyncClient:
         the next call (ADR-0037, decision 5). ``auth`` as for ``request``.
 
         Args:
-            path: Path joined onto the base URL, e.g. ``"/v1/regions"``.
+            path: Path joined onto the base URL, e.g. ``"/regions"``.
             params: Query parameters.
             headers: Extra headers for this request only.
             auth: The client's credentials by default, ``None`` for none, an
@@ -678,8 +678,8 @@ class AsyncClient:
 
         Args:
             url: An absolute URL, e.g. a file link from a catalog, or a path joined onto
-                the base URL, e.g. ``"/files/qs.crops_20261027.txt.gz"``.
-            dest: The file to write, e.g. ``tmp_path / "qs.crops.txt.gz"``, in a directory
+                the base URL, e.g. ``"/files/regions_20261027.csv.gz"``.
+            dest: The file to write, e.g. ``tmp_path / "regions.csv.gz"``, in a directory
                 that exists.
             params: Query parameters, as for ``get``, e.g. ``{"year": "2025"}``.
             headers: Extra headers for this request only, as for ``get``.

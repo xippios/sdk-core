@@ -7,7 +7,7 @@ source::
 
     LISTS = Lists(
         package="xippios.example",
-        lists=(Listed("commodities", api.get_commodities, endpoint="GetCommodities"),),
+        lists=(Listed("regions", api.get_regions, endpoint="listRegions"),),
         packaged=PACKAGED_LISTS,
         client=client,
     )
@@ -107,10 +107,10 @@ class Enumeration:
 
     Attributes:
         ids: The field of each integer id, for an ``IntEnum`` of ``(id, name)`` pairs,
-            e.g. ``"unitId"``; given with ``names``.
-        names: The field of each id's name, e.g. ``"unitDescription"``.
+            e.g. ``"seriesId"``; given with ``names``.
+        names: The field of each id's name, e.g. ``"seriesName"``.
         class_name: The class's name where core's default from the key will not do, e.g.
-            ``"ProgressStage"`` for ``progress_stages``.
+            ``"Region"`` for ``regions``.
         member_names: Members named by hand, per value or per id, where a derived name
             collides or there is none: a mapping, or a function of the list's values or
             pairs that returns one, for a rule that names many (``render_enums``).
@@ -724,7 +724,7 @@ def id_name_pairs(
     Args:
         records: Upstream's records under upstream's field names, e.g. the
             ``regionAttributes`` of an answer.
-        id_field: The field holding the integer id, e.g. ``"attributeId"``; an ``int`` or
+        id_field: The field holding the integer id, e.g. ``"seriesId"``; an ``int`` or
             a string of ASCII digits without leading zeros (``"28"``, not ``"007"``).
         name_field: The field holding the name, a string, e.g. ``"attributeName"``.
 
@@ -797,8 +797,8 @@ letter or a digit."""
 def _class_name(key: str) -> str:
     """The default class name: each word of ``key`` capitalized, a camelCase hump kept.
 
-    ``attributeId`` → ``AttributeId``, ``partner2Code`` → ``Partner2Code``, ``state_alpha``
-    and ``STATE_ALPHA`` → ``StateAlpha``: a key splits into parts at each run of characters
+    ``seriesId`` → ``SeriesId``, ``unit2Code`` → ``Unit2Code``, ``region_code``
+    and ``REGION_CODE`` → ``RegionCode``: a key splits into parts at each run of characters
     that are no ASCII letters or digits, a part that holds a lower-case letter splits again
     before each hump, and every word is capitalized. A part in upper case alone has no hump
     (``STATE2ALPHA`` → ``State2alpha``), nor has an upper-case run (``HSCode`` →
@@ -1074,18 +1074,18 @@ def render_enums(
 
     Args:
         lists: Enum key to its values in upstream order: strings
-            (``{"state_alpha": ["AK", "AL"]}``) or ``(id, name)`` pairs
-            (``{"attributeId": [(4, "Area Harvested"), (20, "Beginning Stocks")]}``).
+            (``{"region_code": ["R01", "R02"]}``) or ``(id, name)`` pairs
+            (``{"seriesId": [(4, "Rainfall"), (20, "Temperature")]}``).
         fetched: When the lists were fetched, as text: one date for the module
-            (``"2026-10-27"``), or one per key (``{"state_alpha": "2026-10-27",
-            "attributeId": "2026-10-23"}``) for lists fetched on different days.
-        class_names: Class name per key, e.g. ``{"progress_stages": "ProgressStage"}``;
+            (``"2026-10-27"``), or one per key (``{"region_code": "2026-10-27",
+            "seriesId": "2026-10-23"}``) for lists fetched on different days.
+        class_names: Class name per key, e.g. ``{"regions": "Region"}``;
             by default each word of the key capitalized, a camelCase hump kept:
-            ``StateAlpha`` for ``state_alpha`` and ``AttributeId`` for ``attributeId``.
+            ``RegionCode`` for ``region_code`` and ``SeriesId`` for ``seriesId``.
         member_names: Member names set by hand, per key and value (an id for an
             ``IntEnum``), for a value whose derived name collides or that has none (an
-            empty or a non-Latin label), e.g. ``{"short_desc": {"CORN, GRAIN": "CORN"}}``
-            or ``{"attributeId": {173: "TOTAL_USE"}}``. Taken before any name is derived;
+            empty or a non-Latin label), e.g. ``{"series_name": {"RAINFALL, MONTHLY": "RAINFALL"}}``
+            or ``{"seriesId": {173: "TOTAL"}}``. Taken before any name is derived;
             each must be an identifier an enum accepts and unique in its list.
         generator: What the module docstring names as its generator, e.g.
             ``"scripts/refresh_reference.py"``.

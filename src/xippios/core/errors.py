@@ -314,7 +314,7 @@ class QueryTooLarge(InvalidRequestError):
             without a count.
         limit: The most records upstream serves per call, e.g. ``100_000``.
         narrow: What narrows the query, the sentences that end the message, e.g.
-            ``"Split by period, then by reporter."``.
+            ``"Split by period, then by region."``.
         request: The request upstream refused, as ``request_description(response)`` gives
             it, e.g. ``"GET /v1/data"``, for the error a source's ``classify`` maps;
             ``None``, the default, for a refusal before the data request.

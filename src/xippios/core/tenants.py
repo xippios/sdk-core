@@ -264,7 +264,7 @@ class Tenants:
                     source=self.source,
                 )
             if not _NAME.fullmatch(name):
-                # By position, never quoted: a pasted subdomain or key would be a value.
+                # By position, never quoted: an entry may be a value pasted by mistake.
                 raise ConfigError(
                     f"entry {position} of {self.list_var} is not a tenant name; names use "
                     "only lower-case letters, digits and underscores",

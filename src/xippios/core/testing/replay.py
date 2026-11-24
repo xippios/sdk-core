@@ -71,7 +71,7 @@ def replay(
 
     ``match_params`` cannot say that a parameter must be absent. Where one recorded
     request carries a parameter that another on the same path lacks (a
-    ``countOnly=true`` count and the data call), mount the more specific fixture, with
+    ``count=true`` count and the data call), mount the more specific fixture, with
     ``match_params``, first: ``respx`` tries routes in the order they were added, and the
     first that matches answers.
 
@@ -79,11 +79,11 @@ def replay(
         router: The ``respx`` router, usually the ``respx_mock`` fixture.
         path: The fixture's file, e.g. ``tests/fixtures/fetch_series/region_2024.json``.
         match_params: Names of recorded query parameters whose recorded values a request
-            must carry too, e.g. ``["countOnly"]`` where two calls share one path.
+            must carry too, e.g. ``["count"]`` where two calls share one path.
             ``None`` matches method, host and path only.
         url: Serve the recorded answer at this URL instead of the recorded one, for a
             state upstream answers alike there, within the fixture's operation or behind
-            one gateway, e.g. an empty 404 recorded for one market year standing in for
+            one gateway, e.g. an empty 404 recorded for one year standing in for
             another year inside a range, or anywhere for a test that asserts only what
             was sent; never as one operation's answer for a state another operation was
             never seen in (conventions §10). The test says that the answer is not
@@ -109,7 +109,7 @@ def replay(
     }
     if match_params is not None:
         if isinstance(match_params, str):
-            raise TypeError("match_params is a collection of names, e.g. ['countOnly']")
+            raise TypeError("match_params is a collection of names, e.g. ['count']")
         recorded: list[tuple[str, str]] = []
         for name in match_params:
             values = served.params.get_list(name)
@@ -194,7 +194,7 @@ def sent_bodies(route: respx.Route) -> list[Any]:
     sits in a test's frame, where a failing assertion or ``pytest -l`` would print it
     (https://github.com/xippios/sdk-core/issues/183). A request without a body gives
     ``None``, at its place. A test compares a body with the one it expects, e.g.
-    ``sent_bodies(route)[-1] == {"name": "Corn", "n": "2"}``; a form's values are text.
+    ``sent_bodies(route)[-1] == {"name": "First thing", "n": "2"}``; a form's values are text.
 
     Args:
         route: A ``respx`` route, e.g. from ``replay_fixture`` or ``respx_mock.post(url)``.

@@ -177,7 +177,7 @@ class UpstreamModel(BaseModel):
         ``Field(alias=...)`` or a ``validation_alias``.
 
         Returns:
-            E.g. ``{"seriesId": "CORN_YIELD", "value": 177.3}``.
+            E.g. ``{"seriesId": "RAINFALL", "value": 177.3}``.
         """
         dumped = self.model_dump(mode="json")
         return {
@@ -226,8 +226,8 @@ class NamedBy:
 
         class Row(UpstreamModel):
             region_code: Annotated[str, NamedBy(REGIONS)] = Field(validation_alias="regionCode")
-            item_code: Annotated[int, NamedBy("item")] = Field(validation_alias="itemCode")
-            item: str
+            series_code: Annotated[int, NamedBy("series")] = Field(validation_alias="seriesCode")
+            series: str
 
     With a list, every ``Result`` whose data holds the record names each code of the field in
     ``meta.names`` under the field's name, so every task that returns the model is named, and a
@@ -767,7 +767,7 @@ class ResultCap:
             rows and the preview, and the envelope and the note can add to it (see
             ``cap_result``).
         note: The text after the counts when the cap cuts a result, used verbatim, e.g.
-            ``"filter by period or by reporter to see the rest"`` for a tool that has
+            ``"filter by period or by region to see the rest"`` for a tool that has
             those filters. ``None`` says ``"narrow the query to see the rest"``, which
             promises no filter the tool may lack.
         paged: ``True`` gives the tool the adapter's own argument ``offset``, the rows of

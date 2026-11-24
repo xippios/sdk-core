@@ -87,14 +87,14 @@ class PackagedList(BaseModel):
     has one, ``"note"``. ``<name>`` is usually ``param``; two lists derived from one
     upstream parameter keep it as ``param`` in files of their own names. A list of
     values is records of one field named by the upstream parameter,
-    ``[{"state_alpha": "AK"}, ...]``; a table is records of its columns. Any other key
+    ``[{"region_code": "R01"}, ...]``; a table is records of its columns. Any other key
     is refused (ADR-0041, decision 5). Instances are frozen.
 
     Attributes:
-        param: The list, as upstream names it, e.g. ``"commodities"`` or
-            ``"state_alpha"``.
+        param: The list, as upstream names it, e.g. ``"regions"`` or
+            ``"region_code"``.
         endpoint: The upstream operation the list was fetched from, an operationId or a
-            URL path, e.g. ``"Regions_List"`` or
+            URL path, e.g. ``"listRegions"`` or
             ``"v1/reference/regions.json"``; never ``"reference"`` or a
             file of the package (ADR-0041, decision 1).
         fetched: When the refresh script fetched the list, timezone-aware UTC; ``write``
@@ -182,7 +182,7 @@ class PackagedList(BaseModel):
 
         Args:
             source: Source slug, e.g. ``"example"``.
-            request: The task's parameters, e.g. ``{"search": "wheat"}``; a ``None``
+            request: The task's parameters, e.g. ``{"search": "north"}``; a ``None``
                 is dropped, as for every ``ResultMeta``.
             vintage: Upstream's release identifier of the list, when upstream has one;
                 never the fetch date, which is not a vintage.
@@ -203,7 +203,7 @@ class PackagedList(BaseModel):
         """The records validated into ``model`` instances, in upstream order.
 
         Args:
-            model: The record model, e.g. a ``UpstreamModel`` subclass ``Commodity``.
+            model: The record model, e.g. a ``UpstreamModel`` subclass ``Region``.
             source: Source slug for the error, e.g. ``"example"``.
 
         Raises:
@@ -257,7 +257,7 @@ class PackagedList(BaseModel):
         pass ``datetime.now(UTC)`` as it is. ``PackagedList.load`` reads the file back.
 
         Args:
-            path: The file, e.g. ``REFERENCE / "commodities.json"``.
+            path: The file, e.g. ``REFERENCE / "regions.json"``.
         """
         written = self.model_copy(update={"fetched": self.fetched.replace(microsecond=0)})
         payload = written.model_dump(mode="json", exclude={"note"} if self.note is None else None)
@@ -818,8 +818,8 @@ def _named(pairs: Iterable[tuple[Any, str]]) -> str:
 def _by_name(text: str, shown: Mapping[str | int, str]) -> list[tuple[str | int, str]]:
     """Up to three codes whose name holds ``text``, then those whose name comes close.
 
-    Case and runs of white space are ignored, so ``"wheat"`` names ``104 (Wheat - White)``,
-    and ``"Flaxsed"`` names ``1001 (Flaxseed)`` by ``difflib``.
+    Case and runs of white space are ignored, so ``"north"`` names ``104 (North - Coast)``,
+    and ``"Highlnds"`` names ``1001 (Highlands)`` by ``difflib``.
     """
     wanted = " ".join(text.split()).casefold()
     if not wanted:
@@ -895,7 +895,7 @@ def matches(search: str | None, *fields: object) -> bool:
     GENC code) matches nothing.
 
     Args:
-        search: The text to look for, e.g. ``"wheat"``; ``None`` matches every record.
+        search: The text to look for, e.g. ``"north"``; ``None`` matches every record.
         *fields: The record's fields to look in, e.g. its code and its name.
     """
     if search is None:
@@ -950,12 +950,12 @@ def nearest[K: (int, str)](
     Args:
         value: The integer given, e.g. ``999``.
         codes: Upstream's integer code to its name, keyed by the integer, e.g.
-            ``{1001: "Flaxseed"}``, or by its text, e.g. ``{"1001": "Flaxseed"}``.
+            ``{1001: "Highlands"}``, or by its text, e.g. ``{"1001": "Highlands"}``.
         n: The most pairs returned.
 
     Returns:
         ``(code, name)`` pairs with the codes as ``codes`` keys them, e.g.
-        ``[(1001, "Flaxseed"), (902, "Soybean Oil")]``; empty when ``codes`` is.
+        ``[(1001, "Highlands"), (902, "Lowlands")]``; empty when ``codes`` is.
 
     Raises:
         ValueError: ``n`` is less than 1, or a code keyed by its text is no integer.

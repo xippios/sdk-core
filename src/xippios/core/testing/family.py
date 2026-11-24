@@ -63,8 +63,8 @@ are read from pytest's rootdir.
   ``tasks_write.__all__``, a source's write tasks included (conventions §13), in the format
   of sdk-template's ``README.md.jinja``: the tables under the ``## Status`` heading whose
   header row has a ``Task function`` column; that cell starts with the task's name in
-  backticks, alone, with its call (``get_data(commodity_code, market_year)``) or as
-  ``tasks.get_data(...)``, several tasks of one row as backticked names separated by
+  backticks, alone, with its call (``get_series(region_code, year)``) or as
+  ``tasks.get_series(...)``, several tasks of one row as backticked names separated by
   commas; whatever follows the first non-backticked text is prose;
 - ``.copier-answers.yml`` names a template tag, ``_commit: vX.Y.Z`` (conventions §15);
 - ``pyproject.toml`` bounds ``xippios-core`` and each of its extras to one minor,

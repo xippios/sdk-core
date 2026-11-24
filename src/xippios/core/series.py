@@ -8,21 +8,21 @@ answer for the task to assemble, its vintage included::
     from xippios.core import Ceiling, fetch_periods
     from xippios.example.errors import NoDataForYear  # a NotFoundError of the source's own
 
-    SERIES = Ceiling(10, unit="market years", source="example")
+    SERIES = Ceiling(10, unit="years", source="example")
 
 
-    async def get_series_async(...) -> Result[list[Week]]:
+    async def get_series_async(...) -> Result[list[Observation]]:
         SERIES.check(end_year - start_year + 1, asked=f"{start_year} to {end_year}")
         ...  # a release list, or a count, may come between the two
         fetched = await fetch_periods(
             range(start_year, end_year + 1),
-            lambda year: api.get_weeks(region_code, year),
+            lambda year: api.get_observations(region_code, year),
             skip=(NoDataForYear,),
         )
         records = [record for _, answer in fetched for record in answer]
         answered = {year for year, _ in fetched}
         passed = [str(year) for year in range(start_year, end_year + 1) if year not in answered]
-        notes = [f"Market years {', '.join(passed)} hold no data."] if passed else []
+        notes = [f"Years {', '.join(passed)} hold no data."] if passed else []
 
 The two stay apart, since a task may send a request between them, and a range over the
 ceiling is still refused before any request. The task says the periods it passed over in a note
@@ -70,7 +70,7 @@ class Ceiling:
         most: The most periods one call fetches in Python and over HTTP, a whole number
             from 1, e.g. ``60``.
         unit: What the periods are, in the plural, as the refusals name them, e.g.
-            ``"months"``, ``"market years"``.
+            ``"months"``, ``"years"``.
         mcp: The ceiling the MCP server starts with, from 1 to ``most``, e.g. ``24``; given
             with ``option``. ``None``, the default, where the server fetches ``most`` too.
         option: The long option that sets the MCP server's ceiling, e.g.
@@ -182,7 +182,7 @@ class Ceiling:
                 ``"2024-08 to 2026-08"``; ``None`` names the count alone, ``25 months
                 asked``.
             advice: The sentence that closes the refusal, after ``Nothing was sent.``, e.g.
-                ``"Give a shorter range, e.g. year__GE=2021 with year__LE=2025."``, written
+                ``"Give a shorter range, e.g. start_year=2021 with end_year=2025."``, written
                 with ``value`` where it names a bound; ``Ask for fewer <unit>.`` by default.
 
         Raises:
