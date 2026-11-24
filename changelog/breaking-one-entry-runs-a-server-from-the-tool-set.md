@@ -30,6 +30,11 @@
     `README.md` (sdk-usda-gats) — a host applies the hooks
     as `tools.apply_options(tools.option_defaults())` — the hook takes no server (ADR-0063,
     decision 7).
+    `CLAUDE.md` (sdk-cashctrl, sdk-google-mail) — the lines that name `serve_tenants`,
+    sdk-cashctrl's 47 and sdk-google-mail's 69, 71 and 363, name core's `main`, which binds a
+    server to one tenant given `tenants=TENANTS` — `serve_tenants` left core, and the template's
+    update skips `CLAUDE.md`, so no update rewrites the lines and no test breaks for them
+    (ADR-0063, decision 7).
     `tests/test_org_lock.py` (sdk-cashctrl) — `LOCK = TenantLock(TENANTS, DEMO)`,
     and `test_both_entry_points_bind_to_the_org` reads `MCP_INSTRUCTIONS`
     and `MCP_BOUND_INSTRUCTIONS` from `tasks` and `tasks_write` in place of `module.INSTRUCTIONS`
