@@ -124,7 +124,7 @@ async def test_mcp_call_fails_when_the_server_reports_an_error() -> None:
 
 
 # assert_write_tools: a write server against its write tasks (conventions §8) ---------
-# The tests of the two copies, sdk-cashctrl's and sdk-google-mail's
+# The tests of the two copies, two sources'
 # tests/test_tasks_write.py, which core removed in 0.3.0 and takes back in 0.4.0 with the
 # check that confirm is the last parameter (ADR-0042, decision 1). Every write task holds
 # its preview, which the check reads in every call (ADR-0050, decision 4).
@@ -197,7 +197,7 @@ async def test_assert_write_tools_accepts_a_server_a_lock_binds() -> None:
         """
         return previewed("thing/rename")
 
-    tenants = Tenants("fictive-src", list_var="FICTIVE_SRC_TENANTS", param="org", fields=("KEY",))
+    tenants = Tenants("example-src", list_var="EXAMPLE_SRC_TENANTS", param="org", fields=("KEY",))
     bound = bind_tasks([rename_thing], TenantLock(tenants, "demo"))
     await assert_write_tools(ToolSet("example", bound, read_only=False), bound)
 
@@ -303,10 +303,10 @@ async def test_assert_write_tools_keeps_write_tools_off_the_read_adapters() -> N
 
 @pytest.mark.anyio
 async def test_assert_write_tools_names_tools_with_the_underscored_source() -> None:
-    write = ToolSet("usda-nass", WRITE, read_only=False)
-    await assert_write_tools(write, WRITE, router=router_from_tasks("usda-nass", READ))
-    with_write = router_from_tasks("usda-nass", WRITE)
-    with pytest.raises(AssertionError, match=r"^usda_nass_create_thing: "):
+    write = ToolSet("example-api", WRITE, read_only=False)
+    await assert_write_tools(write, WRITE, router=router_from_tasks("example-api", READ))
+    with_write = router_from_tasks("example-api", WRITE)
+    with pytest.raises(AssertionError, match=r"^example_api_create_thing: "):
         await assert_write_tools(write, WRITE, router=with_write)
 
 
@@ -314,8 +314,8 @@ async def test_assert_write_tools_names_tools_with_the_underscored_source() -> N
 # A write task's answer holds one member tagged performed: Literal[False], the preview,
 # which declares reads, the operations it read. Every call holds the annotations, and
 # the dry run calls each tool without confirm and compares reads with what the router saw.
-# sdk-cashctrl's previews read with GET, as rename_item's does, and sdk-google-mail's read
-# nothing but a reply's, as add_item's reads nothing.
+# One source's previews read with GET, as rename_item's does, and another's read nothing
+# but a reply's, as add_item's reads nothing.
 
 ITEMS = "https://items.example.test"
 
@@ -335,7 +335,7 @@ class ItemPreview(UpstreamModel):
 
 
 class RecordPreview[T](UpstreamModel):
-    """A preview generic in the record it shows, as sdk-cashctrl's ``WritePreview[T]`` is."""
+    """A preview generic in the record it shows, as a source's ``WritePreview[T]`` is."""
 
     performed: Literal[False] = False
     endpoint: str

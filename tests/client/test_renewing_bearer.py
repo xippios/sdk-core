@@ -2,7 +2,7 @@
 
 ADR-0025, amendment 2026-11-18, point c; https://github.com/xippios/sdk-core/issues/156.
 Every exchange is a test double behind ``httpx.MockTransport``: a token endpoint on an
-origin of its own, as Google's is, that answers a made-up bearer numbered by the exchange,
+origin of its own, as a provider's is, that answers a made-up bearer numbered by the exchange,
 and the API on the base URL. The shell holds made-up values for the two variables the
 login reads; the plugin pins the placeholder on both (ADR-0035, decision 3), so a
 token request carries the placeholder and no shell value.
@@ -69,7 +69,7 @@ class Clock:
 
 
 class LoginAuth(RenewingBearerAuth):
-    """A login as sdk-faostat's: two variables posted as a form, a JSON answer."""
+    """A login of two variables posted as a form, with a JSON answer."""
 
     def token_request(self, request: httpx.Request) -> httpx.Request:
         return httpx.Request(
@@ -308,7 +308,7 @@ async def test_a_write_s_refusal_keeps_the_bearer_that_a_read_renewed_meanwhile(
 
 
 class LoginAuthRenewingOn403(LoginAuth):
-    """A source whose upstream refuses a bearer with 403 too, as FAOSTAT does."""
+    """A source whose upstream refuses a bearer with 403 too."""
 
     renew_on: ClassVar[frozenset[int]] = frozenset({401, 403})
 
@@ -574,7 +574,7 @@ async def test_a_transport_failure_of_the_exchange_is_retried_with_its_request()
 
 
 class RefreshAuth(LoginAuth):
-    """A refresh as sdk-google-mail's: a revoked grant names the consent to run again."""
+    """A refresh whose revoked grant names the consent to run again."""
 
     def token_refused(self, response: httpx.Response) -> XippiosError:
         if response.status_code == 400 and response.json().get("error") == "invalid_grant":

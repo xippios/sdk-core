@@ -58,14 +58,14 @@ class Commodity(UpstreamModel):
 
 COMMODITIES = {
     "param": "commodities",
-    "endpoint": "PSDData_GetCommodities",
+    "endpoint": "commodities",
     "fetched": "2026-10-23",
     "records": [
         {"commodityCode": "0410000", "commodityName": "Wheat"},
         {"commodityCode": "0440000", "commodityName": "Corn"},
     ],
 }
-"""sdk-usda-psd's layout, ``fetched`` a bare date as every refresh script wrote it so far."""
+"""A source's layout, ``fetched`` a bare date as every refresh script wrote it so far."""
 
 
 def test_a_packaged_list_answers_with_the_meta_of_adr_0022(package: str, tmp_path: Path) -> None:
@@ -73,10 +73,10 @@ def test_a_packaged_list_answers_with_the_meta_of_adr_0022(package: str, tmp_pat
     packaged = PackagedList.load(package, "commodities")
     assert PackagedList.load(package, "commodities.json") == packaged
     assert packaged.fetched == datetime(2026, 10, 23, tzinfo=UTC)  # the start of that day
-    meta = packaged.meta("usda-psd", request={"search": None})
-    assert (meta.endpoint, meta.retrieved_at) == ("PSDData_GetCommodities", packaged.fetched)
+    meta = packaged.meta("example", request={"search": None})
+    assert (meta.endpoint, meta.retrieved_at) == ("commodities", packaged.fetched)
     assert (meta.vintage, meta.published_at, meta.total, meta.request) == (None, None, None, {})
-    rows = packaged.parse(Commodity, source="usda-psd")
+    rows = packaged.parse(Commodity, source="example")
     assert [row.commodity_name for row in rows] == ["Wheat", "Corn"]
 
 
@@ -85,7 +85,7 @@ def test_meta_takes_an_upstream_release_but_never_the_fetch_date() -> None:
     assert packaged.fetched == datetime(2026, 10, 27, 9, 15, tzinfo=UTC)
     released = datetime(2026, 10, 6, 8, 0)
     meta = packaged.meta(
-        "usda-gats", vintage="202608", published_at=released, published_at_naive=True
+        "example", vintage="202608", published_at=released, published_at_naive=True
     )
     assert (meta.vintage, meta.published_at, meta.published_at_naive) == ("202608", released, True)
     assert meta.retrieved_at == packaged.fetched
@@ -115,7 +115,7 @@ def test_a_one_field_value_list_round_trips_through_write_and_load(
 
 
 def test_a_note_is_written_when_set_and_fetched_to_the_second(package: str, tmp_path: Path) -> None:
-    # sdk-usda-nass: two lists derived from api_GET's unit_desc, each in a file of its own.
+    # Two lists derived from one endpoint's unit_desc, each in a file of its own.
     derived = PackagedList(
         param="unit_desc",
         endpoint="api_GET",
@@ -138,8 +138,8 @@ def test_a_packaged_list_refuses_a_naive_time_an_unknown_key_and_unparsable_reco
     with pytest.raises(ValueError, match=r"origin\n  Extra inputs are not permitted"):
         PackagedList.model_validate({**COMMODITIES, "origin": "https://example.test/c.json"})
     broken = PackagedList.model_validate({**COMMODITIES, "records": [{"commodityCode": "1"}]})
-    with pytest.raises(ValidationError, match=r"^usda-psd PSDData_GetCommodities: 1 validation"):
-        broken.parse(Commodity, source="usda-psd")
+    with pytest.raises(ValidationError, match=r"^example commodities: 1 validation"):
+        broken.parse(Commodity, source="example")
 
 
 def test_a_file_that_is_no_packaged_list_raises_the_taxonomys_error(
@@ -182,7 +182,7 @@ def test_closest_by_code_then_by_name(value: str, n: int, expected: list[tuple[s
 
 
 VALUES = {"VA": "VA", "AK": "AK", "TX": "TX"}
-"""Bare values, sdk-usda-nass's ``state_alpha`` in shape: each value is its own name."""
+"""Bare values, a source's ``state_alpha`` in shape: each value is its own name."""
 
 
 def test_closest_needs_difflib_s_default_similarity_and_takes_no_cutoff() -> None:
@@ -194,14 +194,14 @@ def test_closest_needs_difflib_s_default_similarity_and_takes_no_cutoff() -> Non
         closest("VS", VALUES, cutoff=0.5)  # type: ignore[call-arg]
 
 
-ESR_COMMODITIES = {902: "Soybean Oil", 1001: "Flaxseed", 104: "Wheat - White"}
-"""Three of sdk-usda-esr's commodities, keyed by their integer codes."""
+INTEGER_CODES = {902: "Soybean Oil", 1001: "Flaxseed", 104: "Wheat - White"}
+"""Three commodities, keyed by their integer codes."""
 
 
 def test_nearest_names_the_codes_nearest_by_number() -> None:
-    # sdk-usda-esr's and sdk-usda-gats's strategy (https://github.com/xippios/sdk-core/issues/107).
-    assert nearest(999, ESR_COMMODITIES, n=2) == [(1001, "Flaxseed"), (902, "Soybean Oil")]
-    assert nearest(999, ESR_COMMODITIES) == [
+    # Two sources' strategy (https://github.com/xippios/sdk-core/issues/107).
+    assert nearest(999, INTEGER_CODES, n=2) == [(1001, "Flaxseed"), (902, "Soybean Oil")]
+    assert nearest(999, INTEGER_CODES) == [
         (1001, "Flaxseed"),
         (902, "Soybean Oil"),
         (104, "Wheat - White"),
@@ -209,7 +209,7 @@ def test_nearest_names_the_codes_nearest_by_number() -> None:
 
 
 def test_nearest_reads_codes_keyed_by_their_text_and_returns_them_so() -> None:
-    # sdk-usda-gats keys its customs districts by the id's text.
+    # A source keys its customs districts by the id's text.
     districts = {
         "10": "NEW YORK, N.Y.",
         "2": "ST.ALBANS, VT.",
@@ -221,7 +221,7 @@ def test_nearest_reads_codes_keyed_by_their_text_and_returns_them_so() -> None:
         ("1", "PORTLAND,MAINE"),
         ("2", "ST.ALBANS, VT."),
     ]
-    by_text = {str(code): name for code, name in ESR_COMMODITIES.items()}
+    by_text = {str(code): name for code, name in INTEGER_CODES.items()}
     assert nearest(999, by_text, n=2) == [("1001", "Flaxseed"), ("902", "Soybean Oil")]
 
 
@@ -235,6 +235,6 @@ def test_nearest_of_no_codes_is_none() -> None:
 
 def test_nearest_refuses_an_n_below_one_and_a_code_that_is_no_integer() -> None:
     with pytest.raises(ValueError, match=r"n must be > 0: 0"):
-        nearest(999, ESR_COMMODITIES, n=0)
+        nearest(999, INTEGER_CODES, n=0)
     with pytest.raises(ValueError, match=r"the code 'R04' of codes is not an integer"):
         nearest(4, {"R04": "South America"})

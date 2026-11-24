@@ -311,7 +311,7 @@ async def test_5xx_to_an_idempotent_method_is_still_retried(
 async def test_a_body_is_sent_form_encoded_or_as_json(
     respx_mock: respx.MockRouter, config: ClientConfig
 ) -> None:
-    # sdk-cashctrl: CashCtrl's writes take form fields, not JSON.
+    # A source whose writes take form fields, not JSON.
     route = respx_mock.post(f"{BASE}/v1/x").respond(200, json={"success": True})
     client = AsyncClient(config)
     await client.request("POST", "/v1/x", data={"a": 1, "b": "x y/é"})
@@ -392,8 +392,8 @@ async def test_get_and_request_store_nothing(respx_mock: respx.MockRouter) -> No
 async def test_a_body_that_does_not_decode_is_requested_again(
     respx_mock: respx.MockRouter,
 ) -> None:
-    # https://github.com/xippios/sdk-core/issues/122: sdk-usda-nass keeps an answer for a
-    # day, so a 200 that was not JSON raised the same ValidationError until it expired.
+    # https://github.com/xippios/sdk-core/issues/122: a source that keeps an answer for a
+    # day raised the same ValidationError for a 200 that was not JSON until it expired.
     route = respx_mock.get(f"{BASE}/v1/x").mock(
         side_effect=[
             httpx.Response(200, text="<html>busy</html>"),
@@ -479,8 +479,8 @@ async def test_a_miss_is_retrieved_when_it_arrived_not_once_it_parsed(
 async def test_get_answer_parses_its_payload_into_the_type_it_is_given(
     respx_mock: respx.MockRouter,
 ) -> None:
-    # https://github.com/xippios/sdk-core/issues/123: sdk-comtrade's ReferenceFile and
-    # sdk-usda-nass's ParamValues each paired the parsed rows with retrieved_at.
+    # https://github.com/xippios/sdk-core/issues/123: two sources' models each paired the
+    # parsed rows with retrieved_at.
     respx_mock.get(f"{BASE}/v1/regions").respond(
         200, json=[{"regionCode": "AF"}, {"regionCode": "EU"}]
     )
@@ -516,7 +516,7 @@ async def test_get_answer_takes_an_endpoint_with_a_type_to_parse(
 async def test_a_cache_hit_carries_the_time_its_entry_was_stored(
     respx_mock: respx.MockRouter,
 ) -> None:
-    # sdk-usda-psd: a task stamped a hit with the current time as retrieved_at.
+    # A source's task stamped a hit with the current time as retrieved_at.
     respx_mock.get(f"{BASE}/v1/x").respond(200, json={"n": 1})
     cache = MemoryCache(lifetimes={"/": None})
     client = AsyncClient(ClientConfig(source="example", version="1", base_url=BASE, cache=cache))
@@ -538,7 +538,7 @@ async def test_a_cache_hit_carries_the_time_its_entry_was_stored(
 async def test_get_answer_is_retrieved_when_it_arrived_or_when_its_entry_was_stored(
     respx_mock: respx.MockRouter,
 ) -> None:
-    # Queue row 39 a, sdk-usda-gats: its wrappers returned (records, stored_at) tuples.
+    # Queue row 39 a: a source's wrappers returned (records, stored_at) tuples.
     respx_mock.get(f"{BASE}/v1/x").respond(200, json={"n": 1})
     cache = MemoryCache(lifetimes={"/": None})
     client = AsyncClient(ClientConfig(source="example", version="1", base_url=BASE, cache=cache))
@@ -557,7 +557,7 @@ async def test_get_answer_is_retrieved_when_it_arrived_or_when_its_entry_was_sto
 
 @pytest.mark.anyio
 async def test_gzip_answer_replays_from_the_cache(respx_mock: respx.MockRouter) -> None:
-    # Found by sdk-usda-psd PR 3: the cache kept the decoded body with content-encoding,
+    # Found by a source's pull request: the cache kept the decoded body with content-encoding,
     # so the replay tried to gunzip plain JSON and raised httpx.DecodingError.
     body = gzip.compress(b'{"a": 1}')
     route = respx_mock.get(f"{BASE}/v1/x").respond(
@@ -773,7 +773,7 @@ def _classified(classify: CountingClassify, *, max_attempts: int = 4) -> ClientC
 async def test_a_429_that_classify_gives_a_long_wait_is_raised_after_one_attempt(
     respx_mock: respx.MockRouter, sleeper: Sleeper
 ) -> None:
-    # sdk-usda-psd: api.data.gov's spent quota is a 429 without Retry-After; the core loop
+    # A gateway's spent quota is a 429 without Retry-After; the core loop
     # fired three more requests into it before classify's one-hour wait was ever read.
     route = respx_mock.get(f"{BASE}/v1/x").respond(429, json={"error": "OVER_RATE_LIMIT"})
     spent = RateLimitError("quota spent", retry_after=3600.0, source="example")
@@ -819,7 +819,7 @@ async def test_a_rate_limit_error_without_retry_after_keeps_the_header(
 async def test_a_5xx_that_classify_maps_to_an_upstream_error_is_still_retried(
     respx_mock: respx.MockRouter, sleeper: Sleeper
 ) -> None:
-    # sdk-cashctrl maps every 5xx to UpstreamError, to scrub the host from its message.
+    # A source maps every 5xx to UpstreamError, to scrub the host from its message.
     route = respx_mock.get(f"{BASE}/v1/x").respond(503, text="busy")
     busy = UpstreamError("busy", status=503, body="", source="example")
     classify = CountingClassify({503: busy})
@@ -907,7 +907,7 @@ KEY_ENV = "EXAMPLE_API_KEY"  # pragma: allowlist secret (a variable name)
 async def test_auth_none_sends_a_keyed_client_s_request_without_the_key(
     respx_mock: respx.MockRouter, config: ClientConfig
 ) -> None:
-    # sdk-comtrade: the public reference files on the same host needed a second client.
+    # A source's public reference files on the same host needed a second client.
     route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
     client = AsyncClient(
         config, auth=KeyAuth(KEY_ENV, location="query", name="key", source="example")
@@ -995,7 +995,7 @@ async def test_any_explicit_auth_form_bypasses_the_cache(respx_mock: respx.MockR
 @pytest.mark.parametrize(
     "url",
     [
-        "https://files.example.test/bulk/psd.csv",  # another host
+        "https://files.example.test/bulk/series.csv",  # another host
         "https://api.example.test:8443/v1/x",  # another port
         "http://api.example.test/v1/x",  # another scheme
     ],

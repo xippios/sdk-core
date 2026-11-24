@@ -74,14 +74,14 @@ def test_a_value_list_renders_a_str_enum() -> None:
 
 
 COMMITTED = {
-    # sdk-comtrade's ten lists, each named in its class_names today
+    # One source's ten lists, each named in its class_names today
     "aggregateBy": "AggregateBy", "breakdownMode": "BreakdownMode", "clCode": "ClCode",
     "customsCode": "CustomsCode", "flowCode": "FlowCode", "freqCode": "FreqCode",
     "mosCode": "MosCode", "motCode": "MotCode", "qtyUnitCode": "QtyUnitCode",
     "typeCode": "TypeCode",
-    # sdk-usda-esr's and sdk-usda-psd's id lists, and sdk-usda-gats's
+    # Three sources' id lists
     "unitId": "UnitId", "attributeId": "AttributeId", "unitOfMeasureId": "UnitOfMeasureId",
-    # sdk-usda-nass's, but its two singular names, which stay in its class_names
+    # A fifth source's, but its two singular names, which stay in its class_names
     "source_desc": "SourceDesc", "sector_desc": "SectorDesc", "group_desc": "GroupDesc",
     "agg_level_desc": "AggLevelDesc", "freq_desc": "FreqDesc", "state_alpha": "StateAlpha",
     "statisticcat_desc": "StatisticcatDesc", "unit_desc": "UnitDesc",
@@ -94,7 +94,7 @@ def test_a_default_class_name_keeps_a_camel_case_hump() -> None:
     # The names the sources set by hand are the default (https://github.com/xippios/sdk-core/issues/95).
     source = render_enums({key: ["A"] for key in COMMITTED}, fetched="2026-11-18")
     assert run(source)["__all__"] == list(COMMITTED.values())
-    # A hump after a digit too: Comtrade's partner2Code, as the template's line names it.
+    # A hump after a digit too: an upstream's partner2Code, as the template's line names it.
     after_digits = render_enums({"partner2Code": ["A"], "level10Id": ["A"]}, fetched="2026-11-18")
     assert run(after_digits)["__all__"] == ["Partner2Code", "Level10Id"]
 
@@ -115,7 +115,7 @@ ATTRIBUTES: list[dict[str, Any]] = [
     {"attributeId": 173, "attributeName": "Total Disappearance"},
     {"attributeId": 20, "attributeName": "Beginning Stocks"},
 ]
-"""PSD's ``commodityAttributes`` in shape: a repeated name, an id sent as digits."""
+"""An upstream's ``commodityAttributes`` in shape: a repeated name, an id sent as digits."""
 
 
 def test_id_name_pairs_render_an_int_enum_equal_to_upstreams_ids() -> None:

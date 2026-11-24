@@ -18,8 +18,8 @@ def test_one_read_timeout_of_sixty_seconds_by_default() -> None:
 
 
 def test_user_agent_format() -> None:
-    config = ClientConfig(source="usda-nass", version="0.3.1", base_url="https://x.test")
-    assert config.user_agent == "xippios-usda-nass/0.3.1 (+https://github.com/xippios)"
+    config = ClientConfig(source="example", version="0.3.1", base_url="https://x.test")
+    assert config.user_agent == "xippios-example/0.3.1 (+https://github.com/xippios)"
 
 
 def test_retry_delay_doubles_and_caps_without_jitter() -> None:

@@ -344,7 +344,7 @@ async def test_an_error_of_the_data_request_passes_as_raised() -> None:
     ids=["whole-float", "fraction", "bool", "text", "none", "decimal"],
 )
 async def test_a_count_that_is_no_int_is_the_source_s_fault(answer: object) -> None:
-    """sdk-faostat's upstream counts with a float: its source reads it into an int first."""
+    """An upstream that counts with a float: its source reads it into an int first."""
     upstream = Upstream(answer)
     with pytest.raises(TypeError) as info:
         await fetch_counted(upstream.count, upstream.fetch, limit=100, empty=[], narrow=NARROW)

@@ -32,7 +32,7 @@ RECORDS: list[dict[str, Any]] = [
     {"countryCode": "BR", "countryName": "Brazil", "regionCode": "R04"},
     {"countryCode": "E4", "countryName": "European Union", "regionCode": "R03"},
 ]
-"""sdk-usda-psd's countries as its packaged file holds them, text codes."""
+"""A source's countries as its packaged file holds them, text codes."""
 
 
 def codes_of(
@@ -42,7 +42,7 @@ def codes_of(
     packaged = PackagedList.model_validate(
         {
             "param": "countries",
-            "endpoint": "PSDData_GetCountries",
+            "endpoint": "countries",
             "fetched": FETCHED,
             "records": records,
         }
@@ -50,12 +50,12 @@ def codes_of(
     return packaged.codes(code, name)
 
 
-PSD = codes_of(RECORDS)
+TEXT_CODES = codes_of(RECORDS)
 
-ESR = PackagedList.model_validate(
+INTEGER_CODES = PackagedList.model_validate(
     {
         "param": "commodities",
-        "endpoint": "ESRData_GetCommodities",
+        "endpoint": "commodities",
         "fetched": FETCHED,
         "records": [
             {"commodityCode": 104, "commodityName": "Wheat - White"},
@@ -63,7 +63,7 @@ ESR = PackagedList.model_validate(
         ],
     }
 ).codes("commodityCode", "commodityName")
-"""sdk-usda-esr's commodities, integer codes."""
+"""A source's commodities, integer codes."""
 
 
 def head(gone: int, new: int, changed: int, packaged: int = 3, served: int = 3) -> str:
@@ -83,14 +83,14 @@ def failure(codes: PackagedCodes, current: Iterable[Any], **options: Any) -> lis
 
 
 def test_the_list_upstream_serves_unchanged_passes_in_any_order() -> None:
-    assert_list_current(PSD, RECORDS)
-    assert_list_current(PSD, list(reversed(RECORDS)))
-    assert_list_current(PSD, [dict(reversed(list(record.items()))) for record in RECORDS])
+    assert_list_current(TEXT_CODES, RECORDS)
+    assert_list_current(TEXT_CODES, list(reversed(RECORDS)))
+    assert_list_current(TEXT_CODES, [dict(reversed(list(record.items()))) for record in RECORDS])
 
 
 def test_an_added_and_a_removed_code_are_both_named() -> None:
     argentina = {"countryCode": "AR", "countryName": "Argentina", "regionCode": "R04"}
-    assert failure(PSD, [RECORDS[0], RECORDS[2], argentina]) == [
+    assert failure(TEXT_CODES, [RECORDS[0], RECORDS[2], argentina]) == [
         head(gone=1, new=1, changed=0),
         "- gone: 'BR'",
         "- new: 'AR'",
@@ -99,7 +99,7 @@ def test_an_added_and_a_removed_code_are_both_named() -> None:
 
 def test_a_changed_name_is_named_by_its_code_and_no_record_is_shown() -> None:
     renamed = [RECORDS[0], {**RECORDS[1], "countryName": "Brasil"}, RECORDS[2]]
-    lines = failure(PSD, renamed)
+    lines = failure(TEXT_CODES, renamed)
     assert lines == [head(gone=0, new=0, changed=1), "- changed: 'BR'"]
     shown = "\n".join(lines)
     for value in ("Brasil", "Brazil", "R04", "United States"):
@@ -112,7 +112,7 @@ def test_gone_new_and_changed_are_counted_and_named_in_the_lists_order() -> None
         {**RECORDS[2], "regionCode": "R09"},
         {"countryCode": "AR", "countryName": "Argentina", "regionCode": "R04"},
     ]
-    assert failure(PSD, current) == [
+    assert failure(TEXT_CODES, current) == [
         head(gone=2, new=2, changed=1),
         "- gone: 'US', 'BR'",
         "- new: 'CN', 'AR'",
@@ -128,9 +128,9 @@ class Country(UpstreamModel):
 
 def test_a_fetch_may_return_upstream_models_read_by_their_upstream_names() -> None:
     models = [Country.model_validate(record) for record in RECORDS]
-    assert_list_current(PSD, models)
+    assert_list_current(TEXT_CODES, models)
     moved = [*models[:2], models[2].model_copy(update={"region_code": "R09"})]
-    assert failure(PSD, moved)[1:] == ["- changed: 'E4'"]
+    assert failure(TEXT_CODES, moved)[1:] == ["- changed: 'E4'"]
 
 
 class Code(StrEnum):
@@ -138,9 +138,9 @@ class Code(StrEnum):
 
 
 def test_bare_codes_are_compared_by_code_alone() -> None:
-    assert_list_current(PSD, ["E4", "US", "BR"])
-    assert_list_current(PSD, [Code.US, "BR", "E4", "E4"])
-    assert failure(PSD, ["US", "E4", "AR"]) == [
+    assert_list_current(TEXT_CODES, ["E4", "US", "BR"])
+    assert_list_current(TEXT_CODES, [Code.US, "BR", "E4", "E4"])
+    assert failure(TEXT_CODES, ["US", "E4", "AR"]) == [
         head(gone=1, new=1, changed=0),
         "- gone: 'BR'",
         "- new: 'AR'",
@@ -155,8 +155,8 @@ def test_a_list_of_values_takes_its_values_as_bare_codes() -> None:
 
 
 def test_integer_codes_given_as_text_are_gone_and_new() -> None:
-    assert_list_current(ESR, [107, 104])
-    lines = failure(ESR, ["104", 107])
+    assert_list_current(INTEGER_CODES, [107, 104])
+    lines = failure(INTEGER_CODES, ["104", 107])
     assert lines[0].startswith("packaged list commodities (fetched 2026-10-23) differs")
     assert lines[1:] == ["- gone: 104", "- new: '104'"]
 
@@ -186,15 +186,15 @@ def test_each_kind_names_its_first_twenty_codes_and_counts_the_rest() -> None:
 
 
 def test_packaged_reads_both_sides_through_one_view() -> None:
-    """sdk-usda-wasde's lists carry the release they came from, which each release changes."""
+    """A source's lists carry the release they came from, which each release changes."""
 
     def view(records: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
         return [{k: v for k, v in record.items() if k != "regionCode"} for record in records]
 
     current = [{**record, "regionCode": "R99"} for record in RECORDS]
-    assert failure(PSD, current)[1:] == ["- changed: 'US', 'BR', 'E4'"]
-    assert_list_current(PSD, view(current), packaged=view(RECORDS))
-    assert failure(PSD, view(current[:2]), packaged=view(RECORDS))[1:] == ["- gone: 'E4'"]
+    assert failure(TEXT_CODES, current)[1:] == ["- changed: 'US', 'BR', 'E4'"]
+    assert_list_current(TEXT_CODES, view(current), packaged=view(RECORDS))
+    assert failure(TEXT_CODES, view(current[:2]), packaged=view(RECORDS))[1:] == ["- gone: 'E4'"]
 
 
 @pytest.mark.parametrize(
@@ -218,13 +218,13 @@ def test_packaged_reads_both_sides_through_one_view() -> None:
 def test_a_list_that_holds_neither_records_nor_codes_fails_naming_the_item(
     current: list[Any], problem: str
 ) -> None:
-    lines = failure(PSD, current)
+    lines = failure(TEXT_CODES, current)
     assert lines == [f"packaged list countries: {problem} (ADR-0055)"]
     assert "Brazil" not in lines[0]
 
 
 def test_a_packaged_side_given_is_read_as_the_current_one() -> None:
-    assert failure(PSD, RECORDS, packaged=[{"countryName": "Brazil"}]) == [
+    assert failure(TEXT_CODES, RECORDS, packaged=[{"countryName": "Brazil"}]) == [
         "packaged list countries: the packaged list: record 0 has no field 'countryCode' (ADR-0055)"
     ]
 

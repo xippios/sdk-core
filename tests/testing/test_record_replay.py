@@ -93,7 +93,7 @@ async def test_record_keeps_error_responses(
 async def test_record_form_data_records_body_and_content_type(
     respx_mock: respx.MockRouter, config: ClientConfig, tmp_path: Path
 ) -> None:
-    # sdk-cashctrl: CashCtrl's writes are form-encoded; a write fixture asserts its payload.
+    # A source whose writes are form-encoded: a write fixture asserts its payload.
     respx_mock.post(f"{BASE}/v1/create.json").respond(200, json={"success": True, "insertId": 7})
     fixture = await record.async_fn(
         AsyncClient(config),
@@ -125,7 +125,7 @@ async def test_record_scrubs_the_named_secrets(
 async def test_record_without_the_client_s_auth(
     respx_mock: respx.MockRouter, config: ClientConfig, tmp_path: Path
 ) -> None:
-    # sdk-comtrade: a keyless reference file is recorded without sending the key.
+    # A source's keyless reference file is recorded without sending the key.
     route = respx_mock.get(f"{BASE}/files/ref.json").respond(200, json={"codes": []})
     client = AsyncClient(
         config, auth=KeyAuth("EXAMPLE_API_KEY", location="header", name="X-Api-Key")
@@ -221,7 +221,7 @@ async def test_a_recording_keeps_the_client_s_key_to_its_origin_and_marks_its_re
 async def test_a_body_past_max_read_bytes_raises_and_writes_nothing(
     respx_mock: respx.MockRouter, config: ClientConfig, tmp_path: Path
 ) -> None:
-    # https://github.com/xippios/sdk-core/issues/62: an unfiltered Eurostat dataset that
+    # https://github.com/xippios/sdk-core/issues/62: an unfiltered dataset that
     # upstream may answer synchronously is 145 MB.
     route = respx_mock.get(f"{BASE}/v1/x").respond(200, content=b"x" * 1001)
     fixture_file = tmp_path / "x" / "big.json"
@@ -274,7 +274,7 @@ class _Chunks(httpx.AsyncByteStream):
 
 @pytest.mark.anyio
 async def test_the_recorder_stops_reading_at_32_mib_by_default(tmp_path: Path) -> None:
-    # Four times the largest body a source records whole (sdk-usda-gats, 7.6 MB), and the
+    # Four times the largest body a source records whole (7.6 MB), and the
     # reading stops there: the rest of a 145 MB answer is never fetched.
     body = _Chunks(40)
     observed: list[int] = []
@@ -301,7 +301,7 @@ TOKENS = ("tok-access-1", "tok-id-2", "tok-refresh-3")  # pragma: allowlist secr
 
 
 def _tokens(response: httpx.Response) -> list[str]:
-    """The tokens of a login answer, as sdk-faostat's Cognito login returns them."""
+    """The tokens of a login answer, as a source's Cognito login returns them."""
     result = response.json().get("AuthenticationResult", {})
     return [result[name] for name in ("AccessToken", "IdToken", "RefreshToken") if name in result]
 
@@ -373,7 +373,7 @@ def _file(fixture: Fixture, path: Path) -> Path:
 async def test_match_params_matches_the_recorded_value_and_misses_another(
     respx_mock: respx.MockRouter, tmp_path: Path
 ) -> None:
-    # sdk-comtrade: the count and the data call of data/v1/get share one path and differ
+    # A source's count and data call of data/v1/get share one path and differ
     # in countOnly=true.
     count = _recorded(f"{BASE}/data/v1/get?reporterCode=842&countOnly=true", {"count": 12})
     route = replay(respx_mock, _file(count, tmp_path / "count.json"), match_params=["countOnly"])
@@ -413,7 +413,7 @@ def test_match_params_refuses_a_credential_or_absent_name(
 
 
 def test_match_params_on_a_key_that_is_data(respx_mock: respx.MockRouter, tmp_path: Path) -> None:
-    # Eurostat's SDMX series key, keyless (ADR-0040, decision 6); NASS's query key, a
+    # An SDMX series key, keyless (ADR-0040, decision 6); another source's query key, a
     # KeyAuth(location="query", name="key"), makes it a credential, and a value recorded as
     # REDACTED cannot be matched.
     series = _file(_recorded(f"{BASE}/data/prc_hicp_manr?key=M.DE.CP00", [1]), tmp_path / "s.json")
@@ -423,8 +423,8 @@ def test_match_params_on_a_key_that_is_data(respx_mock: respx.MockRouter, tmp_pa
     KeyAuth("EXAMPLE_API_KEY", location="query", name="key", source="example")
     with pytest.raises(ValueError, match=r"^match_params: 'key' names a credential"):
         replay(respx_mock, series, match_params=["key"])
-    nass = _recorded(f"{BASE}/api/api_GET?key=SECRET&year=2024", [1])
-    assert recorded_query(nass) == {"key": REDACTED, "year": "2024"}
+    keyed = _recorded(f"{BASE}/api/api_GET?key=SECRET&year=2024", [1])
+    assert recorded_query(keyed) == {"key": REDACTED, "year": "2024"}
 
 
 @pytest.mark.anyio
@@ -454,7 +454,7 @@ async def test_replay_ignores_the_body_and_the_test_asserts_it(
 async def test_sent_urls_are_scrubbed_strings_in_order(
     respx_mock: respx.MockRouter, config: ClientConfig
 ) -> None:
-    # sdk-usda-nass: a test that kept the request in its locals would print the key.
+    # A source's test that kept the request in its locals would print the key.
     route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
     assert sent_urls(route) == []
     client = AsyncClient(config)
@@ -483,7 +483,7 @@ def test_replay_fixture_is_typed_as_replay_fixture(replay_fixture: ReplayFixture
 async def test_a_truncated_array_records_replays_and_decodes(
     respx_mock: respx.MockRouter, replay_fixture: ReplayFixture, fixtures_dir: Path
 ) -> None:
-    # Row 43 (sdk-usda-gats): a list over the fixture cap keeps its first elements.
+    # Row 43: a list over the fixture cap keeps its first elements.
     respx_mock.get(f"{BASE}/v1/rows").respond(200, json=[{"n": n} for n in range(1000)])
     client = AsyncClient(ClientConfig(source="example", version="1", base_url=BASE))
     recorded = await record.async_fn(
@@ -548,11 +548,11 @@ async def test_a_download_replays_its_sample_body_and_the_mark_survives(
     fixtures_dir: Path,
     config: ClientConfig,
 ) -> None:
-    # Row 125 (sdk-usda-wasde): the replay fixture carries the sample the parser tests
+    # Row 125: the replay fixture carries the sample the parser tests
     # read, marked a sample, so `truncated` keeps meaning the recorder's cut.
     whole = b"<report>" + b"<page/>" * 1000 + b"</report>"
     sample = b"<report><page/></report>"
-    request = httpx.Request("GET", f"{BASE}/files/wasde.xml")
+    request = httpx.Request("GET", f"{BASE}/files/report.xml")
     xml = {"Content-Type": "application/xml"}
     recorded = fixture_from_response(
         httpx.Response(200, content=whole, headers=xml, request=request)
@@ -566,13 +566,13 @@ async def test_a_download_replays_its_sample_body_and_the_mark_survives(
     assert loaded.sha256 == marks["sha256"]
 
     replay_fixture("download_report", "sr12")
-    got = await AsyncClient(config).download(f"{BASE}/files/wasde.xml", fixtures_dir / "sr12.xml")
+    got = await AsyncClient(config).download(f"{BASE}/files/report.xml", fixtures_dir / "sr12.xml")
     assert (fixtures_dir / "sr12.xml").read_bytes() == sample
     assert got.bytes == len(sample)
 
 
 def test_sent_query_is_the_last_query_scrubbed(respx_mock: respx.MockRouter) -> None:
-    # sdk-usda-nass (sent_query) and sdk-comtrade (_sent) each carried it; cashctrl reads
+    # Two sources each carried it, as sent_query and as _sent; a third reads
     # route.calls.last inline (row 36 a).
     route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
     with pytest.raises(AssertionError, match="received no request"):
@@ -594,8 +594,8 @@ def test_sent_query_refuses_a_repeated_parameter(respx_mock: respx.MockRouter) -
 async def test_sent_bodies_decodes_json_and_forms_with_credentials_redacted(
     respx_mock: respx.MockRouter, config: ClientConfig
 ) -> None:
-    # https://github.com/xippios/sdk-core/issues/183: sdk-google-mail decoded its writes'
-    # JSON, sdk-cashctrl its writes' forms and sdk-faostat its logins' forms, each from
+    # https://github.com/xippios/sdk-core/issues/183: one source decoded its writes' JSON,
+    # another its writes' forms and a third its logins' forms, each from
     # route.calls, where a failing assertion prints the request.
     route = respx_mock.post(f"{BASE}/v1/write").respond(200, json={})
     client = AsyncClient(config)
@@ -646,7 +646,7 @@ def test_sent_bodies_refuses_a_body_it_does_not_decode(respx_mock: respx.MockRou
 
 
 def test_recorded_query_is_the_scrubbed_recorded_query(tmp_path: Path) -> None:
-    # sdk-comtrade (recorded_params, _recorded) and sdk-cashctrl (recorded_query).
+    # Two sources' copies: recorded_params with _recorded, and recorded_query.
     request = httpx.Request("GET", f"{BASE}/v1/x?token=SECRET&year=2024&q=")
     path = tmp_path / "x.json"
     _write(httpx.Response(200, json={}, request=request), path)
@@ -656,7 +656,7 @@ def test_recorded_query_is_the_scrubbed_recorded_query(tmp_path: Path) -> None:
 def test_a_recorded_answer_is_served_at_another_url(
     respx_mock: respx.MockRouter, tmp_path: Path
 ) -> None:
-    # sdk-usda-psd and sdk-usda-esr each carried _mount_recorded_404 (row 41 b): the empty
+    # Two sources each carried _mount_recorded_404 (row 41 b): the empty
     # 404 recorded for 1900 stands in for a year without data inside a range.
     request = httpx.Request("GET", f"{BASE}/v1/year/1900")
     path = tmp_path / "data" / "unknown_year.json"
@@ -676,8 +676,8 @@ def test_a_recorded_answer_is_served_at_another_url(
 
 
 def test_response_from_fixture_carries_the_recorded_request(tmp_path: Path) -> None:
-    # sdk-usda-psd, sdk-usda-esr, sdk-usda-gats (test_client.py) and sdk-cashctrl
-    # (test_errors.py) each carried recorded(): a recorded answer for classify.
+    # Three sources (test_client.py) and a fourth (test_errors.py) each carried
+    # recorded(): a recorded answer for classify.
     request = httpx.Request("GET", f"{BASE}/v1/x?token=SECRET")
     path = tmp_path / "x.json"
     _write(httpx.Response(404, json={"error": "none"}, request=request), path)

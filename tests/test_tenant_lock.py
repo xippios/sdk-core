@@ -1,8 +1,8 @@
 """The binding lock: a server bound to one tenant, whose tools take no tenant argument.
 
 The tests of the two copies that return to core (ADR-0042, decision 1):
-sdk-cashctrl's ``tests/test_org_lock.py`` and sdk-google-mail's
-``tests/test_account_lock.py``, the parts that test the lock itself, on a fictitious source
+two sources' ``tests/test_org_lock.py`` and ``tests/test_account_lock.py``, the parts that
+test the lock itself, on a fictitious source
 whose variables no shell sets. A call goes through ``mcp_call_text``, an in-process client,
 so the argument check runs as it does for a real client: on a bound server it refuses the
 tenant's argument, which no tool declares (ADR-0036, decision 12).
@@ -41,23 +41,23 @@ from xippios.core.http import router_from_tasks
 from xippios.core.mcp import ToolSet, build_server
 from xippios.core.testing import mcp_call, mcp_call_text
 
-SOURCE = "fictive-src"
-TOOL = "fictive_src_echo_org"
-LIST = "fictive_src_list_tenants"
+SOURCE = "example-src"
+TOOL = "example_src_echo_org"
+LIST = "example_src_list_tenants"
 DEMO = "demo"
 SENTENCE = (
     "This server is bound to org demo; every tool acts on that organisation and takes no org."
 )
 TENANTS = Tenants(
     SOURCE,
-    list_var="FICTIVE_SRC_TENANTS",
+    list_var="EXAMPLE_SRC_TENANTS",
     param="org",
     fields=("SUBDOMAIN",),
     reserved=(DEMO,),
     noun="organisation",
 )
 ACCOUNTS = Tenants(
-    "fictive-mail", list_var="FICTIVE_MAIL_ACCOUNTS", param="account", fields=("REFRESH_TOKEN",)
+    "example-mail", list_var="EXAMPLE_MAIL_ACCOUNTS", param="account", fields=("REFRESH_TOKEN",)
 )
 LOCK = TenantLock(TENANTS, DEMO)
 list_tenants = list_task(TENANTS, name="list_tenants")
@@ -66,7 +66,7 @@ list_tenants = list_task(TENANTS, name="list_tenants")
 @pytest.fixture(autouse=True)
 def only_demo(monkeypatch: pytest.MonkeyPatch) -> None:
     """Every test starts with the reserved ``demo`` declared and no other tenant, by name."""
-    for name in [name for name in os.environ if name.startswith("FICTIVE_")]:
+    for name in [name for name in os.environ if name.startswith("EXAMPLE_")]:
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv(TENANTS.var(DEMO, "SUBDOMAIN"), "placeholder")
 
@@ -322,12 +322,12 @@ async def test_a_bound_tool_keeps_an_annotated_constraint_in_its_schema_and_its_
         100,
         "Rows per page, 1 to 100.",
     )
-    refused = await mcp_call_text(server, "fictive_src_list_rows", {"limit": 500})
+    refused = await mcp_call_text(server, "example_src_list_rows", {"limit": 500})
     assert refused == (
         "error: InvalidRequestError: limit: Input should be less than or equal to 100. "
         "Nothing was sent."
     )
-    served = await mcp_call(server, "fictive_src_list_rows", {"limit": 5, "name": "wheat"})
+    served = await mcp_call(server, "example_src_list_rows", {"limit": 5, "name": "wheat"})
     assert served == {"org": DEMO, "limit": 5, "name": "WHEAT"}, "the validator ran"
 
 
@@ -335,14 +335,14 @@ def test_a_bound_route_keeps_an_annotated_constraint_in_its_schema_and_its_check
     app = FastAPI()
     app.include_router(router_from_tasks(SOURCE, bind_tasks([list_rows], LOCK)))
     client = TestClient(app)
-    operation = app.openapi()["paths"]["/fictive-src/list_rows"]["get"]
+    operation = app.openapi()["paths"]["/example-src/list_rows"]["get"]
     params = {param["name"]: param for param in operation["parameters"]}
     assert set(params) == {"limit", "name"}, "no org"
     assert (params["limit"]["schema"]["minimum"], params["limit"]["schema"]["maximum"]) == (1, 100)
-    refused = client.get("/fictive-src/list_rows", params={"limit": 500})
+    refused = client.get("/example-src/list_rows", params={"limit": 500})
     assert refused.status_code == 422
     assert refused.json()["detail"] == "limit: Input should be less than or equal to 100"
-    served = client.get("/fictive-src/list_rows", params={"limit": 5, "name": "wheat"})
+    served = client.get("/example-src/list_rows", params={"limit": 5, "name": "wheat"})
     assert served.json() == {"org": DEMO, "limit": 5, "name": "WHEAT"}, "the validator ran"
 
 
@@ -417,7 +417,7 @@ async def test_a_bound_write_task_keeps_confirm_last_on_a_write_server() -> None
     assert tool.annotations is not None
     assert tool.annotations.read_only_hint is False, "a write tool"
     assert list(tool.input_schema["properties"]) == ["name", "confirm"]
-    payload = await mcp_call(server, "fictive_src_create_thing", {"name": "Corn"})
+    payload = await mcp_call(server, "example_src_create_thing", {"name": "Corn"})
     assert payload == {"org": DEMO, "name": "Corn", "written": "False"}
 
 
@@ -434,7 +434,7 @@ def test_an_unbound_server_keeps_its_text() -> None:
 
 def test_a_bound_server_s_text_ends_with_the_lock_s_sentence() -> None:
     unbound = "Every tool takes org."
-    assert tenant_instructions(unbound, LOCK) == f"{unbound} {SENTENCE}", "sdk-cashctrl's call"
+    assert tenant_instructions(unbound, LOCK) == f"{unbound} {SENTENCE}", "a source's call"
     assert tenant_instructions(unbound, LOCK, bound="Bound.") == f"Bound. {SENTENCE}"
     assert tenant_instructions(unbound, LOCK, bound="") == SENTENCE
     assert tenant_instructions(None, LOCK) == SENTENCE
@@ -449,8 +449,8 @@ def test_the_sentence_names_the_registry_s_noun_or_else_its_parameter() -> None:
 
 @pytest.mark.anyio
 async def test_a_client_reads_the_bound_server_s_instructions() -> None:
-    text = "Fictive via xippios. Every tool takes org."
-    bound = "Fictive via xippios."
+    text = "Example via xippios. Every tool takes org."
+    bound = "Example via xippios."
     server = build_server(
         ToolSet(
             SOURCE,

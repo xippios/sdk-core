@@ -165,7 +165,7 @@ def test_a_sync_task_hands_system_exit_to_its_caller_and_the_loop_lives_on(
 
 
 def test_a_script_that_exits_inside_a_sync_task_exits_with_its_status() -> None:
-    """The case sdk-usda-esmis met: a script exits from inside a sync task."""
+    """The case a source met: a script exits from inside a sync task."""
     script = textwrap.dedent(
         """
         from xippios.core import sync

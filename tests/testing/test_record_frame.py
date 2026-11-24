@@ -30,12 +30,12 @@ PLACEHOLDERS = {
     "name": "[name rewritten]",
     "location": "[location rewritten]",
 }
-ACCOUNTS = frozenset({"usda", "fao"})
-"""The accounts whose names and handles a fixture keeps, as sdk-x keeps its three."""
+ACCOUNTS = frozenset({"acme", "example"})
+"""The accounts whose names and handles a fixture keeps, as a source keeps its three."""
 
 
 def _by_key(node: Any, replaced: list[str]) -> Any:
-    """``node`` with sdk-x's rule applied, each value it replaced appended to ``replaced``.
+    """``node`` with a source's rule applied, each value it replaced appended to ``replaced``.
 
     Every ``text`` and ``description`` at any depth, and the ``username``, ``name`` and
     ``location`` of an object whose ``username`` is no account of ``ACCOUNTS``.
@@ -57,9 +57,9 @@ def _by_key(node: Any, replaced: list[str]) -> Any:
 
 
 def rewrite_by_key(fixture: Fixture) -> tuple[Fixture, list[str]]:
-    """A source's step in small, sdk-x's: keys replaced in a JSON body, the values returned.
+    """A source's step in small: keys replaced in a JSON body, the values returned.
 
-    The body is written compact, as X sends it; one with nothing to replace stays as sent.
+    The body is written compact, as upstream sends it; one with nothing to replace stays as sent.
     """
     replaced: list[str] = []
     body = _by_key(json.loads(fixture.response.body), replaced)
@@ -85,13 +85,13 @@ def client() -> AsyncClient:
 
 
 USERS = {
-    "data": [{"id": "1", "username": "USDA", "name": "USDA", "description": "a bio of ours"}],
+    "data": [{"id": "1", "username": "ACME", "name": "ACME", "description": "a bio of ours"}],
     "includes": {
-        "tweets": [{"id": "9", "text": "a post about corn", "lang": "en"}],
+        "posts": [{"id": "9", "text": "a post about corn", "lang": "en"}],
         "users": [{"id": "2", "username": "someone", "name": "Some One", "location": "a town"}],
     },
 }
-"""An answer of sdk-x's shape, built here: this repository records from no upstream."""
+"""An answer of a source's shape, built here: this repository records from no upstream."""
 
 
 @pytest.mark.anyio
@@ -100,7 +100,7 @@ async def test_record_scrubs_then_rewrites_then_checks_then_writes_once(
 ) -> None:
     answer = {**USERS, "note": "key-123"}
     route = respx_mock.get(f"{BASE}/2/users/by").respond(200, json=answer)
-    fixture_file = tmp_path / "get_users_by_usernames" / "usda.json"
+    fixture_file = tmp_path / "get_users_by_usernames" / "acme.json"
     seen: list[tuple[bool, bool]] = []
 
     def step(fixture: Fixture) -> tuple[Fixture, list[str]]:
@@ -111,7 +111,7 @@ async def test_record_scrubs_then_rewrites_then_checks_then_writes_once(
         client,
         "/2/users/by",
         fixture_file,
-        params={"usernames": "USDA"},
+        params={"usernames": "ACME"},
         scrub=Scrub(secrets=["key-123"]),
         rewrite=step,
     )
@@ -121,11 +121,11 @@ async def test_record_scrubs_then_rewrites_then_checks_then_writes_once(
     assert body["note"] == REDACTED
     assert body["data"][0] == {
         "id": "1",
-        "username": "USDA",
-        "name": "USDA",
+        "username": "ACME",
+        "name": "ACME",
         "description": "[description rewritten]",
     }
-    assert body["includes"]["tweets"][0]["text"] == "[text rewritten]"
+    assert body["includes"]["posts"][0]["text"] == "[text rewritten]"
     assert body["includes"]["users"][0]["location"] == "[location rewritten]"
     assert load_fixture(fixture_file) == fixture
     written = fixture_file.read_text(encoding="utf-8")
@@ -139,13 +139,13 @@ async def test_sdk_x_s_rule_records_through_record_the_fixture_its_own_flow_writ
     respx_mock: respx.MockRouter, client: AsyncClient, tmp_path: Path
 ) -> None:
     # https://github.com/xippios/sdk-core/issues/322, the first proof: the reduced recorder
-    # writes what sdk-x's flow writes today, fixture_from_response, its step, write_fixture.
+    # writes what a source's flow writes today, fixture_from_response, its step, write_fixture.
     respx_mock.get(f"{BASE}/2/users/by").respond(
         200,
         content=json.dumps(USERS).encode(),
         headers={"Content-Type": "application/json", "x-rate-limit-remaining": "299"},
     )
-    params = {"usernames": "USDA", "user.fields": "description,location"}
+    params = {"usernames": "ACME", "user.fields": "description,location"}
     fixture_file = tmp_path / "frame.json"
     framed = await record.async_fn(
         client, "/2/users/by", fixture_file, params=params, rewrite=rewrite_by_key
@@ -153,7 +153,7 @@ async def test_sdk_x_s_rule_records_through_record_the_fixture_its_own_flow_writ
     response = await send_once.async_fn(client, "/2/users/by", params=params)
     today, _ = rewrite_by_key(fixture_from_response(response))
     assert framed.model_copy(update={"recorded_at": today.recorded_at}) == today
-    unchanged = {"data": [{"id": "1", "username": "FAO"}]}
+    unchanged = {"data": [{"id": "1", "username": "EXAMPLE"}]}
     respx_mock.get(f"{BASE}/2/users/by").respond(200, json=unchanged)
     kept = await record.async_fn(
         client, "/2/users/by", tmp_path / "kept.json", rewrite=rewrite_by_key
@@ -257,7 +257,7 @@ def test_a_step_cannot_bring_a_secret_back(
 def test_an_empty_value_the_step_returns_is_passed_over(
     respx_mock: respx.MockRouter, client: AsyncClient, tmp_path: Path
 ) -> None:
-    # sdk-x replaces a user's empty description too: nothing of it can survive.
+    # A source replaces a user's empty description too: nothing of it can survive.
     respx_mock.get(f"{BASE}/v1/x").respond(200, json={"text": "", "description": ""})
     fixture = record(client, "/v1/x", tmp_path / "x.json", rewrite=rewrite_by_key)
     assert json.loads(fixture.response.body) == {
@@ -313,7 +313,7 @@ def test_fixture_from_response_runs_the_frame_on_one_exchange_without_the_write(
 ) -> None:
     # The door of https://github.com/xippios/sdk-core/issues/174: every exchange of a task
     # is checked before any is written.
-    request = httpx.Request("GET", f"{BASE}/2/users/by?usernames=USDA")
+    request = httpx.Request("GET", f"{BASE}/2/users/by?usernames=ACME")
     response = httpx.Response(200, json=USERS, request=request)
     fixture = fixture_from_response(response, rewrite=rewrite_by_key)
     assert json.loads(fixture.response.body)["data"][0]["description"] == "[description rewritten]"

@@ -67,7 +67,7 @@ def test_the_default_note_promises_no_filter() -> None:
 
 
 def test_a_capped_list_with_an_integer_start_says_where_to_resume() -> None:
-    # Row 21 b (sdk-cashctrl): an offset-paged task records start in meta.request.
+    # Row 21 b: an offset-paged task records start in meta.request.
     capped = json.loads(cap_result(envelope(500, request={"start": 100}), ResultCap(max_rows=10)))
     assert capped["note"] == (
         "showing 10 of 500 rows (cap: 10 rows or 65536 bytes); narrow the query to see the "
@@ -175,8 +175,8 @@ def test_a_lone_surrogate_counts_as_three_bytes_and_does_not_raise() -> None:
 
 
 class Page(UpstreamModel):
-    """A model that holds one list of rows beside two scalars, as sdk-comtrade's
-    ``BilateralData`` holds its rows beside upstream's note and request time."""
+    """A model that holds one list of rows beside two scalars, as a source's answer holds
+    its rows beside upstream's note and request time."""
 
     requested: str
     count: int
@@ -255,7 +255,7 @@ def test_a_cut_model_whose_request_records_a_start_says_where_to_resume() -> Non
 
 
 class Lookup(UpstreamModel):
-    """A model with a second list, as sdk-x's pages carry ``errors`` beside ``data``."""
+    """A model with a second list, as a source's pages carry ``errors`` beside ``data``."""
 
     rows: list[Row]
     errors: list[str] | None = None
@@ -347,9 +347,9 @@ def test_a_model_whose_first_row_alone_passes_the_cap_shows_no_row_and_says_so()
 
 
 # The notes an unpaged cap writes, as main read them at 0.4.0. Sources pin them under
-# xippios-core~=0.4.0 (sdk-usda-esr's every-country note, sdk-google-mail's start notes), so
-# a paged cap, sdk-core#362, leaves each byte as it is.
-GET_THREAD = "read a long message alone with google_mail_get_message"
+# xippios-core~=0.4.0 (one source's every-country note, another's start notes), so a paged
+# cap, sdk-core#362, leaves each byte as it is.
+GET_SERIES = "read a long series alone with example_get_series"
 COUNTRY = "pass country_code, e.g. 1220 (Canada), for one destination's weeks, up to 54 rows"
 
 
@@ -361,12 +361,12 @@ COUNTRY = "pass country_code, e.g. 1220 (Canada), for one destination's weeks, u
          "rest"),
         (envelope(498), ResultCap(note=COUNTRY),
          f"showing 200 of 498 rows (cap: 200 rows or 65536 bytes); {COUNTRY}"),
-        (envelope(3, request={"start": 4}), ResultCap(max_rows=2, note=GET_THREAD),
-         f"showing 2 of 3 rows (cap: 2 rows or 65536 bytes); {GET_THREAD}; resume with start=6"),
+        (envelope(3, request={"start": 4}), ResultCap(max_rows=2, note=GET_SERIES),
+         f"showing 2 of 3 rows (cap: 2 rows or 65536 bytes); {GET_SERIES}; resume with start=6"),
         (Result[list[str]](data=["x" * 70_000] * 2, meta=envelope(0, request={"start": 0}).meta),
-         ResultCap(note=GET_THREAD),
+         ResultCap(note=GET_SERIES),
          "showing 0 of 2 rows (cap: 200 rows or 65536 bytes); the row at offset 0 alone exceeds "
-         f"the byte cap; {GET_THREAD}"),
+         f"the byte cap; {GET_SERIES}"),
         (["x" * 3000, "y"], ResultCap(max_bytes=1000),
          "showing 0 of 2 rows (cap: 200 rows or 1000 bytes); the first row alone exceeds the "
          "byte cap; narrow the query to see the rest"),
@@ -416,7 +416,7 @@ def test_a_paged_answer_that_fits_is_whole_and_carries_no_note() -> None:
 
 
 def test_a_cap_that_keeps_the_last_rows_answers_the_newest_and_walks_to_older() -> None:
-    # sdk-usda-esr's weekly series run oldest first: the newest 200 come first.
+    # A weekly series that runs oldest first: the newest 200 come first.
     cap = ResultCap(paged=True, keep="last")
     newest = json.loads(cap_result(envelope(500), cap))
     assert _n(newest) == list(range(300, 500)), "the newest rows, in the task's order"
