@@ -731,14 +731,14 @@ without case).
 
 - `httpx`, async core, sync facade (ADR-0002). Source packages expose sync functions;
   async variants are optional and suffixed `_async`.
-- Retries with exponential backoff and jitter: a 429 for every method; a 5xx and a
-  transport failure for idempotent methods only (GET, HEAD, OPTIONS), unless the source
-  sets `RetryPolicy.retry_non_idempotent` because it only reads through POST (ADR-0011);
-  never another 4xx.
-  A request that upstream bills and a request that writes are sent once, so that a client
-  whose reads upstream bills takes `RetryPolicy(max_attempts=1)`, and the error of a write
-  that failed says that its outcome is unknown (ADR-0061, decision 10; ADR-0011, amendment
-  2026-11-24).
+- Retries with exponential backoff and jitter: a 429, a 5xx and a transport failure are
+  retried for `GET`, `HEAD` and `OPTIONS` alone, and another 4xx never (ADR-0011).
+  A request that upstream bills and a request that writes are sent once: core's client repeats
+  no `POST`, `PUT`, `PATCH` or `DELETE`, not after a 429, a client whose reads upstream bills
+  takes `RetryPolicy(max_attempts=1)`, the error of a write that met a 5xx or failed in transit
+  says that the request was sent once and that its outcome is unknown, or that nothing was sent
+  where the connection failed, and a write task's docstring names the read that shows whether a
+  failed write was applied (ADR-0061, decision 10; ADR-0011, amendment 2026-11-24).
 - A source maps its error shapes once, in `ClientConfig.classify`, which sees every
   response before the default status mapping (ADR-0031): the shapes upstream documents
   and, where upstream documents none for an answer, the shapes the source recorded, each

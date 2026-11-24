@@ -16,6 +16,7 @@ import httpx
 
 __all__ = [
     "BODY_LIMIT",
+    "IDEMPOTENT_METHODS",
     "AuthError",
     "ConfigError",
     "InvalidRequestError",
@@ -36,6 +37,16 @@ __all__ = [
 
 BODY_LIMIT = 16_384
 """Characters of an upstream response body kept on an error."""
+
+IDEMPOTENT_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+"""The methods of a read, which core's client repeats after a 429, a 5xx or a transport failure.
+
+A request of any other method, a write, is sent once, and the error of one that met a 5xx or
+failed in transit says what became of it (ADR-0011, amendment 2026-11-24).
+"""
+
+_NOTHING_SENT = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
+"""The transport failures that end a request before any of it is sent: no connection was made."""
 
 _SNIPPET = 200
 
@@ -410,6 +421,12 @@ def error_from_response(
 ) -> XippiosError | None:
     """Classify an HTTP response into the taxonomy.
 
+    The message is ``<status> from <method> <path>: <the body's start or the reason>``. A 5xx
+    to a method outside ``IDEMPOTENT_METHODS``, a write that the client sent once, adds that
+    the request was sent once and that its outcome is unknown; a 4xx, a 429 among them, keeps
+    upstream's words, since upstream refused the request before acting on it (ADR-0011,
+    amendment 2026-11-24).
+
     Args:
         response: A fully read ``httpx.Response``.
         source: Source slug to attach to the error.
@@ -430,6 +447,10 @@ def error_from_response(
         return RateLimitError(message, retry_after=retry_after, source=source)
     if status == 404:
         return NotFoundError(message, source=source)
+    if status >= 500 and response.request.method not in IDEMPOTENT_METHODS:
+        # The client sent the write once, and a 5xx does not say whether upstream applied it:
+        # a gateway's 504 can stand in front of a write that the application completed.
+        message = _sent_once(message)
     return UpstreamError(message, status=status, body=body, source=source)
 
 
@@ -450,6 +471,37 @@ def error_from_exception(exc: httpx.RequestError, *, source: str | None = None) 
     for host in _hosts(exc):
         text = re.sub(re.escape(host), "<host>", text, flags=re.IGNORECASE)
     return TransportError(f"{type(exc).__name__}: {text}", source=source)
+
+
+def _failed_in_transit(
+    exc: httpx.RequestError, *, method: str, source: str | None = None
+) -> TransportError:
+    """``error_from_exception``'s error for a call of ``method`` that ``exc`` ended.
+
+    The client sends a write once, so its error says what was sent (ADR-0011, amendment
+    2026-11-24). The call's method decides, not that of the request that failed, which inside
+    an auth flow can be a token request sent on a read's behalf, a read that is retried.
+    """
+    error = error_from_exception(exc, source=source)
+    if method.upper() in IDEMPOTENT_METHODS:
+        return error
+    return TransportError(_sent_once(error.message, exc), source=source)
+
+
+def _sent_once(message: str, failure: httpx.RequestError | None = None) -> str:
+    """``message`` with what became of a write that the client sent once and that failed.
+
+    A write that met a 5xx, or ``failure`` in transit, may have been applied, so the sentence
+    says that the request was sent once and that its outcome is unknown, unless the connection
+    failed before anything was sent. One full stop parts it from ``message``.
+    """
+    said = (
+        "Nothing was sent."
+        if isinstance(failure, _NOTHING_SENT)
+        else "The request was sent once and its outcome is unknown."
+    )
+    text = message.rstrip()
+    return f"{text} {said}" if text.endswith((".", "!", "?")) else f"{text}. {said}"
 
 
 def _hosts(exc: httpx.RequestError) -> set[str]:

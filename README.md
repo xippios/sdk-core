@@ -10,9 +10,9 @@ It gives a source package the things that should be identical across the family:
   response cache (off by default; the in-memory one is bounded by TTL and size),
   one read timeout, 60 s unless a source raises it, and one `User-Agent`. Async at the core; `sync` derives the sync
   task functions from the async ones.
-  A 429 is retried for every method, a 5xx or a transport failure only for GET, HEAD
-  and OPTIONS unless `RetryPolicy.retry_non_idempotent` is set, because upstream makes a
-  repeated write safe, or because the source only reads through POST.
+  A 429, a 5xx or a transport failure is retried for GET, HEAD and OPTIONS alone: a
+  write is sent once, and its error says that it was sent once and that its outcome is
+  unknown, or that nothing was sent where the connection failed.
   `ClientConfig.cache_filter` narrows the cache to chosen requests. A body goes as JSON
   (`json=`) or form-encoded (`data=`), and `post_json` and `delete_json` decode a write's
   answer as `get_json` decodes a read's, `None` for one with no body. Two hooks,
@@ -537,6 +537,20 @@ the answer, `None` for one with no body:
 draft = await client.post_json("/drafts", json={"message": {"raw": raw}})  # decoded JSON
 await client.delete_json(f"/drafts/{draft['id']}")  # None: the answer is a 204
 ```
+
+A write, a `POST`, `PUT`, `PATCH` or `DELETE`, is sent once, after a 429 or a 5xx too,
+whatever the client's `RetryPolicy` says, since a repeat can apply it twice (ADR-0011). The
+error of a write that met a 5xx or failed in transit says what became of it, so the caller
+reads before it sends again, and the write task's docstring names that read:
+
+```text
+503 from POST /v1/things: busy. The request was sent once and its outcome is unknown.
+ConnectError: [Errno 111] Connection refused. Nothing was sent.
+```
+
+A 4xx, a 429 among them, keeps upstream's words, since upstream refused the write before acting
+on it. A client whose reads upstream bills takes `RetryPolicy(max_attempts=1)`, so that it
+sends a read once too.
 
 The client's own credentials go to the base URL's origin only, its scheme, host and port:
 a request to an absolute URL on another origin is sent without them, and a call that must
