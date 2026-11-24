@@ -71,7 +71,7 @@ EXPORTS = {
         "Rewrite",
     },
     "xippios.core.mcp": {
-        "ResultCap", "build_parser", "build_server", "cap_result", "error_to_text", "main",
+        "build_parser", "build_server", "cap_result", "error_to_text", "main",
         "tool_name",
         # what the host imports (https://github.com/xippios/sdk-core/issues/170, ADR-0063)
         "LOOPBACK_HOSTS", "quiet_request_logging", "register_tasks", "tool_functions",
@@ -106,11 +106,13 @@ def test_redacted_is_one_value_by_both_paths() -> None:
 
 
 def test_result_cap_is_one_class_without_the_mcp_extra() -> None:
+    # https://github.com/xippios/sdk-core/issues/475: the root's entry alone, since a
+    # source's tasks.py declares its caps without the mcp extra.
     import xippios.core.mcp as mcp
     from xippios.core.models import ResultCap
 
     assert core.ResultCap is ResultCap
-    assert mcp.ResultCap is ResultCap
+    assert "ResultCap" not in vars(mcp)
 
 
 def test_the_tool_functions_and_their_names_are_one_by_both_paths() -> None:

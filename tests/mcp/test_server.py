@@ -15,10 +15,9 @@ from mcp.client import Client
 from mcp.types import CallToolResult, TextContent
 from pydantic import AfterValidator, BaseModel, Field, field_validator
 
-from xippios.core import sync
+from xippios.core import ResultCap, sync
 from xippios.core.errors import InvalidRequestError, NotFoundError
 from xippios.core.mcp import (
-    ResultCap,
     ToolSet,
     build_server,
     quiet_request_logging,

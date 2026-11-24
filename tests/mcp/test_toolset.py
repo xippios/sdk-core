@@ -18,8 +18,8 @@ import pytest
 from mcp.server.mcpserver import MCPServer
 from pydantic import Field
 
-from xippios.core import Result, ResultMeta, TenantLock, Tenants, bind_tasks, sync
-from xippios.core.mcp import ResultCap, ToolSet, build_server, main, register_tasks, tool_name
+from xippios.core import Result, ResultCap, ResultMeta, TenantLock, Tenants, bind_tasks, sync
+from xippios.core.mcp import ToolSet, build_server, main, register_tasks, tool_name
 from xippios.core.testing import mcp_call, mcp_call_text
 
 
