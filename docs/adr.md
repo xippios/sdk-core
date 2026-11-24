@@ -17,7 +17,7 @@ records in `docs/adr/`. A record changes, and this file follows when the script 
 - <a id="0028"></a>[ADR-0028](adr/0028-upstream-fidelity.md): Upstream fidelity — no cross-source normalization in SDK packages · Accepted · 2026-11-18 · amended 2026-11-24
 - <a id="0029"></a>[ADR-0029](adr/0029-core-layout-and-mcp-sdk.md): Core internal layout, dependency direction and MCP SDK choice · Accepted · 2026-11-18
 - <a id="0030"></a>[ADR-0030](adr/0030-no-credentials-in-envelope.md): Credentials never enter the result envelope; core is exempt from the upstream snapshot · Accepted · 2026-11-18
-- <a id="0031"></a>[ADR-0031](adr/0031-hardening-from-the-first-source.md): Hardening core from the first source package · Accepted · 2026-11-18
+- <a id="0031"></a>[ADR-0031](adr/0031-hardening-from-the-first-source.md): Hardening core from the first source package · Accepted · 2026-11-18 · amended 2026-11-24
 - <a id="0032"></a>[ADR-0032](adr/0032-one-key-per-issuer-for-shared-gateways.md): One key variable per issuer when one key serves several sources · Accepted · 2026-11-18 · amended 2026-11-24
 - <a id="0033"></a>[ADR-0033](adr/0033-rate-limit-policy.md): Rate-limit policy — a fast pace, quotas spent, the 429 interpreted · Accepted · 2026-11-18
 - <a id="0034"></a>[ADR-0034](adr/0034-upstream-totals-in-the-result-envelope.md): Upstream totals in the result envelope · Accepted · 2026-11-18 · amended 2026-11-24
@@ -38,7 +38,6 @@ records in `docs/adr/`. A record changes, and this file follows when the script 
 - <a id="0053"></a>[ADR-0053](adr/0053-one-count-before-a-query-over-upstream-s-limit.md): One count before a query over upstream's limit · Accepted · 2026-11-22 · amended 2026-11-24
 - <a id="0054"></a>[ADR-0054](adr/0054-one-helper-for-a-series-over-periods.md): One helper for a series over periods · Accepted · 2026-11-22 · amended 2026-11-22
 - <a id="0055"></a>[ADR-0055](adr/0055-one-live-comparison-of-a-packaged-list.md): One live comparison of a packaged list · Accepted · 2026-11-21
-- <a id="0056"></a>[ADR-0056](adr/0056-the-name-of-each-country-code-in-an-answer-s-meta.md): The name of each country code in an answer's meta · Accepted · 2026-11-22
 - <a id="0058"></a>[ADR-0058](adr/0058-a-fourth-reason-for-one-consumer-and-what-a-core-patch-keeps.md): A fourth reason for one consumer and what a core patch keeps compatible · Accepted · 2026-11-22 · amended 2026-11-24
 - <a id="0059"></a>[ADR-0059](adr/0059-core-s-scope-what-a-consumer-is-and-how-far-the-two-consumer.md): Core's scope: what a consumer is and how far the two-consumer rule reaches · Accepted · 2026-11-24
 - <a id="0060"></a>[ADR-0060](adr/0060-the-boundary-of-a-source-package-and-the-four-rules-of-a.md): The boundary of a source package and the four rules of a record that a package shapes itself · Accepted · 2026-11-24
@@ -48,6 +47,7 @@ records in `docs/adr/`. A record changes, and this file follows when the script 
 - <a id="0064"></a>[ADR-0064](adr/0064-the-built-answer-check-its-mark-and-its-census-without.md): The built-answer check: its mark and its census, without following a body or the module's declarations · Accepted · 2026-11-24 · amended 2026-11-24
 - <a id="0065"></a>[ADR-0065](adr/0065-core-names-no-publisher.md): Core names no publisher · Accepted · 2026-11-24
 - <a id="0066"></a>[ADR-0066](adr/0066-the-recorder-under-plain-names-without-the-recording-of-a.md): The recorder under plain names, without the recording of a task · Accepted · 2026-11-24
+- <a id="0067"></a>[ADR-0067](adr/0067-what-the-envelope-carries-notes-the-names-of-codes-and.md): What the envelope carries: notes, the names of codes and integers · Accepted · 2026-11-24
 
 The superseded records follow, kept as written: the record that each status names holds its decision now.
 
@@ -71,4 +71,5 @@ The superseded records follow, kept as written: the record that each status name
 - <a id="0048"></a>[ADR-0048](adr/0048-core-s-recorder-frame-around-a-source-s-rewrite-step.md): Core's recorder frame around a source's rewrite step · Superseded by ADR-0066 · 2026-11-21 · amended 2026-11-22
 - <a id="0049"></a>[ADR-0049](adr/0049-the-mark-of-a-built-answer-and-its-check.md): The mark of a built answer and its check · Superseded by ADR-0064 · 2026-11-21 · amended 2026-11-22
 - <a id="0051"></a>[ADR-0051](adr/0051-the-reference-refresh-script-s-frame-in-core.md): The reference refresh script's frame in core · Superseded by ADR-0062 · 2026-11-22
+- <a id="0056"></a>[ADR-0056](adr/0056-the-name-of-each-country-code-in-an-answer-s-meta.md): The name of each country code in an answer's meta · Superseded by ADR-0067 · 2026-11-22
 - <a id="0057"></a>[ADR-0057](adr/0057-the-recording-of-every-exchange-of-a-task.md): The recording of every exchange of a task · Superseded by ADR-0066 · 2026-11-22 · amended 2026-11-22
