@@ -126,6 +126,7 @@ def _beyond(
 ) -> InvalidRequestError:
     """The walk's refusal at its bound, which names what a caller needs to page on purpose."""
     requests = f"{sent:,} request{'' if sent == 1 else 's'}"
+    bound = f"{most:,} page{'' if most == 1 else 's'}"
     if count is None:
         where = (
             "upstream sends no count of its records, so its total of pages is unknown, and the "
@@ -138,7 +139,7 @@ def _beyond(
             f"walk reached page {reached:,} of {pages:,} after {requests}"
         )
     return InvalidRequestError(
-        f"the walk needs more than the {most:,} pages that one call fetches: {where}. It "
+        f"the walk needs more than the {bound} that one call fetches: {where}. It "
         f"returns nothing; pass {paging} to fetch one page at a time.",
         source=source,
     )

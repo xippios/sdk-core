@@ -40,6 +40,6 @@
     `src/xippios/usda/wasde/tasks.py` (sdk-usda-wasde) — `list_releases` without `since` meets
     that refusal of sdk-usda-esmis's walk, so its docstring's 29 requests and the note of its
     tool name the bound and `since`, and `get_release` words its own refusal of a month older
-    than the bound's pages reach back to, since the walk's names esmis's `page`, which
+    than the bound's pages reach back to, since the walk's refusal names esmis's `page`, which
     `get_release` does not take — no test breaks offline, since
     `test_list_releases_re_shapes_esmis_releases` walks one page.
