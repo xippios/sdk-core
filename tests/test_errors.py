@@ -175,6 +175,11 @@ def test_upstream_s_sentence_keeps_its_one_full_stop() -> None:
     assert str(error) == f"503 from POST /v1/x: Try again later. {SENT_ONCE}"
 
 
+def test_a_5xx_without_a_body_or_a_reason_leaves_no_empty_colon() -> None:
+    assert _answer("POST", 599).reason_phrase == ""
+    assert str(error_from_response(_answer("POST", 599))) == f"599 from POST /v1/x. {SENT_ONCE}"
+
+
 @pytest.mark.parametrize(
     ("method", "status"),
     [("GET", 503), ("HEAD", 500), ("OPTIONS", 504), ("POST", 400), ("POST", 429), ("DELETE", 404)],

@@ -242,6 +242,71 @@ async def test_a_second_401_is_the_client_s_auth_error() -> None:
     await client.aclose()
 
 
+@pytest.mark.anyio
+@pytest.mark.parametrize("method", ["POST", "PUT", "PATCH", "DELETE"])
+async def test_a_write_refused_with_a_401_goes_out_once_and_the_next_call_renews(
+    method: str,
+) -> None:
+    # A write is sent once (ADR-0011, amendment 2026-11-24): its refusal reaches the caller,
+    # who knows the write was not applied, and the refused bearer is dropped, so that the
+    # next request exchanges for a new one first.
+    upstream = Upstream()
+    upstream.refusals = [401]
+    client, _ = make_client(upstream)
+    with pytest.raises(AuthError) as raised:
+        await client.request(method, "/data", json={"a": 1})
+    assert raised.value.status == 401
+    assert str(raised.value) == f"401 from {method} /v1/data: refused"
+    assert (len(upstream.exchanges), len(upstream.calls)) == (1, 1), "one write, no resend"
+    response = await client.request(method, "/data", json={"a": 1})
+    assert response.status_code == 200
+    assert len(upstream.exchanges) == 2, "the next call renews the bearer"
+    assert upstream.bearers() == ["Bearer made-up-bearer-1", "Bearer made-up-bearer-2"]
+    await client.aclose()
+
+
+@pytest.mark.anyio
+async def test_a_write_s_refusal_keeps_the_bearer_that_a_read_renewed_meanwhile() -> None:
+    """A read and a write refused with one bearer: the read renews it, and the write, refused
+    after that, drops the refused bearer alone, so the next call needs no exchange."""
+    upstream = Upstream()
+    written, resent = asyncio.Event(), asyncio.Event()
+
+    def api(request: httpx.Request) -> httpx.Response:
+        if request.headers["authorization"] == "Bearer made-up-bearer-1":
+            return httpx.Response(401, text="refused")
+        resent.set()
+        return httpx.Response(200, json={"ok": True})
+
+    async def hold_the_write(request: httpx.Request) -> httpx.Response:
+        if request.url.host != TOKEN_HOST:
+            if request.method == "POST":
+                written.set()
+                await resent.wait()  # refused once the read has renewed and gone out again
+            elif request.headers["authorization"] == "Bearer made-up-bearer-1":
+                await written.wait()  # refused once the write went out with the same bearer
+        return await upstream(request)
+
+    upstream.api = api
+    client = AsyncClient(
+        ClientConfig(source="example", version="1", base_url=BASE),
+        auth=LoginAuth(source="example"),
+        transport=httpx.MockTransport(hold_the_write),
+        sleep=no_sleep,
+    )
+    read, write = await asyncio.gather(
+        client.get("/data"), client.request("POST", "/data", json={"a": 1}), return_exceptions=True
+    )
+    assert isinstance(read, httpx.Response)
+    assert read.status_code == 200
+    assert isinstance(write, AuthError)
+    assert write.status == 401
+    assert len(upstream.exchanges) == 2, "the first exchange and the read's renewal"
+    await client.get("/data")
+    assert len(upstream.exchanges) == 2, "the write's refusal kept the renewed bearer"
+    await client.aclose()
+
+
 class LoginAuthRenewingOn403(LoginAuth):
     """A source whose upstream refuses a bearer with 403 too, as FAOSTAT does."""
 

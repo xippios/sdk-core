@@ -264,8 +264,19 @@ async def test_a_write_refused_with_a_4xx_keeps_upstream_s_words(
         (httpx.WriteError("cut"), f"WriteError: cut. {SENT_ONCE}"),
         (httpx.ReadTimeout("slow"), f"ReadTimeout: slow. {SENT_ONCE}"),
         (httpx.RemoteProtocolError("closed."), f"RemoteProtocolError: closed. {SENT_ONCE}"),
+        (httpx.ReadTimeout(""), f"ReadTimeout. {SENT_ONCE}"),
+        (httpx.ConnectTimeout(""), f"ConnectTimeout. {NOTHING_SENT}"),
     ],
-    ids=["connect", "connect-timeout", "pool", "write", "read-timeout", "closed"],
+    ids=[
+        "connect",
+        "connect-timeout",
+        "pool",
+        "write",
+        "read-timeout",
+        "closed",
+        "read-timeout-without-text",
+        "connect-timeout-without-text",
+    ],
 )
 async def test_a_write_that_fails_in_transit_says_what_was_sent(
     respx_mock: respx.MockRouter, sleeper: Sleeper, failure: httpx.RequestError, said: str

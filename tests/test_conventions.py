@@ -739,6 +739,9 @@ def test_adr_0011_lets_its_two_switches_go_in_one_sentence_after_the_ways() -> N
     for name in (
         "`IDEMPOTENT_METHODS` alone",
         "after a 429",
+        "decision 1 holds for `GET`, `HEAD` and `OPTIONS`",
+        "a renewing bearer's flow sends a write refused with a status of its `renew_on` no "
+        "second time",
         "decision 3",
         "`retry_non_idempotent`",
         "`retry_transport_errors`",
@@ -772,6 +775,13 @@ def test_section_6_repeats_a_read_alone_and_says_what_became_of_a_failed_write()
         "ADR-0011, amendment 2026-11-24",
     ):
         assert name in once, f"§6: {once!r} does not name {name!r}"
+    bearer = sentence(section(7), "The base keeps the bearer until 60 seconds")
+    for name in (
+        "sends a read again, once",
+        "a write's refusal goes back to its caller and the next request exchanges first",
+        "ADR-0011, amendment 2026-11-24",
+    ):
+        assert name in bearer, f"§7: {bearer!r} does not name {name!r}"
 
 
 # §8: what a write tool's preview shows, and its check (sdk-core#182, decided by the human in
