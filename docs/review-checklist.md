@@ -91,8 +91,8 @@ the repository it reviews.
     blocks, and nothing else; it deletes only what the adoption itself makes dead (ADR-0039,
     decision 2). The items stand in §15 alone, and this checklist copies none of them
     (ADR-0068, decision 4).
-13. **Release PR** (told by its title, `X.Y.Z Release`, or by the `release` label, as the
-    organization's conventions check tells it; ADR-0070, decision 3): it changes only the
+13. **Release PR** (told by its title, `X.Y.Z Release` whole, or by the `release` label, as
+    the organization's conventions check tells it; ADR-0070, decision 3): it changes only the
     files of conventions §12
     (`pyproject.toml`, `uv.lock`, `CHANGELOG.md`, `README.md`, `CLAUDE.md`,
     `docs/handover.md`, and the fragments under `changelog/`, which it deletes); the

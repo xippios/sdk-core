@@ -150,8 +150,8 @@ merges: a release PR is not merged while another release run waits at `pypi`. Th
 decision 3, the other decisions and the amendments above stand as written.
 
 ADR-0070 (https://github.com/xippios/sdk-core/issues/561), decision 3, changes decision 2 in
-part: a release PR is told by its title, `X.Y.Z Release`, or by the `release` label, as the
-organization's conventions check tells it, and no longer by its version, since core's `main`
-carries the coming version before its tag and core's release PR raises none (ADR-0070,
-decisions 1 and 2). The rest of decision 2, the other decisions, the amendments and the
-paragraph above stand as written.
+part: a release PR is told by its title, `X.Y.Z Release` whole, or by the `release` label, as
+the organization's conventions check tells it, and no longer by its version, since core's `main`
+carries 0.5.0 before its tag and core's 0.5.0 release PR raises none (ADR-0070, decisions 1 and
+2). The rest of decision 2, the other decisions, the amendments and the paragraph above stand as
+written.
