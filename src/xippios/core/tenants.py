@@ -11,7 +11,6 @@ environment, the contract of conventions §7, and every task takes the tenant's 
         param="org",  # every task takes org, the tenant's name
         fields=("SUBDOMAIN", "API_KEY"),  # EXAMPLE_ACME_SUBDOMAIN, EXAMPLE_ACME_API_KEY
         reserved=("demo",),  # declared by EXAMPLE_DEMO_SUBDOMAIN and _API_KEY alone
-        validate={"SUBDOMAIN": check_subdomain},
     )
 
 
@@ -26,7 +25,9 @@ environment, the contract of conventions §7, and every task takes the tenant's 
 
 A source whose variables carry a prefix other than its slug names it apart,
 ``Tenants("google-mail", var_prefix="GOOGLE", param="account", ...)`` for
-``GOOGLE_<NAME>_REFRESH_TOKEN``, and its errors still name the source.
+``GOOGLE_<NAME>_REFRESH_TOKEN``, and its errors still name the source. ``field`` returns a
+value stripped, and a source that knows the value's shape checks it itself, its
+``ConfigError`` naming the variable and never the value.
 
 A server bound to one tenant takes a ``TenantLock``: ``bind_tasks`` gives the source's
 tool set (``xippios.core.mcp.ToolSet``) the tasks with the tenant's argument bound, so no
@@ -48,15 +49,12 @@ naming the tenant::
 One tenant per call (conventions §7; ADR-0036, decisions 11 and 13): no task, tool or
 helper in core works across tenants, and the tenant list returns names only. A source's
 own tasks follow the same line, each taking exactly one tenant, required, with nothing
-shared between tenants. ``bind_tasks`` refuses a task that takes no tenant, unless it is
-the tenant list or its module names it in ``NO_TENANT_TASKS``, beside ``BULK_TASKS``::
-
-    NO_TENANT_TASKS = frozenset({"list_currencies"})  # in tasks.py: the same for every tenant
-
-and the family check of ``xippios.core.testing`` holds every task of a source whose
-``_client``, ``tasks`` or ``tasks_write`` module holds a ``Tenants`` to it, the tenant's
-parameter the one the registry declares, ``param``, which the serve command's option and
-every ``TenantLock`` take too. A signature shows neither what a task reaches nor what it
+shared between tenants. ``bind_tasks`` refuses a task that takes no tenant unless it is
+the tenant list, so a bound server serves the tenant's tasks and the tenant list, and the
+family check of ``xippios.core.testing`` holds every task of a source whose ``_client``,
+``tasks`` or ``tasks_write`` module holds a ``Tenants`` to it, the tenant's parameter the
+one the registry declares, ``param``, which the serve command's option and every
+``TenantLock`` take too. A signature shows neither what a task reaches nor what it
 shares, so a task that takes one tenant and opens another's client passes both
 (https://github.com/xippios/sdk-core/issues/302).
 
@@ -67,20 +65,17 @@ sdk-cashctrl alone and came back in 0.4.0 from its copy and sdk-google-mail's (A
 decision 1).
 """
 
-import asyncio
 import functools
-import hashlib
 import inspect
 import os
 import re
 import threading
 import typing
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from xippios.core._loop import as_async, sync
-from xippios.core._tasks import touches_no_tenant
+from xippios.core._loop import as_async
 from xippios.core.client import AsyncClient
 from xippios.core.errors import ConfigError, InvalidRequestError
 from xippios.core.models import Result, ResultMeta
@@ -124,15 +119,16 @@ class Tenants:
     upper-cased with ``-`` made ``_`` (``EXAMPLE_ACME_SUBDOMAIN``). A reserved tenant, such
     as the demo tenant fixtures and live tests use, is never listed: it exists when every
     one of its field variables is set, and not otherwise. The environment is read on every
-    call; only the clients are cached.
+    call; only the clients are cached, one per tenant until ``reset()``.
 
     Args:
         source: Source slug, e.g. ``"cashctrl"``; names the source in errors and in the
             tenant list's ``meta.source``.
         var_prefix: The prefix of every per-tenant variable, upper-case as it appears in
             the variable name, e.g. ``"GOOGLE"`` for sdk-google-mail's
-            ``GOOGLE_WORK_REFRESH_TOKEN``, a prefix every Google source shares. ``None``,
-            the default, derives it from ``source``, upper-cased with ``-`` made ``_``:
+            ``GOOGLE_WORK_REFRESH_TOKEN``, a prefix every Google source shares; that
+            source is its one consumer (ADR-0036, amendment 2026-11-24). ``None``, the
+            default, derives it from ``source``, upper-cased with ``-`` made ``_``:
             ``"CASHCTRL"``.
         list_var: The variable listing the tenant names, e.g. ``"CASHCTRL_ORGS"``.
         param: The task parameter that names the tenant, e.g. ``"org"``: the one
@@ -143,15 +139,6 @@ class Tenants:
             variable name, e.g. ``("SUBDOMAIN", "API_KEY")``.
         reserved: Tenant names declared by their own field variables alone and never
             listed, e.g. ``("demo",)``; they follow the listed names, in this order.
-        validate: Per field, a check applied to the value ``field`` returns, e.g.
-            ``{"SUBDOMAIN": check_subdomain}``. It returns the value to use, possibly
-            normalised, and raises ``ValueError`` for a value it refuses; any exception
-            it raises refuses the value the same way.
-        hints: Per field, static text appended to the ``ConfigError`` when ``validate``
-            refuses a value, e.g. ``{"SUBDOMAIN": "set the subdomain alone, e.g. acme
-            for acme.example.org"}``, read as "...; <hint>". It tells the operator what
-            the variable should hold; the check's own message, which may quote the
-            value, is never used. A field with a hint has a ``validate`` check.
 
     Attributes:
         source: The source slug.
@@ -165,11 +152,9 @@ class Tenants:
         TypeError: ``fields`` or ``reserved`` is one string rather than a sequence.
         ValueError: An empty ``source`` or ``list_var``; a ``var_prefix`` that is not
             upper-case letters, digits and underscores; a ``param`` that is not a
-            parameter name; no field, a field that is not
-            upper-case letters, digits and underscores, or a field given twice; a
-            reserved name that is not a valid tenant name or is given twice; a
-            ``validate`` or ``hints`` entry for a field not in ``fields``; a ``hints``
-            entry for a field without a ``validate`` check, which could never be shown.
+            parameter name; no field, a field that is not upper-case letters, digits and
+            underscores, or a field given twice; a reserved name that is not a valid
+            tenant name or is given twice.
     """
 
     def __init__(
@@ -181,8 +166,6 @@ class Tenants:
         param: str,
         fields: Sequence[str],
         reserved: Sequence[str] = (),
-        validate: Mapping[str, Callable[[str], str]] | None = None,
-        hints: Mapping[str, str] | None = None,
     ) -> None:
         if not source:
             raise ValueError("source must not be empty")
@@ -215,28 +198,13 @@ class Tenants:
                 raise ValueError(
                     f"reserved name {name!r} is not lower-case letters, digits and underscores"
                 )
-        checks = dict(validate or {})
-        unknown = sorted(set(checks) - set(fields))
-        if unknown:
-            raise ValueError(f"validate names fields not in fields: {', '.join(unknown)}")
-        texts = dict(hints or {})
-        unknown = sorted(set(texts) - set(fields))
-        if unknown:
-            raise ValueError(f"hints names fields not in fields: {', '.join(unknown)}")
-        unchecked = sorted(set(texts) - set(checks))
-        if unchecked:
-            # Shown only when the check refuses a value: without a check it never would be.
-            raise ValueError(f"hints names fields without a validate check: {', '.join(unchecked)}")
         self.source = source
         self.var_prefix = source.upper().replace("-", "_") if var_prefix is None else var_prefix
         self.list_var = list_var
         self.param = param
         self.fields = fields
         self.reserved = reserved
-        self._validate = checks
-        self._hints = texts
-        self._clients: dict[str, tuple[str, AsyncClient]] = {}
-        self._closing: set[asyncio.Task[None]] = set()
+        self._clients: dict[str, AsyncClient] = {}
         self._lock = threading.Lock()
         global _declared
         _declared = True
@@ -329,22 +297,23 @@ class Tenants:
         raise InvalidRequestError(f"unknown tenant {name!r}; {hint}", source=self.source)
 
     def field(self, name: str, field: str) -> str:
-        """The value of tenant ``name``'s ``field`` variable, stripped and checked.
+        """The value of tenant ``name``'s ``field`` variable, stripped.
+
+        A source that knows the value's shape, a subdomain say, checks the value this
+        returns itself and refuses it with a ``ConfigError`` that names the variable,
+        ``var(name, field)``, and never the value.
 
         Args:
             name: A declared tenant, e.g. ``"acme"``.
             field: One of ``fields``, e.g. ``"SUBDOMAIN"``.
 
         Returns:
-            The value without surrounding whitespace, passed through ``validate[field]``
-            when the source gave one.
+            The value without surrounding whitespace.
 
         Raises:
             InvalidRequestError: ``name`` is not declared (see ``require``).
-            ConfigError: The variable of a declared tenant is unset or blank, or the
-                check refused its value: the operator's environment. The message names
-                the variable, never the value; for a refused value it ends with the
-                field's hint, when the source gave one.
+            ConfigError: The variable of a declared tenant is unset or blank: the
+                operator's environment. The message names the variable, never a value.
             ValueError: ``field`` is not one of ``fields``.
         """
         self._known_field(field)
@@ -355,38 +324,17 @@ class Tenants:
                 f"{variable} is not set; export the {field} of tenant {name!r}",
                 source=self.source,
             )
-        check = self._validate.get(field)
-        if check is None:
-            return os.environ[variable].strip()
-        try:
-            return check(os.environ[variable].strip())
-        except Exception:  # any failure refuses the value; none passes it on
-            pass
-        # Raised outside the handler: the check's error may quote the value, so it is
-        # neither the cause nor the context of this one.
-        message = f"{variable} does not hold a valid {field} for tenant {name!r}"
-        hint = self._hints.get(field)
-        if hint:
-            message += f"; {hint}"
-        raise ConfigError(message, source=self.source)
+        return os.environ[variable].strip()
 
     def client_for(self, name: str, build: Callable[[str], AsyncClient]) -> AsyncClient:
         """Tenant ``name``'s client: ``build(name)`` on first use, the same client after.
 
-        The client is cached under the current values of the tenant's field variables
-        (as a digest, never the values), so a changed value builds a new client on the
-        next call, and the one it replaces is closed through its ``aclose()``, which
-        closes the connection pool it holds on the event loop that awaits it (queue row
-        24 b). Called inside a running event loop, as every endpoint wrapper calls it,
-        the close is scheduled as a task on that loop and runs once the caller next
-        yields; called outside any loop, it runs on core's background loop through
-        ``sync``, the loop every sync facade uses, before this returns. A pool the
-        replaced client holds on yet another loop is not reached and goes with the
-        client. A request still in flight on the replaced client on the same loop is cut
-        off by the close; only tests and notebooks that change the environment inside a
-        running process meet it. Every tenant has a client of its own, and its own rate
-        limiter and cache when ``build`` creates them, as it should. ``build`` runs under
-        the registry's lock: it must not call ``client_for``. Thread-safe.
+        The registry keeps one client per tenant until ``reset()``, whatever the tenant's
+        variables hold later: ``build`` reads them when it builds, and nothing compares
+        them again, since no code of the family changes them after start. Every tenant
+        has a client of its own, and its own rate limiter and cache when ``build`` creates
+        them, as it should. ``build`` runs under the registry's lock: it must not call
+        ``client_for``. Thread-safe.
 
         Args:
             name: A declared tenant, e.g. ``"acme"``.
@@ -396,37 +344,22 @@ class Tenants:
 
         Raises:
             InvalidRequestError: ``name`` is not declared; ``build`` is not called.
-            ConfigError: ``build`` raised it, e.g. from ``field`` for a missing or
-                invalid value.
+            ConfigError: ``build`` raised it, e.g. from ``field`` for a missing value or
+                from the source's own check of it.
         """
         self.require(name)
         with self._lock:
-            digest = self._digest(name)
-            cached = self._clients.get(name)
-            if cached is not None and cached[0] == digest:
-                return cached[1]
-            client = build(name)
-            self._clients[name] = (digest, client)
-        if cached is not None:
-            self._close(cached[1])
-        return client
-
-    def _close(self, replaced: AsyncClient) -> None:
-        """Close ``replaced`` on the running loop, or on core's background loop without one."""
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            sync(replaced.aclose)()
-            return
-        task = loop.create_task(replaced.aclose())
-        self._closing.add(task)  # held until done: the loop keeps a weak reference only
-        task.add_done_callback(self._closing.discard)
+            client = self._clients.get(name)
+            if client is None:
+                client = self._clients[name] = build(name)
+            return client
 
     def reset(self) -> None:
         """Drop every cached client, without closing it; the next ``client_for`` builds anew.
 
-        A source's ``tests/conftest.py`` calls it around each test; a dropped client's
-        pools go with it, unlike the client ``client_for`` replaces.
+        The one way to a new client: a source's ``tests/conftest.py`` calls it around each
+        test, and a process that changes a tenant's variables calls it to take them up. A
+        dropped client's pools go with it.
         """
         with self._lock:
             self._clients.clear()
@@ -434,14 +367,6 @@ class Tenants:
     def _known_field(self, field: str) -> None:
         if field not in self.fields:
             raise ValueError(f"unknown field {field!r}; fields: {', '.join(self.fields)}")
-
-    def _digest(self, name: str) -> str:
-        """A digest of tenant ``name``'s field values, unset ones included; no value in a local."""
-        digest = hashlib.sha256()
-        for field in self.fields:
-            # repr tells an unset variable (None) from an empty one and escapes NUL.
-            digest.update(repr(os.environ.get(self.var(name, field))).encode("utf-8") + b"\x00")
-        return digest.hexdigest()
 
 
 _LIST_DOC = """List the tenants this server can reach, by name.
@@ -453,15 +378,16 @@ tenant is declared where the server runs.
 
 
 def list_task(
-    tenants: Tenants, *, name: str, doc: str | None = None, source: str | None = None
+    tenants: Tenants, *, name: str, doc: str | None = None
 ) -> Callable[[], Result[list[str]]]:
     """A task returning the declared tenants' names, for a ``<source>_list_<tenants>`` tool.
 
     The task is synchronous and takes no argument; it reads ``tenants.names()`` on every
-    call and returns names only (ADR-0030), with ``meta.endpoint`` set to ``name`` and no
-    ``meta.tenant``. Register it with the source's other tasks, on the read server: a
-    write server exposes write tools only (conventions §8). The task carries a mark by
-    which ``bind_tasks`` lists the tenant a ``TenantLock`` binds alone.
+    call and returns names only (ADR-0030), with ``meta.source`` the registry's source,
+    ``meta.endpoint`` set to ``name`` and no ``meta.tenant``. Register it with the source's
+    other tasks, on the read server: a write server exposes write tools only (conventions
+    §8). The task carries a mark by which ``bind_tasks`` lists the tenant a ``TenantLock``
+    binds alone.
 
     Args:
         tenants: The source's registry.
@@ -469,19 +395,16 @@ def list_task(
             named from it (``cashctrl_list_organisations``).
         doc: The docstring, which is the tool description; ``None`` gives a default
             written for agents that says "tenants".
-        source: The source slug ``meta.source`` names, e.g. ``"google-mail"``, for a
-            registry that several sources share; ``None`` names ``tenants.source``.
 
     Raises:
         ValueError: ``name`` is not a Python identifier.
     """
     if not name.isidentifier():
         raise ValueError(f"name {name!r} is not a Python identifier")
-    slug = tenants.source if source is None else source
 
     def task() -> Result[list[str]]:
         return Result[list[str]](
-            data=list(tenants.names()), meta=ResultMeta(source=slug, endpoint=name)
+            data=list(tenants.names()), meta=ResultMeta(source=tenants.source, endpoint=name)
         )
 
     task.__name__ = name
@@ -615,9 +538,7 @@ def _bind(fn: Callable[..., Any], lock: TenantLock) -> Callable[..., Any]:
             return _only_the_locked_tenant(lock, fn())
 
         return only_the_locked_tenant
-    signature = inspect.signature(fn)
-    if lock.param not in signature.parameters:
-        return fn  # declared in NO_TENANT_TASKS: bind_tasks refused every other such task
+    signature = inspect.signature(fn)  # it takes lock.param: bind_tasks refused any other
     # Annotated metadata kept: a bound tool's schema and check hold its constraints too.
     hints = typing.get_type_hints(fn, include_extras=True)
     parameters = [
@@ -658,11 +579,10 @@ def bind_tasks(
     §8). The other parameters keep their ``Annotated`` metadata, so a constraint, a
     description or a validator holds in the bound tool's schema and check, and in a
     route's. The tenant list of ``list_task`` lists the bound tenant alone, still with
-    ``meta.tenant`` ``None``. A task its module names in ``NO_TENANT_TASKS``, beside
-    ``BULK_TASKS``, touches no tenant and is returned as it is; any other task that takes
-    no ``lock.param`` is refused, since the bound server would serve it unbound
-    (conventions §7; ADR-0036, decision 13). The HTTP router takes no lock: a deployment
-    that needs one declares only that tenant.
+    ``meta.tenant`` ``None``. Any other task that takes no ``lock.param`` is refused, since
+    the bound server would serve it unbound: a bound server serves the tenant's tasks and
+    the tenant list (conventions §7; ADR-0036, decision 13). The HTTP router takes no lock:
+    a deployment that needs one declares only that tenant.
 
     Args:
         tasks: A server's tasks, e.g. ``tool_functions(tasks)``.
@@ -674,9 +594,8 @@ def bind_tasks(
         A list of the tools to be, in the order of ``tasks``.
 
     Raises:
-        ValueError: A task takes no ``lock.param`` and is neither the tenant list nor
-            named in its module's ``NO_TENANT_TASKS``; the message names every such task
-            and the parameter, and nothing is bound.
+        ValueError: A task takes no ``lock.param`` and is not the tenant list; the
+            message names every such task and the parameter, and nothing is bound.
     """
     if lock is None:
         return list(tasks)
@@ -684,15 +603,13 @@ def bind_tasks(
     unbound = [
         getattr(fn, "__name__", repr(fn))
         for fn in given
-        if not _lists_tenants(fn)
-        and lock.param not in inspect.signature(fn).parameters
-        and not touches_no_tenant(fn)
+        if not _lists_tenants(fn) and lock.param not in inspect.signature(fn).parameters
     ]
     if unbound:
         verb = "takes" if len(unbound) == 1 else "take"
         raise ValueError(
             f"{', '.join(unbound)} {verb} no {lock.param}, the tenant's parameter that the lock "
-            f"binds; a task that touches a tenant takes it, and one that touches none is named "
-            f"in NO_TENANT_TASKS of its tasks module (conventions §7)"
+            f"binds; a bound server serves the tenant list and the tasks that take "
+            f"{lock.param}, and no other (conventions §7)"
         )
     return [_bind(fn, lock) for fn in given]

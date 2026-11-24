@@ -661,29 +661,25 @@ client = TENANTS.client_for("acme", build)  # acme's own client, built on first 
 list_tenants = list_task(TENANTS, name="list_tenants")  # the tool example_list_tenants
 ```
 
-The environment is read on every call. `client_for` keeps one client per tenant under a
-digest of its variables, never their values, so a changed variable builds a new client
-and closes the one it replaces. A name that is not declared is the caller's
-`InvalidRequestError`, which lists the declared ones; a malformed list, or a missing or
-refused value of a declared tenant, is the operator's `ConfigError`, which names the
-variable. A source whose variables carry a prefix other than its slug names it:
+The environment is read on every call. `client_for` keeps one client per tenant until
+`TENANTS.reset()`, the one way to a new client, which a process calls when it changes a
+tenant's variables. A name that is not declared is the caller's `InvalidRequestError`,
+which lists the declared ones; a malformed list, or a missing value of a declared tenant,
+is the operator's `ConfigError`, which names the variable. `field` returns a value
+stripped, and a source that knows its shape checks it in `build` and raises a
+`ConfigError` that names the variable, `TENANTS.var(name, "SUBDOMAIN")`, and never the
+value. A source whose variables carry a prefix other than its slug names it:
 `Tenants("google-mail", var_prefix="GOOGLE", param="account", ...)` reads
 `GOOGLE_WORK_REFRESH_TOKEN`, and its errors name `google-mail`. The list task takes no
-argument and returns names only, `meta.tenant` `None`, on the read server;
-`list_task(..., source=...)` names another source than the registry's, for a registry that
-several sources share.
+argument and returns names only, `meta.source` the registry's and `meta.tenant` `None`, on
+the read server.
 
 Every other task takes the tenant's name as the registry's `param`, `org` here, and sets
 `ResultMeta(tenant=name, ...)`; its messages and results name tenants and variables, never
 a value, and core's error messages leave the host out, since it names the tenant. One
 tenant per call (ADR-0036, decisions 11 and 13): each task takes exactly one tenant,
 required, the tenant list returns names only, nothing is shared between tenants, and
-nothing in core works across them. A task that touches no tenant, a list that is the same
-for every tenant say, is declared by name beside `BULK_TASKS` in `tasks.py`:
-
-```python
-NO_TENANT_TASKS = frozenset({"list_currencies"})  # tasks_write.py declares its own
-```
+nothing in core works across them.
 
 A server bound to one tenant serves that tenant alone, and none of its tools takes the
 tenant's name. `bind_tasks(tasks, lock)` binds them to a `TenantLock(TENANTS, "acme")`,
@@ -730,8 +726,8 @@ A bound tool keeps its name and its other parameters' `Annotated` constraints, a
 docstring and signature lose `org`, so a call that still names a tenant is refused like
 any argument the tool does not declare; the tenant list lists the bound tenant alone.
 `bind_tasks` refuses with `ValueError`, naming the task and `org`, a task that takes no
-`org`, unless it is the tenant list or named in its module's `NO_TENANT_TASKS`, which the
-bound server serves as it is, so a bound server serves no task unbound.
+`org` and is not the tenant list, so a bound server serves the tenant's tasks and the
+tenant list, and no task unbound.
 The bound server's instructions end "This server is bound to org acme; every tool acts on
 that organisation and takes no org." `--org acme` stops the process with exit status 2
 before anything is served when `acme` is not declared or `check` raises, a missing
@@ -1512,9 +1508,9 @@ table lists exactly the read and the write tasks; `.copier-answers.yml` names a 
 tag; `pyproject.toml` bounds `xippios-core` with `~=`; and every task, read and write, of a
 source whose `_client`, `tasks` or `tasks_write` module holds a `Tenants` registry takes
 exactly one tenant, the parameter its registry declares, `Tenants(..., param="org")`, once,
-required, a `str`, the tenant list and the tasks of `NO_TENANT_TASKS` excepted, with no
-opt-in. The check reads signatures only, so a task that takes one tenant and opens another's
-client is the review's to find. A write
+required, a `str`, the tenant list excepted, with no opt-in. The check reads signatures
+only, so a task that takes one tenant and opens another's client is the review's to find.
+A write
 server is its source's to test, with `await assert_write_tools(write_server, write_tasks,
 source="example", read_server=read_server, router=router)`: a write server, its tools exactly the write
 tasks, each taking `confirm: bool = False` last, and none of them on the read server or

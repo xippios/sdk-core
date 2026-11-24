@@ -58,9 +58,8 @@ than one fails every test here, naming the option. The repository's files (``REA
   or ``tasks_write`` module holds a ``Tenants`` registry, takes exactly one tenant: the
   parameter the registry declares, ``Tenants(..., param="org")``, with no default,
   annotated ``str`` or ``Annotated[str, ...]``, neither ``*`` nor ``**``; the tenant list
-  of ``list_task`` and the tasks its module names in ``NO_TENANT_TASKS`` are excepted,
-  and ``NO_TENANT_TASKS`` names tasks of that module's ``__all__`` alone (conventions §7;
-  ADR-0036, decision 13). A source with no ``Tenants`` registry passes. The check reads
+  of ``list_task`` is excepted (conventions §7; ADR-0036, decision 13). A source with no
+  ``Tenants`` registry passes. The check reads
   signatures: what a task reaches inside is the review's
   (https://github.com/xippios/sdk-core/issues/302);
 - a source that keeps ``docs/upstream/OBSERVED.md``, the notes of what it observed of
@@ -146,7 +145,6 @@ from packaging.requirements import InvalidRequirement, Requirement
 from packaging.utils import canonicalize_name
 from packaging.version import Version
 
-from xippios.core._tasks import touches_no_tenant
 from xippios.core.models import Result
 from xippios.core.reference import PackagedCodes, PackagedList, _named_parameters
 from xippios.core.tenants import Tenants, _lists_tenants
@@ -625,23 +623,14 @@ def test_family_tasks_take_one_tenant(family_source: FamilySource) -> None:
     registry is multi-tenant, with no opt-in: every task of ``tasks.__all__`` and
     ``tasks_write.__all__`` takes the parameter the registry declares, ``tenants.param``,
     once, with no default, of a type that names one tenant, a ``str``, except the tenant
-    list and the tasks its module names in ``NO_TENANT_TASKS``, which touch no tenant
-    (ADR-0036, decision 13).
+    list (ADR-0036, decision 13).
     """
     if family_source.tenants is None:
         return
     problems: list[str] = []
-    for module in filter(None, [family_source.tasks, family_source.tasks_write]):
-        unknown = sorted(
-            set(getattr(module, "NO_TENANT_TASKS", ())) - set(getattr(module, "__all__", ()))
-        )
-        if unknown:
-            problems.append(
-                f"NO_TENANT_TASKS of {module.__name__} names {unknown}, not in its __all__"
-            )
     param = family_source.tenants.param
     for name, fn in _every_task(family_source).items():
-        if _lists_tenants(fn) or touches_no_tenant(fn):
+        if _lists_tenants(fn):
             continue
         problem = _one_tenant_problem(fn, param)
         if problem is not None:
@@ -649,8 +638,7 @@ def test_family_tasks_take_one_tenant(family_source: FamilySource) -> None:
     _fail(
         problems,
         f"every task of a multi-tenant source takes exactly one tenant, {param}, the parameter "
-        "its Tenants registry declares, required; the tenant list and the tasks named in "
-        "NO_TENANT_TASKS of their module are excepted (conventions §7):",
+        "its Tenants registry declares, required, the tenant list excepted (conventions §7):",
     )
 
 

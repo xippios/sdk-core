@@ -1,7 +1,6 @@
 # ADR-0036: Multi-tenant sources
 
-Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under
-https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0014
+Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0014 · Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/475
 
 ## Context
 
@@ -167,3 +166,20 @@ state its decisions from 1.28 on; decisions 11 and 13 conventions §7, item 17 o
 checklist, the README and the docstrings of `xippios.core.tenants`, `bind_tasks` and the
 family check, and the parameter that decision 13 declares on the registry conventions §8 and
 the docstrings of `Tenants`, `TenantLock` and `serve_tenants` too.
+
+Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/475: in decision 1 `validate`
+and `hints` return to their one consumer, sdk-cashctrl, which checks the value that `field`
+returns itself and refuses it with a `ConfigError` that names the variable and never the value,
+by ADR-0059, decision 2, and part 2 of the answer on
+https://github.com/xippios/sdk-core/issues/473, while `var_prefix` stays with its one consumer,
+sdk-google-mail, whose variables carry the prefix `GOOGLE` that its slug does not give; in
+decision 3 the digest of a tenant's variables leaves, so that `client_for` keeps one client per
+tenant until `Tenants.reset()`, the one way to a new client, and closes none, since no code of
+core, of a source or of the host changes a tenant's variables after start; in decision 6
+`list_task` loses `source`, which no source passes, by part 7 of the answer on
+https://github.com/xippios/sdk-core/issues/475; and in decision 13 `NO_TENANT_TASKS` leaves with its reads in `bind_tasks`, in the family check and in core's
+reader of a tasks module, since no source declares it, so that a bound server serves the
+tenant's tasks and the tenant list and the family check excepts the tenant list alone until a
+source has a task that touches no tenant, while decisions 2, 4, 5 and 7 to 12, the rest of
+decisions 1, 3, 6 and 13 and the consequences, but the first and the second's clause on
+`NO_TENANT_TASKS`, stand as written.
