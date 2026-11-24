@@ -31,8 +31,9 @@ changes no decision; their history stays in ADR-0012.
    (sdk-google-mail's `next_page_token`, sdk-x's `data.meta.next_token`), the caller passes
    it back to the page parameter upstream names, and the docstring says that the task
    returns one page and collects nothing. Johannes approved sdk-google-mail's parameters
-   at its G1 on 2026-10-29, and ADR-0027, decision 4 (Johannes, gate P, 2026-10-29)
-   rejected collecting for sdk-x.
+   at its G1 on 2026-10-29, and decision 4 of sdk-x's first record,
+   https://github.com/xippios/sdk-x/blob/main/docs/adr/0001-x-metered-content-source.md
+   (Johannes, gate P, 2026-10-29), rejected collecting for sdk-x.
 3. **A task that returns a page.** A paginated task called with a page parameter returns that
    page, and `total` is upstream's count for the whole request, or `None`, so the caller can
    page.

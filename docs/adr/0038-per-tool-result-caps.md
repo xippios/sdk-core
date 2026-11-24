@@ -53,7 +53,8 @@ and 2026-11-18 as they stand, and changes no decision; their history stays in AD
      with its `next_token` or a bounded lookup, with a byte bound of its own and the row
      bound unchanged, as sdk-x's four post tools take 128,000 bytes and its `lookup_users`
      160,000 (Johannes, 2026-10-30); where the upstream bills per result, the tool's
-     docstring states the price per result (ADR-0027, decision 4), so a larger page is a
+     docstring states the price per result (decision 4 of sdk-x's first record,
+     https://github.com/xippios/sdk-x/blob/main/docs/adr/0001-x-metered-content-source.md), so a larger page is a
      known cost;
    - a tool whose result is one upstream document or table that an agent reads whole, a
      report or a statement, a table's page or a matrix, with the rows and bytes the source

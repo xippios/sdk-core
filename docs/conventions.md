@@ -618,7 +618,8 @@ A paginated task may instead return one upstream page per call and collect nothi
 the two cases where collecting would cost what no call bounds: a list unbounded by
 nature, where collecting would spend hundreds of calls for a result the cap cuts at 200
 rows (a mailbox's `list_messages`), and a metered upstream, which bills
-per resource returned (sdk-x; ADR-0027, decision 4). The cursor upstream returns stays
+per resource returned (sdk-x, decision 4 of its first record,
+https://github.com/xippios/sdk-x/blob/main/docs/adr/0001-x-metered-content-source.md). The cursor upstream returns stays
 on its data under upstream's name (`next_page_token`, or `data.meta.next_token`),
 the caller passes it back to the page parameter upstream names, and the docstring says
 that the task returns one page and collects nothing (ADR-0034, decision 2).
@@ -1432,7 +1433,8 @@ which §12 bounds to one minor.
   30-second example · MCP client config snippet · status table of covered endpoints ·
   upstream terms and attribution · licence.
 - Topics on GitHub: `xippios-sdk`, `python`, `mcp`, plus the domain (`agriculture`,
-  `trade-data`, `accounting`, `email` (ADR-0025), `social-media` (ADR-0027)) as
+  `trade-data`, `accounting`, `email` (ADR-0025), `social-media` (sdk-x's first record,
+  https://github.com/xippios/sdk-x/blob/main/docs/adr/0001-x-metered-content-source.md)) as
   appropriate.
 - Workflows are hardened (ADR-0039, decision 7). Every action is pinned to a
   commit SHA with its version in a comment, and bumped deliberately. A workflow carries no

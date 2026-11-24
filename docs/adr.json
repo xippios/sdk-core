@@ -499,20 +499,6 @@
       "superseded_by": null
     },
     {
-      "id": "ADR-0027",
-      "number": 27,
-      "title": "X as a metered, content-bearing source",
-      "path": "docs/adr/0027-x-metered-content-source.md",
-      "status": "Accepted",
-      "date": "2026-10-30",
-      "decided_by": "Johannes on 2026-10-29 and 2026-10-30 (sdk-x's G1 and G5 answers, gate P with its bounds, the per-tool caps; drafted by the family from the sdk-x plan's §11 and queue row 336; the usage-cap fallback, the recorder's search and List guards, the List posts fixture and `lookup_users`' `most_recent_post` are the sdk-x session's, queue rows 330 and 338)",
-      "amended": [],
-      "amends": [],
-      "supersedes": [],
-      "other": [],
-      "superseded_by": null
-    },
-    {
       "id": "ADR-0028",
       "number": 28,
       "title": "Upstream fidelity — no cross-source normalization in SDK packages",
