@@ -14,16 +14,17 @@ is finished was written with the train on 2026-10-26, in the handover's part for
 When the handover kept one part (ADR-0068, decision 5), the answer on
 https://github.com/xippios/sdk-core/issues/484 moved those sentences to conventions §12, which
 cited ADR-0039, decision 6, for them. That decision states none of them, and one of them, that a
-release PR is not merged while another release run waits at `pypi`, is what ADR-0039, decision
-3, leaves to the process of the work: the organization's conventions check found both (finding 2
-of https://github.com/xippios/sdk-core/pull/558#issuecomment-7140020024;
+release PR is not merged while another release run waits at `pypi`, bears on what ADR-0039,
+decision 3, leaves to the process of the work: the organization's conventions check found both
+(finding 2 of https://github.com/xippios/sdk-core/pull/558#issuecomment-7140020024;
 https://github.com/xippios/sdk-core/issues/559).
 
-This record states the four sentences of §12 as they stand, the third without its clause on a
-release PR's merge, so no rule changes. It changes no decision of ADR-0039, which keeps its two amendments, and supersedes
-no record, since these rules were never among ADR-0039's decisions. When a release PR merges is
-not decided here: ADR-0039, decision 3, leaves who merges a release PR, and when, to the process
-of the work, which binds no repository.
+This record states the four sentences of §12 as they stand, so no rule changes, and supersedes
+no record, since these rules were never among ADR-0039's decisions; ADR-0039 keeps its two
+amendments. ADR-0039, decision 3, leaves who merges a release PR, and when, to the process of the
+work, which binds no repository. This record adds to it the one constraint that the missing
+`concurrency` group imposes on when a release PR merges (decision 3), and everything else about
+who merges and when stays the process of the work.
 
 ## Decision
 
@@ -35,10 +36,14 @@ of the work, which binds no repository.
 2. **Before the tag, the same.** A `ci` that fails before the tag is re-run the same way, by its
    failed jobs and never by a push of a fix, and so is a run that the deployment-branch policy of
    `pypi` refused, once a maintainer has set the policy to `main`.
-3. **No `concurrency` group.** `publish.yml` keeps no `concurrency` group, since GitHub keeps one
-   pending run of a group and cancels it for the next, so a release run queued behind a run that
-   waits at `pypi` would be lost. Two pushes to `main` close together can therefore both find the
-   version untagged, which decision 4 finishes.
+3. **No `concurrency` group, and no release PR merged while a release run waits.** `publish.yml`
+   keeps no `concurrency` group, since GitHub keeps one pending run of a group and cancels it for
+   the next, so a release run queued behind a run that waits at `pypi` would be lost. Two pushes
+   to `main` close together can therefore both find the version untagged, which decision 4
+   finishes, and a release PR is not merged while another release run waits at `pypi`. That is
+   the one constraint that the missing group imposes on when a release PR merges, and this record
+   adds it to ADR-0039, decision 3; everything else about who merges a release PR, and when, stays
+   the process of the work.
 4. **Two runs that found the version untagged.** The second run's push of the tag fails or,
    where the first run's `ci` failed, the second tags a later commit. The failed jobs of the run
    whose commit is the release are re-run, and where the other run tagged a later commit, a
@@ -46,9 +51,9 @@ of the work, which binds no repository.
 
 ## Consequences
 
-- Conventions §12 states decisions 1 to 4, one sentence each that cites its decision, and says
-  that whether a release PR merges while another release run waits at `pypi` is the process of
-  the work (ADR-0039, decision 3). The handover's part for 0.5.0 cites this record for how a
-  release run that fails is finished.
+- Conventions §12 states decisions 1 to 4, one sentence each that cites its decision. The
+  handover's part for 0.5.0 cites this record for how a release run that fails is finished.
+- Who merges a release PR, and when, stays the process of the work by ADR-0039, decision 3, but
+  for the one constraint of decision 3 here.
 - No source's code, workflow or test changes, and the conventions keep version 1.30, since every
   rule reads as it did.
