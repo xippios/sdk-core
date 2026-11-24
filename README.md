@@ -1099,7 +1099,8 @@ The script carries no `# /// script` block: it runs in the project's environment
 `xippios-core`, the source's own package and the converter of the source's dev group are
 installed. `run` fetches every page before it writes one, one request at a time, `pause`
 seconds apart (2 by default), each retried once after a network error or a 5xx, and once
-after a 429 where the client's retry policy gives it a wait, and follows no redirect to
+after a 429 where the client's retry policy gives it a wait, the retry no sooner than 10 s or
+the pause, whichever is longer, and follows no redirect to
 another host: such a page stops the run unless it is recorded by that status, and then
 `FETCHED.md` lists it under `Not fetched` with the host.
 
@@ -1109,7 +1110,8 @@ the source does, `xippios-example/<version>`, the version that of the installed 
 `xippios-example`; a source hands its own as `Snapshot(client=...)` for its credentials, its
 pace, its headers or the wait its retry policy gives a 429, which its `classify` may read from
 a header of upstream's own. The client follows no redirect, so the frame follows one on the
-page's host itself, up to ten, and notes each hop in the page's row. The command line takes
+page's host itself, up to ten, and notes each hop in the page's row: a 301, 302, 303, 307 or
+308 that names a `Location`, while any other 3xx is the page's own answer. The command line takes
 `--check`, and `--keyless` where the snapshot names the variables of its client's
 credentials; the declaration's `out` names where the snapshot stands. The run stops, before writing,
 when a page states a copyright, a licence or terms of use that `attribution` does not

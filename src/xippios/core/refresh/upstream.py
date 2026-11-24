@@ -13,9 +13,9 @@ or one that the frame builds from the slug, on core's loop, and the frame keeps 
 of redirects, since the client follows none (ADR-0062, decision 4). Everything is fetched
 before anything is written, one request at a time after a pause, each URL retried at most
 once after a network error or a 5xx, and after a 429 where the client's retry policy gives it
-a wait. No redirect to another host is followed, no browser is imitated, and only a keyed
-sample sends a credential, the client's (conventions §3). Each page with a file is written
-under ``docs/upstream/``, and
+a wait, the retry no sooner than ``RETRY_PAUSE`` or the pause. No redirect to another host
+is followed, no browser is imitated, and only a keyed sample sends a credential, the
+client's (conventions §3). Each page with a file is written under ``docs/upstream/``, and
 ``FETCHED.md`` is regenerated whole, in the one form this module writes: the UTC time of
 the run with an explicit ``Z``, the attribution, one row per file with its page's HTTP
 status, the size and sha256 of the body as fetched, its ETag in a code span and its
@@ -68,7 +68,9 @@ COMMAND = "uv run scripts/refresh_upstream.py"
 PAUSE = 2.0
 """Seconds before every request, unless the snapshot says otherwise; never in parallel."""
 RETRY_PAUSE = 10.0
-"""Seconds before the one retry after a network error or a 5xx."""
+"""Seconds before the one retry after a network error, a 5xx or a 429, at least: a 429 waits
+longer where the client gives it a longer wait, and every retry waits the snapshot's pause
+where that is longer still."""
 REDIRECTS = 10
 """The most redirects on a page's host that the frame follows for one request, as many as
 ``urllib`` followed before the frame sent through core's client."""
@@ -601,15 +603,16 @@ class _Capture:
     def _get(self, url: str, expect: tuple[int, ...], keyed: bool) -> Response:
         """GET ``url``, following its redirects on its host, and read the final answer.
 
-        The client follows no redirect, so the frame keeps its own record of them: each hop
-        is noted and one on the page's host followed, up to ``REDIRECTS``, while one to
-        another host is not, and a keyed request follows none (conventions §3).
+        The client follows no redirect, so the frame keeps its own record of them: each 301,
+        302, 303, 307 or 308 that names a ``Location`` is noted and one on the page's host
+        followed, up to ``REDIRECTS``, while one to another host is not, and a keyed request
+        follows none (conventions §3). Any other 3xx is the page's own answer.
         """
         hops: list[tuple[int, str]] = []
         at = url
         try:
             answer = self._send(at, keyed)
-            while answer.is_redirect:
+            while answer.has_redirect_location:  # a 301, 302, 303, 307 or 308 with Location
                 target = urljoin(at, answer.headers["Location"])
                 hops.append((answer.status_code, target))
                 if keyed or urlsplit(target).netloc != urlsplit(at).netloc:
@@ -637,7 +640,7 @@ class _Capture:
         if status == 429 and not keyed:
             wait = _quota_wait(self.client, answer)
             if wait is not None:
-                raise _RetryableError(f"HTTP 429 {reason}", wait)
+                raise _RetryableError(f"HTTP 429 {reason}", max(wait, RETRY_PAUSE))
         if status not in expect and hops and urlsplit(hops[-1][1]).netloc != urlsplit(at).netloc:
             raise SystemExit(
                 f"GET {url}: redirected ({status}) to another host, {hops[-1][1]}, and no "
@@ -663,7 +666,9 @@ class _Capture:
     def fetch(self, url: str, expect: tuple[int, ...], *, keyed: bool = False) -> Response:
         """GET ``url`` after the pause; retry once on a network error, a 5xx or a 429 waited.
 
-        A keyed request is never retried, so a failure costs one keyed call and stops the run.
+        The retry waits ``RETRY_PAUSE``, or the longer wait that the client gives a 429, and
+        never less than the snapshot's pause, since it is a request as any other. A keyed
+        request is never retried, so a failure costs one keyed call and stops the run.
         """
         time.sleep(self.snapshot.pause)
         try:
@@ -673,8 +678,9 @@ class _Capture:
                 raise SystemExit(
                     f"GET {url}: {error}; a keyed request is not retried. Nothing was written."
                 ) from None
-            _log(f"  {url}: {error}; retrying once in {error.wait:g} s")
-            time.sleep(error.wait)
+            wait = max(error.wait, self.snapshot.pause)
+            _log(f"  {url}: {error}; retrying once in {wait:g} s")
+            time.sleep(wait)
             try:
                 response = self._get(url, expect, keyed)
             except _RetryableError as again:
@@ -1171,6 +1177,7 @@ def _attribution(snapshot: Snapshot, read: Collection[str]) -> list[str]:
 
 def _how(snapshot: Snapshot) -> list[str]:
     """The sentences of "How this is captured" that the frame states for every source."""
+    retry = max(RETRY_PAUSE, snapshot.pause)
     sentences = [
         "Fetched is the UTC time the run started, in ISO 8601 with an explicit Z, the same",
         "for every row. Bytes and sha256 are those of the body as fetched: a converted page's",
@@ -1182,7 +1189,8 @@ def _how(snapshot: Snapshot) -> list[str]:
         "request records no size, sha256 or ETag. A sample is a small answer of the API kept",
         "verbatim under `samples/`, which documents the answer's shape and is no test fixture.",
         f"Requests go one at a time, {snapshot.pause:g} s apart, through core's client, each",
-        "retried at most once, a 429 after the wait the client gives it, and are identified",
+        f"retried at most once and no sooner than {retry:g} s, a 429 after the wait the client",
+        "gives it where that is longer, and are identified",
         f"as `{_user_agent(snapshot)}`, the source package's version in place of",
         "`<version>`. No redirect to another host is followed and no browser is imitated.",
     ]
