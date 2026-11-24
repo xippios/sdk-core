@@ -22,7 +22,7 @@ written for a source and do not apply, and its adoption PR meets the items of co
 - [ ] every new task function returns `Result[T]` with full `ResultMeta`
 - [ ] every new endpoint wrapper matches `docs/upstream/` — names, parameters, semantics
 - [ ] errors raised are from the taxonomy in `docs/conventions.md` §5
-- [ ] public surface changes are reflected in `__init__.py` exports and the README status table
+- [ ] public surface changes are reflected in `__init__.py` exports and, in a source, the README status table; in core, in the six pinned lists of `tests/test_public_surface.py`, which `scripts/count_surface.py` counts for the release's statement of its surface in two counts (ADR-0068, decision 6)
 - [ ] a core PR names the two consumers of each piece it adds that a caller can name, a source or the host each by the code it runs (in its ADR, or in its description when it has none), or, in its ADR, the part of the family's contract that a piece with one consumer serves: the envelope, the error taxonomy, the package contract with the host, the family check or one of the three security properties (ADR-0059, decisions 1, 2 and 4)
 
 ## Tests
