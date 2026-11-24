@@ -124,7 +124,7 @@ class ClientConfig:
             ``retry.backoff_max`` is not retried; an ``UpstreamError`` for a 5xx and
             ``None`` leave the decision to the retry policy; any other error stops the
             retries. At most once per response.
-        before_request: Called once per ``request()`` call, not per retry, after the
+        before_request: Called once per call, downloads and recordings too, not per retry, after the
             cache lookup (a cache hit returns before it) and before the rate limiter,
             with the request as built from base URL, path, query parameters, body and
             headers; credentials from ``auth`` are not on it yet, and changes to it are
