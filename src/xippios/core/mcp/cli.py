@@ -17,12 +17,7 @@ from collections.abc import Callable, Sequence
 from mcp.server.mcpserver import MCPServer
 
 from xippios.core.errors import XippiosError
-from xippios.core.mcp.server import (
-    build_server,
-    is_loopback_only,
-    is_write_server,
-    quiet_request_logging,
-)
+from xippios.core.mcp.server import _hold, build_server, quiet_request_logging
 from xippios.core.mcp.toolset import ToolSet
 from xippios.core.tenants import TenantLock, Tenants
 
@@ -34,18 +29,17 @@ __all__ = ["LOOPBACK_HOSTS", "build_parser", "main", "serve_tenants"]
 # to loopback is served on without --allow-remote therefore gets those checks too, which
 # is why the match is exact: another loopback address such as 127.0.0.2 would not get them.
 LOOPBACK_HOSTS: tuple[str, ...] = ("127.0.0.1", "localhost", "::1")
-"""The ``--host`` values a server held to loopback (``is_loopback_only``) is served on
-over HTTP without ``--allow-remote``; a host that serves such a server itself binds one
-of them too (ADR-0026, decision 5)."""
+"""The ``--host`` values a server held to loopback is served on over HTTP without
+``--allow-remote``, one built from a tool set that writes or is ``loopback_only``; a host
+that serves such a tool set itself binds one of them too (ADR-0026, decision 5)."""
 
 
 def _held(server: MCPServer) -> str | None:
     """What ``server`` is, as a refusal names it, when it is held to loopback; else ``None``."""
-    if is_write_server(server):
-        return "a write server"
-    if is_loopback_only(server):
-        return "a read server held to loopback"
-    return None
+    kind = _hold(server)
+    if kind is None:
+        return None
+    return "a write server" if kind == "write" else "a read server held to loopback"
 
 
 def _allow_remote_help(server: MCPServer | None) -> str:
@@ -55,9 +49,9 @@ def _allow_remote_help(server: MCPServer | None) -> str:
             "serve a write server, or a read server built with loopback_only=True, beyond "
             "loopback; it carries no authentication, put it behind a gateway"
         )
-    if _held(server) is None:
+    kind = _hold(server)
+    if kind is None:
         return "changes nothing: this read server is not held to loopback"
-    kind = "write" if is_write_server(server) else "read"
     return (
         f"serve this {kind} server beyond loopback; it carries no authentication, put it "
         "behind a gateway"
@@ -104,11 +98,10 @@ def main(
     ``apply_options(namespace, server)`` returns the server to run; a ``XippiosError``
     it raises (an option value the source refuses is an ``InvalidRequestError``, a
     missing variable a ``ConfigError``) stops the process like an argparse error: the
-    message on stderr, exit status 2, no traceback. A server held to loopback
-    (``is_loopback_only``), a write server or a read server built with
-    ``loopback_only=True``, is served over ``--http`` on a loopback ``--host`` only
-    (``LOOPBACK_HOSTS``: ``127.0.0.1``, ``localhost``, ``::1``), unless
-    ``--allow-remote`` is passed: it carries no authentication. On any other read server
+    message on stderr, exit status 2, no traceback. A server held to loopback, one built
+    from a tool set that writes or is ``loopback_only``, is served over ``--http`` on a
+    loopback ``--host`` only (``LOOPBACK_HOSTS``: ``127.0.0.1``, ``localhost``, ``::1``),
+    unless ``--allow-remote`` is passed: it carries no authentication. On any other read server
     ``--allow-remote`` changes nothing. The usage line and the errors name the entry
     point that runs, ``sys.argv[0]``, since ``server.name`` is one slug for a source's
     read and write servers.

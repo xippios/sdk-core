@@ -366,8 +366,8 @@ class ResultCap:
     """Limits for one tool result, and what to tell the agent when they cut it (conventions §8).
 
     The defaults are the family's: 200 rows or 64 KB. A reference tool whose whole list
-    an agent needs gets a cap of its own, through ``caps=`` of ``register_tasks`` or
-    ``build_server`` (ADR-0038), with the rows and bytes the source judges it needs; a
+    an agent needs gets a cap of its own, through the ``caps`` of its ``ToolSet``
+    (ADR-0038, ADR-0063), with the rows and bytes the source judges it needs; a
     byte bound above the default is a deliberate choice for that tool. It lives here, not
     in ``xippios.core.mcp``, so a source's ``tasks.py`` can declare its ``MCP_CAPS``
     without the ``mcp`` extra; ``xippios.core.mcp.cap_result`` applies it.

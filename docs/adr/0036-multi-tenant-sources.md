@@ -1,6 +1,6 @@
 # ADR-0036: Multi-tenant sources
 
-Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0014 · Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/475
+Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0014 · Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/475 · Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/476
 
 ## Context
 
@@ -183,3 +183,13 @@ tenant's tasks and the tenant list and the family check excepts the tenant list 
 source has a task that touches no tenant, while decisions 2, 4, 5 and 7 to 12, the rest of
 decisions 1, 3, 6 and 13 and the consequences, but the first and the second's clause on
 `NO_TENANT_TASKS`, stand as written.
+
+Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/476: by ADR-0063, decisions 3,
+5, 6 and 7, in decision 7 the noun of a tenant goes from the lock to the `Tenants` registry, in
+decision 8 the one entry `main(build, *, tenants=None, check=None, argv=None)` takes the
+package's `build`, reads the option hooks from its tool set and binds a tenant where `tenants`
+is given, in place of `serve_tenants` and `main`'s two hook parameters, in decision 9 the confirm
+rule is checked when a tool set that writes is built and the hold to loopback is read from the
+tool set's `read_only`, since `is_write_server` leaves with its registry, and in decision 12 the
+refusal of an argument ends with the sentence "Nothing was sent.", while the other decisions,
+the rest of decisions 7, 8, 9 and 12 and the amendment above stand as written.

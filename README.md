@@ -1258,10 +1258,10 @@ sdk-usda-wasde's `--keep` and `--from`, reads it before the call and passes the 
 
 ```python
 # xippios/example/mcp.py
-from xippios.core.mcp import build_server, main, tool_functions
+from xippios.core.mcp import ToolSet, build_server, main, tool_functions
 from xippios.example import tasks
 
-server = build_server("example", tool_functions(tasks))  # tasks.__all__ minus BULK_TASKS
+server = build_server(ToolSet("example", tool_functions(tasks)))  # __all__ minus BULK_TASKS
 
 
 def run() -> None:  # entry point: xippios-example-mcp = "xippios.example.mcp:run"
@@ -1276,16 +1276,17 @@ even its first row fits, which the note then says instead. A model that holds on
 rows keeps its other fields whole past 64 KB and has its rows cut the same way; any other
 result past it is the note and a preview of its first 64 KB. Errors come
 back as `error: <Class>: <message>`, arguments the tool's schema refuses too
-(`error: InvalidRequestError: year: Input should be a valid integer, ...`), before the
-tool runs and never with pydantic's rendered error (its URL, input type or input value),
-and so does an argument the tool does not declare (`error: InvalidRequestError: yaer:
-Not an argument of this tool; it takes series_id, year`). An error answer sets `isError`
+(`error: InvalidRequestError: year: Input should be a valid integer, ... Nothing was
+sent.`), before the tool runs and never with pydantic's rendered error (its URL, input type
+or input value), and so does an argument the tool does not declare (`error:
+InvalidRequestError: yaer: Not an argument of this tool; it takes series_id, year. Nothing
+was sent.`): the tool did not run (ADR-0063, decision 6). An error answer sets `isError`
 on the tool's result beside its text. A constraint that an `Annotated` parameter declares,
 `Annotated[int, Field(ge=1)]` say, reaches the input schema and the check.
 `--http` serves streamable HTTP instead of stdio.
 A reference tool whose whole list an agent needs gets a cap of its own, keyed by the
 task function's name, with the rows and bytes the source judges it needs:
-`build_server(..., caps={"list_commodities": ResultCap(max_rows=500,
+`ToolSet(..., caps={"list_commodities": ResultCap(max_rows=500,
 max_bytes=100_000)})`. So does a tool whose result is one upstream page that must return
 whole, a cursor-paged page with its `next_token` or a bounded lookup, with a byte bound
 of its own and the row bound unchanged (ADR-0038, decision 4), and so does a
@@ -1295,14 +1296,14 @@ part of it (ADR-0038, decision 4); every other tool keeps 200 rows or
 64 KB. The note says "narrow the query to see the rest" and
 promises no filter; a tool with filters names them in its cap, `ResultCap(note="filter
 by year to see the rest")`. `ResultCap` comes from `xippios.core`, so the `MCP_CAPS` in
-a source's `tasks.py` need no `mcp` extra. A write server (`build_server(...,
-read_only=False)`) refuses, with `ValueError`, a task that does not take `confirm: bool
-= False`, and `--http` serves it on a loopback `--host` only (`LOOPBACK_HOSTS`:
-`127.0.0.1`, `localhost`, `::1`): it carries no authentication. `--allow-remote` serves
-it beyond loopback, behind a gateway that adds it. A read server that reaches what no
-deployment may serve without authentication, a mailbox say, is held the same way with
-`build_server(..., loopback_only=True)` (ADR-0025, D-a); `is_loopback_only(server)`
-answers for both kinds. The usage line names the entry point that runs, and the help of
+a source's `tasks.py` need no `mcp` extra. A write tool set (`ToolSet(...,
+read_only=False)`) refuses, with `ValueError` when it is built, a task that does not take
+`confirm: bool = False`, and `--http` serves its server on a loopback `--host` only
+(`LOOPBACK_HOSTS`: `127.0.0.1`, `localhost`, `::1`): it carries no authentication.
+`--allow-remote` serves it beyond loopback, behind a gateway that adds it. A read server
+that reaches what no deployment may serve without authentication, a mailbox say, is held
+the same way, its tool set built with `loopback_only=True` (ADR-0025, D-a); the tool set's
+`read_only` and `loopback_only` tell either kind. The usage line names the entry point that runs, and the help of
 `--allow-remote` and the refusal name the server's kind.
 
 A tool whose cut answer a caller continues takes a paged cap, `ResultCap(paged=True)`
@@ -1343,20 +1344,22 @@ can still keep its newest rows unpaged. The second run draws on the same quota a
 first: on a multi-tenant source the tenant's own, on a key that several packages share the
 key's, and on a metered upstream the bill, so a source counts a continuation there as one
 more call at that price. Rows can change between two runs, so a continuation of a live list
-can repeat or skip a row. A task that pages with its own `start` keeps its `resume with
-start=` note and stays unpaged. `register_tasks` refuses a paged cap, with `ValueError`
-naming the tool, for a task that takes a parameter `offset` itself and for every task of a
-write server, since a continuation would run a confirmed write again; a write task may keep
-its last rows, `ResultCap(keep="last")` alone, which runs it once. A tool without
-`paged=True` declares no `offset`, and its notes read as before.
+can repeat or skip a row. A tool set refuses a paged cap when it is built, with
+`ValueError` naming the tool, for a task that takes `start`, which pages upstream itself and
+keeps its `resume with start=` note, for a task that takes a parameter `offset` itself and
+for every task of a write tool set, since a continuation would run a confirmed write again
+(ADR-0063, decision 3); a write task may keep its last rows, `ResultCap(keep="last")` alone,
+which runs it once. A tool without `paged=True` declares no `offset`, and its notes read as
+before.
 
 `tool_functions(tasks)` gives the functions of `tasks.__all__` that become tools, those in
 its `BULK_TASKS` left out, read from the module it is given; it refuses an entry whose
 function carries another `__name__`, since a task's name is its entry in `__all__` for its
-tool name, its `MCP_CAPS` key and its `BULK_TASKS` entry alike. A task named in
-`BULK_TASKS` is skipped by `register_tasks` too, a wrapper whose `__wrapped__` leads to it
-included, so `mcp.py` may pass every name of `tasks.__all__`; a cap named for it is
-refused. Request URLs are not logged: `build_server` and `main` set the `httpx`,
+tool name, its `MCP_CAPS` key and its `BULK_TASKS` entry alike. It and `tool_name(source,
+task)`, which takes a task or its name, come from `xippios.core` without the `mcp` extra. A
+task named in `BULK_TASKS` is left out of a tool set too, a wrapper whose `__wrapped__`
+leads to it included, so `mcp.py` may pass every name of `tasks.__all__`; a cap named for it
+is refused. Request URLs are not logged: `build_server` and `main` set the `httpx`,
 `httpcore`, `httpx2` and `httpcore2` loggers to `WARNING` (`quiet_request_logging`),
 because a URL can carry an API key or a tenant host; httpx2 is the `mcp` SDK's own HTTP
 client.
@@ -1377,11 +1380,15 @@ class WritePreview(UpstreamModel):
     reads: list[str]  # ["thing/read.json"] for the update, [] for a create
 ```
 
-A host that builds its servers itself, such as xippios-mcp, imports what `build_server`
-and `main` use from `xippios.core.mcp`: `register_tasks` with `read_only` and
-`loopback_only`, `tool_functions`, `quiet_request_logging` after each `MCPServer` it
-constructs, and `is_write_server`, `is_loopback_only` and `LOOPBACK_HOSTS` to hold a
-server to loopback as `main` does (ADR-0026, decision 5).
+A host that builds its servers itself, such as xippios-mcp, reads a source's tool set
+(ADR-0063, decision 4). It takes `ToolSet`, `build_server`, `register_tasks`,
+`LOOPBACK_HOSTS` and `quiet_request_logging`, after each `MCPServer` it constructs, from
+`xippios.core.mcp`, and `tool_name`, `tool_functions`, `ResultCap` and `ConfigError` from
+`xippios.core`. A tool set holds tools alone, so a source's tools are named
+`tool_name(tool_set.source, fn)` for each `fn` of `tool_set.tasks`; a host's list of tools
+is `dataclasses.replace(tool_set, tasks=..., caps=...)`, checked as a new tool set; and the
+tool set's `read_only` and `loopback_only` say whether to hold its server to loopback as
+`main` does (ADR-0026, decision 5).
 
 A source's own options go through `main`'s hooks, so the command line is parsed once:
 `add_options` puts them on core's parser, so `--help` lists them; `apply_options(namespace,
@@ -1475,7 +1482,8 @@ def run() -> None:
     main(server, add_options=TOOLS.add_options, apply_options=TOOLS.apply_options)
 ```
 
-Beside a tool set `build_server` takes `name` alone. A multi-tenant source's
+`build_server` takes a tool set and `name` alone, and `register_tasks` a server and a tool
+set, which was checked when it was built. A multi-tenant source's
 `build(lock=None)` passes its tasks through `bind_tasks` and its instructions through
 `tenant_instructions`, and `serve_tenants(server, build, ...)` builds the bound server from
 the tool set it returns (see Multi-tenant sources). A host builds one server from the tool

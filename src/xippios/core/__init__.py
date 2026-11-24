@@ -8,6 +8,7 @@ live in their own subpackages and are imported explicitly: ``xippios.core.mcp``,
 """
 
 from xippios.core._loop import sync
+from xippios.core._tasks import tool_functions, tool_name
 from xippios.core._version import __version__
 from xippios.core.client import (
     Answer,
@@ -117,4 +118,6 @@ __all__ = [
     "request_description",
     "sync",
     "tenant_instructions",
+    "tool_functions",
+    "tool_name",
 ]
