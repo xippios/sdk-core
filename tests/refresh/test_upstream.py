@@ -1761,6 +1761,37 @@ def test_a_section_of_the_sources_own_stands_before_the_files(
     assert "differs: FETCHED.md" in capsys.readouterr().out
 
 
+def test_a_check_across_pages_runs_in_sections_before_anything_is_written(
+    site: Site, out: Path
+) -> None:
+    """https://github.com/xippios/sdk-core/issues/579 (ADR-0062, decisions 3 and 5): a hook
+    of one page sees one page, while ``sections`` sees every row, after the last request and
+    before anything is written, in every mode, so a check of a documentation page against
+    the API document it renders returns ``()`` while they agree and stops the run with
+    ``changed`` where they part."""
+    spec = site.page("openapi.json", '{"openapi": "3.1.0", "info": {"version": "2.1"}}')
+    docs = site.page("redoc.html", "<p>API version 2.1</p>")
+
+    def agree(rows: Sequence[Row]) -> Sequence[Section]:
+        by_url = {row.page.url: row.response for row in rows}
+        version = refresh.parse_json(by_url[spec])["info"]["version"]
+        if f"version {version}" not in refresh.decode(by_url[docs]):
+            raise refresh.changed(docs, f"it no longer renders version {version}")
+        return ()
+
+    snapshot = declare(
+        out, Page(spec, "openapi/openapi.json"), Page(docs, note="renders SPEC"), sections=agree
+    )
+    assert go(snapshot) == 0
+    before = fetched(out)
+    site.page("redoc.html", "<p>API version 2.0</p>")
+    for mode in ((), ("--check",)):
+        with pytest.raises(SystemExit, match=r"redoc\.html changed: .*version 2\.1") as stop:
+            go(snapshot, *mode)
+        assert "Nothing was written." in str(stop.value)
+    assert fetched(out) == before, "nothing written"
+
+
 def test_a_rows_note_is_made_from_its_answer(site: Site, out: Path) -> None:
     """A source's and a shared kit's notes, which count what the answer holds: ``note``
     makes the row's note from the row, and stops the run with ``changed`` on an answer it does
