@@ -10,14 +10,14 @@ from typing import Annotated, Any
 import pytest
 
 from xippios.core.http import router_from_tasks
-from xippios.core.mcp import build_server
+from xippios.core.mcp import ToolSet, build_server
 from xippios.core.testing import family
 from xippios.core.testing.family import FamilySource, _cell_tasks, _status_table_tasks
 
 # What building the adapters imports is loaded here, before pytester's in-process runs: a
 # module first imported inside one is dropped after it, and imported again by the next,
 # cryptography's hash classes (behind the MCP server) no longer match its compiled half.
-build_server("warmup", [], read_only=False)
+build_server(ToolSet("warmup", [], read_only=False))
 router_from_tasks("warmup", [])
 
 TASKS = '''
@@ -102,10 +102,10 @@ SOURCE: dict[str, str] = {
     "src/xippios/example/_client.py": 'SOURCE = "example"\n',
     "src/xippios/example/tasks.py": TASKS,
     "src/xippios/example/mcp.py": (
-        "from xippios.core.mcp import build_server\n"
+        "from xippios.core.mcp import ToolSet, build_server\n"
         "from xippios.example import tasks\n"
         "from xippios.example._client import SOURCE\n\n"
-        f"server = build_server(SOURCE, {SERVED})\n"
+        f"server = build_server(ToolSet(SOURCE, {SERVED}))\n"
     ),
     "src/xippios/example/http.py": (
         "from xippios.core.http import router_from_tasks\n"
@@ -241,7 +241,7 @@ def test_a_paged_tool_takes_its_tasks_parameters_and_the_adapters_offset(
     paged = "from xippios.core import ResultCap\n" + paged
     result = run_family(pytester, {"src/xippios/example/mcp.py": paged})
     result.assert_outcomes(passed=FAMILY_TESTS)
-    # A task that takes offset itself cannot be paged: the server refuses it as it is built.
+    # A task that takes offset itself cannot be paged: the tool set refuses it as it is built.
     own = TASKS.replace("(series_id: str, year: int = 2024)", "(series_id: str, offset: int = 0)")
     result = run_family(
         pytester, {"src/xippios/example/mcp.py": paged, "src/xippios/example/tasks.py": own}
@@ -285,7 +285,7 @@ def test_bulk_tasks_stay_off_the_adapters_and_in_the_table(pytester: pytest.Pyte
     changes: dict[str, str | None] = {"src/xippios/example/tasks.py": bulk, "README.md": table}
     result = run_family(pytester, changes)
     result.assert_outcomes(passed=FAMILY_TESTS)
-    # register_tasks and router_from_tasks skip it themselves (ADR-0040, decision 4).
+    # A tool set leaves it out and router_from_tasks skips it (ADR-0040, decision 4).
     every = "[getattr(tasks, n) for n in tasks.__all__]"
     adapters = {
         path: SOURCE[path].replace(SERVED, every)

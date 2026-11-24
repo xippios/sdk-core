@@ -20,8 +20,6 @@ from xippios.core.mcp import (
     ResultCap,
     ToolSet,
     build_server,
-    is_loopback_only,
-    is_write_server,
     quiet_request_logging,
     register_tasks,
     tool_functions,
@@ -67,13 +65,23 @@ def plain(x: int) -> dict[str, int]:
 
 
 def test_tool_name_prefix_is_never_doubled() -> None:
-    assert tool_name("usda-nass", get_series) == "usda_nass_get_series"
+    assert tool_name("example-api", get_series) == "example_api_get_series"
     assert tool_name("example", example_list_things) == "example_list_things"
+
+
+def test_tool_name_takes_a_tasks_name_as_text() -> None:
+    # https://github.com/xippios/sdk-core/issues/476, part 6: a refusal below tasks.py
+    # names a tool without the function at hand.
+    assert tool_name("example", "get_series") == tool_name("example", get_series)
+    assert tool_name("example-api", "get_series") == "example_api_get_series"
+    assert tool_name("example", "example_list_things") == "example_list_things"
 
 
 @pytest.mark.anyio
 async def test_tools_keep_signature_and_docstring() -> None:
-    server = build_server("example", [get_series, example_list_things, plain], version="1.0")
+    server = build_server(
+        ToolSet("example", [get_series, example_list_things, plain], version="1.0")
+    )
     tools = {t.name: t for t in await server.list_tools()}
     assert set(tools) == {"example_get_series", "example_list_things", "example_plain"}
     series = tools["example_get_series"]
@@ -101,14 +109,16 @@ async def latest_release_async() -> Result[list[str]]:
 @pytest.mark.anyio
 async def test_a_naive_release_time_reaches_the_agent_with_its_flag() -> None:
     # ADR-0041, decision 2: the MCP text carries the flag.
-    server = build_server("example", [sync(latest_release_async)])
+    server = build_server(ToolSet("example", [sync(latest_release_async)]))
     meta = (await mcp_call(server, "example_latest_release", {}))["meta"]
     assert (meta["published_at"], meta["published_at_naive"]) == ("2026-10-06T08:00:00", True)
 
 
 @pytest.mark.anyio
 async def test_call_returns_capped_json_text() -> None:
-    server = build_server("example", [get_series], cap=ResultCap(max_rows=3))
+    server = build_server(
+        ToolSet("example", [get_series], caps={"get_series": ResultCap(max_rows=3)})
+    )
     payload = await mcp_call(server, "example_get_series", {"series_id": "CORN", "year": 2010})
     assert [row["id"] for row in payload["data"]] == ["CORN"] * 3
     assert payload["note"].startswith("showing 3 of 10 rows")
@@ -127,7 +137,7 @@ list_areas = sync(list_areas_async)
 @pytest.mark.anyio
 async def test_a_tool_with_a_cap_of_its_own_returns_the_whole_list() -> None:
     caps = {"list_areas": ResultCap(max_rows=400)}  # the sync facade's __name__
-    server = build_server("example", [get_series, list_areas], caps=caps)
+    server = build_server(ToolSet("example", [get_series, list_areas], caps=caps))
     areas = await mcp_call(server, "example_list_areas", {})
     assert len(areas["data"]) == 310
     assert "note" not in areas
@@ -139,21 +149,22 @@ async def test_a_tool_with_a_cap_of_its_own_returns_the_whole_list() -> None:
 
 
 @pytest.mark.anyio
-async def test_a_cap_of_its_own_replaces_the_server_cap_for_that_tool_only() -> None:
-    server = build_server("example", [])
+async def test_a_tool_without_a_cap_of_its_own_takes_the_family_default() -> None:
+    # ADR-0063, decision 1: the default cap of the slug forms left with them.
+    server = build_server(ToolSet("example", []))
     caps = {"list_areas": ResultCap(max_rows=300, note="ask for one area by code instead")}
-    names = register_tasks(
-        server, "example", [get_series, list_areas], cap=ResultCap(max_rows=3), caps=caps
-    )
+    names = register_tasks(server, ToolSet("example", [get_series, list_areas], caps=caps))
     assert names == ["example_get_series", "example_list_areas"]
     areas = await mcp_call(server, "example_list_areas", {})
     assert len(areas["data"]) == 300
     assert areas["note"] == (
         "showing 300 of 310 rows (cap: 300 rows or 65536 bytes); ask for one area by code instead"
+    ), "a field the tool's own cap leaves unset takes the family default"
+    series = await mcp_call(server, "example_get_series", {"series_id": "CORN", "year": 2300})
+    assert len(series["data"]) == 200
+    assert series["note"] == (
+        "showing 200 of 300 rows (cap: 200 rows or 65536 bytes); narrow the query to see the rest"
     )
-    series = await mcp_call(server, "example_get_series", {"series_id": "CORN", "year": 2010})
-    assert len(series["data"]) == 3
-    assert series["note"].startswith("showing 3 of 10 rows (cap: 3 rows or 65536 bytes); ")
 
 
 async def list_regions_async() -> Result[list[str]]:
@@ -167,52 +178,16 @@ list_regions = sync(list_regions_async)
 
 @pytest.mark.anyio
 async def test_a_tool_with_a_byte_bound_of_its_own_returns_what_the_default_would_cut() -> None:
-    default = await mcp_call(build_server("example", [list_regions]), "example_list_regions", {})
+    default = await mcp_call(
+        build_server(ToolSet("example", [list_regions])), "example_list_regions", {}
+    )
     assert 0 < len(default["data"]) < 300  # the default 64 KB cuts it
     assert default["note"].startswith(f"showing {len(default['data'])} of 300 rows ")
     caps = {"list_regions": ResultCap(max_rows=400, max_bytes=200_000)}
-    server = build_server("example", [list_regions], caps=caps)
+    server = build_server(ToolSet("example", [list_regions], caps=caps))
     whole = await mcp_call(server, "example_list_regions", {})
     assert len(whole["data"]) == 300
     assert "note" not in whole
-
-
-@pytest.mark.anyio
-async def test_a_cap_for_a_name_that_is_no_task_is_refused() -> None:
-    caps = {"example_list_areas": ResultCap(max_rows=400), "list_nothing": ResultCap()}
-    rule = (
-        "^caps names no task among the tasks: example_list_areas, list_nothing; a key is the "
-        "task function's __name__, not the tool name with the source prefix, and a task in "
-        "BULK_TASKS is no tool$"
-    )
-    with pytest.raises(ValueError, match=rule):
-        build_server("example", [get_series, list_areas], caps=caps)
-    server = build_server("example", [])
-    middleware = list(server.middleware)  # the SDK's own
-    with pytest.raises(ValueError, match=r"^caps names no task among the tasks: list_nothing;"):
-        register_tasks(server, "example", iter([list_areas]), caps={"list_nothing": ResultCap()})
-    with pytest.raises(ValueError, match=r"^caps names no task among the tasks: list_nothing;"):
-        register_tasks(
-            server, "example", [create_thing], caps={"list_nothing": ResultCap()}, read_only=False
-        )
-    assert await server.list_tools() == []  # checked before anything is registered
-    assert not is_write_server(server)  # nor marked a write server
-    assert server.middleware == middleware  # nor a middleware installed
-
-
-@pytest.mark.anyio
-async def test_a_cap_of_its_own_falls_back_to_the_family_default_not_to_the_server_cap() -> None:
-    caps = {"list_areas": ResultCap(max_rows=300)}  # max_bytes unset
-    server = build_server(
-        "example", [get_series, list_areas], cap=ResultCap(max_bytes=1000), caps=caps
-    )
-    areas = await mcp_call(server, "example_list_areas", {})
-    assert len(areas["data"]) == 300  # over 2,000 bytes, more than the server cap allows
-    assert areas["note"].startswith("showing 300 of 310 rows (cap: 300 rows or 65536 bytes); ")
-    series = await mcp_call(server, "example_get_series", {"series_id": "CORN", "year": 2100})
-    assert series["note"].endswith(
-        "rows (cap: 200 rows or 1000 bytes); narrow the query to see the rest"
-    )
 
 
 async def download_series_async(series_id: str) -> Result[list[Series]]:
@@ -234,14 +209,14 @@ async def test_a_task_in_bulk_tasks_is_no_tool(monkeypatch: pytest.MonkeyPatch) 
     tasks = types.ModuleType("example_bulk_tasks")
     tasks.BULK_TASKS = frozenset({"download_series"})  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, tasks.__name__, tasks)
-    server = build_server("example", [get_series, download_series])
+    tools = ToolSet("example", [get_series, download_series])
+    assert tools.tasks == (get_series,), "a tool set holds tools alone (ADR-0063, decision 3)"
+    server = build_server(tools)
     assert [tool.name for tool in await server.list_tools()] == ["example_get_series"]
     with pytest.raises(ValueError, match=r"download_series; .* a task in BULK_TASKS is no tool$"):
-        build_server(
-            "example", [get_series, download_series], caps={"download_series": ResultCap()}
-        )
+        ToolSet("example", [get_series, download_series], caps={"download_series": ResultCap()})
     monkeypatch.delitem(sys.modules, tasks.__name__)  # no module, no BULK_TASKS: a tool
-    assert len(await build_server("example", [download_series]).list_tools()) == 1
+    assert len(await build_server(ToolSet("example", [download_series])).list_tools()) == 1
 
 
 def locked(fn: Callable[..., Any]) -> Callable[..., Any]:
@@ -264,7 +239,7 @@ async def test_a_bulk_task_behind_a_wrapper_of_another_module_is_no_tool(
     tasks = types.ModuleType("example_bulk_tasks")
     tasks.BULK_TASKS = frozenset({"download_series"})  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, tasks.__name__, tasks)
-    server = build_server("example", [locked(get_series), locked(download_series)])
+    server = build_server(ToolSet("example", [locked(get_series), locked(download_series)]))
     assert [tool.name for tool in await server.list_tools()] == ["example_get_series"]
 
 
@@ -299,7 +274,7 @@ def test_tool_functions_are_the_tasks_of_all_minus_bulk_tasks() -> None:
 async def test_a_server_built_from_tool_functions_serves_them() -> None:
     tasks = tasks_module("example_tasks", get_series=get_series, download_series=download_series)
     tasks.BULK_TASKS = frozenset({"download_series"})  # type: ignore[attr-defined]
-    server = build_server("example", tool_functions(tasks))
+    server = build_server(ToolSet("example", tool_functions(tasks)))
     assert [tool.name for tool in await server.list_tools()] == ["example_get_series"]
 
 
@@ -321,32 +296,31 @@ def test_tool_functions_refuse_an_entry_that_names_another_function() -> None:
 
 
 @pytest.mark.anyio
-async def test_a_read_server_built_loopback_only_is_held_to_loopback() -> None:
-    # ADR-0025, D-a; https://github.com/xippios/sdk-core/issues/167
-    held = build_server("example", [get_series], loopback_only=True)
-    assert is_loopback_only(held)
-    assert not is_write_server(held)
+async def test_a_server_is_held_by_the_tool_sets_registered_on_it() -> None:
+    # ADR-0063, decision 5: main reads the hold from what the tool sets say, read_only and
+    # loopback_only, where is_write_server and is_loopback_only kept registries of their own.
+    from xippios.core.mcp.server import _hold
+
+    held = build_server(ToolSet("example", [get_series], loopback_only=True))
+    assert _hold(held) == "read"
     tool = (await held.list_tools())[0]
     assert tool.annotations is not None
     assert tool.annotations.read_only_hint is True
-    assert not is_loopback_only(build_server("example", [get_series]))
-    # a write server is held to loopback whatever the option says
-    assert is_loopback_only(build_server("example", [create_thing], read_only=False))
-    server = build_server("example", [])
-    with pytest.raises(ValueError, match=r"^caps names no task among the tasks: list_nothing;"):
-        register_tasks(
-            server, "example", [get_series], caps={"list_nothing": ResultCap()}, loopback_only=True
-        )
-    assert not is_loopback_only(server)  # a refused registration marks nothing
-    register_tasks(server, "example", [get_series], loopback_only=True)
-    assert is_loopback_only(server)
-    register_tasks(server, "example", [plain])
-    assert is_loopback_only(server)  # once held, the server stays held
+    assert _hold(build_server(ToolSet("example", [get_series]))) is None
+    # a write tool set holds its server whatever loopback_only says
+    assert _hold(build_server(ToolSet("example", [create_thing], read_only=False))) == "write"
+    server = build_server(ToolSet("example", []))
+    register_tasks(server, ToolSet("example", [get_series], loopback_only=True))
+    assert _hold(server) == "read"
+    register_tasks(server, ToolSet("example", [plain]))
+    assert _hold(server) == "read", "once held, the server stays held"
+    register_tasks(server, ToolSet("example", [create_thing], read_only=False))
+    assert _hold(server) == "write"
 
 
 @pytest.mark.anyio
 async def test_taxonomy_errors_become_text_not_errors() -> None:
-    server = build_server("example", [get_series])
+    server = build_server(ToolSet("example", [get_series]))
     text = await mcp_call_text(server, "example_get_series", {"series_id": "missing"})
     assert text == "error: NotFoundError: no series missing"
 
@@ -367,13 +341,14 @@ def text_of(result: CallToolResult) -> str:
 async def test_an_error_answer_sets_is_error_beside_its_text() -> None:
     # https://github.com/xippios/sdk-core/issues/168; ADR-0026, decision 6: a client tells
     # an error answer from data by the flag, and the text stays conventions §8's.
-    server = build_server("example", [get_series, get_top])
+    server = build_server(ToolSet("example", [get_series, get_top]))
     raised = await call_tool(server, "example_get_series", {"series_id": "missing"})
     assert (raised.is_error, text_of(raised)) == (True, "error: NotFoundError: no series missing")
     refused = await call_tool(server, "example_get_top", {"field": "volume"})
     assert refused.is_error is True
     assert text_of(refused) == (
-        "error: InvalidRequestError: field: Input should be 'quantity' or 'value'"
+        "error: InvalidRequestError: field: Input should be 'quantity' or 'value'. "
+        "Nothing was sent."
     )
     undeclared = await call_tool(server, "example_get_top", {"field": "value", "top": 3})
     assert undeclared.is_error is True
@@ -401,13 +376,18 @@ def get_top(field: Measure, year: int = 2024) -> dict[str, str]:
     return {"field": field.value}
 
 
+NOTHING_SENT = "Nothing was sent."
+"""The sentence that closes the adapter's refusal of an argument (ADR-0063, decision 6)."""
+
+
 @pytest.mark.parametrize(
     ("arguments", "expected"),
     [
-        ({"field": "volume"}, "field: Input should be 'quantity' or 'value'"),
+        ({"field": "volume"}, f"field: Input should be 'quantity' or 'value'. {NOTHING_SENT}"),
         ({"field": "value", "year": "soon"},
-         "year: Input should be a valid integer, unable to parse string as an integer"),
-        ({"year": "soon"}, "field: Field required (the first of 2 errors)"),
+         "year: Input should be a valid integer, unable to parse string as an integer. "
+         f"{NOTHING_SENT}"),
+        ({"year": "soon"}, f"field: Field required (the first of 2 errors). {NOTHING_SENT}"),
         ({"field": "value", "year": 1999}, "year: there is no data before 2000"),  # the task's
     ],
 )  # fmt: skip
@@ -416,8 +396,8 @@ async def test_arguments_the_schema_refuses_are_answered_in_the_family_form(
     arguments: dict[str, Any], expected: str
 ) -> None:
     # Row 41 a (sdk-usda-esr): the SDK answered "Error executing tool ...", pydantic's text.
-    server = build_server("example", [get_top])
-    register_tasks(server, "example", [plain])  # the middleware is installed once
+    server = build_server(ToolSet("example", [get_top]))
+    register_tasks(server, ToolSet("example", [plain]))  # the middleware is installed once
     names = [getattr(middleware, "__name__", "") for middleware in server.middleware]
     assert names.count("check_arguments") == 1
     text = await mcp_call_text(server, "example_get_top", arguments)
@@ -462,9 +442,9 @@ async def test_an_argument_the_tool_does_not_declare_is_refused_before_it_runs(
     # https://github.com/xippios/sdk-core/issues/84: the SDK's argument model dropped it,
     # and the tool ran with its default.
     ran: list[str] = []
-    server = build_server("example", [count_series_factory(ran)])
+    server = build_server(ToolSet("example", [count_series_factory(ran)]))
     text = await mcp_call_text(server, "example_count_series", arguments)
-    assert text == f"error: InvalidRequestError: {expected}"
+    assert text == f"error: InvalidRequestError: {expected}. {NOTHING_SENT}"
     assert not {"2024", "demo", "None", "soon"} & set(text.replace(",", " ").split())
     assert ran == [], "the tool does not run"
     served = await mcp_call(server, "example_count_series", {"series_id": "CORN"})
@@ -473,10 +453,11 @@ async def test_an_argument_the_tool_does_not_declare_is_refused_before_it_runs(
 
 @pytest.mark.anyio
 async def test_a_tool_without_arguments_refuses_every_argument() -> None:
-    server = build_server("example", [example_list_things])
+    server = build_server(ToolSet("example", [example_list_things]))
     text = await mcp_call_text(server, "example_list_things", {"search": "a"})
     assert text == (
-        "error: InvalidRequestError: search: Not an argument of this tool; it takes no arguments"
+        "error: InvalidRequestError: search: Not an argument of this tool; it takes no "
+        f"arguments. {NOTHING_SENT}"
     )
     assert await mcp_call(server, "example_list_things", {}) == {"data": ["a", "b"]}
 
@@ -505,12 +486,15 @@ get_ranked = sync(get_ranked_async)
 async def test_an_annotated_parameter_keeps_its_metadata_in_the_tool() -> None:
     # https://github.com/xippios/sdk-core/issues/68: get_type_hints dropped the metadata,
     # so the schema lacked the bound and the validator never ran.
-    server = build_server("example", [get_ranked])
+    server = build_server(ToolSet("example", [get_ranked]))
     tool = {t.name: t for t in await server.list_tools()}["example_get_ranked"]
     top = tool.input_schema["properties"]["top"]
     assert (top["minimum"], top["description"]) == (1, "How many, from 1.")
     text = await mcp_call_text(server, "example_get_ranked", {"top": 0})
-    assert text == "error: InvalidRequestError: top: Input should be greater than or equal to 1"
+    assert text == (
+        "error: InvalidRequestError: top: Input should be greater than or equal to 1. "
+        f"{NOTHING_SENT}"
+    )
     served = await mcp_call(server, "example_get_ranked", {"name": "wheat"})
     assert served == {"top": 10, "name": "WHEAT"}, "the validator ran"
 
@@ -536,14 +520,14 @@ def search(query: Query) -> dict[str, str]:
 @pytest.mark.anyio
 async def test_a_validator_that_crashes_falls_through_to_the_sdks_answer() -> None:
     # Only a refusal is answered as InvalidRequestError; a crash stays the SDK's to answer.
-    server = build_server("example", [search])
+    server = build_server(ToolSet("example", [search]))
     with pytest.raises(AssertionError, match="Error executing tool example_search"):
         await mcp_call_text(server, "example_search", {"query": {"name": "corn"}})  # is_error
 
 
 @pytest.mark.anyio
 async def test_async_and_plain_functions_work() -> None:
-    server = build_server("example", [example_list_things, plain])
+    server = build_server(ToolSet("example", [example_list_things, plain]))
     assert await mcp_call(server, "example_list_things", {}) == {"data": ["a", "b"]}
     assert await mcp_call(server, "example_plain", {"x": 21}) == {"x": 42}
 
@@ -562,70 +546,18 @@ def delete_thing(thing_id: int, confirm: "Annotated[bool, 'write']" = False) -> 
     """Delete a thing; the annotation is a string, resolved to bool."""
 
 
-def no_confirm(name: str) -> None:
-    """No confirm at all."""
-
-
-def confirm_wrong_type(confirm: bool | None = False) -> None:
-    """Optional, not bool."""
-
-
-def confirm_true(confirm: bool = True) -> None:
-    """Writes unless told not to."""
-
-
-def confirm_required(confirm: bool) -> None:
-    """Must be told."""
-
-
-def confirm_zero(confirm: int = 0) -> None:
-    """An int."""
-
-
 @pytest.mark.anyio
-async def test_register_tasks_on_existing_server_and_write_flag() -> None:
-    server = build_server("example", [], name="custom", instructions="Call list first.")
+async def test_a_write_tool_set_registered_on_a_server_marks_its_tools_destructive() -> None:
+    server = build_server(ToolSet("example", [], instructions="Call list first."), name="custom")
     assert (server.name, server.instructions) == ("custom", "Call list first.")
-    assert not is_write_server(server)
-    names = register_tasks(server, "example", [create_thing, delete_thing], read_only=False)
+    names = register_tasks(
+        server, ToolSet("example", [create_thing, delete_thing], read_only=False)
+    )
     assert names == ["example_create_thing", "example_delete_thing"]
-    assert is_write_server(server)
-    assert is_write_server(build_server("example", [], read_only=False))
     tool = (await server.list_tools())[0]
     assert tool.annotations is not None
     assert tool.annotations.read_only_hint is False
     assert tool.annotations.destructive_hint is True
-
-
-@pytest.mark.parametrize(
-    ("task", "problem"),
-    [
-        (no_confirm, "no parameter confirm"),
-        (confirm_wrong_type, r"confirm is annotated bool \| None, not bool"),
-        (confirm_zero, "confirm is annotated <class 'int'>, not bool"),
-        (confirm_true, "confirm defaults to True, not False"),
-        (confirm_required, "confirm has no default"),
-    ],
-)
-@pytest.mark.anyio
-async def test_a_write_server_refuses_a_task_without_confirm_false(
-    task: Callable[..., Any], problem: str
-) -> None:
-    rule = r"every task of a write server takes confirm: bool = False .*\(conventions §8\)"
-    with pytest.raises(ValueError, match=f"^example_{task.__name__}: {problem}; {rule}"):
-        build_server("example", [create_thing, task], read_only=False)
-    server = build_server("example", [])
-    with pytest.raises(ValueError, match=f"^example_{task.__name__}: "):
-        register_tasks(server, "example", iter([create_thing, task]), read_only=False)
-    assert await server.list_tools() == []  # checked before anything is registered
-
-
-@pytest.mark.anyio
-async def test_a_read_only_server_ignores_the_confirm_rule() -> None:
-    server = build_server("example", [no_confirm, confirm_true, confirm_zero, plain])
-    assert len(await server.list_tools()) == 4
-    names = register_tasks(server, "example", [confirm_required], read_only=True)
-    assert names == ["example_confirm_required"]
 
 
 # httpx2 and httpcore2 are the mcp SDK's own HTTP client (https://github.com/xippios/sdk-core/issues/176)
@@ -652,14 +584,14 @@ def _httpx2_request_with_key() -> None:
 
 def test_build_server_quiets_request_loggers() -> None:
     _unset_request_logger_levels()
-    build_server("example", [])
+    build_server(ToolSet("example", []))
     for name in REQUEST_LOGGERS:
         assert logging.getLogger(name).level == logging.WARNING
 
 
 def test_request_urls_are_not_logged_after_build_server(caplog: pytest.LogCaptureFixture) -> None:
     _unset_request_logger_levels()
-    build_server("example", [])
+    build_server(ToolSet("example", []))
     with caplog.at_level(logging.INFO):
         _request_with_key()
         _httpx2_request_with_key()
@@ -678,7 +610,7 @@ def test_httpx2_logs_request_urls_unless_quieted(caplog: pytest.LogCaptureFixtur
 
 def test_consumer_can_raise_the_request_log_level_again(caplog: pytest.LogCaptureFixture) -> None:
     _unset_request_logger_levels()
-    build_server("example", [])
+    build_server(ToolSet("example", []))
     logging.getLogger("httpx").setLevel(logging.INFO)
     with caplog.at_level(logging.INFO):
         _request_with_key()
@@ -723,7 +655,7 @@ def paged() -> dict[str, ResultCap]:
 @pytest.mark.anyio
 async def test_a_paged_tool_answers_200_of_500_and_the_call_its_note_names_the_next_200() -> None:
     runs: list[dict[str, Any]] = []
-    server = build_server("example", [list_weeks_factory(runs)], caps=paged())
+    server = build_server(ToolSet("example", [list_weeks_factory(runs)], caps=paged()))
     first = await mcp_call(server, "example_list_weeks", {"year": 2024})
     assert first["data"] == list(range(200))
     assert first["note"] == (
@@ -740,7 +672,7 @@ async def test_a_paged_tool_answers_200_of_500_and_the_call_its_note_names_the_n
 @pytest.mark.anyio
 async def test_a_paged_tool_that_keeps_the_last_rows_walks_to_older_ones() -> None:
     caps = {"list_weeks": ResultCap(paged=True, keep="last")}
-    server = build_server("example", [list_weeks_factory([])], caps=caps)
+    server = build_server(ToolSet("example", [list_weeks_factory([])], caps=caps))
     newest = await mcp_call(server, "example_list_weeks", {})
     assert newest["data"] == list(range(300, 500))
     assert newest["note"].endswith("; continue with offset=200")
@@ -750,7 +682,7 @@ async def test_a_paged_tool_that_keeps_the_last_rows_walks_to_older_ones() -> No
 
 @pytest.mark.anyio
 async def test_a_paged_tool_declares_offset_and_an_unpaged_one_does_not() -> None:
-    server = build_server("example", [list_weeks_factory([]), get_series], caps=paged())
+    server = build_server(ToolSet("example", [list_weeks_factory([]), get_series], caps=paged()))
     tools = {tool.name: tool for tool in await server.list_tools()}
     weeks = tools["example_list_weeks"].input_schema
     assert list(weeks["properties"]) == ["year", "offset"]
@@ -766,15 +698,15 @@ async def test_a_paged_tool_declares_offset_and_an_unpaged_one_does_not() -> Non
     series = tools["example_get_series"].input_schema
     assert list(series["properties"]) == ["series_id", "year"]
     text = await mcp_call_text(server, "example_get_series", {"series_id": "CORN", "offset": 200})
-    assert text == (
-        "error: InvalidRequestError: offset: Not an argument of this tool; it takes series_id, year"
-    ), "the unpaged tool's refusal reads as before"
+    assert text == (f"error: InvalidRequestError: offset: {TAKES}. {NOTHING_SENT}"), (
+        "the unpaged tool refuses offset as any argument it does not declare"
+    )
 
 
 @pytest.mark.anyio
 async def test_a_cap_that_keeps_the_last_rows_describes_offset_from_the_last_row() -> None:
     caps = {"list_weeks": ResultCap(paged=True, keep="last")}
-    server = build_server("example", [list_weeks_factory([])], caps=caps)
+    server = build_server(ToolSet("example", [list_weeks_factory([])], caps=caps))
     (tool,) = await server.list_tools()
     assert tool.input_schema["properties"]["offset"]["description"] == (
         "Rows of the answer already shown, counted from its last row: the note of a cut "
@@ -786,9 +718,12 @@ async def test_a_cap_that_keeps_the_last_rows_describes_offset_from_the_last_row
 @pytest.mark.anyio
 async def test_a_negative_offset_is_refused_before_the_task_runs() -> None:
     runs: list[dict[str, Any]] = []
-    server = build_server("example", [list_weeks_factory(runs)], caps=paged())
+    server = build_server(ToolSet("example", [list_weeks_factory(runs)], caps=paged()))
     text = await mcp_call_text(server, "example_list_weeks", {"offset": -1})
-    assert text == "error: InvalidRequestError: offset: Input should be greater than or equal to 0"
+    assert text == (
+        "error: InvalidRequestError: offset: Input should be greater than or equal to 0. "
+        f"{NOTHING_SENT}"
+    )
     assert runs == []
 
 
@@ -803,7 +738,9 @@ get_summary = sync(get_summary_async)
 
 @pytest.mark.anyio
 async def test_a_paged_tool_whose_answer_holds_no_rows_refuses_an_offset() -> None:
-    server = build_server("example", [get_summary], caps={"get_summary": ResultCap(paged=True)})
+    server = build_server(
+        ToolSet("example", [get_summary], caps={"get_summary": ResultCap(paged=True)})
+    )
     assert (await mcp_call(server, "example_get_summary", {}))["data"] == {"weeks": 500}
     text = await mcp_call_text(server, "example_get_summary", {"offset": 5})
     assert text == (
@@ -822,20 +759,9 @@ def list_pages(offset: int = 0) -> Result[list[int]]:
 
 
 @pytest.mark.anyio
-async def test_a_task_that_takes_offset_itself_is_refused_a_paged_cap() -> None:
-    caps = {"list_pages": ResultCap(paged=True)}
-    why = (
-        r"^example_list_pages: the task takes a parameter offset, which a paged cap adds as "
-        r"the adapter's own argument for the rest of a cut answer; rename the task's "
-        r"parameter or leave the tool unpaged$"
-    )
-    with pytest.raises(ValueError, match=why):
-        build_server("example", [list_weeks_factory([]), list_pages], caps=caps)
-    server = build_server("example", [])
-    with pytest.raises(ValueError, match=why):
-        register_tasks(server, "example", [list_pages], cap=ResultCap(paged=True))
-    assert await server.list_tools() == [], "checked before anything is registered"
-    unpaged = build_server("example", [list_pages])
+async def test_an_unpaged_task_keeps_its_own_offset() -> None:
+    # A paged cap would shadow it, which the tool set refuses (tests/mcp/test_toolset.py).
+    unpaged = build_server(ToolSet("example", [list_pages]))
     assert (await mcp_call(unpaged, "example_list_pages", {"offset": 7}))["data"] == [7]
 
 
@@ -855,43 +781,13 @@ def create_rows_factory(writes: list[int]) -> Callable[..., Result[list[int]]]:
     return create_rows
 
 
-WRITE_IS_NOT_PAGED = (
-    r"^example_create_rows: a paged cap runs the task again for the next rows, so a write "
-    r"task is never paged: following its note would repeat a confirmed write; leave the "
-    r"tool unpaged$"
-)
-
-
-@pytest.mark.anyio
-async def test_a_write_task_is_refused_a_paged_cap_since_a_continuation_writes_again() -> None:
-    # https://github.com/xippios/sdk-core/pull/388#pullrequestreview-6008310538, finding 1:
-    # following "continue with offset=200" ran a confirmed write a second time.
-    writes: list[int] = []
-    caps = {"create_rows": ResultCap(paged=True)}
-    with pytest.raises(ValueError, match=WRITE_IS_NOT_PAGED):
-        build_server("example", [create_rows_factory(writes)], caps=caps, read_only=False)
-    tools = ToolSet("example", [create_rows_factory(writes)], caps=caps, read_only=False)
-    with pytest.raises(ValueError, match=WRITE_IS_NOT_PAGED):
-        build_server(tools)
-    server = build_server("example", [])
-    with pytest.raises(ValueError, match=WRITE_IS_NOT_PAGED):
-        register_tasks(
-            server,
-            "example",
-            [create_rows_factory(writes)],
-            cap=ResultCap(paged=True),
-            read_only=False,
-        )
-    assert await server.list_tools() == [], "checked before anything is registered"
-    assert not is_write_server(server), "nor marked"
-    assert writes == []
-
-
 @pytest.mark.anyio
 async def test_a_write_task_may_keep_the_last_rows_which_runs_it_once() -> None:
     writes: list[int] = []
     caps = {"create_rows": ResultCap(keep="last")}
-    server = build_server("example", [create_rows_factory(writes)], caps=caps, read_only=False)
+    server = build_server(
+        ToolSet("example", [create_rows_factory(writes)], caps=caps, read_only=False)
+    )
     (tool,) = await server.list_tools()
     assert list(tool.input_schema["properties"]) == ["count", "confirm"], "no offset"
     payload = await mcp_call(server, "example_create_rows", {"count": 300, "confirm": True})

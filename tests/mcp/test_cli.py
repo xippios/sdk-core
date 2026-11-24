@@ -60,7 +60,7 @@ def test_parser_defaults() -> None:
 
 
 def test_main_dispatches_to_transport(monkeypatch: pytest.MonkeyPatch) -> None:
-    server = build_server("example", [])
+    server = build_server(ToolSet("example", []))
     calls: list[tuple[Any, ...]] = []
 
     def fake_run(transport: str = "stdio", **kwargs: Any) -> None:
@@ -76,7 +76,7 @@ def test_main_dispatches_to_transport(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_main_quiets_request_loggers_before_running(monkeypatch: pytest.MonkeyPatch) -> None:
-    server = build_server("example", [])
+    server = build_server(ToolSet("example", []))
     seen: dict[str, int] = {}
 
     def fake_run(transport: str = "stdio", **kwargs: Any) -> None:
@@ -118,8 +118,8 @@ class Runs:
 
 def test_an_added_option_is_parsed_once_and_applied(monkeypatch: pytest.MonkeyPatch) -> None:
     runs = Runs(monkeypatch)
-    server = runs.attach(build_server("example", []))
-    acme = runs.attach(build_server("example", [], name="xippios-example-acme"))
+    server = runs.attach(build_server(ToolSet("example", [])))
+    acme = runs.attach(build_server(ToolSet("example", []), name="xippios-example-acme"))
     seen: list[argparse.Namespace] = []
 
     def apply(args: argparse.Namespace, given: MCPServer) -> MCPServer:
@@ -143,7 +143,7 @@ def test_an_added_option_is_parsed_once_and_applied(monkeypatch: pytest.MonkeyPa
 
 def test_help_lists_core_and_source_options(capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as info:
-        main(build_server("example", []), ["--help"], add_options=add_org)
+        main(build_server(ToolSet("example", [])), ["--help"], add_options=add_org)
     assert info.value.code == 0
     out = capsys.readouterr().out
     for option in ("--http", "--host", "--port", "--allow-remote", "--org"):
@@ -161,18 +161,20 @@ def help_of(server: MCPServer, capsys: pytest.CaptureFixture[str]) -> str:
 
 def test_the_usage_line_names_the_entry_point(capsys: pytest.CaptureFixture[str]) -> None:
     # https://github.com/xippios/sdk-core/issues/167: server.name is one slug for both servers
-    assert help_of(build_server("example", []), capsys).startswith(f"usage: {ENTRY_POINT} ")
+    assert help_of(build_server(ToolSet("example", [])), capsys).startswith(
+        f"usage: {ENTRY_POINT} "
+    )
 
 
 def test_the_help_of_allow_remote_names_the_server_kind(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    write = build_server("example", [create_thing], read_only=False)
+    write = build_server(ToolSet("example", [create_thing], read_only=False))
     assert (
         "--allow-remote serve this write server beyond loopback; it carries no "
         "authentication, put it behind a gateway"
     ) in help_of(write, capsys)
-    held = build_server("example", [], loopback_only=True)
+    held = build_server(ToolSet("example", [], loopback_only=True))
     assert (
         "--allow-remote serve this read server beyond loopback; it carries no "
         "authentication, put it behind a gateway"
@@ -194,7 +196,7 @@ def test_unknown_options_still_fail(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     runs = Runs(monkeypatch)
-    server = runs.attach(build_server("example", []))
+    server = runs.attach(build_server(ToolSet("example", [])))
     with pytest.raises(SystemExit) as info:
         main(server, ["--org", "acme", "--nope"], add_options=add_org)
     assert info.value.code == 2
@@ -216,7 +218,7 @@ def test_an_error_from_apply_options_exits_2_without_a_traceback(
     message: str,
 ) -> None:
     runs = Runs(monkeypatch)
-    server = runs.attach(build_server("example", [], name="xippios-example"))
+    server = runs.attach(build_server(ToolSet("example", []), name="xippios-example"))
 
     def apply(args: argparse.Namespace, given: MCPServer) -> MCPServer:
         raise error(message, source="example")
@@ -245,7 +247,7 @@ def test_a_write_server_is_not_served_beyond_loopback(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], host: str
 ) -> None:
     runs = Runs(monkeypatch)
-    server = runs.attach(build_server("example", [create_thing], read_only=False))
+    server = runs.attach(build_server(ToolSet("example", [create_thing], read_only=False)))
     with pytest.raises(SystemExit) as info:
         main(server, ["--http", "--host", host])
     assert info.value.code == 2
@@ -259,7 +261,7 @@ def test_allow_remote_serves_a_write_server_beyond_loopback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     runs = Runs(monkeypatch)
-    server = runs.attach(build_server("example", [create_thing], read_only=False))
+    server = runs.attach(build_server(ToolSet("example", [create_thing], read_only=False)))
     main(server, ["--http", "--host", "0.0.0.0", "--allow-remote"])
     assert runs.calls == [(server, "streamable-http", {"host": "0.0.0.0", "port": 8000})]
 
@@ -267,7 +269,7 @@ def test_allow_remote_serves_a_write_server_beyond_loopback(
 @pytest.mark.parametrize("host", LOOPBACK_HOSTS)
 def test_a_write_server_is_served_on_loopback(monkeypatch: pytest.MonkeyPatch, host: str) -> None:
     runs = Runs(monkeypatch)
-    server = runs.attach(build_server("example", [create_thing], read_only=False))
+    server = runs.attach(build_server(ToolSet("example", [create_thing], read_only=False)))
     main(server, ["--http", "--host", host])
     main(server, ["--host", "0.0.0.0"])  # stdio: --host is not used
     assert runs.calls == [
@@ -278,7 +280,7 @@ def test_a_write_server_is_served_on_loopback(monkeypatch: pytest.MonkeyPatch, h
 
 def test_a_read_only_server_is_served_anywhere(monkeypatch: pytest.MonkeyPatch) -> None:
     runs = Runs(monkeypatch)
-    server = runs.attach(build_server("example", []))
+    server = runs.attach(build_server(ToolSet("example", [])))
     main(server, ["--http", "--host", "0.0.0.0"])
     assert runs.calls == [(server, "streamable-http", {"host": "0.0.0.0", "port": 8000})]
 
@@ -289,7 +291,7 @@ def test_a_read_server_held_to_loopback_is_not_served_beyond_it(
 ) -> None:
     # ADR-0025, D-a; https://github.com/xippios/sdk-core/issues/167
     runs = Runs(monkeypatch)
-    server = runs.attach(build_server("example", [], loopback_only=True))
+    server = runs.attach(build_server(ToolSet("example", [], loopback_only=True)))
     with pytest.raises(SystemExit) as info:
         main(server, ["--http", "--host", host])
     assert info.value.code == 2
@@ -306,7 +308,7 @@ def test_allow_remote_serves_a_read_server_held_to_loopback_beyond_it(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     runs = Runs(monkeypatch)
-    server = runs.attach(build_server("example", [], loopback_only=True))
+    server = runs.attach(build_server(ToolSet("example", [], loopback_only=True)))
     main(server, ["--http", "--host", "0.0.0.0", "--allow-remote"])
     for host in LOOPBACK_HOSTS:
         main(server, ["--http", "--host", host])
@@ -322,8 +324,8 @@ def test_the_server_from_apply_options_is_the_one_checked(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     runs = Runs(monkeypatch)
-    server = runs.attach(build_server("example", []))
-    write = runs.attach(build_server("example", [create_thing], read_only=False))
+    server = runs.attach(build_server(ToolSet("example", [])))
+    write = runs.attach(build_server(ToolSet("example", [create_thing], read_only=False)))
     with pytest.raises(SystemExit) as info:
         main(server, ["--http", "--host", "0.0.0.0"], apply_options=lambda args, given: write)
     assert info.value.code == 2
@@ -334,7 +336,7 @@ def test_the_server_from_apply_options_is_the_one_checked(
 def test_the_request_log_is_quiet_when_the_server_from_apply_options_runs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    server = build_server("example", [])
+    server = build_server(ToolSet("example", []))
     seen: dict[str, int] = {}
 
     def fake_run(transport: str = "stdio", **kwargs: Any) -> None:
@@ -454,11 +456,13 @@ class Builds:
     def __call__(self, lock: TenantLock | None = None) -> MCPServer:
         self.locks.append(lock)
         return build_server(
-            "fictive-src",
-            bind_tasks([self.task], lock),
-            instructions=tenant_instructions(TEXT, lock),
-            read_only=self.read_only,
-            loopback_only=self.loopback_only,
+            ToolSet(
+                "fictive-src",
+                bind_tasks([self.task], lock),
+                instructions=tenant_instructions(TEXT, lock),
+                read_only=self.read_only,
+                loopback_only=self.loopback_only,
+            )
         )
 
 

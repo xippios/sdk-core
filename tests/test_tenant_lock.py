@@ -38,7 +38,7 @@ from xippios.core import (
     tenant_instructions,
 )
 from xippios.core.http import router_from_tasks
-from xippios.core.mcp import build_server, is_write_server
+from xippios.core.mcp import ToolSet, build_server
 from xippios.core.testing import mcp_call, mcp_call_text
 
 SOURCE = "fictive-src"
@@ -85,7 +85,7 @@ class Echo:
             calls.append(org)
             return {"org": org, "note": note}
 
-        return build_server(SOURCE, bind_tasks([echo_org, list_tenants], lock))
+        return build_server(ToolSet(SOURCE, bind_tasks([echo_org, list_tenants], lock)))
 
 
 def find_things(org: str, query: str | None = None, *, limit: int = 10) -> list[str]:
@@ -312,7 +312,7 @@ def test_a_bound_task_keeps_the_annotated_metadata_of_its_other_parameters() -> 
 @pytest.mark.anyio
 async def test_a_bound_tool_keeps_an_annotated_constraint_in_its_schema_and_its_check() -> None:
     """Conventions §8: the constraint holds in the schema and the check, bound or not."""
-    server = build_server(SOURCE, bind_tasks([list_rows], LOCK))
+    server = build_server(ToolSet(SOURCE, bind_tasks([list_rows], LOCK)))
     (tool,) = await server.list_tools()
     limit = tool.input_schema["properties"]["limit"]
     assert (limit["minimum"], limit["maximum"], limit["description"]) == (
@@ -322,7 +322,8 @@ async def test_a_bound_tool_keeps_an_annotated_constraint_in_its_schema_and_its_
     )
     refused = await mcp_call_text(server, "fictive_src_list_rows", {"limit": 500})
     assert refused == (
-        "error: InvalidRequestError: limit: Input should be less than or equal to 100"
+        "error: InvalidRequestError: limit: Input should be less than or equal to 100. "
+        "Nothing was sent."
     )
     served = await mcp_call(server, "fictive_src_list_rows", {"limit": 5, "name": "wheat"})
     assert served == {"org": DEMO, "limit": 5, "name": "WHEAT"}, "the validator ran"
@@ -370,7 +371,10 @@ async def test_a_call_that_still_names_the_tenant_is_refused(named: str | None) 
     """Step 2's argument check: no tool of a bound server declares ``org``, so none takes it."""
     echo = Echo()
     text = await mcp_call_text(echo.server(LOCK), TOOL, {"org": named, "note": "x"})
-    assert text == "error: InvalidRequestError: org: Not an argument of this tool; it takes note"
+    assert text == (
+        "error: InvalidRequestError: org: Not an argument of this tool; it takes note. "
+        "Nothing was sent."
+    )
     assert echo.calls == [], "the tool does not run"
 
 
@@ -406,9 +410,10 @@ async def test_a_bound_write_task_keeps_confirm_last_on_a_write_server() -> None
         """
         return {"org": org, "name": name, "written": str(confirm)}
 
-    server = build_server(SOURCE, bind_tasks([create_thing], LOCK), read_only=False)
-    assert is_write_server(server)
+    server = build_server(ToolSet(SOURCE, bind_tasks([create_thing], LOCK), read_only=False))
     (tool,) = await server.list_tools()
+    assert tool.annotations is not None
+    assert tool.annotations.read_only_hint is False, "a write tool"
     assert list(tool.input_schema["properties"]) == ["name", "confirm"]
     payload = await mcp_call(server, "fictive_src_create_thing", {"name": "Corn"})
     assert payload == {"org": DEMO, "name": "Corn", "written": "False"}
@@ -445,9 +450,11 @@ async def test_a_client_reads_the_bound_server_s_instructions() -> None:
     text = "Fictive via xippios. Every tool takes org."
     bound = "Fictive via xippios."
     server = build_server(
-        SOURCE,
-        bind_tasks([list_tenants], LOCK),
-        instructions=tenant_instructions(text, LOCK, bound=bound),
+        ToolSet(
+            SOURCE,
+            bind_tasks([list_tenants], LOCK),
+            instructions=tenant_instructions(text, LOCK, bound=bound),
+        )
     )
     async with Client(server) as client:
         assert client.instructions == f"{bound} {SENTENCE}"

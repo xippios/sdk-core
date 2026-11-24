@@ -26,7 +26,7 @@ from xippios.core import (
     Tenants,
     list_task,
 )
-from xippios.core.mcp import build_server
+from xippios.core.mcp import ToolSet, build_server
 from xippios.core.testing import mcp_call
 
 SOURCE = "fictive-src"
@@ -631,7 +631,7 @@ async def test_list_task_is_a_tool(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(LIST_VAR, "xa")
     tenants = make()
     task: Callable[[], Result[list[str]]] = list_task(tenants, name="list_organisations")
-    server = build_server(SOURCE, [task])
+    server = build_server(ToolSet(SOURCE, [task]))
     tools = {tool.name: tool for tool in await server.list_tools()}
     tool = tools["fictive_src_list_organisations"]
     assert tool.input_schema.get("properties", {}) == {}

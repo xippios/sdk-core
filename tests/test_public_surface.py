@@ -46,6 +46,8 @@ EXPORTS = {
         "fetch_pages",
         # the name of each country code in an answer's meta (ADR-0056)
         "names_codes",
+        # a source's tool functions and their names, without the mcp extra (ADR-0063)
+        "tool_functions", "tool_name",
     },
     "xippios.core.client": {
         "AsyncClient", "CachedResponse", "ClientConfig", "KeyAuth", "MemoryCache",
@@ -71,9 +73,8 @@ EXPORTS = {
     "xippios.core.mcp": {
         "ResultCap", "build_parser", "build_server", "cap_result", "error_to_text", "main",
         "tool_name",
-        # what the host imports (https://github.com/xippios/sdk-core/issues/170, #167)
-        "LOOPBACK_HOSTS", "is_loopback_only", "is_write_server", "quiet_request_logging",
-        "register_tasks", "tool_functions",
+        # what the host imports (https://github.com/xippios/sdk-core/issues/170, ADR-0063)
+        "LOOPBACK_HOSTS", "quiet_request_logging", "register_tasks", "tool_functions",
         # the serve command of a multi-tenant source (ADR-0042, decision 1)
         "serve_tenants",
         # the tool set of the package contract (ADR-0026, amendment 2026-11-18, point c)
@@ -112,6 +113,16 @@ def test_result_cap_is_one_class_without_the_mcp_extra() -> None:
 
     assert core.ResultCap is ResultCap
     assert mcp.ResultCap is ResultCap
+
+
+def test_the_tool_functions_and_their_names_are_one_by_both_paths() -> None:
+    # ADR-0063, decision 2: the root holds them without the mcp extra, and the MCP
+    # package keeps them for the sources that import them there.
+    import xippios.core.mcp as mcp
+    from xippios.core._tasks import tool_functions, tool_name
+
+    assert core.tool_functions is mcp.tool_functions is tool_functions
+    assert core.tool_name is mcp.tool_name is tool_name
 
 
 def test_optional_adapters_are_not_imported_eagerly() -> None:
