@@ -106,7 +106,7 @@ async def test_a_429_waits_until_the_snapshot_says_the_quota_is_back() -> None:
     upstream = Upstream(429, OVER_RATE_LIMIT, RECORDED_429)
     client = client_for(Gateway("usda-psd"), upstream)
     with pytest.raises(RateLimitError) as info:
-        await client.get_json("/api/psd/commodities")
+        await client.get_answer("/api/psd/commodities")
     assert upstream.sent == ["GET /api/psd/commodities"], "3151 s is beyond backoff_max"
     snapshot = Gateway.policy.snapshot()
     assert snapshot is not None
@@ -129,7 +129,7 @@ async def test_a_429_waits_until_the_snapshot_says_the_quota_is_back() -> None:
 async def test_a_429_without_retry_after_waits_the_window() -> None:
     client = client_for(Gateway("usda-gats"), Upstream(429, OVER_RATE_LIMIT))
     with pytest.raises(RateLimitError) as info:
-        await client.get_json("/api/gats/x")
+        await client.get_answer("/api/gats/x")
     assert info.value.retry_after is not None
     slack = CLOCK_SLACK.total_seconds()
     assert WINDOW - slack <= info.value.retry_after <= WINDOW + slack
@@ -174,9 +174,9 @@ async def test_two_sources_draw_on_one_quota() -> None:
     esr_upstream = Upstream(200, [], QUOTA)
     esr = client_for(Gateway("usda-esr"), esr_upstream)
     with pytest.raises(RateLimitError):
-        await psd.get_json("/api/psd/commodities")
+        await psd.get_answer("/api/psd/commodities")
     with pytest.raises(RateLimitError, match="nothing was sent for GET /api/esr/regions") as info:
-        await esr.get_json("/api/esr/regions", params={"key": "not-sent"})
+        await esr.get_answer("/api/esr/regions", params={"key": "not-sent"})
     assert esr_upstream.sent == []
     assert info.value.source == "api.data.gov"
     assert info.value.message.startswith(f"api.data.gov quota of the key in {API_KEY_ENV} spent")
@@ -271,12 +271,12 @@ async def test_a_429_from_another_host_spends_no_gateway_quota() -> None:
     upstream = Upstream(429, OVER_RATE_LIMIT, RECORDED_429)
     client = client_for(Gateway("usda-psd"), upstream)
     with pytest.raises(RateLimitError) as info:
-        await client.get_json("https://files.example.test/psd_alldata.zip")
+        await client.get_answer("https://files.example.test/psd_alldata.zip")
     assert not info.value.message.startswith("api.data.gov"), "core's mapping, not the gateway's"
     assert Gateway.policy.snapshot() is None
     sent = len(upstream.sent)
     with pytest.raises(RateLimitError):
-        await client.get_json("https://files.example.test/psd_alldata.zip")
+        await client.get_answer("https://files.example.test/psd_alldata.zip")
     assert len(upstream.sent) > sent, "sent again: no gateway quota holds it back"
 
 

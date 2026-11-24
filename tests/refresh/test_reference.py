@@ -103,7 +103,7 @@ def values(client: AsyncClient, param: str) -> Callable[[], Any]:
     """The wrapper of ``get_param_values`` for ``param``: an async fetch of its values."""
 
     async def fetch() -> list[str]:
-        answer = await client.get_json("/get_param_values", params={"param": param})
+        answer = (await client.get_answer("/get_param_values", params={"param": param})).payload
         return [str(value) for value in answer]
 
     return fetch
@@ -118,7 +118,7 @@ def units(client: AsyncClient) -> Callable[[], Any]:
     """The wrapper of ``GetUnitsOfMeasure``: an async fetch of its records."""
 
     async def fetch() -> list[Unit]:
-        answer = await client.get_json("/units")
+        answer = (await client.get_answer("/units")).payload
         return [Unit.model_validate(record) for record in answer]
 
     return fetch
@@ -773,17 +773,17 @@ class Unit(UpstreamModel):
 
 
 async def get_param_values(param: str) -> list[str]:
-    answer = await client.get_json("/api/get_param_values", params={"param": param})
+    answer = (await client.get_answer("/api/get_param_values", params={"param": param})).payload
     return [str(value) for value in answer]
 
 
 async def get_units_of_measure() -> list[Unit]:
-    answer = await client.get_json("/api/unitsOfMeasure")
+    answer = (await client.get_answer("/api/unitsOfMeasure")).payload
     return [Unit.model_validate(record) for record in answer]
 
 
 async def get_commodities() -> list[dict[str, Any]]:
-    return list(await client.get_json("/api/commodities"))
+    return list((await client.get_answer("/api/commodities")).payload)
 """
 
 EXAMPLE_PARAMS = """PACKAGED_LISTS: tuple[str, ...] = ({names})

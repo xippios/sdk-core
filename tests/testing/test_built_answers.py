@@ -709,7 +709,7 @@ import pytest
 from xippios.core.client import KeyAuth
 
 # key is a credential here, as in sdk-usda-nass
-KeyAuth("EXAMPLE_API_KEY", location="query", name="key")
+KeyAuth("EXAMPLE_API_KEY", location="query", name="key", source="example")
 
 SERIES = "https://api.example.test/v1/series"
 

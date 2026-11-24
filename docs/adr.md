@@ -23,10 +23,10 @@ records in `docs/adr/`. A record changes, and this file follows when the script 
 - <a id="0034"></a>[ADR-0034](adr/0034-upstream-totals-in-the-result-envelope.md): Upstream totals in the result envelope · Accepted · 2026-11-18 · amended 2026-11-24
 - <a id="0035"></a>[ADR-0035](adr/0035-offline-tests-guaranteed-by-the-plugin.md): Offline tests guaranteed by the plugin · Accepted · 2026-11-18 · amended 2026-11-24
 - <a id="0036"></a>[ADR-0036](adr/0036-multi-tenant-sources.md): Multi-tenant sources · Accepted · 2026-11-18 · amended 2026-11-24
-- <a id="0037"></a>[ADR-0037](adr/0037-client-request-hooks-and-quota-policy.md): Client request hooks and a quota policy · Accepted · 2026-11-18 · amended 2026-11-21
+- <a id="0037"></a>[ADR-0037](adr/0037-client-request-hooks-and-quota-policy.md): Client request hooks and a quota policy · Accepted · 2026-11-18 · amended 2026-11-24
 - <a id="0038"></a>[ADR-0038](adr/0038-per-tool-result-caps.md): Per-tool result caps · Accepted · 2026-11-18 · amended 2026-11-24
 - <a id="0039"></a>[ADR-0039](adr/0039-core-versioning-and-source-adoption.md): Core versioning and source adoption · Accepted · 2026-11-18
-- <a id="0040"></a>[ADR-0040](adr/0040-bulk-downloads-and-non-json-payloads.md): Bulk downloads and non-JSON payloads in core · Accepted · 2026-11-18
+- <a id="0040"></a>[ADR-0040](adr/0040-bulk-downloads-and-non-json-payloads.md): Bulk downloads and non-JSON payloads in core · Accepted · 2026-11-18 · amended 2026-11-24
 - <a id="0041"></a>[ADR-0041](adr/0041-packaged-answers-and-release-times.md): Packaged answers and release times in `ResultMeta` · Accepted · 2026-11-18 · amended 2026-11-24
 - <a id="0042"></a>[ADR-0042](adr/0042-the-recorder-extras-stay-the-sources.md): The recorder extras stay the source's, and the multi-tenant kit returns to core · Accepted · 2026-11-18 · amended 2026-11-21
 - <a id="0043"></a>[ADR-0043](adr/0043-the-cases-that-the-reviews-of-the-sources-adoptions-settled.md): The cases that the reviews of the sources' adoptions settled · Accepted · 2026-11-21 · amended 2026-11-21

@@ -10,7 +10,8 @@ from pydantic import SecretStr
 from xippios.core.client import AsyncClient, ClientConfig, KeyAuth
 from xippios.core.client.auth import EnvKeyAuth
 from xippios.core.errors import ConfigError
-from xippios.core.redaction import is_credential_name
+from xippios.core.models import ResultMeta
+from xippios.core.redaction import REDACTED, is_credential_name, scrub_params
 
 BASE = "https://api.example.test"
 ENV = "EXAMPLE_TEST_API_KEY"
@@ -79,10 +80,45 @@ def test_the_key_class_keeps_where_the_key_travels() -> None:
 
 
 def test_a_query_key_makes_its_parameter_a_credential_and_a_header_none() -> None:
-    KeyAuth(ENV, location="header", name="key")  # a header registers no name
+    KeyAuth(ENV, location="header", name="key", source="example")  # a header registers none
     assert not is_credential_name("key")
-    KeyAuth(ENV, location="query", name="key")
-    assert is_credential_name("key")
+    KeyAuth(ENV, location="query", name="key", source="example")
+    assert is_credential_name("key", source="example")
+    assert not is_credential_name("key", source="sibling"), "another source's key stays data"
+
+
+@pytest.mark.usefixtures("key_in_env")
+def test_a_source_whose_key_class_and_envelope_name_one_slug_redacts_its_key() -> None:
+    # The first review of #518 probed two slugs, which the family check refuses
+    # (https://github.com/xippios/sdk-core/issues/526): with one, the key reads REDACTED.
+    query = KeyAuth(ENV, location="query", name="key", source="example")
+    request = {
+        "key": KEY,
+        "series": "M.DE",
+        "link": f"{BASE}/v1/x?key={KEY}&year=2024",
+        "nested": [{"key": KEY}],
+    }
+    meta = ResultMeta(source="example", endpoint="get_series", request=request)
+    assert meta.request == {
+        "key": REDACTED,
+        "series": "M.DE",
+        "link": f"{BASE}/v1/x?key={REDACTED}&year=2024",
+        "nested": [{"key": REDACTED}],
+    }
+    keyless = ResultMeta(source="sibling", endpoint="get_series", request={"key": "M.DE.CP00"})
+    assert keyless.request == {"key": "M.DE.CP00"}, "another source's data stays as sent"
+    assert scrub_params([("key", KEY), ("year", "2024")]) == [
+        ("key", REDACTED),
+        ("year", "2024"),
+    ]
+    assert query.key() == KEY
+
+
+def test_a_query_key_without_its_source_is_refused() -> None:
+    # Its name is a credential of the source it names, and of no other (ADR-0040, decision 6).
+    with pytest.raises(ValueError, match=r'^location="query" takes source=, the source whose'):
+        KeyAuth(ENV, location="query", name="key")
+    assert not is_credential_name("key"), "a refused query key registers nothing"
 
 
 @pytest.mark.parametrize(

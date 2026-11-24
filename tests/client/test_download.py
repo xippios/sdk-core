@@ -91,7 +91,9 @@ async def test_download_streams_the_file_and_keeps_what_upstream_said(
     }
     route = respx_mock.get(f"{BASE}/files/psd.csv").respond(200, text=CSV, headers=headers)
     cache = MemoryCache()
-    client = make_client(cache=cache, auth=KeyAuth("EXAMPLE_API_KEY", location="query", name="key"))
+    client = make_client(
+        cache=cache, auth=KeyAuth("EXAMPLE_API_KEY", location="query", name="key", source="example")
+    )
     before = datetime.now(UTC)
     got = await client.download("/files/psd.csv", tmp_path / "psd.csv")
     assert got == Downloaded(
@@ -112,6 +114,33 @@ async def test_download_streams_the_file_and_keeps_what_upstream_said(
 
 
 @pytest.mark.anyio
+async def test_a_download_takes_the_query_and_the_headers_its_siblings_take(
+    respx_mock: respx.MockRouter, tmp_path: Path
+) -> None:
+    # download(url, dest, *, params=, headers=, auth=), as get and get_answer take them.
+    route = respx_mock.get(f"{BASE}/v1/export").respond(200, text=CSV)
+    seen: list[str] = []
+    client = make_client(before_request=lambda request: seen.append(str(request.url)))
+    await client.download(
+        "/v1/export",
+        tmp_path / "export.csv",
+        params={"year": 2025, "format": "csv"},
+        headers={"Accept": "text/csv"},
+    )
+    assert sent_urls(route) == [f"{BASE}/v1/export?year=2025&format=csv"]
+    assert route.calls.last.request.headers["accept"] == "text/csv"
+    assert seen == [f"{BASE}/v1/export?year=2025&format=csv"], "before_request sees the query"
+    assert list(inspect.signature(AsyncClient.download).parameters) == [
+        "self",
+        "url",
+        "dest",
+        "params",
+        "headers",
+        "auth",
+    ]
+
+
+@pytest.mark.anyio
 async def test_a_download_from_another_host_carries_no_credential(
     respx_mock: respx.MockRouter, tmp_path: Path
 ) -> None:
@@ -121,7 +150,7 @@ async def test_a_download_from_another_host_carries_no_credential(
     route = respx_mock.get(link).respond(200, text=CSV)
     seen: list[object] = []
     client = make_client(
-        auth=KeyAuth("EXAMPLE_API_KEY", location="query", name="key"),
+        auth=KeyAuth("EXAMPLE_API_KEY", location="query", name="key", source="example"),
         before_request=lambda request: seen.append(request.extensions.get("xippios_origin")),
         observe=lambda response: seen.append(response.request.extensions.get("xippios_auth")),
     )

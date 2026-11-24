@@ -1,7 +1,6 @@
 # ADR-0040: Bulk downloads and non-JSON payloads in core
 
-Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under
-https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0019
+Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0019 · Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/479
 
 ## Context
 
@@ -150,3 +149,29 @@ the definition of done's Tests block, the README and the docstrings of `download
 `Downloaded`, `decode_text`, `decode_csv`, `ClientConfig`, `xippios.core.redaction`,
 `register_tasks`, `router_from_tasks`, the family check, the fixtures, the recorder and
 `Scrub` state its decisions from 1.28 on.
+
+Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/479: in decision 3
+`cache_filter` leaves for `MemoryCache(lifetimes=...)`, a lifetime per prefix of the request's URL
+path, the longest prefix winning, `None` for the life of the process and `0` or no prefix for
+nothing stored, which the cache reads from the path that the client hands its `set`, and which
+sdk-comtrade, sdk-usda-nass and sdk-usda-gats take in place of the filters, the `ttl` and the
+`PathCaches` of their `_client.py`, and the cache drops an entry once its lifetime has passed and
+bounds the bytes of the bodies it holds in all by `max_bytes=`, which no source passes yet and
+whose default of 64 MiB bounds every client that keeps a `MemoryCache`, those of sdk-comtrade,
+sdk-eurostat, sdk-faostat, sdk-usda-gats and sdk-usda-nass, beside `cache_max_bytes`, the bound of
+one answer, which stays; in decision 1 `download` takes `params` and `headers` as its siblings take
+them, the first for sdk-cashctrl and sdk-eurostat, which write a download's query into its URL by
+hand (`src/xippios/cashctrl/api/_download.py`, `src/xippios/eurostat/api/sdmx.py`), and the second
+with no caller yet; and in decision 6 the registries of credential names and of data names are kept
+for each source, by part 4 of the answer on https://github.com/xippios/sdk-core/issues/485, so that
+a query `KeyAuth` registers its name for the `source` that it then must name, as sdk-usda-nass's
+key does for `key`, `register_data_name` takes the source too, as sdk-x's two declarations do,
+`ResultMeta` reads the names of its own source alone, which serves the redaction of every
+envelope of the family (ADR-0030), a reader given no source, a testing helper's, reads those of
+every source with a credential of any one winning, one source's key name no longer turns another
+source's data into `REDACTED` in a process that imports both, and the family check fails a source
+whose key class names another slug than the package's own, a `KeyAuth` of its `_client.py`, the
+`auth` of its client or that of a gateway that a publisher's shared package builds with the slug it
+is given, so that no envelope keeps a key as sent
+(https://github.com/xippios/sdk-core/issues/526), while decisions 2, 4 and 5, the rest of
+decisions 1, 3 and 6 and the consequences stand as written.

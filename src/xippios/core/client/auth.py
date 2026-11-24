@@ -123,10 +123,11 @@ class KeyAuth(EnvKeyAuth):
 
     - ``"query"``: the key goes as the query parameter ``name`` of every request,
       ``?key=<key>`` for ``name="key"``. Building one registers ``name`` as a credential
-      name for the whole process (``xippios.core.redaction``): its value is ``REDACTED`` in
-      every ``ResultMeta.request``, every recorded fixture and every URL ``sent_urls``
-      gives, also where the name is no credential by itself, as ``key`` is not (ADR-0040,
-      decision 6).
+      name of its ``source`` (``xippios.core.redaction``), which it then takes: the value
+      is ``REDACTED`` in every ``ResultMeta.request`` of that source, every recorded
+      fixture and every URL ``sent_urls`` gives, also where the name is no credential by
+      itself, as ``key`` is not, while another source's ``key`` stays data (ADR-0040,
+      decision 6, amendment 2026-11-24).
     - ``"header"``: the key goes as the value of the header ``name``,
       ``X-Api-Key: <key>`` for ``name="X-Api-Key"``.
     - ``"bearer"``: the key goes as ``Authorization: Bearer <key>``; no ``name``.
@@ -143,12 +144,13 @@ class KeyAuth(EnvKeyAuth):
         name: The query parameter or the header that carries the key, e.g. ``"key"`` or
             ``"X-Api-Key"``; given for ``"query"`` and ``"header"`` and only for them.
         key: Explicit key; wins over the environment.
-        source: Source slug for error messages, e.g. ``"example"``.
+        source: Source slug for error messages, e.g. ``"example"``, and for ``"query"`` the
+            source whose answers read ``name`` as a credential, given then.
 
     Raises:
         ValueError: ``location`` is none of the four, or ``name`` is missing or empty for
-            ``"query"`` or ``"header"``, or given for ``"bearer"`` or ``"basic"``; nothing is
-            registered.
+            ``"query"`` or ``"header"``, or given for ``"bearer"`` or ``"basic"``, or
+            ``source`` is missing for ``"query"``; nothing is registered.
     """
 
     def __init__(
@@ -174,11 +176,16 @@ class KeyAuth(EnvKeyAuth):
             raise ValueError(
                 f'location="{location}" takes no name=: the key goes in the Authorization header'
             )
+        if location == "query" and not source:
+            raise ValueError(
+                'location="query" takes source=, the source whose answers read name= as a '
+                "credential"
+            )
         super().__init__(env_var, key=key, source=source)
         self.location = location
         self.name = name
-        if location == "query" and name:
-            register_credential_name(name)
+        if location == "query" and name and source:
+            register_credential_name(name, source=source)
 
     def apply(self, request: httpx.Request) -> None:
         """Attach the key where ``location`` sends it."""
@@ -246,8 +253,8 @@ class RenewingBearerAuth(httpx.Auth):
     The flow reads the token answer and no other, so a download through it streams to its
     file (ADR-0040, decision 1). httpx keeps the token answer, its body read, in the final
     response's ``history`` for as long as that response lives: a caller that keeps a
-    response of ``request`` or ``get`` keeps the bearer with it, while ``get_json``,
-    ``get_answer`` and the cache keep no response. The client sends its auth to the base
+    response of ``request`` or ``get`` keeps the bearer with it, while ``get_answer``,
+    ``post_json`` and the cache keep no response. The client sends its auth to the base
     URL's origin only (ADR-0037, decision 4).
 
     The bearer is kept as a ``SecretStr``, and a credential is read when the token request

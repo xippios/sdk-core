@@ -7,7 +7,12 @@ reads the quota headers of every response from the wire, and ``before_request``,
 runs after the cache lookup, waits a spent quota out when the wait is short and
 otherwise refuses without sending::
 
-    policy = QuotaPolicy(window=3600.0, source="usda-psd")
+    policy = QuotaPolicy(
+        limit_header="x-ratelimit-limit",
+        remaining_header="x-ratelimit-remaining",
+        window=3600.0,
+        source="example",
+    )
     client = AsyncClient(policy.install(config), auth=auth)
 
 The snapshot belongs to the policy: clients that draw on one quota, one key say, share
@@ -26,7 +31,7 @@ import weakref
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import ClassVar
+from typing import ClassVar, Final
 
 import httpx
 
@@ -39,6 +44,9 @@ logger = logging.getLogger("xippios.core.client")
 
 _TEN_YEARS = 315_360_000.0
 """Seconds in ten years: the longest ``window``, so a ``resumes_at`` can always be computed."""
+
+_PAUSE_CAP: Final = 30.0
+"""The longest wait inside a call, in seconds: ``RetryPolicy``'s default ``backoff_max``."""
 
 
 _POLICIES: "weakref.WeakSet[QuotaPolicy]" = weakref.WeakSet()
@@ -146,13 +154,13 @@ class QuotaPolicy:
 
     Implements ADR-0033's quota rules on ``ClientConfig.observe`` and
     ``ClientConfig.before_request`` (ADR-0037); ``install`` sets both. ``observe`` keeps
-    a snapshot of the quota headers of every response from the wire, raw ones
-    (``raise_on_error=False``) included, and never of a cache hit. When the snapshot
-    shows the quota spent, ``before_request`` waits until it is expected back if that
-    is within ``pause_cap``, logging one warning, and otherwise raises
+    a snapshot of the quota headers of every response from the wire, a recording's
+    included, and never of a cache hit. When the snapshot shows the quota spent,
+    ``before_request`` waits until it is expected back if that is within 30 seconds,
+    ``RetryPolicy``'s default ``backoff_max``, logging one warning, and otherwise raises
     ``RateLimitError`` with ``retry_after`` and sends nothing, so a sync call or an MCP
-    tool never blocks for an hour. A request the cache answers never reaches it.
-    ``pause_cap`` is the one bound of that wait, wherever the policy is installed.
+    tool never blocks for an hour. A request the cache answers never reaches it. The 30
+    seconds are the one bound of that wait, wherever the policy is installed.
 
     A request outside the quota is neither held back nor read: one sent with
     ``auth=None``, a keyless endpoint of the same upstream, and one to an origin other than
@@ -161,26 +169,26 @@ class QuotaPolicy:
     paces it.
 
     A 429 marks the quota spent by itself, until its ``Retry-After`` or, without one,
-    for ``window``. A source whose upstream answers a spent limit otherwise, UN
-    Comtrade's 403 "Quota will be replenished in HH:MM:SS" for one, passes ``spent``,
-    which reads that answer. The source's ``classify`` still maps the refusal
-    (ADR-0033) and can read ``snapshot()`` for its message: ``observe`` runs before it.
+    for ``window``. A source whose upstream answers a spent limit otherwise, a 403
+    "Quota will be replenished in HH:MM:SS" say, passes ``spent``, which reads that
+    answer. The source's ``classify`` still maps the refusal (ADR-0033) and can read
+    ``snapshot()`` for its message: ``observe`` runs before it.
 
     Args:
         limit_header: The header with the quota's size, e.g. ``"x-ratelimit-limit"``;
-            ``None`` turns its reading off.
+            ``None``, the default, reads none.
         remaining_header: The header with the requests left, e.g.
-            ``"x-ratelimit-remaining"``; ``None`` turns its reading off. Read only a
+            ``"x-ratelimit-remaining"``; ``None``, the default, reads none. Name only a
             header that describes the long-window quota: where upstream's
-            ``x-ratelimit-*`` headers describe a per-second or per-minute pace (UN
-            Comtrade's), a remaining ``0`` would pause for ``window``. With both
-            ``None`` the policy relies on a 429 and ``spent`` alone.
-        window: The quota's window in seconds, the one setting for two things: how long
-            a spent quota stays spent when neither ``Retry-After`` (on a 429) nor
-            ``spent`` names a time, and the longest wait either can set, so no refusal
-            outlives one window. ``3600.0`` for an hourly quota (api.data.gov);
-            ``86400.0`` for a daily one, e.g. UN Comtrade's, whose 403 names up to 24
-            hours and would otherwise be cut to one. At most ten years.
+            ``x-ratelimit-*`` headers describe a per-second or per-minute pace, a
+            remaining ``0`` would pause for ``window``. With both ``None`` the policy
+            relies on a 429 and ``spent`` alone.
+        window: The quota's window in seconds, given always, the one setting for two
+            things: how long a spent quota stays spent when neither ``Retry-After`` (on a
+            429) nor ``spent`` names a time, and the longest wait either can set, so no
+            refusal outlives one window. ``3600.0`` for an hourly quota; ``86400.0`` for a
+            daily one, whose answer may name up to 24 hours, which would otherwise be cut
+            to one. At most ten years.
         spent: Called by ``observe`` with every response it observes, after the quota
             headers are read: a number of seconds marks the quota spent for that long
             (cut to ``window``, and ahead of ``Retry-After``); ``None`` says the response
@@ -189,9 +197,6 @@ class QuotaPolicy:
             from any ``observe`` hook does, except on a ``download``'s success, whose
             body goes to the file unread: reading it there is suppressed and counts as
             nothing observed (ADR-0040).
-        pause_cap: The longest wait inside a call, in seconds, e.g. ``30.0``, the
-            default, which is ``RetryPolicy``'s default ``backoff_max``. A spent quota
-            expected back later than that is refused without sending.
         source: Name for the ``RateLimitError`` and the log line, e.g. ``"usda-psd"``,
             or the gateway's name where one policy serves several sources.
         clock: The current time, timezone-aware, replaceable in tests.
@@ -202,12 +207,10 @@ class QuotaPolicy:
         remaining_header: As given.
         window: As given.
         spent: As given.
-        pause_cap: As given.
         source: As given.
 
     Raises:
-        ValueError: A ``window`` that is negative, NaN or longer than ten years, or a
-            ``pause_cap`` that is negative or NaN.
+        ValueError: A ``window`` that is negative, NaN or longer than ten years.
     """
 
     _subject: ClassVar[str] = "quota"
@@ -216,24 +219,20 @@ class QuotaPolicy:
     def __init__(
         self,
         *,
-        limit_header: str | None = "x-ratelimit-limit",
-        remaining_header: str | None = "x-ratelimit-remaining",
-        window: float = 3600.0,
+        limit_header: str | None = None,
+        remaining_header: str | None = None,
+        window: float,
         spent: Callable[[httpx.Response], float | None] | None = None,
-        pause_cap: float = 30.0,
         source: str | None = None,
         clock: Callable[[], datetime] = _utc_now,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
         if not 0 <= window <= _TEN_YEARS:
             raise ValueError("window must be between 0 and ten years (315360000 s)")
-        if not pause_cap >= 0:  # NaN fails it too
-            raise ValueError("pause_cap must be non-negative, not NaN")
         self.limit_header = limit_header
         self.remaining_header = remaining_header
         self.window = window
         self.spent = spent
-        self.pause_cap = pause_cap
         self.source = source
         self._clock = clock
         self._sleep = sleep
@@ -287,7 +286,7 @@ class QuotaPolicy:
             )
 
     async def before_request(self, request: httpx.Request) -> None:
-        """Wait out a spent quota within ``pause_cap``; beyond it, refuse without sending.
+        """Wait out a spent quota within 30 s; beyond that, refuse without sending.
 
         The ``ClientConfig.before_request`` hook ``install`` sets, called once per
         request, after the cache lookup. Does nothing while the snapshot shows requests
@@ -302,9 +301,9 @@ class QuotaPolicy:
                 log line and the error, never its host or query (conventions §5).
 
         Raises:
-            RateLimitError: The quota is expected back later than ``pause_cap`` from
-                now; ``retry_after`` is the wait, and the message says that nothing was
-                sent and when the quota is expected back.
+            RateLimitError: The quota is expected back later than 30 s from now;
+                ``retry_after`` is the wait, and the message says that nothing was sent and
+                when the quota is expected back.
         """
         if _outside(request):
             return
@@ -315,7 +314,7 @@ class QuotaPolicy:
 
         Returns ``dataclasses.replace(config, before_request=self.before_request,
         observe=self.observe)``; ``config`` itself is unchanged, and nothing is read from
-        it: the pause's bound is ``pause_cap``, whatever the config's retry policy. Hooks
+        it: the pause's bound is 30 s, whatever the config's retry policy. Hooks
         the config had are replaced, so a source that needs hooks of its own as well
         composes them with the policy's itself; installing the policy again changes
         nothing.
@@ -326,17 +325,17 @@ class QuotaPolicy:
         return dataclasses.replace(config, before_request=self.before_request, observe=self.observe)
 
     async def _pause(self, request: httpx.Request) -> None:
-        """Wait out a spent quota within ``pause_cap``; beyond it, raise without sending."""
+        """Wait out a spent quota within 30 s; beyond that, raise without sending."""
         snapshot = self.snapshot()
         wait = self._wait_left(snapshot)
         if snapshot is None or snapshot.resumes_at is None or wait is None:
             return
         where = f"{request.method} {request.url.path}"
-        if wait > self.pause_cap:
+        if wait > _PAUSE_CAP:
             raise RateLimitError(
                 f"{self._subject} spent ({snapshot.describe()}); nothing was sent for "
                 f"{where}: the quota is expected back at {_utc(snapshot.resumes_at)}, later "
-                f"than a call waits ({self.pause_cap:g} s)",
+                f"than a call waits ({_PAUSE_CAP:g} s)",
                 retry_after=wait,
                 source=self.source,
             )

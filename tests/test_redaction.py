@@ -55,20 +55,23 @@ def test_a_name_without_a_credential_word_is_data(name: str) -> None:
     assert not is_credential_name(name)
 
 
-def test_a_query_key_auth_makes_its_parameter_a_credential() -> None:
-    # USDA NASS sends its key as ?key=...; the name is exact, in any letter case.
-    KeyAuth("EXAMPLE_API_KEY", location="query", name="key")
-    assert is_credential_name("key")
-    assert is_credential_name("KEY")
-    assert not is_credential_name("sort_key")
-    register_credential_name("Key")  # again: nothing changes
-    assert scrub_params([("key", "s"), ("year", "2024")]) == [("key", REDACTED), ("year", "2024")]
+def test_a_query_key_auth_makes_its_parameter_a_credential_of_its_source() -> None:
+    # example sends its key as ?key=...; the name is exact, in any letter case.
+    KeyAuth("EXAMPLE_API_KEY", location="query", name="key", source="example")
+    assert is_credential_name("key", source="example")
+    assert is_credential_name("KEY", source="example")
+    assert not is_credential_name("sort_key", source="example")
+    register_credential_name("Key", source="example")  # again: nothing changes
+    assert scrub_params([("key", "s"), ("year", "2024")], source="example") == [
+        ("key", REDACTED),
+        ("year", "2024"),
+    ]
 
 
 def test_redact_credentials_copies_at_any_depth() -> None:
-    register_credential_name("key")
+    register_credential_name("key", source="example")
     request = {"key": "S", "q": "corn", "nested": {"ok": [{"token": "T"}, 1]}, "sort_key": "id"}
-    assert redact_credentials(request) == {
+    assert redact_credentials(request, source="example") == {
         "key": REDACTED,
         "q": "corn",
         "nested": {"ok": [{"token": REDACTED}, 1]},
@@ -77,13 +80,68 @@ def test_redact_credentials_copies_at_any_depth() -> None:
     assert request["key"] == "S"
 
 
-def test_result_meta_reads_the_rule() -> None:
-    meta = ResultMeta(source="eurostat", endpoint="data", request={"key": "M.DE.CP00"})
+def test_result_meta_reads_the_rule_of_its_own_source() -> None:
+    meta = ResultMeta(source="example", endpoint="get_series", request={"key": "M.DE.CP00"})
     assert meta.request == {"key": "M.DE.CP00"}
-    register_credential_name("key")
-    meta = ResultMeta(source="usda-nass", endpoint="api_GET", request={"key": "SECRET"})
+    register_credential_name("key", source="example")
+    meta = ResultMeta(source="example", endpoint="get_series", request={"key": "SECRET"})
     assert meta.request == {"key": REDACTED}
     assert "SECRET" not in meta.model_dump_json()
+
+
+# -- the registries are kept for each source (ADR-0040, decision 6) ------------------------
+
+
+def test_one_source_s_key_name_leaves_another_source_s_data_as_sent() -> None:
+    # Two invented sources in one process, as a host loads them: example sends its key as
+    # ?key=..., and sibling sends a series key under the same name, which is data.
+    KeyAuth("EXAMPLE_API_KEY", location="query", name="key", source="example")
+    keyed = ResultMeta(source="example", endpoint="get_series", request={"key": "SECRET"})
+    keyless = ResultMeta(source="sibling", endpoint="get_series", request={"key": "M.DE.CP00"})
+    assert keyed.request == {"key": REDACTED}
+    assert keyless.request == {"key": "M.DE.CP00"}
+    assert not is_credential_name("key", source="sibling")
+    assert scrub_url("https://api.example.org/v1/x?key=M.DE", source="sibling") == (
+        "https://api.example.org/v1/x?key=M.DE"
+    )
+    link = {"url": "https://api.example.org/v1/x?key=M.DE"}
+    assert redact_credentials(link, source="sibling") == link
+    assert redact_credentials(link, source="example") == {
+        "url": f"https://api.example.org/v1/x?key={REDACTED}"
+    }
+
+
+def test_one_source_s_data_name_leaves_another_source_s_credential_redacted() -> None:
+    register_data_name("next_token", source="sibling")
+    assert not is_credential_name("next_token", source="sibling")
+    assert is_credential_name("next_token", source="example")
+    meta = ResultMeta(source="example", endpoint="list_regions", request={"next_token": "T"})
+    assert meta.request == {"next_token": REDACTED}
+
+
+def test_a_reader_without_a_source_reads_every_source_s_names() -> None:
+    # The testing helpers read a sent or a recorded request without its source: a name that
+    # any source sends a key under stays a credential there.
+    KeyAuth("EXAMPLE_API_KEY", location="query", name="key", source="example")
+    register_data_name("next_token", source="sibling")
+    register_data_name("page_token", source="sibling")
+    register_credential_name("page_token", source="example")
+    assert is_credential_name("key")
+    assert not is_credential_name("next_token")
+    assert is_credential_name("page_token"), "a credential of any source wins"
+    assert scrub_params([("key", "s"), ("next_token", "n")]) == [
+        ("key", REDACTED),
+        ("next_token", "n"),
+    ]
+    assert redaction._registered == {"example": frozenset({"key", "page_token"})}
+    assert redaction._data_names == {"sibling": frozenset({"next_token", "page_token"})}
+
+
+def test_a_name_registers_for_one_source_by_keyword() -> None:
+    with pytest.raises(TypeError):
+        register_credential_name("key")  # type: ignore[call-arg]
+    with pytest.raises(TypeError):
+        register_data_name("next_token")  # type: ignore[call-arg]
 
 
 def test_scrub_url_redacts_credentials_and_userinfo() -> None:
@@ -112,27 +170,29 @@ def test_register_data_name_is_the_module_s() -> None:
 
 
 def test_a_declared_data_name_is_data_in_the_envelope_the_recorder_and_replay() -> None:
-    # sdk-x pages with X's next_token and pagination_token, which a caller reads to page on.
-    assert is_credential_name("next_token")
-    register_data_name("next_token")
-    register_data_name("pagination_token")
-    assert not is_credential_name("next_token")
-    assert not is_credential_name("NEXT_TOKEN"), "matched exactly, in any letter case"
-    assert is_credential_name("page_token"), "a name nobody declared stays a credential"
-    assert is_credential_name("access_token")
+    # example pages with next_token and pagination_token, which a caller reads to page on.
+    assert is_credential_name("next_token", source="example")
+    register_data_name("next_token", source="example")
+    register_data_name("pagination_token", source="example")
+    assert not is_credential_name("next_token", source="example")
+    assert not is_credential_name("NEXT_TOKEN", source="example"), "exactly, in any case"
+    assert is_credential_name("page_token", source="example"), "undeclared: a credential"
+    assert is_credential_name("access_token", source="example")
     meta = ResultMeta(
-        source="x",
-        endpoint="searchPostsRecent",
+        source="example",
+        endpoint="list_regions",
         request={"next_token": "b26v89c19zqg8o3f", "access_token": "T"},
     )
     assert meta.request == {"next_token": "b26v89c19zqg8o3f", "access_token": REDACTED}
-    url = "https://api.x.com/2/tweets/search/recent?next_token=b26v&access_token=T"
-    assert scrub_url(url) == (
-        f"https://api.x.com/2/tweets/search/recent?next_token=b26v&access_token={REDACTED}"
+    url = "https://api.example.org/v1/regions?next_token=b26v&access_token=T"
+    assert scrub_url(url, source="example") == (
+        f"https://api.example.org/v1/regions?next_token=b26v&access_token={REDACTED}"
     )
-    assert scrub_params([("pagination_token", "p2")]) == [("pagination_token", "p2")]
-    register_data_name("Next_Token")  # again, in another case: nothing changes
-    assert not is_credential_name("next_token")
+    assert scrub_params([("pagination_token", "p2")], source="example") == [
+        ("pagination_token", "p2")
+    ]
+    register_data_name("Next_Token", source="example")  # again, in another case: no change
+    assert not is_credential_name("next_token", source="example")
 
 
 @pytest.mark.parametrize(
@@ -154,17 +214,17 @@ def test_only_a_name_with_token_and_no_other_credential_word_is_declared_data(
     name: str,
 ) -> None:
     with pytest.raises(ValueError, match="cannot be declared data"):
-        register_data_name(name)
-    assert redaction._data_names == frozenset()
+        register_data_name(name, source="example")
+    assert redaction._data_names == {}
 
 
 def test_a_registered_credential_name_stays_one_though_declared_data() -> None:
-    register_data_name("next_token")
-    register_credential_name("next_token")
-    assert is_credential_name("next_token")
-    register_credential_name("pagination_token")
-    register_data_name("pagination_token")
-    assert is_credential_name("pagination_token")
+    register_data_name("next_token", source="example")
+    register_credential_name("next_token", source="example")
+    assert is_credential_name("next_token", source="example")
+    register_credential_name("pagination_token", source="example")
+    register_data_name("pagination_token", source="example")
+    assert is_credential_name("pagination_token", source="example")
 
 
 # -- a signed link in meta.request (https://github.com/xippios/sdk-core/issues/163) -------
@@ -245,5 +305,5 @@ def test_a_token_name_with_any_other_credential_word_stays_a_credential(word: st
     assert is_credential_name(word)
     name = f"next_token_{word}"
     with pytest.raises(ValueError, match="cannot be declared data"):
-        register_data_name(name)
+        register_data_name(name, source="example")
     assert is_credential_name(name)

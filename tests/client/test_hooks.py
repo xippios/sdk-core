@@ -18,6 +18,7 @@ from xippios.core.client import (
     RetryPolicy,
 )
 from xippios.core.errors import NotFoundError, RateLimitError, XippiosError
+from xippios.core.testing import send_once
 
 BASE = "https://api.example.test"
 
@@ -139,9 +140,9 @@ async def test_a_cache_hit_reaches_neither_hook(respx_mock: respx.MockRouter) ->
     client = AsyncClient(config)
     await client.get_answer("/v1/x")
     hit = await client.get("/v1/x")
-    raw = await client.request("GET", "/v1/x", raise_on_error=False)
+    requested = await client.request("GET", "/v1/x")
     assert hit.extensions["xippios_cache"] == "hit"
-    assert raw.extensions["xippios_cache"] == "hit"
+    assert requested.extensions["xippios_cache"] == "hit"
     assert route.call_count == 1
     assert events.seen == ["before", "observe 200"]
 
@@ -177,8 +178,9 @@ async def test_observe_sees_every_attempt_before_classify(respx_mock: respx.Mock
 
 
 @pytest.mark.anyio
-async def test_observe_sees_raw_responses_too(respx_mock: respx.MockRouter) -> None:
-    # The recorder asks for raw responses; ADR-0033 wants the quota observed on them too.
+async def test_observe_sees_a_recording_s_answer_too(respx_mock: respx.MockRouter) -> None:
+    # The recorder takes an answer whatever its status; ADR-0033 wants the quota observed
+    # on it too. The client's public calls return no such answer (#473, part 2).
     seen: list[int] = []
     respx_mock.get(f"{BASE}/v1/x").respond(500, json={})
     client = AsyncClient(
@@ -187,7 +189,7 @@ async def test_observe_sees_raw_responses_too(respx_mock: respx.MockRouter) -> N
             retry=RetryPolicy(max_attempts=1),
         )
     )
-    response = await client.request("GET", "/v1/x", raise_on_error=False)
+    response = await send_once(client, "/v1/x")
     assert response.status_code == 500
     assert seen == [500]
 

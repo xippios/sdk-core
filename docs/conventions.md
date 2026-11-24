@@ -391,12 +391,13 @@ class Result(BaseModel, Generic[T]):
 
 `meta` is never optional. It is what makes a later as-of/vintage store possible.
 `ResultMeta` refuses a field it does not define, so a misspelt one is an error, never
-dropped (ADR-0034, decision 1). On a cache hit, `retrieved_at` is the time the
-entry was stored, which the client puts on the response as
-`extensions["xippios_cache_stored_at"]` (ADR-0037); a wrapper reads it with
-`get_answer()`, whose `Answer` carries the payload and that `retrieved_at` (§6). The miss
-that stored the entry carries the same time, one reading of the clock for both, taken
-when the answer arrived (ADR-0037, decision 5).
+dropped (ADR-0034, decision 1). `retrieved_at` is the client's fact: a wrapper reads it
+with `get_answer()`, whose `Answer` carries the payload and that `retrieved_at` (§6), and a
+task that assembles several answers gives the oldest of their times
+(https://github.com/xippios/sdk-core/issues/479). On a cache hit it is the time the entry
+was stored, which the client puts on the response as `extensions["xippios_cache_stored_at"]`
+(ADR-0037). The miss that stored the entry carries the same time, one reading of the clock
+for both, taken when the answer arrived (ADR-0037, decision 5).
 
 `published_at` carries a zone. A naive value, a time upstream printed without one (FAS:
 `2026-10-06T08:00:00`), is accepted only with `published_at_naive=True` and is stored as
@@ -552,14 +553,17 @@ names one, at any depth, to `"REDACTED"` at construction, by the one rule of
 `credential` or `credentials`, between `_`, `-` or the ends of the name), so an envelope
 is safe to hand to an agent, return over HTTP, or write to a store; personal identifiers
 in upstream data stay out of it by §3's rule for projections (ADR-0017). A bare `key` is
-not on the list: it is a credential in a process where the one key class sends the key
-under that name as a query parameter, `KeyAuth("EXAMPLE_API_KEY", location="query",
-name="key")`, which registers it when built (ADR-0059, decision 7), and data elsewhere, as
-Eurostat's SDMX series `key` is (ADR-0040, decision 6). A source declares a
-name with a whole-word `token` data where its value is data, a paging cursor such as X's
-`next_token` and `pagination_token`, once, with
-`xippios.core.redaction.register_data_name`: the envelope, the recorder and replay keep
-its value. Every other name with a whole-word `token` stays a credential, and `token`,
+not on the list: it is a credential of a source whose one key class sends the key under
+that name as a query parameter, `KeyAuth("EXAMPLE_API_KEY", location="query", name="key",
+source=SOURCE)`, which registers it for that source when built (ADR-0059, decision 7), and
+data of every other source, a source's own series `key` say, also in a host that loads
+both (ADR-0040, decision 6, amendment 2026-11-24). A source's key class names the
+package's own slug, so that its envelopes read its key's name as a credential, and the
+family check holds it (§10). A source declares a name with a
+whole-word `token` data where its value is data, a paging cursor such as `next_token` and
+`pagination_token`, once, with `xippios.core.redaction.register_data_name(name,
+source=SOURCE)`: the envelope of that source, the recorder and replay keep its value.
+Every other name with a whole-word `token` stays a credential, and `token`,
 `access_token`, `refresh_token` and `id_token` cannot be declared (ADR-0040,
 decision 6). A link in `request`, a file's signed URL say, keeps its
 path and its other parameters and reads each credential of its query `REDACTED`, an
@@ -744,14 +748,16 @@ without case).
   and, where upstream documents none for an answer, the shapes the source recorded, each
   backed by a fixture of that answer that a test passes to `classify` through
   `response_from_fixture` (ADR-0031, decision 2). Its endpoint
-  wrappers then use `get_json`, and a write wrapper `post_json` or `delete_json`, which
-  return `None` for an answer with no body (ADR-0037, decision 7),
-  and never inspect status codes themselves. A wrapper
-  whose answer may come from the cache calls `get_answer()`: its `Answer(payload,
-  retrieved_at)` carries a hit's stored time, from `xippios_cache_stored_at`, or else
-  the arrival time, for `meta.retrieved_at` (ADR-0037, decision 5). A wrapper decodes a
-  JSON answer through `get_json` or `get_answer` alone, since `decode_json` is the
-  client's own (ADR-0059, decision 3), and a CSV file through `decode_csv` (below).
+  wrappers then read through `get_answer()`, the one reader of JSON
+  (https://github.com/xippios/sdk-core/issues/479), a write wrapper through `post_json`,
+  which returns `None` for an answer with no body (ADR-0037, decision 7), or through
+  `request` for a DELETE, and none inspects status codes itself. `get_answer()`'s
+  `Answer(payload, retrieved_at)` carries a hit's stored time, from
+  `xippios_cache_stored_at`, or else the arrival time, for `meta.retrieved_at` (ADR-0037,
+  decision 5). A wrapper decodes a JSON answer through `get_answer` alone, since
+  `decode_json` is the client's own (ADR-0059, decision 3), and a CSV file through
+  `decode_csv` (below). The client returns no error answer: a recording takes one through
+  `xippios.core.testing.send_once`.
   `Answer` is generic over its payload: `get_answer(path, parse=list[Region],
   endpoint="regions")` parses the payload with `parse` and returns an
   `Answer[list[Region]]`, and a wrapper that
@@ -768,9 +774,11 @@ without case).
   documented fallback), the client keeps a quota snapshot from the quota headers
   (`QuotaPolicy`, ADR-0037), and retries honour `retry_after` up to `backoff_max`. A
   request into a quota the snapshot shows spent waits it out inside the call, logged,
-  when the wait is within the policy's `pause_cap` (30 s by default), and otherwise
-  raises `RateLimitError` with `retry_after` without sending; a pause handed back to the
-  caller is stated in the error text.
+  when the wait is within 30 s, and otherwise raises `RateLimitError` with `retry_after`
+  without sending; a pause handed back to the caller is stated in the error text. The
+  policy reads the quota headers that the source names, `limit_header` and
+  `remaining_header`, and its `window` is given: no default reads a header (ADR-0037,
+  amendment 2026-11-24).
 - One limiter paces each host a source sends to, and core builds one per client
   (ADR-0033, decision 1). A second base URL on the host of the first
   (Eurostat's `https://ec.europa.eu/eurostat/api/comext/dissemination` beside
@@ -802,15 +810,22 @@ without case).
   takes none says why in one sentence of the source's `CLAUDE.md`, private data or a billed
   page whose age matters (ADR-0061, decision 11).
 - Optional response cache (in-memory by default, pluggable) keyed on method+URL+params.
-  A body larger than `ClientConfig.cache_max_bytes` (default 8 MiB) passes through and
-  is not stored; `cache_filter` stays for finer rules. A source that wants a larger
-  answer cached raises the bound and says why in its `CLAUDE.md` (ADR-0040). Every GET
-  reads the cache, and only `get_answer()` stores an answer in it: a 200 once its body
-  decoded and, with `parse=`, its payload parsed, so a body that fails is requested
-  again on the next call; `get()`, `get_json()` and `request()` store nothing
-  (ADR-0037, decision 5).
+  `MemoryCache(lifetimes=...)` maps a path prefix of the request's URL, the base URL's
+  own path included, to the seconds an answer under it is kept, the longest prefix
+  winning: `None` keeps it for the life of the process, `0` stores nothing, and a path
+  no prefix matches is not cached; by default every path is kept for 300 s. The cache
+  drops an entry once its lifetime has passed and holds at most `max_bytes` of bodies in
+  all, 64 MiB by default (ADR-0040, decision 3, amendment 2026-11-24). A body larger than
+  `ClientConfig.cache_max_bytes` (default 8 MiB) passes through and is not stored. A
+  source that wants a larger answer cached raises the bound and says why in its
+  `CLAUDE.md` (ADR-0040). Every GET reads the cache, and only `get_answer()` stores an
+  answer in it, for as long as the cache keeps its path: a 200 once its body decoded and,
+  with `parse=`,
+  its payload parsed, so a body that fails is requested again on the next call; `get()`
+  and `request()` store nothing (ADR-0037, decision 5).
 - A file is downloaded, never held in memory (ADR-0040): `download(url, dest, *,
-  auth=...) -> Downloaded` streams the body to `dest` under a temporary name, renames it
+  params=None, headers=None, auth=...) -> Downloaded`, which takes the query and the
+  headers as `get()` does, streams the body to `dest` under a temporary name, renames it
   when complete and removes it on failure, and never touches the response cache. The
   limiter, the hooks (`before_request`, `observe`), `classify` and the retry rule apply
   as they do to `get()`, and `auth` works as it does there; a retry restarts the file;
@@ -1288,11 +1303,13 @@ standalone from the package. A task named in `BULK_TASKS` gets no route:
   `x-transaction-id` and the others `REQUEST_ID_HEADERS` names), which change with every
   recording and trip the secret scan (ADR-0040, decision 5).
   The scrub redacts credentials by the rule `ResultMeta` applies (§4): a parameter named
-  `key` is data unless the one key class sends the key under that name as a query
-  parameter, `KeyAuth("EXAMPLE_API_KEY", location="query", name="key")` (ADR-0059,
-  decision 7, and ADR-0040), and a
+  `key` is data unless a source's one key class sends the key under that name as a query
+  parameter, `KeyAuth("EXAMPLE_API_KEY", location="query", name="key", source=SOURCE)`
+  (ADR-0059, decision 7, and ADR-0040), and a
   `token` name its source declared data is written as sent, so replay can match it
-  (ADR-0040, decision 6).
+  (ADR-0040, decision 6). The scrub and the replay helpers name no source, so they read
+  the names of every source the process registered, a credential of any one winning
+  (ADR-0040, amendment 2026-11-24).
 - Live tests are marked `@pytest.mark.live`, skipped unless `XIPPIOS_LIVE_TESTS=1`,
   and run in CI only in the one live workflow, `.github/workflows/live.yml`, in the shape
   the template renders (a source whose secrets differ keeps that shape): one job,
@@ -1384,6 +1401,12 @@ standalone from the package. A task named in `BULK_TASKS` gets no route:
   field `<stem>_number` or `<stem>_label` stands beside a field `<stem>` of the same model that
   holds no text, and it passes a name whose part before the suffix names no field of its model,
   which is upstream's own name and no reading (ADR-0060, decision 9).
+- The family check fails a source whose key class names another slug than the package's own,
+  `_client.SOURCE`: a `KeyAuth` that `_client.py` holds by a name, the `auth` of its
+  `AsyncClient`, or the `auth` of a shared object of it, such as the gateway that a
+  publisher's shared package builds with the slug it is given, `Gateway(SOURCE)`. A key class
+  that names no source, and a source with none, pass
+  (https://github.com/xippios/sdk-core/issues/526).
 - A value set that a package writes by hand from upstream's document, an enumeration or a table
   of allowed values, is held by an offline test that reads it against the document under
   `docs/upstream/` (ADR-0061, decision 12).

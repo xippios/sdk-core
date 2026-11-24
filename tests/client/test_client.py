@@ -1,6 +1,7 @@
 import asyncio
 import dataclasses
 import gzip
+import inspect
 import time
 from datetime import UTC, datetime
 from typing import assert_type
@@ -65,7 +66,7 @@ def config() -> ClientConfig:
 async def test_headers_url_and_params(respx_mock: respx.MockRouter, config: ClientConfig) -> None:
     route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={"ok": True})
     client = AsyncClient(config)
-    assert await client.get_json("/v1/x", params={"a": 1}) == {"ok": True}
+    assert (await client.get_answer("/v1/x", params={"a": 1})).payload == {"ok": True}
     await client.aclose()
     headers = route.calls.last.request.headers
     assert headers["user-agent"] == "xippios-example/1.2.3 (+https://github.com/xippios)"
@@ -201,13 +202,10 @@ async def test_5xx_to_a_write_is_returned_after_one_attempt(
     # that nobody knows whether it was.
     route = respx_mock.route(method=method, url=f"{BASE}/v1/x").respond(503, text="busy")
     client = AsyncClient(config, sleep=sleeper)
-    response = await client.request(method, "/v1/x", json={"a": 1}, raise_on_error=False)
-    assert response.status_code == 503
-    assert route.call_count == 1
     with pytest.raises(UpstreamError) as info:
         await client.request(method, "/v1/x", json={"a": 1})
     assert str(info.value) == f"503 from {method} /v1/x: busy. {SENT_ONCE}"
-    assert route.call_count == 2
+    assert route.call_count == 1
     assert sleeper.calls == []
 
 
@@ -370,23 +368,22 @@ async def test_an_answer_get_answer_stored_answers_every_get_of_its_url(
     assert route.call_count == 1
     assert second.json() == {"n": 1}
     assert second.extensions.get("xippios_cache") == "hit"
-    assert await client.get_json("/v1/x", params={"a": 1}) == {"n": 1}
+    assert (await client.get_answer("/v1/x", params={"a": 1})).payload == {"n": 1}
     assert route.call_count == 1
     await client.get_answer("/v1/x", params={"a": 2})
     assert route.call_count == 2
 
 
 @pytest.mark.anyio
-async def test_get_get_json_and_request_store_nothing(respx_mock: respx.MockRouter) -> None:
+async def test_get_and_request_store_nothing(respx_mock: respx.MockRouter) -> None:
     # https://github.com/xippios/sdk-core/issues/122: request stored a 200 before
     # anything had read it, so a body that failed to decode answered from the cache.
     route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={"n": 1})
     cache = MemoryCache()
     client = AsyncClient(ClientConfig(source="example", version="1", base_url=BASE, cache=cache))
     first = await client.get("/v1/x")
-    assert await client.get_json("/v1/x") == {"n": 1}
-    await client.request("GET", "/v1/x", raise_on_error=False)
-    assert route.call_count == 3
+    await client.request("GET", "/v1/x")
+    assert route.call_count == 2
     assert len(cache) == 0
     assert "xippios_cache" not in first.extensions
 
@@ -403,7 +400,7 @@ async def test_a_body_that_does_not_decode_is_requested_again(
             httpx.Response(200, json={"n": 1}),
         ]
     )
-    cache = MemoryCache(ttl=None)
+    cache = MemoryCache(lifetimes={"/": None})
     client = AsyncClient(ClientConfig(source="example", version="1", base_url=BASE, cache=cache))
     with pytest.raises(ValidationError, match="is not JSON"):
         await client.get_answer("/v1/x")
@@ -424,7 +421,7 @@ async def test_a_payload_that_does_not_parse_is_requested_again(
             httpx.Response(200, json=[{"regionCode": "AF"}]),
         ]
     )
-    cache = MemoryCache(ttl=None)
+    cache = MemoryCache(lifetimes={"/": None})
     client = AsyncClient(ClientConfig(source="example", version="1", base_url=BASE, cache=cache))
     with pytest.raises(ValidationError, match=r"^example regions: "):
         await client.get_answer("/v1/regions", parse=list[Region], endpoint="regions")
@@ -440,7 +437,7 @@ async def test_a_miss_carries_the_time_its_entry_was_stored(respx_mock: respx.Mo
     # https://github.com/xippios/sdk-core/issues/79: the miss read the clock after the
     # store, so a later hit reported an earlier time than the miss that stored it.
     route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={"n": 1})
-    cache = MemoryCache(ttl=None)
+    cache = MemoryCache(lifetimes={"/": None})
     client = AsyncClient(ClientConfig(source="example", version="1", base_url=BASE, cache=cache))
     miss = await client.get_answer("/v1/x")
     hit = await client.get_answer("/v1/x")
@@ -469,7 +466,7 @@ async def test_a_miss_is_retrieved_when_it_arrived_not_once_it_parsed(
             return value
 
     respx_mock.get(f"{BASE}/v1/regions").respond(200, json=[{"regionCode": "AF"}])
-    cache = MemoryCache(ttl=None)
+    cache = MemoryCache(lifetimes={"/": None})
     client = AsyncClient(ClientConfig(source="example", version="1", base_url=BASE, cache=cache))
     miss = await client.get_answer("/v1/regions", parse=list[SlowRegion], endpoint="regions")
     stored = cache.get(cache_key("GET", httpx.URL(f"{BASE}/v1/regions")))
@@ -487,14 +484,15 @@ async def test_get_answer_parses_its_payload_into_the_type_it_is_given(
     respx_mock.get(f"{BASE}/v1/regions").respond(
         200, json=[{"regionCode": "AF"}, {"regionCode": "EU"}]
     )
-    cache = MemoryCache(ttl=None)
+    cache = MemoryCache(lifetimes={"/": None})
     client = AsyncClient(ClientConfig(source="example", version="1", base_url=BASE, cache=cache))
     miss = await client.get_answer("/v1/regions", parse=list[Region], endpoint="regions")
     assert_type(miss, Answer[list[Region]])
     key = cache_key("GET", httpx.URL(f"{BASE}/v1/regions"))
     stored = cache.get(key)
     assert stored is not None
-    cache.set(key, dataclasses.replace(stored, stored_at=1_792_400_000.0))  # stored on 2026-10-19
+    stored_then = dataclasses.replace(stored, stored_at=1_792_400_000.0)  # on 2026-10-19
+    cache.set(key, stored_then, path="/v1/regions")
     hit = await client.get_answer("/v1/regions", parse=list[Region], endpoint="regions")
     stored_on = datetime(2026, 10, 19, 8, 53, 20, tzinfo=UTC)
     assert hit == Answer([Region(region_code="AF"), Region(region_code="EU")], stored_on)
@@ -520,7 +518,7 @@ async def test_a_cache_hit_carries_the_time_its_entry_was_stored(
 ) -> None:
     # sdk-usda-psd: a task stamped a hit with the current time as retrieved_at.
     respx_mock.get(f"{BASE}/v1/x").respond(200, json={"n": 1})
-    cache = MemoryCache(ttl=None)
+    cache = MemoryCache(lifetimes={"/": None})
     client = AsyncClient(ClientConfig(source="example", version="1", base_url=BASE, cache=cache))
     first = await client.get("/v1/x")
     assert "xippios_cache_stored_at" not in first.extensions
@@ -542,7 +540,7 @@ async def test_get_answer_is_retrieved_when_it_arrived_or_when_its_entry_was_sto
 ) -> None:
     # Queue row 39 a, sdk-usda-gats: its wrappers returned (records, stored_at) tuples.
     respx_mock.get(f"{BASE}/v1/x").respond(200, json={"n": 1})
-    cache = MemoryCache(ttl=None)
+    cache = MemoryCache(lifetimes={"/": None})
     client = AsyncClient(ClientConfig(source="example", version="1", base_url=BASE, cache=cache))
     before = datetime.now(UTC)
     miss = await client.get_answer("/v1/x")
@@ -551,7 +549,8 @@ async def test_get_answer_is_retrieved_when_it_arrived_or_when_its_entry_was_sto
     key = cache_key("GET", httpx.URL(f"{BASE}/v1/x"))
     stored = cache.get(key)
     assert stored is not None
-    cache.set(key, dataclasses.replace(stored, stored_at=1_792_400_000.0))  # stored on 2026-10-19
+    stored_then = dataclasses.replace(stored, stored_at=1_792_400_000.0)  # on 2026-10-19
+    cache.set(key, stored_then, path="/v1/x")
     hit = await client.get_answer("/v1/x")
     assert hit == Answer({"n": 1}, datetime(2026, 10, 19, 8, 53, 20, tzinfo=UTC))
 
@@ -582,42 +581,74 @@ async def test_gzip_answer_replays_from_the_cache(respx_mock: respx.MockRouter) 
     assert not names & {"content-encoding", "content-length"}
 
 
+# -- one reader of JSON, the cache by path prefix (https://github.com/xippios/sdk-core/issues/479)
+
+
+def test_get_answer_is_the_one_reader_of_json() -> None:
+    # get_json, delete_json and the public raise_on_error leave (sdk-core#473, part 2).
+    assert not hasattr(AsyncClient, "get_json")
+    assert not hasattr(AsyncClient, "delete_json")
+    assert "raise_on_error" not in inspect.signature(AsyncClient.request).parameters
+    assert "cache_filter" not in {field.name for field in dataclasses.fields(ClientConfig)}
+
+
 @pytest.mark.anyio
-async def test_cache_filter_limits_caching_to_chosen_requests(
+async def test_the_cache_keeps_the_paths_its_lifetimes_name_and_no_other(
     respx_mock: respx.MockRouter,
 ) -> None:
-    reference = respx_mock.get(f"{BASE}/v1/reference").respond(200, json={"codes": [1]})
+    reference = respx_mock.get(f"{BASE}/v1/reference/codes").respond(200, json={"codes": [1]})
     data = respx_mock.get(f"{BASE}/v1/data").respond(200, json={"rows": []})
-    respx_mock.post(f"{BASE}/v1/reference").respond(200, json={})
-    seen: list[httpx.Request] = []
-
-    def only_reference(request: httpx.Request) -> bool:
-        seen.append(request)
-        return request.url.path == "/v1/reference"
-
-    cache = MemoryCache()
-    config = ClientConfig(
-        source="example",
-        version="1",
-        base_url=BASE,
-        cache=cache,
-        cache_filter=only_reference,
-    )
-    client = AsyncClient(config)
+    live = respx_mock.get(f"{BASE}/v1/reference/live").respond(200, json={"now": 1})
+    respx_mock.post(f"{BASE}/v1/reference/codes").respond(200, json={})
+    cache = MemoryCache(lifetimes={"/v1/reference/": None, "/v1/reference/live": 0})
+    client = AsyncClient(ClientConfig(source="example", version="1", base_url=BASE, cache=cache))
     for _ in range(2):
-        await client.get_answer("/v1/reference", params={"lang": "en"})
+        await client.get_answer("/v1/reference/codes", params={"lang": "en"})
         await client.get_answer("/v1/data", params={"year": 2024})
+        await client.get_answer("/v1/reference/live")
     assert reference.call_count == 1
-    assert data.call_count == 2
-    assert len(cache) == 1  # the filtered-out GET was never stored
-    assert cache.get(cache_key("GET", httpx.URL(f"{BASE}/v1/data?year=2024"))) is None
-    hit = await client.get("/v1/reference", params={"lang": "en"})
-    assert hit.extensions["xippios_cache"] == "hit"
-    assert seen[0].url.params["lang"] == "en"
-    assert seen[1].url.params["year"] == "2024"
-    await client.request("POST", "/v1/reference", json={})  # never cached, filter not asked
-    assert all(request.method == "GET" for request in seen)
+    assert (data.call_count, live.call_count) == (2, 2), "no prefix, and a lifetime of 0"
     assert len(cache) == 1
+    assert cache.get(cache_key("GET", httpx.URL(f"{BASE}/v1/data?year=2024"))) is None
+    hit = await client.get("/v1/reference/codes", params={"lang": "en"})
+    assert hit.extensions["xippios_cache"] == "hit"
+    await client.request("POST", "/v1/reference/codes", json={})  # never cached
+    assert len(cache) == 1
+
+
+@pytest.mark.anyio
+async def test_a_prefix_is_matched_against_the_path_with_the_base_url_s_own(
+    respx_mock: respx.MockRouter,
+) -> None:
+    # The path of the URL sent, as the base URL and the call's path join to it.
+    route = respx_mock.get(f"{BASE}/v1/regions").respond(200, json=[])
+    cache = MemoryCache(lifetimes={"/v1/regions": 3600.0})
+    config = ClientConfig(source="example", version="1", base_url=f"{BASE}/v1", cache=cache)
+    client = AsyncClient(config)
+    await client.get_answer("/regions")
+    await client.get_answer("/regions")
+    assert route.call_count == 1
+
+
+@pytest.mark.anyio
+async def test_a_stored_answer_lives_as_long_as_its_path_s_lifetime(
+    respx_mock: respx.MockRouter,
+) -> None:
+    # The entry's stored_at is the client's clock; the cache's runs ahead by `later`.
+    later = [0.0]
+    regions = respx_mock.get(f"{BASE}/v1/regions").respond(200, json=[])
+    series = respx_mock.get(f"{BASE}/v1/series").respond(200, json=[])
+    cache = MemoryCache(
+        lifetimes={"/v1/regions": 86400.0, "/v1/series": 60.0},
+        clock=lambda: time.time() + later[0],
+    )
+    client = AsyncClient(ClientConfig(source="example", version="1", base_url=BASE, cache=cache))
+    await client.get_answer("/v1/regions")
+    await client.get_answer("/v1/series")
+    later[0] = 61.0
+    await client.get_answer("/v1/regions")
+    await client.get_answer("/v1/series")
+    assert (regions.call_count, series.call_count) == (1, 2)
 
 
 @pytest.mark.anyio
@@ -713,9 +744,7 @@ async def test_classify_sees_every_response_first(respx_mock: respx.MockRouter) 
         await client.get("/v1/big")
     with pytest.raises(NotFoundError, match="404"):
         await client.get("/v1/other")
-    assert (await client.get_json("/v1/ok")) == {"rows": 1}
-    raw = await client.request("GET", "/v1/empty", raise_on_error=False)
-    assert raw.status_code == 200
+    assert (await client.get_answer("/v1/ok")).payload == {"rows": 1}
 
 
 # -- classify shapes retries (ADR-0037) ---------------------------------------------------
@@ -768,7 +797,7 @@ async def test_the_retry_after_from_classify_sets_the_wait(
     )
     classify = CountingClassify({429: RateLimitError("slow down", retry_after=2.0)})
     client = AsyncClient(_classified(classify), sleep=sleeper)
-    assert await client.get_json("/v1/x") == {"n": 1}
+    assert (await client.get_answer("/v1/x")).payload == {"n": 1}
     assert route.call_count == 2
     assert sleeper.calls == [2.0]
 
@@ -856,14 +885,14 @@ async def test_classify_is_called_at_most_once_per_attempt(
 
 
 @pytest.mark.anyio
-async def test_a_raw_request_stops_retrying_and_returns_the_response(
+async def test_a_wait_from_classify_beyond_backoff_max_raises_after_one_attempt(
     respx_mock: respx.MockRouter, sleeper: Sleeper
 ) -> None:
     route = respx_mock.get(f"{BASE}/v1/x").respond(429)
     classify = CountingClassify({429: RateLimitError("quota spent", retry_after=3600.0)})
     client = AsyncClient(_classified(classify), sleep=sleeper)
-    response = await client.request("GET", "/v1/x", raise_on_error=False)
-    assert response.status_code == 429
+    with pytest.raises(RateLimitError, match="quota spent"):
+        await client.request("GET", "/v1/x")
     assert route.call_count == 1
     assert sleeper.calls == []
     assert classify.calls == [429]
@@ -880,10 +909,12 @@ async def test_auth_none_sends_a_keyed_client_s_request_without_the_key(
 ) -> None:
     # sdk-comtrade: the public reference files on the same host needed a second client.
     route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
-    client = AsyncClient(config, auth=KeyAuth(KEY_ENV, location="query", name="key"))
+    client = AsyncClient(
+        config, auth=KeyAuth(KEY_ENV, location="query", name="key", source="example")
+    )
     await client.get("/v1/x", params={"a": 1})
     await client.get("/v1/x", params={"a": 1}, auth=None)
-    await client.get_json("/v1/x", params={"a": 1}, auth=None)
+    await client.get_answer("/v1/x", params={"a": 1}, auth=None)
     await client.request("GET", "/v1/x", params={"a": 1}, auth=None)
     await client.get("/v1/x", params={"a": 1})
     assert sent_urls(route) == [
@@ -977,8 +1008,8 @@ async def test_the_client_s_auth_goes_to_the_base_url_s_origin_only(
     home = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
     client = AsyncClient(config, auth=KeyAuth(KEY_ENV, location="header", name="X-Api-Key"))
     await client.get(url)
-    await client.get_json(url)
-    await client.request("GET", url, raise_on_error=False)
+    await client.get_answer(url)
+    await client.request("GET", url)
     await client.get("/v1/x")
     await client.get("https://API.example.test/v1/x")  # the base URL's origin, spelt otherwise
     assert not any("x-api-key" in call.request.headers for call in elsewhere.calls)
@@ -992,8 +1023,10 @@ async def test_a_query_key_stays_off_a_link_to_another_host(
     respx_mock: respx.MockRouter, config: ClientConfig
 ) -> None:
     route = respx_mock.get("https://files.example.test/f.json").respond(200, json={})
-    client = AsyncClient(config, auth=KeyAuth(KEY_ENV, location="query", name="key"))
-    await client.get_json("https://files.example.test/f.json", params={"year": 2024})
+    client = AsyncClient(
+        config, auth=KeyAuth(KEY_ENV, location="query", name="key", source="example")
+    )
+    await client.get_answer("https://files.example.test/f.json", params={"year": 2024})
     assert sent_urls(route) == ["https://files.example.test/f.json?year=2024"]
 
 
@@ -1062,7 +1095,9 @@ async def test_every_request_tells_the_hooks_its_auth_and_its_origin(
 async def test_auth_none_and_the_default_share_the_cache(respx_mock: respx.MockRouter) -> None:
     route = respx_mock.get(f"{BASE}/v1/reference").respond(200, json={"codes": [1]})
     config = ClientConfig(source="example", version="1", base_url=BASE, cache=MemoryCache())
-    client = AsyncClient(config, auth=KeyAuth(KEY_ENV, location="query", name="key"))
+    client = AsyncClient(
+        config, auth=KeyAuth(KEY_ENV, location="query", name="key", source="example")
+    )
     await client.get_answer("/v1/reference", auth=None)
     hit = await client.get("/v1/reference")
     assert hit.extensions["xippios_cache"] == "hit"

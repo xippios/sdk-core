@@ -125,7 +125,7 @@ SOURCE: dict[str, str] = {
     "tests/test_family.py": "from xippios.core.testing.family import *  # noqa: F403\n",
 }
 
-FAMILY_TESTS = 18
+FAMILY_TESTS = 19
 
 
 def run_family(
@@ -149,6 +149,58 @@ def run_family(
 def test_a_conforming_source_passes_every_family_check(pytester: pytest.Pytester) -> None:
     result = run_family(pytester)
     result.assert_outcomes(passed=FAMILY_TESTS)
+
+
+KEYED_CLIENT = """from xippios.core.client import AsyncClient, ClientConfig, KeyAuth
+
+SOURCE = "example"
+BASE_URL = "https://api.example.org/v1"
+
+
+class Shared:
+    # Builds the key class with the slug it is given, as a publisher's gateway does.
+
+    def __init__(self, source: str) -> None:
+        self.auth = KeyAuth("EXAMPLE_SHARED", location="header", name="X-Api-Key", source=source)
+
+
+auth = KeyAuth("EXAMPLE_API_KEY", location="query", name="key", source=SOURCE)
+shared = Shared(SOURCE)
+config = ClientConfig(source=SOURCE, version="0.1.0", base_url=BASE_URL)
+client = AsyncClient(config, auth=shared.auth)
+"""
+
+ANOTHER_SLUG = """
+other = Shared("example-v2")
+elsewhere = AsyncClient(config, auth=KeyAuth("EXAMPLE_KEY", location="bearer", source="sibling"))
+stray = KeyAuth("EXAMPLE_STRAY_KEY", location="query", name="key", source="sibling-two")
+"""
+
+
+def test_a_key_class_that_names_another_slug_than_the_package_s_fails(
+    pytester: pytest.Pytester,
+) -> None:
+    # A key registered under one slug stays as sent in an envelope of another, so the check
+    # holds the key class a source's client uses to the package's own slug
+    # (https://github.com/xippios/sdk-core/issues/526).
+    no_key = run_family(pytester)
+    no_key.assert_outcomes(passed=FAMILY_TESTS)
+    own = run_family(pytester, {"src/xippios/example/_client.py": KEYED_CLIENT})
+    own.assert_outcomes(passed=FAMILY_TESTS)
+    mismatched = KEYED_CLIENT + ANOTHER_SLUG
+    result = run_family(pytester, {"src/xippios/example/_client.py": mismatched})
+    result.assert_outcomes(passed=FAMILY_TESTS - 1, failed=1)
+    result.stdout.fnmatch_lines(
+        [
+            "*test_family_key_class_names_the_package_s_own_slug*",
+            "*_client.py's key class must name the package's slug, 'example':*",
+            "*- elsewhere's auth names 'sibling'*",
+            "*- other.auth names 'example-v2'*",
+            "*- stray names 'sibling-two'*",
+        ]
+    )
+    for passing in ("- auth ", "- shared.auth", "- client's auth"):
+        assert passing not in result.stdout.str(), passing
 
 
 COUNTRIES = """
