@@ -998,6 +998,32 @@ def test_a_redirect_on_the_page_s_host_is_followed_and_counted(
     assert len(site.asked(f"{BASE}/loop.html")) == 11
 
 
+def test_a_3xx_without_a_redirect_location_is_the_page_s_own_answer(site: Site, out: Path) -> None:
+    """Finding 1 of the review of https://github.com/xippios/sdk-core/pull/536: only a 301,
+    302, 303, 307 or 308 with a ``Location`` is a redirect that the frame notes and may follow.
+    A 3xx without ``Location``, and a 300 or a 304 with one, is the page's final answer: it
+    stops the run as any other status that the page does not expect, or stands in ``Not
+    fetched`` where the page is recorded by it, and its ``Location`` is never asked."""
+    site.routes[f"{BASE}/bare"] = (302, {}, b"")
+    site.routes[f"{BASE}/choices"] = (300, {"Location": f"{BASE}/guide.html"}, b"")
+    site.routes[f"{BASE}/unchanged"] = (304, {"Location": f"{BASE}/guide.html"}, b"")
+    site.page("guide.html", "<p>Guide</p>")
+    for name, status in [("bare", 302), ("choices", 300), ("unchanged", 304)]:
+        stop = re.escape(f"GET {BASE}/{name}: HTTP {status} ")
+        with pytest.raises(SystemExit, match=stop):
+            go(declare(out, Page(f"{BASE}/{name}", "pages/page.html")))
+    snapshot = declare(
+        out,
+        Page(f"{BASE}/bare", status=302, note="a 302 without Location"),
+        Page(f"{BASE}/unchanged", status=304, note="a 304 that names a Location"),
+    )
+    assert go(snapshot) == 0
+    text = fetched(out)
+    assert f"| {BASE}/bare | 302 | - | a 302 without Location |" in text
+    assert f"| {BASE}/unchanged | 304 | - | a 304 that names a Location |" in text
+    assert not site.asked(f"{BASE}/guide.html"), "no Location of these is followed"
+
+
 def test_two_pages_never_write_one_file(site: Site, out: Path) -> None:
     """A file is one page's: two rows that would write one file stop the run before any
     write."""
@@ -1489,9 +1515,10 @@ def test_a_429_waits_as_the_client_says_then_retries_once(site: Site, out: Path)
     assert go(declare(out, page)) == 0
     assert site.sleeps == [0.0, 30.0], "the built client's policy honours Retry-After"
     assert len(site.asked(url)) == 2
-    assert "each retried at most once, a 429 after the wait the client gives it" in flat(
-        fetched(out)
-    )
+    assert (
+        "each retried at most once and no sooner than 10 s, a 429 after the wait the client "
+        "gives it where that is longer"
+    ) in flat(fetched(out))
 
     def own_header(response: httpx.Response) -> XippiosError | None:
         if response.status_code == 429:
@@ -1519,6 +1546,31 @@ def test_a_429_waits_as_the_client_says_then_retries_once(site: Site, out: Path)
     site.later[url] = [(429, {}, b""), (429, {}, b"")]
     with pytest.raises(SystemExit, match=r"429 .*\(after one retry\)"):
         go(declare(out, page))
+
+
+def test_a_retry_waits_no_less_than_the_retry_pause_or_the_snapshot_s_pause(
+    site: Site, out: Path
+) -> None:
+    """Finding 2 of the review of https://github.com/xippios/sdk-core/pull/536: the one retry
+    waits ``RETRY_PAUSE`` or the snapshot's pause, whichever is longer, so a 429 without
+    ``Retry-After``, whose wait the client built from the slug puts below a second, is retried
+    no sooner than a 5xx, and no retry comes sooner than the pause before every request; a
+    longer wait that the client gives a 429 stands, and FETCHED.md states the floor."""
+    url = site.page("data.html", "<p>Data</p>")
+    page = Page(url, "pages/data.html")
+    for refusal, pause, waits in [
+        ((429, {}, b""), 0.0, [0.0, 10.0]),
+        ((429, {"Retry-After": "12"}, b""), 0.0, [0.0, 12.0]),
+        ((429, {}, b""), 15.0, [15.0, 15.0]),
+        ((503, {}, b""), 15.0, [15.0, 15.0]),
+    ]:
+        site.sleeps.clear()
+        site.requests.clear()
+        site.later[url] = [refusal]
+        assert go(declare(out, page, pause=pause)) == 0
+        assert site.sleeps == waits, (refusal, pause)
+        assert len(site.asked(url)) == 2
+    assert "each retried at most once and no sooner than 15 s" in flat(fetched(out))
 
 
 def test_read_json_reads_a_document_that_dump_json_writes_again(site: Site, out: Path) -> None:
@@ -1799,7 +1851,7 @@ FORMS = {
     # pragma: allowlist nextline secret (a digest of the render, not a key)
     1: "4a19cba319af24e05fc71ebd50586fe9b9d891cf6beb661b0cee492bcf997cf7",
     # pragma: allowlist nextline secret (a digest of the render, not a key)
-    2: "734f94a0ca3b707ca6274a2064784c4558bf4c5f4b0c5397ce6262c5c690200c",
+    2: "ab0879899f581ebd2e96a6afbb9681d471ef3a31698e3f366edc4611e3cc047f",
 }
 """The digest of ``every_sentence_rendered`` for each form of FETCHED.md, by its number.
 
@@ -1809,7 +1861,9 @@ when a line feed in a cell came to be written as a space
 (https://github.com/xippios/sdk-core/issues/434). Core 0.4.1 wrote form 1; form 2 is the
 fetch through core's client, which names the client's User-Agent and leaves the clauses of a
 file kept as recorded and of a second origin (ADR-0062, decisions 4 to 6), so the render of
-form 1 no longer stands and its digest is the record of what 0.4.1 wrote."""
+form 1 no longer stands and its digest is the record of what 0.4.1 wrote. Form 2 took its
+digest again while unreleased, when it came to state the floor of the one retry (finding 2 of
+the review of https://github.com/xippios/sdk-core/pull/536)."""
 
 
 def test_a_change_of_what_the_frame_writes_raises_the_form() -> None:
