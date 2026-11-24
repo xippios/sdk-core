@@ -939,3 +939,18 @@ def test_the_readmes_short_script_runs_on_the_frame(
             exec(compile(script, "README.md", "exec"), {**namespace})
     assert "Declared by the package alone: regions." in str(exited.value), exited.value
     assert route.call_count == 0, "the package's own lists are checked before a request"
+
+
+def test_the_readmes_examples_are_written_as_the_renderer_writes_them() -> None:
+    """The README's section on the frame says that ``enums.py`` writes every character
+    outside ASCII as an escape: its example of an escaped value is the one ``ascii()``
+    writes, and its code, the member named by hand among it, is ASCII as the module is."""
+    readme = (ROOT / "README.md").read_text()
+    section = readme.split("## The reference refresh script's frame\n", 1)[1].split("\n## ", 1)[0]
+    value = "C" + chr(0xF4) + "te d" + chr(0x2019) + "Ivoire"
+    assert f"(`{value!a}`)" in section
+    blocks = section.split("```python\n")[1:]
+    assert len(blocks) == 3, len(blocks)
+    for block in blocks:
+        code = block.split("```\n", 1)[0]
+        assert code.isascii(), code
