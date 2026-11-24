@@ -1436,8 +1436,9 @@ which §12 bounds to one minor.
   appropriate.
 - Workflows are hardened (ADR-0039, decision 7). Every action is pinned to a
   commit SHA with its version in a comment, and bumped deliberately. Every checkout sets
-  `persist-credentials: false`, except in a job that pushes with the token (the release
-  train's `tag` job), which says so in a comment. Every workflow declares
+  `persist-credentials: false`, except in a job that pushes with the token, the release
+  train's `tag` job, which the README's paragraph on `publish.yml` names as the exception
+  (ADR-0039, decision 7, amendment 2026-11-24). Every workflow declares
   `permissions: contents: read` at the top, and a job adds only what it needs. No
   `secrets: inherit`: a secret is passed by name to the one job that uses it. The
   reusable workflows of the organization's repository `xippios/.github` are called at

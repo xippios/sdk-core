@@ -2105,6 +2105,56 @@ nor is a keyword passed through `**options`, nor a field of a dataclass that a c
 by position. The last lines tally the names and the parameters with no consumer, one, and two
 or more, each object once, and count the entries that repeat one.
 
+## Workflows
+
+`ci.yml` runs ruff, its format check, mypy and pytest on Python 3.12, 3.13 and 3.14, then
+pre-commit, secret detection among its hooks, whose ruff hooks run the version that `uv.lock`
+pins, kept in step by hand, so a hook that would change a file fails. Its job `ci` passes once
+the whole matrix passed and is the check that the organization's ruleset requires on `main`.
+It runs on every pull request and, called by `publish.yml`, once for a release, with no push
+trigger of its own, since the ruleset's up-to-date policy tests every tree before it merges.
+It is handed no secret, and no variable switches it off.
+
+`publish.yml` is the release train (conventions §12; ADR-0039, decision 6). Every push to
+`main` and a dispatch start it. Its job `release-check` reads a push that changed
+`pyproject.toml` or `CHANGELOG.md`, a first release's change of `CHANGELOG.md` alone included,
+counts a dispatch or a push whose range it cannot read as a changed `pyproject.toml`, and lets
+it through when the version that `pyproject.toml` names has no tag yet and `CHANGELOG.md` holds
+its `## [X.Y.Z] - ` heading; any other push ends there quietly, with a notice where
+`pyproject.toml` names a version without that heading. The run then calls `ci.yml`, tags the
+merge commit `vX.Y.Z` with the version's section as the tag's message, builds the package and,
+once a maintainer approves the run at the environment `pypi`, uploads it by trusted
+publishing. It is one workflow, since a tag pushed with the job's token starts no other, and
+PyPI's trusted publisher names its file. It is handed no secret: `release-check` reads the
+tags with the job's token, the job `tag` pushes the tag with that token from the one checkout
+that keeps its credentials (conventions §13), and PyPI trusts the workflow itself. No variable
+switches it off.
+
+A release run that fails is finished by its own jobs, never by a push. The tag comes before
+the build, so a build that fails for good leaves a tag without a release, which a patch
+release mends. Once the tag stands, only "Re-run failed jobs" finishes the release: a
+dispatch or "Re-run all jobs" stops at `release-check`, which finds the tag. Where the
+deployment-branch policy of `pypi` refuses `main` on the first run, a maintainer sets it to
+`main` and re-runs the failed jobs, and a `ci` that fails before the tag is re-run too. Runs
+are not serialised, and GitHub keeps one pending run of a group and cancels it for the next,
+so two pushes close together can both find a version untagged: the second run's push of the
+tag fails, or, where the first run's `ci` failed, the second tags a later commit. The failed
+jobs of the run whose commit is the release are then re-run, and where the other run tagged a
+later commit, the maintainer rejects its deployment and the release is made again as a patch.
+A release is therefore not merged while another release run waits at `pypi`.
+
+`conventions.yml` calls the organization's review of a pull request against the documents
+listed under Documents below, the check `conventions / conventions`, when a pull request
+opens, is pushed to, reopens or is edited, and on a push to `main` or a dispatch the review of
+the range of commits, `range / range`. It hands each the two secrets of the organization that
+the review reads, the model's key and a token that reads the documents, by name. A variable
+`WORKFLOW_CONVENTIONS` of `off`, the repository's over the organization's, switches both off.
+
+`adr-index.yml` calls the organization's check of the ADR index, `adr-index / adr-index`,
+which runs `scripts/adr_index.py --check`, when a pull request opens, is pushed to or
+reopens. It hands over nothing, and the called workflow reads its switch itself: a variable
+`WORKFLOW_ADR_INDEX` of `off`, the repository's over the organization's, skips the check.
+
 ## Documents
 
 - sdk-core: [docs/conventions.md](https://github.com/xippios/sdk-core/blob/main/docs/conventions.md) — the rules of the family, which this package implements and every `sdk-*` repository follows; a change to one comes with an ADR.

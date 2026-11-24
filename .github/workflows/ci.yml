@@ -1,8 +1,3 @@
-# The org ruleset requires a check named `ci` on main. The matrix job is `test`;
-# the single `ci` job below aggregates it so the required check has one name.
-# Pull requests run it directly; a push to main runs it only through publish.yml, once,
-# for a release (the release train, conventions §12). It has no push trigger of its own and
-# gets none back: the strict up-to-date policy tests every tree before it merges.
 name: CI
 
 on:
@@ -33,9 +28,6 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run mypy
       - run: uv run pytest
-      # The definition of done's CI block includes pre-commit (secret detection). Its ruff
-      # hooks run the version uv.lock pins (keep their rev in step), so where the two ruff
-      # steps above passed they change nothing; a hook that would change a file fails.
       - name: Cache pre-commit hook environments
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
