@@ -182,3 +182,8 @@ several names no variable and raises no error, and a package installed beside it
 shared package in its environment say, is not read, while no ini option comes back, the family
 check still tests the one package with a `tasks.py`, and the rest of the first amendment stands
 as written.
+
+Decision 8 lists what the family check tested when it was decided; the tests that later
+records added stand in the docstring of `xippios.core.testing.family`, each with its record:
+ADR-0036, decision 13, ADR-0040, decision 6, ADR-0044, ADR-0055, ADR-0060, ADR-0061,
+decision 3, ADR-0063, decisions 8 and 9, and ADR-0067.

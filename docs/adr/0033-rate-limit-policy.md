@@ -57,7 +57,8 @@ Decided 2026-10-23 for every package.
    window its fallback. `QuotaPolicy` tracks one window per client (ADR-0037, decision 2)
    and is not used for per-endpoint windows, so decision 4's refusal before a spent window
    waits for a policy keyed per endpoint; until then a spent window costs one 429. Johannes
-   decided the per-endpoint windows on 2026-10-29 (ADR-0027, decision 2).
+   decided the per-endpoint windows on 2026-10-29 (decision 2 of sdk-x's first record,
+   https://github.com/xippios/sdk-x/blob/main/docs/adr/0001-x-metered-content-source.md).
 3. **The answer to a spent limit.** The client interprets the upstream's 429, and any other
    answer the source documents for a spent limit (Comtrade's 403), in
    `ClientConfig.classify`: a `RateLimitError` whose `retry_after` comes from `Retry-After`

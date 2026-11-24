@@ -13,7 +13,6 @@ records in `docs/adr/`. A record changes, and this file follows when the script 
 - <a id="0021"></a>[ADR-0021](adr/0021-dependencies-between-source-packages.md): Dependencies between source packages · Accepted · 2026-10-26 · amended 2026-11-24
 - <a id="0025"></a>[ADR-0025](adr/0025-google-mail.md): Google Mail — loopback, the renewing bearer, scopes, the kit's return and the decoded view · Accepted · 2026-10-29 · amended 2026-11-24
 - <a id="0026"></a>[ADR-0026](adr/0026-the-host-xippios-mcp.md): The host xippios-mcp · Accepted · 2026-10-29 · amended 2026-11-24
-- <a id="0027"></a>[ADR-0027](adr/0027-x-metered-content-source.md): X as a metered, content-bearing source · Accepted · 2026-10-30
 - <a id="0028"></a>[ADR-0028](adr/0028-upstream-fidelity.md): Upstream fidelity — no cross-source normalization in SDK packages · Accepted · 2026-11-18 · amended 2026-11-24
 - <a id="0029"></a>[ADR-0029](adr/0029-core-layout-and-mcp-sdk.md): Core internal layout, dependency direction and MCP SDK choice · Accepted · 2026-11-18
 - <a id="0030"></a>[ADR-0030](adr/0030-no-credentials-in-envelope.md): Credentials never enter the result envelope; core is exempt from the upstream snapshot · Accepted · 2026-11-18

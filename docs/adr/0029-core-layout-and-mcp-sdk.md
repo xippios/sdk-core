@@ -54,3 +54,10 @@ ADR-0004.
 - `py.typed` ships in the package; without it `mypy --strict` fails in every consumer.
 
 Core's `CLAUDE.md` states its decisions in its layout and its rules of the tree.
+
+Decisions 1, 2 and 4 name the tree as it stood when they were decided, and later records
+added to it: the module `contract` at the bottom (ADR-0026, amendment 2026-11-18, point c),
+the modules `series` and `tenants` above it, beside `client` (ADR-0054, decision 1;
+ADR-0036, decision 1), and the subpackage `refresh` on top, beside the adapters, whose
+`__init__` is the sixth public list (ADR-0062, decision 1), while `ResultCap` is exported
+from `xippios.core` alone (https://github.com/xippios/sdk-core/issues/475, part 7).

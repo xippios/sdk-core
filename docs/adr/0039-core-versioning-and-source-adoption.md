@@ -1,8 +1,9 @@
 # ADR-0039: Core versioning and source adoption
 
 Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under
-https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0018 · Amended 2026-11-24
-by https://github.com/xippios/sdk-core/issues/484
+https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0018 ·
+Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/484 ·
+Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/494
 
 ## Context
 
@@ -133,3 +134,10 @@ a source frozen on a template tag, leaves conventions §15, since no source stan
 tag and the conventions keep no history, and the adoption's items stand once, in §15, where the
 definition of done's Adoption PR block and the review checklist point without mirroring the
 list, while the rest of decision 2 stands as written.
+
+Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/494: in decision 7 the
+checkout of the `tag` job of `publish.yml`, which keeps its credentials to push the tag with
+the token, carries no comment that says so, since a workflow carries no comment but the
+version after a pinned action (https://github.com/xippios/.github/issues/111), and the
+README's paragraph on `publish.yml` names the exception in its place, while the rest of
+decision 7, the other decisions and the amendment above stand as written.
