@@ -16,7 +16,7 @@ from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Optional
 
 import pytest
 from fastapi import FastAPI
@@ -764,11 +764,26 @@ class Unnamed(UpstreamModel):
     self_code: Annotated[str, NamedBy("self_code")]
     item: str
     unit: int
+    items: list[Annotated[str, NamedBy(REGIONS)]]
+    either: Annotated[str, NamedBy(REGIONS)] | Annotated[int, NamedBy(UNITS)]
+    again: Annotated[Annotated[str, NamedBy(REGIONS)] | None, NamedBy(REGIONS)]
 
 
 def test_a_mark_that_cannot_name_is_refused_when_an_answer_holds_its_record() -> None:
+    # A mark on a list's items or in a union of codes is no mark of the field: a Result would
+    # read nothing of it, so it is refused (https://github.com/xippios/sdk-core/pull/537,
+    # finding 1).
     record = Unnamed.model_construct(
-        item_code=1, twice="R1", unit_code=2, region=row(), self_code="x", item="i", unit=3
+        item_code=1,
+        twice="R1",
+        unit_code=2,
+        region=row(),
+        self_code="x",
+        item="i",
+        unit=3,
+        items=["R1"],
+        either="R1",
+        again="R1",
     )
     with pytest.raises(TypeError) as refused:
         Result[Unnamed](data=record, meta=ResultMeta(source="example", endpoint="u"))
@@ -778,6 +793,72 @@ def test_a_mark_that_cannot_name_is_refused_when_an_answer_holds_its_record() ->
         "Unnamed.unit_code is named by unit, which holds int, not text; "
         "Unnamed.region holds Row, no code: NamedBy marks a field of text or integer codes, one "
         "or a list of them; "
-        "Unnamed.self_code is named by self_code, which is no other field of the model "
+        "Unnamed.self_code is named by self_code, which is no other field of the model; "
+        "Unnamed.items carries NamedBy inside its type, where no answer reads it: mark the "
+        "field, Annotated[str | None, NamedBy(...)] or Annotated[str, NamedBy(...)] | None; "
+        "Unnamed.either carries NamedBy inside its type, where no answer reads it: mark the "
+        "field, Annotated[str | None, NamedBy(...)] or Annotated[str, NamedBy(...)] | None; "
+        "Unnamed.again is marked by NamedBy twice; keep one "
         "(conventions §4, ADR-0067, decision 6)"
     )
+
+
+class Optionally(UpstreamModel):
+    inner: Annotated[str | None, NamedBy(REGIONS)] = None
+    outer: Annotated[str, NamedBy(REGIONS)] | None = None
+    typed: Optional[Annotated[str, NamedBy(REGIONS)]] = None  # noqa: UP045
+    item_code: Annotated[int, NamedBy("item")] | None = None
+    item: str | None = None
+
+
+def test_an_optional_code_reads_its_mark_inside_or_outside_none() -> None:
+    # The plain spelling of an optional code is Annotated[...] | None (finding 1 of
+    # https://github.com/xippios/sdk-core/pull/537): the mark reads in all three forms.
+    record = Optionally(inner="R1", outer="R2", typed="R3", item_code=4, item="Wheat")
+    result = Result[Optionally](data=record, meta=ResultMeta(source="example", endpoint="o"))
+    assert result.meta.names == {
+        "inner": {"R1": "North"},
+        "outer": {"R2": "South"},
+        "typed": {"R3": "East"},
+    }
+    empty = Result[Optionally](data=Optionally(), meta=ResultMeta(source="example", endpoint="o"))
+    assert empty.meta.names == {}
+
+
+OTHERS = declared(
+    "others",
+    "otherCode",
+    "otherName",
+    [{"otherCode": "O1", "otherName": "Other one"}, {"otherCode": "R2", "otherName": "Other two"}],
+)
+
+
+class First(UpstreamModel):
+    code: Annotated[str, NamedBy(REGIONS)]
+
+
+class Second(UpstreamModel):
+    code: Annotated[str, NamedBy(OTHERS)]
+
+
+class Both(BaseModel):
+    first: list[First]
+    second: list[Second]
+
+
+def test_two_lists_of_one_field_name_note_each_its_own_gaps_and_no_code_named() -> None:
+    # Two models of one answer mark a field of one name with two lists (finding 2 of
+    # https://github.com/xippios/sdk-core/pull/537): a code that one list names is no gap, and
+    # each list's gaps are noted under its own name.
+    both = Both(
+        first=[First(code="R1"), First(code="R9")],
+        second=[Second(code="O1"), Second(code="R1"), Second(code="R9"), Second(code="R8")],
+    )
+    result = Result[Both](data=both, meta=ResultMeta(source="example", endpoint="b"))
+    assert result.meta.names == {"code": {"R1": "North", "O1": "Other one"}}
+    assert result.meta.notes == [
+        "The packaged regions list (fetched 2026-10-23) holds no name for code R9 of this "
+        "answer, so meta.names leaves it out.",
+        "The packaged others list (fetched 2026-10-23) holds no name for code R9 or R8 of this "
+        "answer, so meta.names leaves them out.",
+    ]

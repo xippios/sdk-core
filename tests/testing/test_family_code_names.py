@@ -42,6 +42,7 @@ class Row(UpstreamModel):
     item: str
     unit_ids: Annotated[list[int], NamedBy("unit")] = []
     unit: str | None = None
+    partner_code: Annotated[str, NamedBy(REGIONS)] | None = None
 
 
 class Report(BaseModel):
@@ -76,6 +77,7 @@ class Wrong(UpstreamModel):
     unit: int
     row: Annotated[Row, NamedBy(REGIONS)]
     region: str
+    regions: list[Annotated[str, NamedBy(REGIONS)]]
 
 
 def get_wrong() -> Result[Wrong]:
@@ -162,6 +164,8 @@ def test_each_mark_that_cannot_name_fails_naming_its_model_and_field(
         "- Wrong.unit_code is named by unit, which holds int, not text",
         "- Wrong.row holds Row, no code: NamedBy marks a field of text or integer codes, one or a "
         "list of them",
+        "- Wrong.regions carries NamedBy inside its type, where no answer reads it: mark the "
+        "field, Annotated[str | None, NamedBy(...)] or Annotated[str, NamedBy(...)] | None",
     ]
 
 
