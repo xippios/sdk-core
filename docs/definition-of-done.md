@@ -22,8 +22,8 @@ written for a source and do not apply, and its adoption PR meets the items of co
 - [ ] every new task function returns `Result[T]` with full `ResultMeta`
 - [ ] every new endpoint wrapper matches `docs/upstream/` — names, parameters, semantics
 - [ ] errors raised are from the taxonomy in `docs/conventions.md` §5
-- [ ] public surface changes are reflected in `__init__.py` exports and the README status table
-- [ ] a core PR names the two consumers of each piece it adds that a caller can name, a source or the host each by the code it runs (in its ADR, or in its description when it has none), or, in its ADR, the part of the family's contract that a piece with one consumer serves: the envelope, the error taxonomy, the package contract with the host, the family check or one of the three security properties (ADR-0059, decisions 1, 2 and 4)
+- [ ] public surface changes are reflected in the `__init__.py` exports, and in a source's README status table (conventions §13) or, in core, whose README keeps none, in the release's statement of the surface, the run-time part and the workbench counted apart by `scripts/count_surface.py` (ADR-0068, decision 6)
+- [ ] a core PR names the two consumers of each piece it adds that a caller can name, a source or the host each by the code it runs (in its ADR, or in its description when it has none), or, in its ADR, the part of the family's contract that a piece with one consumer serves: the envelope, the error taxonomy, the package contract with the host, the family check or one of the three security properties (ADR-0059, decisions 1, 2 and 4), or, in its ADR, for a piece that a maintainer's answer adds and decided with fewer than two consumers, that answer and the piece's one consumer or none, which the release's statement of the surface names too (ADR-0059, amendment 2026-11-24)
 
 ## Tests
 - [ ] each new task function has a fixture-backed unit test (`tests/fixtures/...` recorded, not hand-written)

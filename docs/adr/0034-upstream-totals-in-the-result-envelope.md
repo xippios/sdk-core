@@ -68,6 +68,6 @@ which sends no request at or past upstream's count and returns nothing where it 
 than its bound, the most requests that a call spends by ADR-0061, decision 8, refusing with
 `InvalidRequestError` once the count shows it or at the bound where a stop rule runs, while its
 stop rule has one consumer, sdk-usda-esmis, whose walks of its release lists stop at a date, and
-its key, which drops an item that a later page repeats, has no consumer yet, both built since
-nothing leaves by the count alone (ADR-0059, decision 6), and the rest of decision 2 stands as
-written.
+its key, which drops an item that a later page repeats, has no consumer yet, both entering with
+fewer than two consumers since the answer on that issue decided them (ADR-0059, amendment
+2026-11-24), and the rest of decision 2 stands as written.

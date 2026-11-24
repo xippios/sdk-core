@@ -162,7 +162,9 @@ sdk-eurostat, sdk-faostat, sdk-usda-gats and sdk-usda-nass, beside `cache_max_by
 one answer, which stays; in decision 1 `download` takes `params` and `headers` as its siblings take
 them, the first for sdk-cashctrl and sdk-eurostat, which write a download's query into its URL by
 hand (`src/xippios/cashctrl/api/_download.py`, `src/xippios/eurostat/api/sdmx.py`), and the second
-with no caller yet; and in decision 6 the registries of credential names and of data names are kept
+with no consumer, entering with fewer than two consumers since the answer on
+https://github.com/xippios/sdk-core/issues/555 decided it (ADR-0059, amendment 2026-11-24); and in
+decision 6 the registries of credential names and of data names are kept
 for each source, by part 4 of the answer on https://github.com/xippios/sdk-core/issues/485, so that
 a query `KeyAuth` registers its name for the `source` that it then must name, as sdk-usda-nass's
 key does for `key`, `register_data_name` takes the source too, as sdk-x's two declarations do,
