@@ -106,9 +106,9 @@ def statuses_before(response: httpx.Response) -> list[httpx.Response]:
 
     An auth's flow leaves them there: a ``RenewingBearerAuth``'s token answers and the answer
     that refused its bearer before the resend. An answer that the client rebuilds keeps them
-    so, and a refresh frame counts one request for each (ADR-0062, decisions 4 and 14), with
-    no body, header or request, so neither a bearer nor a credential of the token request
-    stays with the answer.
+    so, as httpx's own answer holds them, so a caller still sees one status for each request
+    the call sent, with no body, header or request, so neither a bearer nor a credential of
+    the token request stays with the answer.
     """
     return [httpx.Response(earlier.status_code) for earlier in response.history]
 

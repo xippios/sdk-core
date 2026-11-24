@@ -610,7 +610,19 @@ class _Capture:
         self.snapshot = snapshot
         self.client = client
         self.keyless = keyless
-        self.sent = 0
+        self._before = client._sent
+
+    @property
+    def sent(self) -> int:
+        """The requests the client sent since the capture began.
+
+        The client counts each request it hands to its transport (``AsyncClient._sent``):
+        one that fails in transit, where it may have reached upstream, and each request of a
+        renewing auth's flow, its token requests and its resend after a refused bearer, those
+        of a call that an error ends among them, a refused login's included (ADR-0062,
+        decision 4; ADR-0025).
+        """
+        return self.client._sent - self._before
 
     def _send(self, url: str, keyed: bool) -> httpx.Response:
         """One GET through the client on core's loop, its answer whatever its status.
@@ -619,36 +631,21 @@ class _Capture:
         status, as the recorder's is (ADR-0066, decision 4): the client's limiter, its hooks,
         its headers and, for a keyed sample alone, its credentials apply. A renewing auth
         sends its token request before a keyed sample and, after a refused bearer, a second
-        one and the sample once more: the answer's ``history`` keeps one status for each, so
-        the GET counts one request and one per status there (ADR-0062, decision 4; ADR-0025).
-        A request is counted once it answers or fails in transit, where it may have reached
-        upstream; a token request whose answer the auth refuses ends the call with its error,
-        uncounted, and stops the run.
+        one and the sample once more, which the client counts as it sends them (``sent``).
         """
-        try:
-            if keyed:
-                answer = _run_coroutine(self.client._send_once("GET", url))
-            else:
-                answer = _run_coroutine(self.client._send_once("GET", url, auth=None))
-        except TransportError:
-            self.sent += 1
-            raise
-        self.sent += 1 + len(answer.history)
-        return answer
+        if keyed:
+            return _run_coroutine(self.client._send_once("GET", url))
+        return _run_coroutine(self.client._send_once("GET", url, auth=None))
 
     def report(self) -> str:
         """The requests sent, one line, which names an auth's own where the client logs in.
 
-        The run prints it last, a failed run's too, so where the client's auth is a
-        ``RenewingBearerAuth`` it says that a refused login, whose error stops the run with
-        no answer to count, is not counted.
+        The run prints it last, a failed run's too, so a refused login, which stops the run,
+        stands in it with the requests before it.
         """
         line = f"{self.sent} requests sent, each redirect and retry counted"
         if _logs_in(self.client):
-            line += (
-                ", and each token request and resend of the client's auth, a refused login "
-                "not counted"
-            )
+            line += ", and each token request and resend of the client's auth"
         return line
 
     def _get(self, url: str, expect: tuple[int, ...], keyed: bool) -> Response:
@@ -1517,7 +1514,7 @@ def run(snapshot: Snapshot, argv: Sequence[str] | None = None) -> int:
     none, needs no variable and writes nothing. Every request goes through the snapshot's
     client, or one built from its slug, which the run closes once it compared or wrote. The
     run prints the requests it sent as its last line, a failed run's too once it began to
-    fetch, each token request and resend of a renewing auth counted and a refused login not
+    fetch, each token request and resend of a renewing auth counted, a refused login's too
     (ADR-0062, decisions 4 and 14).
 
     Args:

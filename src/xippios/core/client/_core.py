@@ -158,6 +158,10 @@ class AsyncClient:
             weakref.WeakKeyDictionary()
         )
         self._lock = threading.Lock()
+        self._sent = 0
+        """The requests handed to the transport, across every pool, each request of an auth's
+        flow among them, a token request and a resend: what the refresh frames count, a call
+        that an error ends included (https://github.com/xippios/sdk-core/pull/580)."""
 
     @property
     def source(self) -> str:
@@ -175,9 +179,15 @@ class AsyncClient:
                     timeout=httpx.Timeout(_TIMEOUT, read=self.config.read_timeout),
                     auth=self._auth,
                     transport=self._transport,
+                    event_hooks={"request": [self._count]},
                 )
                 self._pools[loop] = pool
             return pool
+
+    async def _count(self, request: httpx.Request) -> None:
+        """One more request sent: the pool's request hook, run as each goes to the transport."""
+        with self._lock:
+            self._sent += 1
 
     def _reach(self, auth: "httpx.Auth | _ClientAuth | None") -> _Reach:
         """Where a call with ``auth`` sends credentials (``_Reach``)."""

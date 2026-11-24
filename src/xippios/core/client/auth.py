@@ -257,10 +257,10 @@ class RenewingBearerAuth(httpx.Auth):
     ``history`` for as long as that response lives: a caller that keeps a response of
     ``request`` or ``get`` keeps the bearer with it, while ``get_answer``, ``post_json`` and
     the cache keep no response, and the recorder's ``send_once`` and a download's refusal
-    keep that history as statuses alone. The two refresh frames count one request for each
-    answer in it, so a run's count holds each exchange and resend, and not a token request
-    whose answer the flow refused (ADR-0062, decisions 4 and 14). The client sends its auth
-    to the base URL's origin only (ADR-0037, decision 4).
+    keep that history as statuses alone. The client counts each request that the flow hands
+    to its transport, so the two refresh frames count each exchange and resend, those of a
+    call that an error ends and a refused one's among them (ADR-0062, decisions 4 and 14).
+    The client sends its auth to the base URL's origin only (ADR-0037, decision 4).
 
     The bearer is kept as a ``SecretStr``, and a credential is read when the token request
     is built and kept nowhere, unless it is given to the constructor. It runs on an async
