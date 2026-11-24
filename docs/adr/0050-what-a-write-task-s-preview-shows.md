@@ -1,6 +1,6 @@
 # ADR-0050: What a write task's preview shows
 
-Status: Accepted · Date: 2026-11-21 · Decided by https://github.com/xippios/sdk-core/issues/369
+Status: Accepted · Date: 2026-11-21 · Decided by https://github.com/xippios/sdk-core/issues/369 · Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/475
 
 ## Context
 
@@ -86,3 +86,14 @@ Two sources consume it, sdk-cashctrl and sdk-google-mail (ADR-0023, decision 3).
   a preview's read and its cost stays the review's (review checklist, item 18).
 - A request that no route of the test answers fails the dry run's call with `respx`'s own error,
   which names the request, before the check judges it.
+
+Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/475: in decision 4
+`assert_write_tools` holds the field in every call and `preview_reads` leaves, which no source
+passed, so that a source declares `reads` on its preview from its adoption of core 0.5.0,
+sdk-cashctrl on `WritePreview` and sdk-google-mail on `ComposePreview` and `ActionPreview`, where
+neither had declared it, by part 7 of the answer; the check of `confirm: bool = False` that
+`assert_write_tools` ran a second time leaves too, since a write tool set refuses such a task when
+it is built (ADR-0063, decision 3), while the check that `confirm` is a write task's last parameter
+stays (ADR-0042, decision 1); and in the first consequence a source's patch passes no
+`preview_reads=True`, while decisions 1 to 3 and 5 to 7, the rest of decision 4 and the other
+consequences stand as written.

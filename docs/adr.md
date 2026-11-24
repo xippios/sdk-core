@@ -34,7 +34,7 @@ records in `docs/adr/`. A record changes, and this file follows when the script 
 - <a id="0045"></a>[ADR-0045](adr/0045-one-check-of-an-argument-against-a-packaged-list.md): One check of an argument against a packaged list · Accepted · 2026-11-21 · amended 2026-11-22
 - <a id="0047"></a>[ADR-0047](adr/0047-the-adapter-s-offset-for-the-rest-of-a-cut-answer.md): The adapter's offset for the rest of a cut answer · Accepted · 2026-11-21 · amended 2026-11-24
 - <a id="0048"></a>[ADR-0048](adr/0048-core-s-recorder-frame-around-a-source-s-rewrite-step.md): Core's recorder frame around a source's rewrite step · Accepted · 2026-11-21 · amended 2026-11-22
-- <a id="0050"></a>[ADR-0050](adr/0050-what-a-write-task-s-preview-shows.md): What a write task's preview shows · Accepted · 2026-11-21
+- <a id="0050"></a>[ADR-0050](adr/0050-what-a-write-task-s-preview-shows.md): What a write task's preview shows · Accepted · 2026-11-21 · amended 2026-11-24
 - <a id="0052"></a>[ADR-0052](adr/0052-one-filter-for-a-vintage-taken-back.md): One filter for a vintage taken back · Accepted · 2026-11-21 · amended 2026-11-24
 - <a id="0053"></a>[ADR-0053](adr/0053-one-count-before-a-query-over-upstream-s-limit.md): One count before a query over upstream's limit · Accepted · 2026-11-22 · amended 2026-11-22
 - <a id="0054"></a>[ADR-0054](adr/0054-one-helper-for-a-series-over-periods.md): One helper for a series over periods · Accepted · 2026-11-22 · amended 2026-11-22
