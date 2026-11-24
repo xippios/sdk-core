@@ -49,7 +49,7 @@ from xippios.core.models import (
     parse,
     parse_decimal,
 )
-from xippios.core.pagination import collect, fetch_counted, paginate_offset
+from xippios.core.pagination import fetch_counted, fetch_pages
 from xippios.core.redaction import REDACTED
 from xippios.core.reference import (
     PackagedCodes,
@@ -101,9 +101,9 @@ __all__ = [
     "__version__",
     "bind_tasks",
     "closest",
-    "collect",
     "error_from_response",
     "fetch_counted",
+    "fetch_pages",
     "fetch_periods",
     "list_task",
     "load_json",
@@ -111,7 +111,6 @@ __all__ = [
     "names_codes",
     "nearest",
     "newer_than",
-    "paginate_offset",
     "parse",
     "parse_decimal",
     "parse_retry_after",

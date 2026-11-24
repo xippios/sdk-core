@@ -1,6 +1,6 @@
 # ADR-0034: Upstream totals in the result envelope
 
-Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0012 · Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/474
+Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0012 · Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/474 · Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/480
 
 ## Context
 
@@ -60,3 +60,13 @@ Amended by ADR-0060, decision 8 (https://github.com/xippios/sdk-core/issues/474)
 `total`, never computed, is not summed either, so a task that assembles its answer from several
 requests, as a split by year does, leaves `total` `None` unless upstream counts the whole
 request, while decisions 1 to 3 stand as written.
+
+Amended by https://github.com/xippios/sdk-core/issues/480: decision 2's paginator,
+`paginate_offset` with `collect`, gives way to `fetch_pages`, core's one walk of offset pages,
+which sends no request at or past upstream's count and returns nothing where it needs more pages
+than its bound, the most requests that a call spends by ADR-0061, decision 8, refusing with
+`InvalidRequestError` once the count shows it or at the bound where a stop rule runs, while its
+stop rule has one consumer, sdk-usda-esmis, whose walks of its release lists stop at a date, and
+its key, which drops an item that a later page repeats, has no consumer yet, both built since
+nothing leaves by the count alone (ADR-0059, decision 6), and the rest of decision 2 stands as
+written.

@@ -1,74 +1,148 @@
-"""The helpers of a fetch that task functions compose: offset paging and a count first.
+"""The helpers of a fetch that task functions compose: one walk of pages and a count first.
 
-``paginate_offset`` is an async generator over the items of an offset-paginated endpoint, a
-page-numbered one included, and ``fetch_counted`` counts a query's records before it fetches
-them, so a query over upstream's limit is refused before its data request (ADR-0053). Task
-functions drive them and build the ``Result`` themselves; the sync facade comes from
+``fetch_pages`` collects the items of an offset-paginated endpoint, a page-numbered one
+included, and refuses once it needs more pages than its bound (ADR-0034, amendment
+2026-11-24), and ``fetch_counted`` counts a query's records before it fetches them, so a
+query over upstream's limit is refused before its data request (ADR-0053). Task functions
+drive them and build the ``Result`` themselves; the sync facade comes from
 ``xippios.core.sync``.
 """
 
-from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable, Sequence
+import math
+from collections.abc import Awaitable, Callable, Hashable, Sequence
 
-from xippios.core.errors import QueryTooLarge
+from xippios.core.errors import InvalidRequestError, QueryTooLarge
 
-__all__ = ["collect", "fetch_counted", "paginate_offset"]
+__all__ = ["fetch_counted", "fetch_pages"]
 
 
-async def paginate_offset[T](
-    fetch: Callable[[int], Awaitable[Sequence[T]]],
+async def fetch_pages[T](
+    fetch: Callable[[int], Awaitable[tuple[Sequence[T], int | None]]],
     *,
     page_size: int,
+    most: int,
+    paging: str,
     start: int = 0,
-    max_items: int | None = None,
-) -> AsyncIterator[T]:
-    """Yield items from an offset-paginated endpoint until a short page arrives.
+    stop: Callable[[Sequence[T]], bool] | None = None,
+    key: Callable[[T], Hashable] | None = None,
+    source: str | None = None,
+) -> tuple[list[T], int | None]:
+    """Collect every page of an offset-paginated list, or refuse past the bound with nothing.
 
-    A page-numbered endpoint maps the offset to its page inside ``fetch``: the offset
-    advances by a full page until the short last one, so the page is
-    ``first_page + offset // page_size``::
+    ``fetch(offset)`` sends the request of one page and answers the page's items with
+    upstream's count of the records matching the request, ``None`` where upstream sends no
+    count. The walk starts at ``start``, advances by the items each page held, and ends on a
+    page shorter than ``page_size``, before any request at or past upstream's count, or after
+    the page that ``stop`` marks. A page-numbered endpoint maps the offset to its page inside
+    ``fetch``, the page being ``first_page + offset // page_size``::
 
-        async def fetch(offset: int) -> list[Row]:
-            page = 1 + offset // PAGE_SIZE  # pages 1, 2, 3, ...
-            return await list_rows(page=page, per_page=PAGE_SIZE)
+        async def fetch(offset: int) -> tuple[list[Region], int | None]:
+            answer = await api.list_regions(page=offset // PAGE_SIZE, per_page=PAGE_SIZE)
+            return answer.data, answer.total  # pages 0, 1, 2, ... and upstream's count
 
-        rows = await collect(paginate_offset(fetch, page_size=PAGE_SIZE))
+        regions, total = await fetch_pages(fetch, page_size=PAGE_SIZE, most=24, paging="page")
+
+    ``most`` is the bound: the most pages, so the most requests, that one call fetches, which
+    the task states as the most requests one call spends (ADR-0061, decision 8). The client
+    tries each request up to ``RetryPolicy.max_attempts`` times, so with retries counted one
+    call spends at most ``most`` times that, 96 attempts for 24 pages at the default of 4.
+    Without ``stop``, the walk refuses as soon as upstream's count shows that the pages from
+    ``start`` are more than ``most``, after the first page; with ``stop``, or without a
+    count, it refuses where it has fetched ``most`` pages and needs another. It then raises
+    ``InvalidRequestError`` and returns nothing, and the message names the bound, upstream's
+    count with its total of pages, the page the walk reached, counted from 1 in upstream's
+    whole list, the requests it sent and ``paging``, the task's argument that fetches one
+    page::
+
+        the walk needs more than the 24 pages that one call fetches: upstream counts 703
+        records on 29 pages of 25, and the walk reached page 1 of 29 after 1 request. It
+        returns nothing; pass page to fetch one page at a time.
+
+    ``stop`` has one consumer, the source that ADR-0034's amendment of 2026-11-24 names, and
+    ``key`` none yet; both are built, since nothing leaves by the count alone (ADR-0059,
+    decision 6).
 
     Args:
-        fetch: Async function taking the offset and returning one page of items.
-        page_size: Items requested per page, e.g. ``100``; a page shorter than this ends
-            iteration.
-        start: First offset, usually 0.
-        max_items: Stop after this many items, e.g. ``500``; ``None`` yields everything.
+        fetch: Async function taking the offset and returning one page's items with
+            upstream's count, e.g. ``(answer.data, answer.total)``.
+        page_size: Items requested per page, e.g. ``100``; a shorter page ends the walk.
+        most: The most pages that one call fetches, the task's bound of requests, e.g.
+            ``24``.
+        paging: The task's argument that fetches one page, as the refusal names it, e.g.
+            ``"page"`` or ``"start with limit"``.
+        start: The offset of the first item, ``0`` by default.
+        stop: Takes each page's items and answers ``True`` where that page is the last one
+            the task wants, e.g. one that reaches back before its ``since``; ``None``, the
+            default, walks to the end.
+        key: Takes an item and answers what tells it apart, e.g. ``lambda row: row.id``; an
+            item whose key an earlier item had is dropped, as a list that changes between two
+            requests repeats one. ``None``, the default, keeps every item.
+        source: Source slug the refusal carries, e.g. ``"example"``.
+
+    Returns:
+        The items in upstream's order and the count upstream answered on the last page
+        fetched, which the task sets as ``meta.total`` (ADR-0034, decision 2).
 
     Raises:
-        ValueError: ``page_size`` is below 1.
+        InvalidRequestError: The walk needs more pages than ``most``; nothing is returned.
+        ValueError: ``page_size`` or ``most`` is below 1, raised before any request.
     """
     if page_size < 1:
-        raise ValueError("page_size must be at least 1")
+        raise ValueError(f"page_size must be at least 1, not {page_size!r}")
+    if most < 1:
+        raise ValueError(f"most must be at least 1, not {most!r}")
+    items: list[T] = []
+    seen: set[Hashable] = set()
     offset = start
-    yielded = 0
-    while max_items is None or yielded < max_items:
-        page = await fetch(offset)
+    sent = 0
+    while True:
+        page, count = await fetch(offset)
+        sent += 1
+        reached = offset // page_size + 1
         for item in page:
-            if max_items is not None and yielded >= max_items:
-                return
-            yield item
-            yielded += 1
-        if len(page) < page_size:
-            return
+            if key is not None:
+                if (mark := key(item)) in seen:
+                    continue
+                seen.add(mark)
+            items.append(item)
         offset += len(page)
+        if len(page) < page_size or (count is not None and offset >= count):
+            return items, count
+        if stop is not None and stop(page):
+            return items, count
+        left = None if count is None else math.ceil((count - offset) / page_size)
+        if sent >= most or (stop is None and left is not None and sent + left > most):
+            raise _beyond(most, count, page_size, reached, sent, paging, source)
 
 
-async def collect[T](items: AsyncIterable[T], *, limit: int | None = None) -> list[T]:
-    """Drain an async iterable into a list, optionally stopping after ``limit`` items."""
-    out: list[T] = []
-    if limit is not None and limit <= 0:
-        return out
-    async for item in items:
-        out.append(item)
-        if limit is not None and len(out) >= limit:
-            break
-    return out
+def _beyond(
+    most: int,
+    count: int | None,
+    page_size: int,
+    reached: int,
+    sent: int,
+    paging: str,
+    source: str | None,
+) -> InvalidRequestError:
+    """The walk's refusal at its bound, which names what a caller needs to page on purpose."""
+    requests = f"{sent:,} request{'' if sent == 1 else 's'}"
+    bound = f"{most:,} page{'' if most == 1 else 's'}"
+    if count is None:
+        where = (
+            "upstream sends no count of its records, so its total of pages is unknown, and the "
+            f"walk reached page {reached:,} after {requests}"
+        )
+    else:
+        pages = math.ceil(count / page_size)
+        where = (
+            f"upstream counts {count:,} records on {pages:,} pages of {page_size:,}, and the "
+            f"walk reached page {reached:,} of {pages:,} after {requests}"
+        )
+    return InvalidRequestError(
+        f"the walk needs more than the {bound} that one call fetches: {where}. It "
+        f"returns nothing; pass {paging} to fetch one page at a time.",
+        source=source,
+    )
 
 
 async def fetch_counted[T, E](

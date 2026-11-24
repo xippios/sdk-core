@@ -22,7 +22,7 @@ EXPORTS = {
         "request_description",
         # models and helpers
         "Result", "ResultCap", "ResultMeta", "UpstreamModel", "parse", "parse_decimal",
-        "collect", "paginate_offset", "load_json", "PackagedList", "matches",
+        "load_json", "PackagedList", "matches",
         "closest", "sync", "__version__",
         # the filter of a vintage taken back, each source handing its own reader (ADR-0052)
         "newer_than",
@@ -42,6 +42,8 @@ EXPORTS = {
         "Ceiling", "fetch_periods",
         # the count before a query over upstream's limit: the error and the runner (ADR-0053)
         "QueryTooLarge", "fetch_counted",
+        # the one walk of pages, which refuses at its bound (ADR-0034, amendment 2026-11-24)
+        "fetch_pages",
         # the name of each country code in an answer's meta (ADR-0056)
         "names_codes",
     },

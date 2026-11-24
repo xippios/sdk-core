@@ -361,6 +361,52 @@ message about an answer names its request, and the message names it in place of 
 none. A source subclasses it only for an attribute of its own, worded in `narrow`, as
 sdk-usda-nass keeps the `year` that alone is over the limit.
 
+A task that collects every page of an offset-paged list walks them with `fetch_pages`, under
+the bound of pages that its docstring states as the most requests one call spends (ADR-0061,
+decision 8). Its `fetch` answers a page's items with upstream's count, and the walk sends no
+request at or past that count (ADR-0034, amendment 2026-11-24):
+
+```python
+from xippios.core import Result, ResultMeta, fetch_pages
+
+PAGE_SIZE = 100  # upstream's page size, sent explicitly
+MOST_PAGES = 24  # the most requests one call spends, 96 with the client's retries
+
+
+async def list_regions_async(*, page: int | None = None) -> Result[list[Region]]:
+    async def fetch(offset: int) -> tuple[list[Region], int | None]:
+        answer = await api.list_regions(page=offset // PAGE_SIZE, per_page=PAGE_SIZE)
+        return answer.data, answer.total  # the page's items and upstream's count
+
+    if page is not None:
+        regions, total = await fetch(page * PAGE_SIZE)
+    else:
+        regions, total = await fetch_pages(
+            fetch, page_size=PAGE_SIZE, most=MOST_PAGES, paging="page", source="example"
+        )
+    meta = ResultMeta(source="example", endpoint="regions", request={"page": page}, total=total)
+    return Result(data=list(regions), meta=meta)
+```
+
+`fetch_pages(fetch, *, page_size, most, paging, start=0, stop=None, key=None, source=None)`
+returns the items in upstream's order with the count of the last page fetched, `meta.total`'s.
+A page shorter than `page_size` ends the walk, and so does the offset that reaches upstream's
+count, with no request for an empty page. Without `stop`, the walk refuses after its first page
+where upstream's count shows more pages from `start` than `most`; with `stop`, or where upstream
+sends no count, it refuses where it has fetched `most` pages and needs another. Either way it
+raises `InvalidRequestError` and returns nothing, and its message names what a caller needs to
+page on purpose: `the walk needs more than the 24 pages that one call fetches: upstream counts
+703 records on 29 pages of 25, and the walk reached page 1 of 29 after 1 request. It returns
+nothing; pass page to fetch one page at a time.` The client tries each request up to
+`RetryPolicy.max_attempts` times, 4 by default, so a call spends at most `most` times that
+with its retries. `stop` takes each page's items and answers `True` for the last page that a
+task wants, a page that reaches back before its `since` say, and the page it marks is kept
+whole; one source uses it, the one that ADR-0034's amendment of 2026-11-24 names. `key` takes
+an item and answers what tells it apart, and an item whose key an earlier item had is dropped,
+as a list that changes between two requests repeats one; no source uses it yet. Both stay,
+since nothing leaves by the count alone (ADR-0059, decision 6). A cursor-paged task keeps its
+own loop (ADR-0034, decision 2).
+
 ## Quotas, hooks and keyless calls
 
 An upstream that reports a longer-window quota in its headers (api.data.gov:
@@ -1994,7 +2040,7 @@ fragment until the release assembles it.
 | `xippios.core.redaction` | the one credential rule of the envelope, the recorder and replay, `REDACTED`, which a source's package imports from `xippios.core`, `register_data_name`, signed links | alpha |
 | `xippios.core.models` | `UpstreamModel` with `dump_upstream`, `Result`, `ResultMeta` with `published_at_naive` and `names`, the name of each country code of a request, `ResultCap` with `paged` and `keep`, `parse`, `newer_than`, the filter of a vintage taken back | alpha |
 | `xippios.core.reference` | the packaged JSON loader, `PackagedList`, its `codes` and their `check` of an argument (`PackagedCodes`), `names_codes`, `matches`, `closest`, `nearest`, generated `StrEnum`/`IntEnum` modules | alpha |
-| `xippios.core.pagination` | `paginate_offset` (a page-numbered endpoint maps the offset to its page), `collect`, `fetch_counted`, the count before a query over upstream's limit | alpha |
+| `xippios.core.pagination` | `fetch_pages`, the one walk of pages, which refuses at its bound and returns nothing (a page-numbered endpoint maps the offset to its page), `fetch_counted`, the count before a query over upstream's limit | alpha |
 | `xippios.core.series` | `Ceiling`, the ceiling of a series over periods with its option on the MCP server, and `fetch_periods`, its requests in order | alpha |
 | `xippios.core.tenants` | `Tenants`, a multi-tenant source's tenants declared in the environment with one client each, `list_task`, the tool that names them, and `TenantLock` with `bind_tasks` and `tenant_instructions`, a server bound to one of them | alpha |
 | `xippios.core.contract` | `EnvVar`, a variable of the package contract | alpha |
