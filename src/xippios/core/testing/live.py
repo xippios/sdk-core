@@ -25,7 +25,9 @@ entry that names no packaged list.
 and the function that fetches the list now. The function takes no argument and returns the
 list, or an awaitable of it, which the test runs on core's loop as ``sync`` runs a task:
 records under upstream's field names, as mappings or ``UpstreamModel`` instances, compared
-whole by their code, or bare codes, text or integers, compared by code alone.
+whole by their code, or bare codes, text or integers, compared by code alone. It may return
+the list in an ``api/`` wrapper's ``Answer``, read by its ``payload``, so a wrapper that takes
+no argument is a fetch as it stands.
 
 **An entry of** ``NO_LIVE_LIST`` is the reason the list is not compared: a list that no
 endpoint serves, say, or one that a test of the source's own compares through
@@ -40,12 +42,13 @@ import inspect
 import json
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from enum import Enum
-from typing import Any, TypeGuard
+from typing import Any, TypeGuard, cast
 
 import pytest
 from pydantic_core import to_jsonable_python
 
 from xippios.core._loop import run
+from xippios.core.client import Answer
 from xippios.core.models import UpstreamModel
 from xippios.core.reference import PackagedCodes
 
@@ -96,9 +99,9 @@ async def _awaited(awaitable: Awaitable[Any]) -> Any:
 def test_packaged_list_is_current(live_list: str, request: pytest.FixtureRequest) -> None:
     """The packaged list ``live_list`` is the list upstream serves now (conventions §10).
 
-    Its entry of ``LIVE_LISTS`` fetches the list, and ``assert_list_current`` compares it with
-    the packaged records by the declared code: a code gone, new or changed fails the test,
-    naming the codes and never a record (ADR-0055).
+    Its entry of ``LIVE_LISTS`` fetches the list, or a wrapper's ``Answer`` of it, and
+    ``assert_list_current`` compares it with the packaged records by the declared code: a
+    code gone, new or changed fails the test, naming the codes and never a record (ADR-0055).
     """
     entry = getattr(request.module, _LIVE)[live_list]
     if not _is_entry(entry):
@@ -114,12 +117,52 @@ class _Unreadable(Exception):
     """A side of the comparison that holds neither records nor codes, as ``_read`` says."""
 
 
+_PACKAGED = (
+    "the packaged list is {kind}: hand its records, not the body or the text that holds them"
+)
+"""The refusal of a ``packaged=`` side that is no list, ``{kind}`` its type."""
+_CURRENT = (
+    "the list upstream serves now is {kind}: hand its records, or the wrapper's Answer of them, "
+    "not the body or the text that holds them"
+)
+"""The refusal of a current side that is no list."""
+_PAYLOAD = (
+    "the list upstream serves now is an Answer of {kind}: an Answer's payload is the list, so "
+    "hand the records, not the body that holds them"
+)
+"""The refusal of an ``Answer`` whose payload is no list."""
+
+
+def _a_list(items: object, refusal: str) -> Iterable[object]:
+    """``items``, one side of the comparison, where it is a list of records or codes.
+
+    Raises:
+        _Unreadable: ``items`` is a mapping, a text or bytes, whose keys or characters would
+            read as bare codes, or no iterable; ``refusal`` names its type, never a value.
+    """
+    if isinstance(items, str | bytes | Mapping) or not isinstance(items, Iterable):
+        raise _Unreadable(refusal.format(kind=_a(type(items).__name__)))
+    return items
+
+
+def _listed(current: object) -> Iterable[object]:
+    """The list ``current`` holds: an ``Answer``'s ``payload``, else ``current`` itself.
+
+    Raises:
+        _Unreadable: Either is no list, as ``_a_list`` refuses it.
+    """
+    if isinstance(current, Answer):
+        return _a_list(cast(object, current.payload), _PAYLOAD)
+    return _a_list(current, _CURRENT)
+
+
 def _is_code(value: object) -> TypeGuard[_Code]:
     return isinstance(value, str | int) and not isinstance(value, bool)
 
 
 def _a(kind: str) -> str:
-    return f"{'an' if kind[:1] in 'aeiou' else 'a'} {kind}"
+    """``kind`` with its article, the vowel read in either case: ``"an Answer"``, ``"a str"``."""
+    return f"{'an' if kind[:1].lower() in 'aeiou' else 'a'} {kind}"
 
 
 def _read(items: Iterable[object], field: str, side: str) -> tuple[dict[_Code, list[str]], bool]:
@@ -171,7 +214,7 @@ def _shown(codes: list[_Code]) -> str:
 
 def assert_list_current(
     codes: PackagedCodes,
-    current: Iterable[_Item],
+    current: Iterable[_Item] | Answer[Iterable[_Item]],
     *,
     packaged: Iterable[_Item] | None = None,
 ) -> None:
@@ -196,10 +239,14 @@ def assert_list_current(
             the records are compared by, and its list's records the packaged side.
         current: The list upstream serves now: its records under upstream's field names, as
             mappings or ``UpstreamModel`` instances, read through ``dump_upstream``, or its
-            bare codes, text or integers.
-        packaged: The packaged side, read as ``current`` is read, for a list whose records
-            name the release they came from, as records that carry a ``report_month`` do:
-            ``codes.packaged.records`` as the source views them; those records by default.
+            bare codes, text or integers; or an ``api/`` wrapper's ``Answer`` whose
+            ``payload`` is that list, read as the list is. A mapping, a text or bytes, or an
+            ``Answer`` of one or of no list, the body that holds the records say, fails the
+            test naming its type, never read as bare codes of its keys or characters.
+        packaged: The packaged side, read and refused as ``current`` is, an ``Answer`` apart,
+            for a list whose records name the release they came from, as records that carry
+            a ``report_month`` do: ``codes.packaged.records`` as the source views them; those
+            records by default.
 
     Raises:
         TypeError: ``codes`` is no ``PackagedCodes``.
@@ -210,8 +257,8 @@ def assert_list_current(
         )
     side = codes.packaged.records if packaged is None else packaged
     try:
-        before, packaged_bare = _read(side, codes.code, "the packaged list")
-        after, current_bare = _read(current, codes.code, "the list upstream serves now")
+        before, packaged_bare = _read(_a_list(side, _PACKAGED), codes.code, "the packaged list")
+        after, current_bare = _read(_listed(current), codes.code, "the list upstream serves now")
     except _Unreadable as unreadable:
         pytest.fail(f"packaged list {codes.list_name}: {unreadable} (ADR-0055)", pytrace=False)
     by_code_alone = packaged_bare or current_bare

@@ -17,6 +17,7 @@ import inspect
 import io
 import subprocess
 import sys
+from collections import OrderedDict
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import redirect_stdout
 from dataclasses import dataclass
@@ -30,6 +31,7 @@ import respx
 from pydantic import Field
 
 from xippios.core import (
+    Answer,
     AsyncClient,
     ClientConfig,
     PackagedList,
@@ -449,6 +451,73 @@ def test_a_fetch_that_answers_plain_values_is_refused(
     assert source.files() == before
 
 
+def test_a_fetch_that_answers_an_answer_is_written_as_its_records(source: Source) -> None:
+    """https://github.com/xippios/sdk-core/issues/577: an ``api/`` wrapper answers an
+    ``Answer`` by ``get_answer`` (https://github.com/xippios/sdk-core/issues/479), and a list
+    whose fetch is that wrapper is written as one whose fetch answers the records, its
+    ``payload``: the same file, stamped when the fetch returned, whatever the ``Answer``'s
+    ``retrieved_at``."""
+    long_ago = datetime(2020, 1, 1, tzinfo=UTC)
+    regions = [{"regionCode": "1", "extra": None}]
+
+    async def get_units_of_measure() -> Answer[list[Unit]]:
+        return await source.client.get_answer(
+            "/units", parse=list[Unit], endpoint="GetUnitsOfMeasure"
+        )
+
+    bare = [
+        Listed("unitsOfMeasure", units(source.client), endpoint="GetUnitsOfMeasure"),
+        Listed("regions", lambda: regions, endpoint="GetRegions"),
+    ]
+    answered = [
+        Listed("unitsOfMeasure", get_units_of_measure, endpoint="GetUnitsOfMeasure"),
+        Listed("regions", lambda: Answer(regions, long_ago), endpoint="GetRegions"),
+    ]
+    written: list[dict[str, dict[str, Any]]] = []
+    for lists in (bare, answered):
+        start = datetime.now(UTC).replace(microsecond=0)
+        with respx.mock(base_url=BASE) as upstream:
+            upstream.get("/units").respond(200, json=[{"unitId": 4, "unitDescription": "Bales"}])
+            status, _ = go(source, lists)
+        end = datetime.now(UTC)
+        assert status == 0
+        files = {listed.name: source.packaged(listed.name) for listed in lists}
+        for name, packaged in files.items():
+            assert start <= packaged.fetched <= end, name
+        written.append(
+            {name: packaged.model_dump(exclude={"fetched"}) for name, packaged in files.items()}
+        )
+    assert written[1] == written[0]
+    assert written[1]["unitsOfMeasure"]["records"] == [{"unitId": 4, "unitDescription": "Bales"}]
+
+
+@pytest.mark.parametrize(
+    ("payload", "found"),
+    [
+        ({"data": [{"area": "4"}]}, "an Answer of a dict"),
+        ("4", "an Answer of a str"),
+        (Answer([{"area": "4"}], datetime(2026, 11, 1, tzinfo=UTC)), "an Answer of an Answer"),
+    ],
+    ids=["body", "text", "answer"],
+)
+def test_an_answer_that_holds_no_records_is_refused(
+    source: Source, payload: object, found: str
+) -> None:
+    """https://github.com/xippios/sdk-core/issues/577: an ``Answer`` whose payload is the body
+    that holds the records, or anything else that is no sequence of them, stops the run before
+    the first write, as a fetch that answers neither records nor a finished list does, and the
+    message says to hand the records and names the payload's type, never its value."""
+    before = source.files()
+    answer: Any = Answer(payload, datetime(2026, 11, 1, tzinfo=UTC))  # a fetch mypy refuses
+    listed = Listed("area_QCL", lambda: answer, endpoint="getCodeList", param="area")
+    error, _ = go_raising(source, [listed])
+    assert isinstance(error, SystemExit)
+    assert str(error).startswith(f"area_QCL's fetch answered {found}: "), error
+    assert "hand the records" in str(error), error
+    assert "'4'" not in str(error)
+    assert source.files() == before
+
+
 def test_a_finished_list_agrees_with_its_declaration(source: Source) -> None:
     """A finished list that names another ``param`` or ``endpoint`` than its declaration,
     records with no endpoint to name, and an answer that is neither stop the run, and
@@ -468,11 +537,40 @@ def test_a_finished_list_agrees_with_its_declaration(source: Source) -> None:
             lambda: "x",  # type: ignore[arg-type,return-value]
             endpoint="GetA",
         ),
+        # The type is named as _described names it, its article with it, never "a int".
+        "a's fetch answered an int: it answers records or a PackagedList": Listed(
+            "a",
+            lambda: 4,  # type: ignore[arg-type,return-value]
+            endpoint="GetA",
+        ),
     }
     for message, listed in cases.items():
         error, _ = go_raising(source, [listed])
         assert isinstance(error, SystemExit)
         assert message in str(error), error
+    assert source.files() == before
+
+
+class Item:
+    """A type of a source's own that is no record, its name capitalized."""
+
+
+def test_a_type_is_named_with_its_article_whatever_its_case(source: Source) -> None:
+    """A refusal names a type by its name with its article, the vowel read in either case:
+    "an Item" and "an OrderedDict", never "a Item"."""
+    before = source.files()
+    cases: dict[str, Callable[[], Any]] = {
+        "a's fetch answered an Item: it answers records": Item,
+        "a's fetch answered an OrderedDict: it answers records": lambda: OrderedDict(a=1),
+        "a's fetch answered an Item at position 1: a fetch answers records": lambda: [
+            {"a": "x"},
+            Item(),
+        ],
+    }
+    for message, fetch in cases.items():
+        error, _ = go_raising(source, [Listed("a", fetch, endpoint="GetA")])
+        assert isinstance(error, SystemExit)
+        assert str(error).startswith(message), error
     assert source.files() == before
 
 
@@ -842,7 +940,7 @@ client = AsyncClient(ClientConfig(source="example", version="0", base_url=BASE_U
 
 EXAMPLE_API = """from typing import Any
 
-from xippios.core import UpstreamModel
+from xippios.core import Answer, UpstreamModel
 from xippios.example._client import client
 
 
@@ -851,19 +949,23 @@ class Unit(UpstreamModel):
     unitDescription: str
 
 
-async def get_param_values(param: str) -> list[str]:
-    answer = (await client.get_answer("/api/get_param_values", params={"param": param})).payload
-    return [str(value) for value in answer]
+async def get_param_values(param: str) -> Answer[list[str]]:
+    params = {"param": param}
+    path, endpoint = "/api/get_param_values", "get_param_values"
+    return await client.get_answer(path, params=params, parse=list[str], endpoint=endpoint)
 
 
-async def get_units_of_measure() -> list[Unit]:
-    answer = (await client.get_answer("/api/unitsOfMeasure")).payload
-    return [Unit.model_validate(record) for record in answer]
+async def get_units_of_measure() -> Answer[list[Unit]]:
+    path, endpoint = "/api/unitsOfMeasure", "GetUnitsOfMeasure"
+    return await client.get_answer(path, parse=list[Unit], endpoint=endpoint)
 
 
-async def get_commodities() -> list[dict[str, Any]]:
-    return list((await client.get_answer("/api/commodities")).payload)
+async def get_commodities() -> Answer[list[dict[str, Any]]]:
+    return await client.get_answer("/api/commodities")
 """
+"""The ``api/`` wrappers, each answering the ``Answer`` of ``get_answer`` as every wrapper does
+(https://github.com/xippios/sdk-core/issues/479), which the README's script hands the frame as
+its fetches (https://github.com/xippios/sdk-core/issues/577)."""
 
 EXAMPLE_PARAMS = """PACKAGED_LISTS: tuple[str, ...] = ({names})
 """
@@ -894,7 +996,8 @@ def test_the_readmes_short_script_runs_on_the_frame(
 ) -> None:
     """The short script that sdk-template renders, as the README's section on the frame
     holds it, declares its lists in one ``Lists`` that the frame fetches, writes and renders
-    as they stand, and hands ``run`` that declaration alone."""
+    as they stand, its ``api/`` wrappers' ``Answer`` read from its payload, and hands ``run``
+    that declaration alone."""
     readme = (ROOT / "README.md").read_text()
     section = readme.split("## The reference refresh script's frame\n", 1)[1]
     script = section.split("```python\n", 1)[1].split("```\n", 1)[0]
