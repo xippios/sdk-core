@@ -443,7 +443,7 @@ def test_section_1_keeps_the_one_departure_from_upstream_s_name() -> None:
         assert name in rule, f"§1: {rule!r} does not name {name!r}"
 
 
-def test_the_header_names_no_source_but_example_outside_a_record_s_citation() -> None:
+def test_the_header_names_no_source_but_example_outside_a_public_record_s_citation() -> None:
     # The conventions cite records that name a source, so the sentence says where a name stands
     # (ADR-0068's consequences; finding 2 of the review of
     # https://github.com/xippios/sdk-core/pull/553).
@@ -458,6 +458,31 @@ def test_the_header_names_no_source_but_example_outside_a_record_s_citation() ->
         "request, a record or a report"
     )
     assert exception in rule, f"the header: {rule!r}"
+
+
+EXCEPTION = "outside the citation of a public record of the organization"
+"""The header's exception, which every document that binds words the same way."""
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        CONVENTIONS,
+        CHECKLIST,
+        DONE,
+        ROOT / "docs" / "handover.md",
+        ROOT / "README.md",
+        ROOT / "CLAUDE.md",
+    ],
+    ids=lambda path: path.name,
+)
+def test_every_document_that_binds_words_the_exception_as_the_header_does(path: Path) -> None:
+    # One wording for the citation in which a source's name may stand (findings 1 of the reviews
+    # of https://github.com/xippios/sdk-core/pull/556), so no document keeps an older one.
+    text = flat(path.read_text(encoding="utf-8"))
+    for start in [found.start() for found in re.finditer("outside the citation of ", text)]:
+        assert text.startswith(EXCEPTION, start), f"{path.name}: {text[start : start + 90]!r}"
+    assert "or of a public decision" not in text, f"{path.name} keeps the older exception"
 
 
 def test_the_conventions_word_the_organization_s_check_as_planned() -> None:
