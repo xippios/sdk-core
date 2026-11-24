@@ -46,10 +46,9 @@ the repository it reviews.
 4. **Fixtures** (conventions §10; not the host's): recorded, never hand-written; scrubbed;
    free of key patterns and of production tenant names; the fixture files this PR adds or
    changes under 256 KiB, a file it only moves, its content unchanged, being neither, and
-   a truncated one marked `truncated: true` (ADR-0040; binds from the source's 0.3.0
-   adoption); a download fixture whose body is its parser tests' sample marked
-   `sample: true` with the whole file's size and sha256 (ADR-0020, amendment 2026-11-18,
-   point a; binds from the source's adoption of core 0.4.0); a sample a script wrote from
+   a truncated one marked `truncated: true` (ADR-0040); a download fixture whose body is its
+   parser tests' sample marked `sample: true` with the whole file's size and sha256
+   (ADR-0020, amendment 2026-11-18, point a); a sample a script wrote from
    a file over the cap in the file's own form, its row saying what it keeps (ADR-0020,
    amendment 2026-11-18, point d); a body a test serves where it was not recorded one of
    §10's kinds, saying where it comes from, and its test asserting what the source does
@@ -73,8 +72,7 @@ the repository it reviews.
    `changelog/README.md` gives; a release PR assembles the fragments instead, and
    Dependabot's carries none (conventions §12).
 8. **Nothing forbidden**: nothing committed to `main`, no secrets, no tag pushed by hand;
-   the tag a merged release PR gets from its workflow, from 0.2.1 on, is legitimate
-   (conventions §12).
+   the tag a merged release PR gets from its workflow is legitimate (conventions §12).
 9. **Decisions taken**: the description carries a `## Decisions taken` block, and every
    line is backed by a convention, an ADR, a maintainer's decision with its date, or the
    issue that records the gap. A line backed by none of these is a blocking finding.
@@ -86,26 +84,11 @@ the repository it reviews.
     that a caller can name (in its ADR, or in its description when it has none), or, in its
     ADR, the part of the family's contract that a piece with one consumer serves (ADR-0059,
     decisions 1, 2 and 4).
-12. **Adoption PR** (conventions §15): judged against conventions §15 and nothing else,
-    that is the definition of done's Adoption PR block with its Enforced by CI and
-    Process blocks; it deletes only what the adoption itself makes dead (ADR-0039,
-    decision 2). On §15's routes (1) and (3), a core release without a
-    template tag and a source frozen on a template tag, §15's item 2 does not apply: the
-    first raises the bound with `copier update --vcs-ref=:current:`, the second runs no
-    `copier update` and lists the template changes it hand-applies file by file
-    (ADR-0039, decision 2). The host's adoption PR runs no `copier update` and is
-    judged against §15's items 1, 3, 4, 7, 8 and 9, read for the host as §15 reads them,
-    and lists the template changes it hand-applies file by file (ADR-0026, amendment
-    2026-11-18, point e). A source's adoption fragment names the core bound, the template's
-    tag and the conventions' version as they stand after the adoption, changed or not, and
-    is `breaking` where it brings a core minor and `changed` where it brings none
-    (conventions §15, item 9; ADR-0043). An adoption of a core release is held against the
-    two lists of the handover's section `Adopting core X.Y.Z` for that release: each of the
-    conventions' rules changed since the version before holds in the source, as §15 item 8
-    asks, and each of the changes that a source's callers see that the adoption brings to
-    them has its entry among the adoption's fragments
-    (https://github.com/xippios/sdk-core/issues/334,
-    https://github.com/xippios/sdk-core/issues/349).
+12. **Adoption PR** (conventions §15): judged against conventions §15's items, its routes
+    and its reading for the host, with the definition of done's Enforced by CI and Process
+    blocks, and nothing else; it deletes only what the adoption itself makes dead (ADR-0039,
+    decision 2). The items stand in §15 alone, and this checklist copies none of them
+    (ADR-0068, decision 4).
 13. **Release PR** (the version in `pyproject.toml` changed, or for sdk-template the top
     heading of `CHANGELOG.md`): it changes only the files of conventions §12
     (`pyproject.toml`, `uv.lock`, `CHANGELOG.md`, `README.md`, `CLAUDE.md`,
@@ -137,7 +120,7 @@ the repository it reviews.
     `bind_tasks` and the family check
     read signatures, so the review judges what a task reaches inside, a task that takes one
     tenant and opens another's client say (https://github.com/xippios/sdk-core/issues/302).
-18. **Write tools** (a source with a write server, from its patch on core 0.4.1): each write
+18. **Write tools** (a source with a write server): each write
     task's docstring says whether its preview reads first and what the read costs, its
     preview sends no write and carries `reads`, the operations it read, `[]` for none, and the
     source's tests hold it with `assert_write_tools`, the dry run of each tool (`dry_run=`) at

@@ -495,7 +495,11 @@ passed, and the cache holds at most 256 entries and 64 MiB of bodies in all
 (`maxsize=`, `max_bytes=`), the least recently used leaving first.
 
 The hooks are plain callables on `ClientConfig` (`before_request` may be async) for
-anything else that has to see each call or each response.
+anything else that has to see each call or each response. `before_request` runs once per
+call, after the cache lookup and before the rate limiter, and may wait or raise an error of
+the taxonomy, and then nothing is sent; `observe` sees every response from the wire, a
+retried attempt's and a raw one's included and a cache hit's never, before `classify`
+(ADR-0037).
 
 `ClientConfig.classify` is asked before a 429 or 5xx is retried: a `RateLimitError`
 with a `retry_after` beyond `backoff_max` is raised after one attempt instead of being
@@ -613,12 +617,12 @@ sdk-faostat's login and sdk-google-mail's refresh are its two token requests (AD
 ## Files: download and decode
 
 An upstream that publishes files (a bulk dataset, a release's CSV or XLS) is read with
-`download`, which streams the body to disk under a temporary name and renames it when it
-is complete; it takes `params=`, `headers=` and `auth=` as `get()` does, the limiter,
+`download`, which streams the body to disk under a temporary name, renames it when it
+is complete and removes it on a failure; it takes `params=`, `headers=` and `auth=` as `get()` does, the limiter,
 the hooks, `classify` and the retries apply as for `get()`, a retry restarting the file,
 and the response cache is never touched. The hooks see a
-success's status and headers only, since its body goes to the file unread, and a
-redirect raises `UpstreamError`:
+success's status and headers only, since its body goes to the file unread, and a 1xx or
+a 3xx, a redirect among them, raises `UpstreamError`, since no redirect is followed:
 
 ```python
 from pathlib import Path
@@ -1363,10 +1367,11 @@ alone.
 
 ```python
 MCP_CAPS: Mapping[str, ResultCap] = {
-    "list_publications": ResultCap(paged=True),  # a packaged table: a second run is free
-    # A series of 500 periods, oldest first, answers its newest 200 with the note
-    # "showing rows 301 to 500 of 500 (cap: 200 rows or 65536 bytes); narrow the query to
-    # see the rest; continue with offset=200", and offset=200 answers rows 101 to 300.
+    "list_regions": ResultCap(paged=True),  # a packaged table: a second run is free
+    # A series of 500 periods, oldest first, whose path the client's MemoryCache keeps, so
+    # that a second run is free, answers its newest 200 with the note "showing rows 301 to
+    # 500 of 500 (cap: 200 rows or 65536 bytes); narrow the query to see the rest; continue
+    # with offset=200", and offset=200 answers rows 101 to 300.
     "get_series": ResultCap(paged=True, keep="last"),
 }
 ```

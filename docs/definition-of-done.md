@@ -8,8 +8,8 @@ blocks do not apply to it. A release PR changes only the files of conventions §
 code, test or fixture, so the Code and Tests blocks have nothing to judge in it. In the
 host `xippios-mcp`, a package that is no source (ADR-0026, decision 1), the Code and
 Tests blocks and the Docs block's lines on agent docstrings and `docs/upstream/` are
-written for a source and do not apply, and its adoption PR meets the Adoption PR lines
-that conventions §15 names for the host (ADR-0026, amendment 2026-11-18, point e).
+written for a source and do not apply, and its adoption PR meets the items of conventions
+§15 that §15 names for the host (ADR-0026, amendment 2026-11-18, point e).
 
 ## Enforced by CI
 - [ ] `ruff check` and `ruff format --check` pass
@@ -29,7 +29,7 @@ that conventions §15 names for the host (ADR-0026, amendment 2026-11-18, point 
 - [ ] each new task function has a fixture-backed unit test (`tests/fixtures/...` recorded, not hand-written)
 - [ ] each new task function has a `@pytest.mark.live` smoke test
 - [ ] fixtures contain no credentials: grep `tests/fixtures/` for key patterns and for the values of fields the source keeps out of its projections (ADR-0017) before committing
-- [ ] the fixture files this PR adds or changes stay under 256 KiB, a file it only moves, its content unchanged, being neither; a truncated one is marked `truncated: true` with the full count or byte size and sha256 (ADR-0040; binds from the source's 0.3.0 adoption), and a download fixture whose body is its parser tests' sample is marked `sample: true` with the full file's byte size and sha256 (ADR-0020, amendment 2026-11-18, point a; binds from the source's adoption of core 0.4.0)
+- [ ] the fixture files this PR adds or changes stay under 256 KiB, a file it only moves, its content unchanged, being neither; a truncated one is marked `truncated: true` with the full count or byte size and sha256 (ADR-0040), and a download fixture whose body is its parser tests' sample is marked `sample: true` with the full file's byte size and sha256 (ADR-0020, amendment 2026-11-18, point a)
 - [ ] a file-distributed source: each file kind has a sample under `tests/fixtures/files/<file_kind>/` with its provenance line and one live parser test (ADR-0020); a sample of a file over the cap that cannot be cut by bytes is written by a script from one download in the file's own form, and its row says what it keeps (conventions §10; ADR-0020, amendment 2026-11-18, point d)
 - [ ] a body a test serves where it was not recorded is one of the kinds of conventions §10 and says where it comes from (ADR-0028, decision 8)
 - [ ] a recorded fixture that no test replays after the change, and that no test or document cites, is deleted, and the description names it (conventions §10; ADR-0039, decision 8)
@@ -41,23 +41,11 @@ that conventions §15 names for the host (ADR-0026, amendment 2026-11-18, point 
 - [ ] if `docs/upstream/` was refreshed: `FETCHED.md` updated and the diff summarised in the PR
 
 ## Adoption PR (conventions §15)
-The reviewer judges an adoption PR against this list and nothing else: no new endpoints,
-tasks or fixtures ride along, and it deletes only the fixtures, mounts and tests the
-adoption itself makes dead (ADR-0039, decision 2). The host's adoption PR
-meets the lines on the core floor, the workarounds, the code core removed for it alone,
-the duplicated logic, `mypy` over `scripts/`, the conventions version and the changelog
-fragment, as conventions §15 reads them for it, and runs no `copier update` (ADR-0026,
-amendment 2026-11-18, point e).
-- [ ] core floor raised: `xippios-core~=X.Y.0`, or `~=X.Y.Z` when patch Z shipped what the source adopts (§12), and its extras likewise; a source package the source depends on bound to its own minor the same way (ADR-0021); from PyPI, no git pin, `uv.lock` updated
-- [ ] `copier update` to the template release, conflicts resolved; not applicable on §15's routes (1), a core release without a template tag, and (3), a source frozen on a template tag, whose hand-applied template changes are listed file by file in the PR description
-- [ ] every local workaround a core change replaced is deleted, its tests with it, the core change named for each in the PR description
-- [ ] code core removed for this source alone is copied in from the commit core's handover names, every copied file listed in the PR description with the ADR that moved it (conventions §15 item 3; ADR-0059, decision 2; ADR-0042)
-- [ ] logic duplicated across sources moved into core or dropped; what core lacks is carried by the source and named in an issue of sdk-core, a second copy only when the issue names both sources, never a third (ADR-0059, decision 5)
-- [ ] every test that asserted a limiter wait or a quota pause is marked `rate_limited`, and one that asserted key resolution has a module-level `placeholder_api_key` override that pins nothing (ADR-0035, ADR-0037)
-- [ ] generated enum files re-rendered once through the template's refresh script and committed as formatted, after its `ruff format && ruff check --fix`
-- [ ] `mypy --strict` covers `scripts/` too
-- [ ] the current conventions version applied (1.22's name rule excepted, §2): for a core release, each of the conventions' rules changed since the version before that the handover's section `Adopting core X.Y.Z` lists (https://github.com/xippios/sdk-core/issues/349)
-- [ ] the changelog fragment names the core bound, the template's tag and the conventions' version as they stand after the adoption, changed or not, and is `breaking` where the adoption brings a core minor and `changed` where it brings none (§15 item 9; ADR-0043); for a core release, each of the changes that a source's callers see that the handover's section `Adopting core X.Y.Z` lists and the adoption brings to them has its entry among the adoption's fragments (https://github.com/xippios/sdk-core/issues/334)
+An adoption PR meets the items of conventions §15, its routes and its reading for the host,
+and the reviewer judges it against them with the Enforced by CI and Process blocks and
+nothing else: no new endpoints, tasks or fixtures ride along, and it deletes only the
+fixtures, mounts and tests the adoption itself makes dead (ADR-0039, decision 2). The items
+stand in §15 alone, and this file copies none of them (ADR-0068, decision 4).
 
 ## Process
 - [ ] commit messages follow Conventional Commits

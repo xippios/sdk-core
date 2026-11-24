@@ -6,10 +6,12 @@ form, the mark of FETCHED.md's form
 and the one comparison of a snapshot of ADR-0062, the attribution check of ADR-0046, decision 7,
 the refusal of a hinted value of ADR-0041's amendment of 2026-11-22, the two sentences of a
 period series that ADR-0054's amendment of 2026-11-22 words, a recorder's field of a request of
-ADR-0066, decision 7, the review checklist's sentence that holds an adoption against the two
-lists of the handover's section for the release, ADR-0058's decision 2, what a core patch keeps
-compatible, ADR-0059's rule for code with one consumer, as the definition of done, the
-review checklist and §15 name it, and the publisher's shared package of ADR-0065 in §7 and §12.
+ADR-0066, decision 7, §15's items that hold an adoption against the two lists of the
+handover's section for the release, to which the review checklist and the definition of done
+point, ADR-0058's decision 2, what a core patch keeps compatible, ADR-0059's rule for code with
+one consumer, as the definition of done, the review checklist and §15 name it, the publisher's
+shared package of ADR-0065 in §7 and §12, and ADR-0068's documents: one case per rule, no
+history and the adoption's items once.
 
 The organization's release check quotes the conventions from sdk-core's `main`, and a finding
 blocks only where it quotes the sentence that a change breaks
@@ -82,7 +84,7 @@ RULES = [
         5,
         "names no request: it names the argument, the record or the tool that it refuses and "
         "says that nothing was sent",
-        ("ADR-0030, decision 4", "sdk-cashctrl"),
+        ("ADR-0030, decision 4", "`create_thing`"),
         id="s5-a-refusal-of-the-call-as-given",
     ),
     pytest.param(
@@ -91,26 +93,25 @@ RULES = [
         ("ADR-0030, decision 4", "`parse`"),
         id="s5-a-decoder-s-subject",
     ),
-    # §10: the three cases between the kinds of a built answer, each with its sources
-    # (sdk-core#345).
+    # §10: the three cases between the kinds of a built answer, each with the invented source's
+    # case (sdk-core#345; ADR-0068, decision 2).
     pytest.param(
         10,
         "changed in its status, its content type and its body at once is a new answer composed "
         "in a recorded shape, the second kind",
-        # sdk-usda-esr's example is the body it refused (decision 2 of sdk-usda-esr#55).
-        ("the fourth", "serves no empty 404 off an exports path", "sdk-cashctrl"),
+        ("the fourth", "composed in the shape of its recorded 401"),
         id="s10-a-recording-changed-three-ways",
     ),
     pytest.param(
         10,
         "is an input of the test and takes no kind",
-        ("no route serves", "sdk-google-mail", "sdk-cashctrl"),
+        ("no route serves", "a recorder's step"),
         id="s10-an-input-of-the-test",
     ),
     pytest.param(
         10,
         "A recording replayed at its own path for other parameters is the third kind",
-        ("names the condition under which upstream answers", "sdk-google-mail", "sdk-cashctrl"),
+        ("names the condition under which upstream answers", "at other years"),
         id="s10-a-recording-at-its-own-path",
     ),
     # §12: the release's pull request and its entries (sdk-core#355), its live run (sdk-core#351,
@@ -321,8 +322,8 @@ def test_each_rule_of_a_series_message_is_one_sentence_that_cites_its_amendment(
     [
         pytest.param(3, "a refusal the package makes of the call as given", id="errors"),
         pytest.param(4, "the three cases that §10 settles", id="fixtures"),
-        pytest.param(12, "`breaking` where it brings a core minor", id="adoption"),
         pytest.param(13, "a green run of `live.yml`", id="release"),
+        # Item 12 judges an adoption by §15's items, which cite the record (ADR-0068, decision 4).
     ],
 )
 def test_the_review_checklist_judges_each_rule_by_its_record(number: int, phrase: str) -> None:
@@ -337,52 +338,147 @@ HANDOVER_ROWS = (
 )
 
 
-def test_the_review_checklist_holds_an_adoption_against_the_handover_s_two_lists() -> None:
-    # Item 12 reads §15's items 8 and 9 through the handover's section for the release, so
-    # an adoption's review names the same rules and the same entries in every source.
-    rule = sentence(checklist_item(12), "the two lists of the handover's section")
-    for name in (
-        "`Adopting core X.Y.Z`",
-        "the conventions' rules changed since",
-        "§15 item 8",
-        "the changes that a source's callers see",
-        "the adoption's fragments",
-        *HANDOVER_ROWS,
+DOCUMENTS = "ADR-0068"
+DOCUMENTS_QUESTION = "https://github.com/xippios/sdk-core/issues/484"
+"""The record of which document holds what, and the question it states."""
+
+
+def test_section_15_holds_an_adoption_against_the_handover_s_two_lists() -> None:
+    # Items 8 and 9 read the handover's section for the release, so an adoption's review names
+    # the same rules and the same entries in every source (ADR-0068, decision 4).
+    for phrase, names in (
+        (
+            "The current conventions version is applied",
+            ("the conventions' rules changed since the version before", HANDOVER_ROWS[1]),
+        ),
+        (
+            "For a core release, each of the changes that a source's callers see",
+            ("has its entry among the adoption's fragments", HANDOVER_ROWS[0]),
+        ),
     ):
-        assert name in rule, f"item 12: {rule!r} does not name {name!r}"
-
-
-def test_the_definition_of_done_words_an_adoption_s_fragment_as_item_9_does() -> None:
-    # The line of the Adoption PR block, which "the versions adopted" made a second reading of
-    # item 9 (https://github.com/xippios/sdk-core/issues/347).
-    block = DONE.read_text(encoding="utf-8").split("## Adoption PR", 1)[1].split("\n## ", 1)[0]
-    lines = [flat(line) for line in block.splitlines() if "changelog fragment" in line]
-    assert len(lines) == 1, "the Adoption PR block has one line on the changelog fragment"
-    for name in (
-        "the core bound, the template's tag and the conventions' version as they stand after "
-        "the adoption, changed or not",
-        "`breaking` where the adoption brings a core minor",
-        "`changed` where it brings none",
-        "§15 item 9",
-        RECORD,
-    ):
-        assert name in lines[0], f"{lines[0]!r} does not name {name!r}"
-
-
-def test_the_definition_of_done_holds_an_adoption_against_the_handover_s_two_lists() -> None:
-    # The opener's list names what item 12 of the review checklist holds the adoption to, so
-    # an adoption meets before its review the two lists that its review reads.
-    block = DONE.read_text(encoding="utf-8").split("## Adoption PR", 1)[1].split("\n## ", 1)[0]
-    lines = [flat(line) for line in block.splitlines() if line.startswith("- [ ]")]
-    version = [line for line in lines if "the current conventions version applied" in line]
-    fragment = [line for line in lines if "changelog fragment" in line]
-    assert len(version) == len(fragment) == 1, "one line on the version, one on the fragment"
-    for line, names in (
-        (version[0], ("the conventions' rules changed since", HANDOVER_ROWS[1])),
-        (fragment[0], ("the changes that a source's callers see", HANDOVER_ROWS[0])),
-    ):
+        rule = sentence(section(15), phrase)
         for name in ("`Adopting core X.Y.Z`", *names):
-            assert name in line, f"{line!r} does not name {name!r}"
+            assert name in rule, f"§15: {rule!r} does not name {name!r}"
+
+
+ADOPTION_ITEMS = (
+    "the conventions' rules changed since",
+    "the changes that a source's callers see",
+    "`breaking` where",
+    "`copier update --vcs-ref=:current:`",
+    "items 1, 3, 4, 7, 8 and 9",
+    "`placeholder_api_key`",
+    "core floor raised",
+)
+"""Words of §15's items that neither the checklist nor the definition of done repeats."""
+
+
+def adoption_block() -> str:
+    """The definition of done's Adoption PR block, on one line."""
+    text = DONE.read_text(encoding="utf-8")
+    return flat(text.split("## Adoption PR", 1)[1].split("\n## ", 1)[0])
+
+
+def test_the_review_checklist_and_the_definition_of_done_point_an_adoption_to_section_15() -> None:
+    # The adoption's items stand once, in §15, and both documents point there (ADR-0068,
+    # decision 4).
+    for where, text in (
+        ("item 12", checklist_item(12)),
+        ("the Adoption PR block", adoption_block()),
+    ):
+        for name in ("conventions §15", "ADR-0039, decision 2", f"{DOCUMENTS}, decision 4"):
+            assert name in text, f"{where}: {text!r} does not name {name!r}"
+        for copied in ADOPTION_ITEMS:
+            assert copied not in text, f"{where} copies §15's item {copied!r}"
+    assert "- [ ]" not in adoption_block(), "the Adoption PR block holds no item of its own"
+
+
+def test_section_15_keeps_two_routes_and_no_frozen_tag() -> None:
+    # Route (3), a source frozen on a template tag, left by ADR-0039's amendment of 2026-11-24.
+    text = section(15)
+    assert "Two routes depart from the list" in text, "§15 names its routes"
+    for gone in ("(3)", "frozen on a template tag", "1.22's name rule"):
+        assert gone not in text, f"§15 still names {gone!r}"
+    for where, words in (
+        ("item 12", checklist_item(12)),
+        ("the definition of done", flat(DONE.read_text(encoding="utf-8"))),
+    ):
+        assert "frozen on a template tag" not in words, f"{where} still names route (3)"
+
+
+HISTORY = (
+    "binds a source from",
+    "bind a source from",
+    "bind such a source from",
+    "binds from the source",
+    "binds sdk-",
+    "until then a client tells",
+    "as 1.22 lands",
+    "before template v0.3.0",
+    "from its patch on core",
+)
+"""The words of a sentence that names the release from which a rule binds (ADR-0068, decision 3)."""
+
+
+@pytest.mark.parametrize("path", [CONVENTIONS, CHECKLIST, DONE], ids=lambda path: path.name)
+def test_no_document_that_binds_tells_the_release_a_rule_binds_from(path: Path) -> None:
+    text = flat(path.read_text(encoding="utf-8"))
+    for words in HISTORY:
+        assert words not in text, f"{path.name} still says {words!r}"
+
+
+def test_section_1_reserves_the_invented_source_and_lists_no_source() -> None:
+    rule = sentence(section(1), "The slug `example` is the invented source's")
+    for name in ("no source of the family takes it", "ADR-0065, decision 4"):
+        assert name in rule, f"§1: {rule!r} does not name {name!r}"
+    listed = sentence(section(1), "The family's sources are listed where they are loaded")
+    assert f"{DOCUMENTS}, decision 2" in listed, f"§1: {listed!r} does not cite its record"
+
+
+def test_section_1_keeps_the_one_departure_from_upstream_s_name() -> None:
+    # A source carries upstream's own name but for the one departure that ADR-0025 records, which
+    # no record withdraws (finding 1 of the review of https://github.com/xippios/sdk-core/pull/553).
+    rule = sentence(section(1), "`<source>` names the data provider")
+    for name in ("in upstream's own name", "the one departure", "ADR-0025"):
+        assert name in rule, f"§1: {rule!r} does not name {name!r}"
+
+
+def test_the_header_names_no_source_but_example_outside_a_record_s_citation() -> None:
+    # The conventions cite records that name a source, so the sentence says where a name stands
+    # (ADR-0068's consequences; finding 2 of the review of
+    # https://github.com/xippios/sdk-core/pull/553).
+    text = flat(CONVENTIONS.read_text(encoding="utf-8").split("\n## 1.", 1)[0])
+    rule = sentence(text, "names no source but `example`")
+    assert "outside the citation of a record" in rule, f"the header: {rule!r}"
+
+
+def test_the_conventions_word_the_organization_s_check_as_planned() -> None:
+    # ADR-0065, decision 6: the organization's step is planned, and no release of core waits.
+    text = flat(CONVENTIONS.read_text(encoding="utf-8").split("\n## 1.", 1)[0])
+    rule = sentence(text, "a step of the organization's conventions check")
+    for name in (
+        "is planned with the organization's package after the sources' first wave",
+        "no release of core waits for it",
+        "ADR-0065, decisions 5 and 6",
+        "https://github.com/xippios/.github/issues/169",
+    ):
+        assert name in rule, f"the header: {rule!r} does not name {name!r}"
+
+
+def test_adr_0039_lets_route_3_go_in_one_sentence_of_adr_0068() -> None:
+    # A later amendment of the same day stands in the section as a paragraph of its own.
+    paragraphs = amendments("ADR-0039", "2026-11-24")
+    mark = f"Amended by {DOCUMENTS} ({DOCUMENTS_QUESTION}):"
+    amendment = next((p for p in paragraphs if p.startswith(mark)), paragraphs[0])
+    assert amendment.startswith(mark), amendment[:60]
+    assert amendment.endswith("."), "the sentence ends its paragraph"
+    assert ". " not in amendment, "one sentence"
+    for name in ("decision 2's third route", "frozen on a template tag", "§15", "point"):
+        assert name in amendment, f"ADR-0039's amendment does not name {name!r}"
+    records = {r["id"]: r for r in json.loads(INDEX.read_text(encoding="utf-8"))["records"]}
+    assert {"date": "2026-11-24", "by": DOCUMENTS_QUESTION} in records["ADR-0039"]["amended"]
+    assert records[DOCUMENTS]["decided_by"] == DOCUMENTS_QUESTION
+    assert len(decisions(DOCUMENTS)) == 7, "one decision per part of the documents"
 
 
 def test_both_questions_keep_the_record() -> None:
@@ -706,7 +802,7 @@ def test_adr_0034_names_the_one_walk_in_one_sentence_after_the_ways() -> None:
         "at or past upstream's count",
         "returns nothing",
         "stop rule",
-        "sdk-usda-esmis",
+        "has one consumer",
         "key",
         "no consumer",
         "ADR-0061, decision 8",
@@ -862,7 +958,11 @@ def test_each_rule_of_a_publisher_s_shared_package_is_one_sentence_of_section_12
 
 
 AMENDED_BY_PUBLISHER = {
-    "ADR-0032": ("decision 5 leaves core", "`xippios.usda.fas`", "one key variable"),
+    "ADR-0032": (
+        "decision 5 leaves core",
+        "whose first record takes the decision",
+        "one key variable",
+    ),
     "ADR-0021": ("its publisher's shared package", "the task layer", "decision 2 binds nothing"),
     "ADR-0025": (
         "`xippios.core.google`",
@@ -954,8 +1054,8 @@ PREVIEW_RULES = [
         id="s8-the-dry-run",
     ),
     pytest.param(
-        "A source declares `reads` on its preview from its adoption of core 0.5.0",
-        ("the dry run at its own choice", "off by default", "ADR-0050, decisions 4 and 5"),
+        "A source declares `reads` on its preview, and the dry run at its own choice",
+        ("off by default", "ADR-0050, decisions 4 and 5"),
         id="s8-when-a-source-declares-reads",
     ),
 ]
