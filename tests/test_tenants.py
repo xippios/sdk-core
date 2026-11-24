@@ -158,8 +158,8 @@ def test_the_registry_holds_the_noun_of_one_tenant() -> None:
         ({"reserved": "demo"}, TypeError, "reserved is a sequence"),
         ({"reserved": ("Demo",)}, ValueError, "reserved name 'Demo' is not lower-case"),
         ({"reserved": ("demo", "demo")}, ValueError, "reserved name given twice: demo"),
-        ({"noun": ""}, ValueError, "noun must be a word such as 'organisation', or None"),
-        ({"noun": " "}, ValueError, "noun must be a word such as 'organisation', or None"),
+        ({"noun": ""}, ValueError, "noun must be the word for one tenant, or None"),
+        ({"noun": " "}, ValueError, "noun must be the word for one tenant, or None"),
     ],
 )
 def test_construction_refuses_a_malformed_scheme(
