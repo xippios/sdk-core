@@ -1,6 +1,6 @@
 # ADR-0058: A fourth reason for one consumer and what a core patch keeps compatible
 
-Status: Accepted · Date: 2026-11-22 · Decided by https://github.com/xippios/sdk-core/issues/455
+Status: Accepted · Date: 2026-11-22 · Decided by https://github.com/xippios/sdk-core/issues/455 · Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/473
 
 ## Context
 
@@ -80,3 +80,9 @@ keeps a patch compatible.
 
 Conventions §12, the definition of done's Code block, the review checklist's item 11 and the
 handover's section `Adopting core 0.4.1` state its decisions from 1.29 on.
+
+Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/473: decision 1 leaves, since
+ADR-0059, decision 4, names the family's contract as the one reason for code with one consumer
+and makes the maintainer's decision on a step's design question no reason of its own, so that
+`naive_time` and `record_task`, which entered by it, return to their consumers, while decision 2,
+on what a core patch keeps compatible, stands as written.

@@ -395,7 +395,7 @@
       "number": 23,
       "title": "Core scope — code enters `xippios-core` with two consumers",
       "path": "docs/adr/0023-core-scope-two-consumers.md",
-      "status": "Accepted",
+      "status": "Superseded by ADR-0059",
       "date": "2026-10-26",
       "decided_by": "Johannes on 2026-10-26 (drafted by the architect from the family review of 2026-10-25 and the queue rows of core 0.2.0)",
       "amended": [
@@ -407,7 +407,7 @@
       "amends": [],
       "supersedes": [],
       "other": [],
-      "superseded_by": null
+      "superseded_by": "ADR-0059"
     },
     {
       "id": "ADR-0024",
@@ -904,6 +904,10 @@
         {
           "date": "2026-11-22",
           "by": "https://github.com/xippios/sdk-core/issues/455"
+        },
+        {
+          "date": "2026-11-24",
+          "by": "https://github.com/xippios/sdk-core/issues/473"
         }
       ],
       "amends": [],
@@ -1008,9 +1012,30 @@
       "status": "Accepted",
       "date": "2026-11-22",
       "decided_by": "https://github.com/xippios/sdk-core/issues/455",
-      "amended": [],
+      "amended": [
+        {
+          "date": "2026-11-24",
+          "by": "https://github.com/xippios/sdk-core/issues/473"
+        }
+      ],
       "amends": [],
       "supersedes": [],
+      "other": [],
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-0059",
+      "number": 59,
+      "title": "Core's scope: what a consumer is and how far the two-consumer rule reaches",
+      "path": "docs/adr/0059-core-s-scope-what-a-consumer-is-and-how-far-the-two-consumer.md",
+      "status": "Accepted",
+      "date": "2026-11-24",
+      "decided_by": "https://github.com/xippios/sdk-core/issues/473",
+      "amended": [],
+      "amends": [],
+      "supersedes": [
+        "ADR-0023"
+      ],
       "other": [],
       "superseded_by": null
     }

@@ -1,6 +1,6 @@
 # ADR-0023: Core scope — code enters `xippios-core` with two consumers
 
-Status: Accepted · Date: 2026-10-26 · Decided by Johannes on 2026-10-26 (drafted by the architect from the family review of 2026-10-25 and the queue rows of core 0.2.0) · Amended 2026-11-22 by https://github.com/xippios/sdk-core/issues/455
+Status: Superseded by ADR-0059 · Date: 2026-10-26 · Decided by Johannes on 2026-10-26 (drafted by the architect from the family review of 2026-10-25 and the queue rows of core 0.2.0) · Amended 2026-11-22 by https://github.com/xippios/sdk-core/issues/455
 
 ## Context
 
