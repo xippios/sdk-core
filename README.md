@@ -639,7 +639,7 @@ environment with `Tenants`, one client each, and names them with `list_task`
 (`xippios.core.tenants`; ADR-0036, ADR-0042):
 
 ```python
-from xippios.core import AsyncClient, BasicKeyAuth, ClientConfig, Tenants, list_task
+from xippios.core import AsyncClient, ClientConfig, KeyAuth, Tenants, list_task
 
 TENANTS = Tenants(
     "example",
@@ -653,7 +653,7 @@ TENANTS = Tenants(
 def build(name: str) -> AsyncClient:
     subdomain = TENANTS.field(name, "SUBDOMAIN")  # EXAMPLE_<NAME>_SUBDOMAIN, stripped
     config = ClientConfig(..., base_url=f"https://{subdomain}.example.org/api")
-    return AsyncClient(config, auth=BasicKeyAuth(TENANTS.var(name, "API_KEY")))
+    return AsyncClient(config, auth=KeyAuth(TENANTS.var(name, "API_KEY"), location="basic"))
 
 
 client = TENANTS.client_for("acme", build)  # acme's own client, built on first use
