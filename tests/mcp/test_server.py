@@ -79,22 +79,111 @@ def test_tool_name_takes_a_tasks_name_as_text() -> None:
 
 @pytest.mark.anyio
 async def test_tools_keep_signature_and_docstring() -> None:
+    # ADR-0063, decision 9: the description is the docstring's text before Args:, and each
+    # argument's text from Args: describes it in the input schema.
     server = build_server(
         ToolSet("example", [get_series, example_list_things, plain], version="1.0")
     )
     tools = {t.name: t for t in await server.list_tools()}
     assert set(tools) == {"example_get_series", "example_list_things", "example_plain"}
     series = tools["example_get_series"]
-    assert series.description is not None
-    assert series.description.startswith("Fetch one series.")
-    assert "series_id: Upstream identifier" in series.description
+    assert series.description == "Fetch one series."
     props = series.input_schema["properties"]
-    assert props["series_id"]["type"] == "string"
-    assert props["year"] == {"type": "integer", "default": 2024, "title": "Year"}
+    assert props["series_id"] == {
+        "type": "string",
+        "title": "Series Id",
+        "description": 'Upstream identifier, e.g. ``"CORN_YIELD"``.',
+    }
+    assert props["year"] == {
+        "type": "integer",
+        "default": 2024,
+        "title": "Year",
+        "description": "Marketing year, e.g. ``2024``.",
+    }
     assert series.input_schema["required"] == ["series_id"]
     assert series.annotations is not None
     assert series.annotations.read_only_hint is True
     assert series.annotations.destructive_hint is False
+    assert tools["example_list_things"].description == "List the things."
+    assert tools["example_plain"].input_schema["properties"]["x"]["description"] == "A number."
+
+
+class Kind(StrEnum):
+    """The kinds of report that upstream serves, from its list of reports."""
+
+    ANNUAL = "annual"
+    MONTHLY = "monthly"
+
+
+async def get_report_async(
+    region: str, year: int = 2024, *, kind: Kind = Kind.ANNUAL, limit: int = 10
+) -> Result[list[str]]:
+    """Fetch one region's report for a year.
+
+    A report is upstream's table for one region, its rows in upstream's order.
+
+    Args:
+        region: A region's code from ``list_regions``, e.g. ``"north"``; a code
+            upstream does not list is refused before any request.
+        year (int): Four-digit year,
+            e.g. ``2024``.
+
+            A year upstream has not published answers no rows.
+        kind: Which report, ``annual`` or ``monthly``.
+        unknown: A name that no parameter carries, which no schema shows.
+
+    Returns:
+        The report's rows, which no description carries.
+
+    Raises:
+        NotFoundError: Upstream has no such region.
+    """
+    return Result[list[str]](data=[region], meta=ResultMeta(source="example", endpoint="report"))
+
+
+get_report = sync(get_report_async)
+
+
+@pytest.mark.anyio
+async def test_the_description_is_the_docstring_before_args() -> None:
+    # ADR-0063, decision 9: what follows Args:, Returns: and Raises: among it, leaves the
+    # description, and a docstring without Args: is the description whole.
+    server = build_server(ToolSet("example", [get_report, example_list_things]))
+    tools = {t.name: t for t in await server.list_tools()}
+    assert tools["example_get_report"].description == (
+        "Fetch one region's report for a year.\n\n"
+        "A report is upstream's table for one region, its rows in upstream's order."
+    )
+    assert tools["example_list_things"].description == "List the things."
+
+
+@pytest.mark.anyio
+async def test_each_argument_s_text_reaches_the_input_schema() -> None:
+    # ADR-0063, decision 9: an argument's lines as the docstring wraps them, its type in
+    # parentheses dropped; an argument that Args: does not name has no description, and an
+    # entry that names no argument reaches nothing.
+    server = build_server(ToolSet("example", [get_report]))
+    tool = {t.name: t for t in await server.list_tools()}["example_get_report"]
+    props = tool.input_schema["properties"]
+    assert props["region"]["description"] == (
+        'A region\'s code from ``list_regions``, e.g. ``"north"``; a code\n'
+        "upstream does not list is refused before any request."
+    )
+    assert props["year"]["description"] == (
+        "Four-digit year,\ne.g. ``2024``.\n\nA year upstream has not published answers no rows."
+    )
+    assert props["kind"]["description"] == "Which report, ``annual`` or ``monthly``."
+    assert "description" not in props["limit"]
+    assert set(props) == {"region", "year", "kind", "limit"}
+    assert "unknown" not in str(tool.input_schema)
+    # The enum's class docstring still reaches the schema through the type (conventions §8).
+    kind = tool.input_schema["$defs"]["Kind"]
+    assert (
+        kind["description"] == "The kinds of report that upstream serves, from its list of reports."
+    )
+    assert props["kind"]["$ref"] == "#/$defs/Kind"
+    served = await mcp_call(server, "example_get_report", {"region": "north", "kind": "monthly"})
+    assert served["data"] == ["north"]
 
 
 async def latest_release_async() -> Result[list[str]]:
@@ -485,6 +574,10 @@ async def test_an_annotated_parameter_keeps_its_metadata_in_the_tool() -> None:
     tool = {t.name: t for t in await server.list_tools()}["example_get_ranked"]
     top = tool.input_schema["properties"]["top"]
     assert (top["minimum"], top["description"]) == (1, "How many, from 1.")
+    # The description a parameter declares wins over its text under Args:, and a parameter
+    # whose metadata declares none takes that text beside its validator (ADR-0063, decision 9).
+    name = tool.input_schema["properties"]["name"]
+    assert name["description"] == 'Which series, e.g. ``"corn"``.'
     text = await mcp_call_text(server, "example_get_ranked", {"top": 0})
     assert text == (
         "error: InvalidRequestError: top: Input should be greater than or equal to 1. "

@@ -1236,3 +1236,42 @@ def test_adr_0052_s_amendment_ends_every_sentence_on_core_s_reader() -> None:
     for name in ("decision 1", "decision 6", "the third consequence", "no longer"):
         assert name in amendment[1], f"ADR-0052's amendment does not name {name!r}"
     assert "the other consequences stand" not in amendment[1], "the third does not stand"
+
+
+# §8 and §10: a tool's description and its bound, and what a source no longer tests again
+# (ADR-0063, decisions 8 and 9; https://github.com/xippios/sdk-core/issues/477 and
+# https://github.com/xippios/sdk-core/issues/485, part 7).
+
+CONTRACT_RULES = [
+    pytest.param(
+        8,
+        "A tool's description is the text of its task's docstring before `Args:`",
+        ("under 1,000 characters", "into the tool's input schema", "ADR-0063, decision 9"),
+        id="s8-the-description-and-its-bound",
+    ),
+    pytest.param(
+        10,
+        "A source does not test again what core's adapters answer for every source",
+        ("keeps the test of a refusal of its own", "ADR-0063, decision 8"),
+        id="s10-no-test-of-core-s-adapters",
+    ),
+    pytest.param(
+        10,
+        "no probe of upstream's base URL stands beside them",
+        ("one live smoke test", "ADR-0063, decision 8"),
+        id="s10-no-live-probe",
+    ),
+]
+
+
+@pytest.mark.parametrize(("number", "phrase", "names"), CONTRACT_RULES)
+def test_each_rule_of_the_contract_and_the_description_cites_adr_0063(
+    number: int, phrase: str, names: tuple[str, ...]
+) -> None:
+    rule = sentence(section(number), phrase)
+    for name in names:
+        assert name in rule, f"§{number}: {rule!r} does not name {name!r}"
+
+
+def test_no_sentence_of_section_8_makes_the_whole_docstring_the_description() -> None:
+    assert "The function docstring is the tool description" not in section(8)
