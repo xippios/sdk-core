@@ -1,7 +1,8 @@
 """Loader for reference data packaged with a source (conventions §3).
 
-Files live in ``<package>/reference/`` as CSV or JSON and ship inside the wheel. File
-contents are cached per process; callers get fresh objects on every call.
+Files live in ``<package>/reference/`` and ship inside the wheel, and core reads the JSON
+ones: ``load_json`` and ``PackagedList``. File contents are cached per process; callers get
+fresh objects on every call.
 
 A packaged list, the records of one upstream operation as the refresh script fetched
 them, is a ``PackagedList``: it loads the file, builds the ``ResultMeta`` of an answer
@@ -18,11 +19,9 @@ plain, ASCII-only Python that the refresh script formats with ``ruff format`` an
 ``ruff check --fix`` before it is committed.
 """
 
-import csv
 import difflib
 import functools
 import inspect
-import io
 import json
 import keyword
 import os
@@ -38,7 +37,7 @@ from types import MappingProxyType
 from typing import Any, Self, cast
 
 import pydantic
-from pydantic import BaseModel, ConfigDict, TypeAdapter, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from xippios.core.errors import InvalidRequestError, UnknownCode, ValidationError, _raise
 from xippios.core.models import Result, ResultMeta, _validation_text, parse
@@ -49,9 +48,7 @@ __all__ = [
     "closest",
     "enum_member_name",
     "id_name_pairs",
-    "load_csv",
     "load_json",
-    "load_table",
     "matches",
     "names_codes",
     "nearest",
@@ -70,17 +67,6 @@ def _read_text(package: str, name: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def load_csv(package: str, name: str) -> list[dict[str, str]]:
-    """Rows of a packaged CSV file as dicts keyed by the header row.
-
-    Args:
-        package: Import path of the source package, e.g. ``"xippios.usda.nass"``.
-        name: File name under ``reference/``, e.g. ``"commodities.csv"``.
-    """
-    rows = csv.DictReader(io.StringIO(_read_text(package, name)))
-    return [cast(dict[str, str], dict(row)) for row in rows]
-
-
 def load_json(package: str, name: str) -> Any:
     """Decoded contents of a packaged JSON file.
 
@@ -89,30 +75,6 @@ def load_json(package: str, name: str) -> Any:
         name: File name under ``reference/``, e.g. ``"countries.json"``.
     """
     return json.loads(_read_text(package, name))
-
-
-def load_table[T](package: str, name: str, model: type[T]) -> list[T]:
-    """Rows of a packaged CSV or JSON file validated into ``model`` instances.
-
-    The format is chosen by extension: ``.csv`` rows are strings coerced by the model,
-    ``.json`` must hold a list of objects.
-
-    Args:
-        package: Import path of the source package.
-        name: File name under ``reference/``.
-        model: The row model, e.g. a ``UpstreamModel`` subclass.
-
-    Raises:
-        ValidationError: A row does not fit ``model``; raised as ``parse`` raises it,
-            its text naming the package, the file and the first failure's location, type
-            and message, the rows on ``raw``.
-    """
-    raw = load_csv(package, name) if name.endswith(".csv") else load_json(package, name)
-    try:
-        return TypeAdapter(list[model]).validate_python(raw)  # type: ignore[valid-type]
-    except pydantic.ValidationError as exc:
-        message = f"{package} reference/{name}: {_validation_text(exc)}"
-        _raise(ValidationError(message, raw=raw))
 
 
 class PackagedList(BaseModel):

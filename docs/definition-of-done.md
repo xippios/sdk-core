@@ -23,7 +23,7 @@ that conventions §15 names for the host (ADR-0026, amendment 2026-11-18, point 
 - [ ] every new endpoint wrapper matches `docs/upstream/` — names, parameters, semantics
 - [ ] errors raised are from the taxonomy in `docs/conventions.md` §5
 - [ ] public surface changes are reflected in `__init__.py` exports and the README status table
-- [ ] a core PR names the two consumers of what it adds (in its ADR, or in its description when it has none), or, in its ADR, the one-consumer reason of ADR-0023 decision 3 or the fourth that ADR-0058, decision 1, adds: the maintainer's decision on the closed design question of the step that adds the code
+- [ ] a core PR names the two consumers of each piece it adds that a caller can name, a source or the host each by the code it runs (in its ADR, or in its description when it has none), or, in its ADR, the part of the family's contract that a piece with one consumer serves: the envelope, the error taxonomy, the package contract with the host, the family check or one of the three security properties (ADR-0059, decisions 1, 2 and 4)
 
 ## Tests
 - [ ] each new task function has a fixture-backed unit test (`tests/fixtures/...` recorded, not hand-written)
@@ -51,8 +51,8 @@ amendment 2026-11-18, point e).
 - [ ] core floor raised: `xippios-core~=X.Y.0`, or `~=X.Y.Z` when patch Z shipped what the source adopts (§12), and its extras likewise; a source package the source depends on bound to its own minor the same way (ADR-0021); from PyPI, no git pin, `uv.lock` updated
 - [ ] `copier update` to the template release, conflicts resolved; not applicable on §15's routes (1), a core release without a template tag, and (3), a source frozen on a template tag, whose hand-applied template changes are listed file by file in the PR description
 - [ ] every local workaround a core change replaced is deleted, its tests with it, the core change named for each in the PR description
-- [ ] code core removed for this source alone is copied in from the commit core's handover names, every copied file listed in the PR description with the ADR that moved it (conventions §15 item 3; ADR-0023, decision 5; ADR-0042)
-- [ ] logic duplicated across sources moved into core or dropped; what core lacks is carried by the source and named in an issue of sdk-core, a second copy only when the issue names both sources, never a third (ADR-0023)
+- [ ] code core removed for this source alone is copied in from the commit core's handover names, every copied file listed in the PR description with the ADR that moved it (conventions §15 item 3; ADR-0059, decision 2; ADR-0042)
+- [ ] logic duplicated across sources moved into core or dropped; what core lacks is carried by the source and named in an issue of sdk-core, a second copy only when the issue names both sources, never a third (ADR-0059, decision 5)
 - [ ] every test that asserted a limiter wait or a quota pause is marked `rate_limited`, and one that asserted key resolution has a module-level `placeholder_api_key` override that pins nothing (ADR-0035, ADR-0037)
 - [ ] generated enum files re-rendered once through the template's refresh script and committed as formatted, after its `ruff format && ruff check --fix`
 - [ ] `mypy --strict` covers `scripts/` too

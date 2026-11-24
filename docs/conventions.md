@@ -379,9 +379,9 @@ release time, a value with a zone is refused with `InvalidRequestError`, never
 converted, and so is a text the parameter cannot read (ADR-0007; ADR-0041,
 decision 2). A parameter that takes back a vintage filters with core's `newer_than(since,
 items, released=..., read=...)`, which keeps the items released strictly later than `since`
-as the source's reader of its vintage text reads it, core's `naive_time` for a release time
-printed without a zone, and leaves `meta.vintage` and `meta.published_at` to the task, which
-sets them from the whole answer (ADR-0052). A parameter named `since` means one of two things
+as the source's own reader of its vintage text reads it, and leaves `meta.vintage` and
+`meta.published_at` to the task, which sets them from the whole answer (ADR-0052; ADR-0059,
+decision 4). A parameter named `since` means one of two things
 in the family, each its own rule: a vintage taken back, the `meta.vintage` of an earlier call
 after which only what is strictly later is kept, with no `until`, or an inclusive bound on
 dates or periods beside an `until`, as sdk-usda-esmis, sdk-usda-wasde, sdk-faostat and
@@ -1397,7 +1397,7 @@ a template-only update, with no new core minor, is judged against the items it t
 3. Every local workaround that a core change replaced is deleted, its tests with it, and
    the PR description names the core change for each (`QuotaAwareClient` → `QuotaPolicy`,
    ADR-0037); the release's ADRs and CHANGELOG list them per source. In the other
-   direction, code that core removed for its one consumer (ADR-0023, decision 5) is
+   direction, code that core removed for its one consumer (ADR-0059, decision 2) is
    copied into that consumer as part of its adoption, from the commit core's handover
    names (`git show <sha>:<path>`); the PR description lists every copied file with the
    ADR that moved it (ADR-0042 for sdk-cashctrl at 0.3.0), and the reviewer judges the
@@ -1405,8 +1405,8 @@ a template-only update, with no new core minor, is judged against the items it t
 4. Logic duplicated across sources is moved into core or dropped: what core now provides
    is dropped here; what it does not provide yet is carried by the source, named in the
    PR description and in an issue of sdk-core; a second source may carry the same helper
-   when the issue names both; a third never: core takes it in that minor (ADR-0023). An
-   issue of sdk-core names its consumers (ADR-0023).
+   when the issue names both; a third never: core takes it in that minor (ADR-0059,
+   decision 5). An issue of sdk-core names its consumers (ADR-0059, decision 8).
 5. Every test that asserted a limiter wait, a quota pause or key resolution is marked or
    overridden: a limiter wait or a quota pause marked `rate_limited` (ADR-0035,
    ADR-0037), key resolution given a module-level `placeholder_api_key` override that

@@ -1,8 +1,8 @@
 """xippios-core: the shared foundation of the xippios Python SDK family.
 
-The names re-exported here are the public API: what consumers import (ADR-0023,
-decision 5). A helper core calls itself and no consumer imports, ``load_csv`` or
-``EnvKeyAuth`` say, stays importable from its own module only. The optional adapters
+The names re-exported here are the public API: what consumers import (ADR-0059,
+decision 3). A helper core calls itself and no consumer imports, ``EnvKeyAuth`` say,
+stays importable from its own module only. The optional adapters
 live in their own subpackages and are imported explicitly: ``xippios.core.mcp``,
 ``xippios.core.http``, ``xippios.core.testing``.
 """
@@ -49,18 +49,17 @@ from xippios.core.models import (
     ResultCap,
     ResultMeta,
     UpstreamModel,
-    naive_time,
     newer_than,
     parse,
     parse_decimal,
 )
 from xippios.core.pagination import collect, fetch_counted, paginate_offset
+from xippios.core.redaction import REDACTED
 from xippios.core.reference import (
     PackagedCodes,
     PackagedList,
     closest,
     load_json,
-    load_table,
     matches,
     names_codes,
     nearest,
@@ -70,6 +69,7 @@ from xippios.core.tenants import TenantLock, Tenants, bind_tasks, list_task, ten
 
 __all__ = [
     "BODY_LIMIT",
+    "REDACTED",
     "Answer",
     "AsyncClient",
     "AuthError",
@@ -115,9 +115,7 @@ __all__ = [
     "fetch_periods",
     "list_task",
     "load_json",
-    "load_table",
     "matches",
-    "naive_time",
     "names_codes",
     "nearest",
     "newer_than",
