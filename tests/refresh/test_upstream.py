@@ -1317,10 +1317,10 @@ def test_the_credentials_go_to_the_origin_of_the_client_s_base_alone(
         return declare(out, page, client=keyed_client(base), variables=VARIABLES)
 
     refused = [
-        ("https://api.example.org", "https://api.example.org.elsewhere.net/v1/items"),
+        ("https://api.example.org", "https://api.example.org.elsewhere.example.net/v1/items"),
         ("https://api.example.org/v1/", "https://api.example.org:8443/v1/items"),
         ("https://api.example.org/v1/", "http://api.example.org/v1/items"),
-        ("https://api.example.org/v1/", "https://api.example.org@elsewhere.net/v1/items"),
+        ("https://api.example.org/v1/", "https://api.example.org@elsewhere.example.net/v1/items"),
         ("https://api.example.org/v1/", "https://[api.example.org/v1/items"),
     ]
     for base, url in refused:

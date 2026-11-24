@@ -134,7 +134,8 @@ def read_since(text: str) -> datetime:
         parsed = None
     if parsed is None or parsed.tzinfo is not None:  # comparing the two would invent a zone
         raise InvalidRequestError(
-            f"since must be a release time without a zone, got {text!r}.", source="example"
+            f"since must be a release time without a zone, got {text!r}. Nothing was sent.",
+            source="example",
         )
     return parsed
 
@@ -1025,9 +1026,9 @@ statement recorded with a link,
 `Statement("Terms of Service", DOCS_URL, "the footer", "https://example.org/tos")`, passes
 only as the text of a link to that target, on any page that prints the link, so the same
 words in prose, linked elsewhere or on a page that is no HTML stop the run, while a
-statement without a link and the words of `vocabulary` pass wherever they stand (ADR-0046,
-decision 7). An API document's `info` names a licence, terms or a contact only as a
-statement recorded from the document quotes it (ADR-0046, Consequences).
+statement without a link and the words of `vocabulary` pass wherever they stand (ADR-0062,
+decision 10). An API document's `info` names a licence, terms or a contact only as a
+statement recorded from the document quotes it (ADR-0062, decision 10).
 `FETCHED.md` is written whole, in one form for every source: the time of the run, the
 attribution, one row per file with the size and sha256 of the body as fetched, each ETag
 in a code span on a row that ends in the secret scan's allowlist mark, a row for
@@ -1066,7 +1067,7 @@ them itself, a login's included; it follows no redirect, is never retried, and t
 prints nothing of it. It lies on the origin of the client's base URL, its scheme, host and
 port, where alone the client sends its credentials (ADR-0037, decision 4), so
 `https://api.example.org/v2/items` is a keyed sample of a client on
-`https://api.example.org/v1` and `https://api.example.org.elsewhere.net/v1/items` none.
+`https://api.example.org/v1` and `https://api.example.org.elsewhere.example.net/v1/items` none.
 `variables` names the environment variables that the credentials are read from: `FETCHED.md`
 names them and never a value, and each must be set before anything is fetched. A shared
 document is cut to the source's part in `reduce` with `read_json`, which refuses a document
@@ -1482,7 +1483,7 @@ a tool set writes or is `loopback_only`, as `main` does, and applies each packag
 as its entry point does when it runs without options:
 
 ```python
-server = MCPServer("xippios-group")
+server = MCPServer("xippios-mcp")
 quiet_request_logging()
 for tools in (example_mcp.build(), other_mcp.build()):
     register_tasks(server, tools)
@@ -2057,7 +2058,7 @@ reopens. It hands over nothing, and the called workflow reads its switch itself:
 - sdk-core: [docs/conventions.md](https://github.com/xippios/sdk-core/blob/main/docs/conventions.md) — the rules of the family, which this package implements and every `sdk-*` repository follows; a change to one comes with an ADR.
 - sdk-core: [docs/definition-of-done.md](https://github.com/xippios/sdk-core/blob/main/docs/definition-of-done.md) — what a change satisfies before its pull request is opened.
 - sdk-core: [docs/review-checklist.md](https://github.com/xippios/sdk-core/blob/main/docs/review-checklist.md) — the checklist every `sdk-*` pull request is reviewed against.
-- sdk-core: [docs/handover.md](https://github.com/xippios/sdk-core/blob/main/docs/handover.md) — the record of each core release and how a source adopts it.
+- sdk-core: [docs/handover.md](https://github.com/xippios/sdk-core/blob/main/docs/handover.md) — what a source's adoption of a core release does, in one part for the coming release that names no source.
 - sdk-core: [docs/adr.md](https://github.com/xippios/sdk-core/blob/main/docs/adr.md) — the index of the architecture decision records under `docs/adr/`, the decisions behind the rules.
 
 ## Licence
