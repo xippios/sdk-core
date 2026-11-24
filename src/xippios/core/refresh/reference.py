@@ -1,49 +1,65 @@
-"""The frame of a source's reference refresh script, ``scripts/refresh_reference.py`` (ADR-0051).
+"""The frame of a source's reference refresh script, ``scripts/refresh_reference.py`` (ADR-0062).
 
-A source's script declares one ``Listed`` per packaged list, with the fetch that gets it
-through the source's ``api/`` wrappers, its enum, if any, and its origin, and runs them; the
-frame does the rest, the same in every source::
+A source's script declares its packaged lists in one ``Lists``, one ``Listed`` per list with
+the fetch that gets it through the source's ``api/`` wrappers, its enum, if any, and its
+origin, and hands the declaration to ``run``; the frame does the rest, the same in every
+source::
 
-    LISTS = (Listed("commodities", api.get_commodities, endpoint="GetCommodities"),)
+    LISTS = Lists(
+        package="xippios.example",
+        lists=(Listed("commodities", api.get_commodities, endpoint="GetCommodities"),),
+        packaged=PACKAGED_LISTS,
+        client=client,
+    )
 
     if __name__ == "__main__":
-        raise SystemExit(
-            run(LISTS, package="xippios.example", packaged=PACKAGED_LISTS, client=client)
-        )
+        raise SystemExit(run(LISTS))
 
 The lists must be those the package declares it ships, ``packaged``, its
 ``params.PACKAGED_LISTS``. Every list is fetched before anything is written, through
 ``client`` with one attempt per request, each counted, so a 5xx or a 429 spends no second
 call of upstream's quota; the requests sent and the quota left are printed after the
-fetches, a failed run's too. A fetch answers values, records or a finished
-``PackagedList``. Then each list is written to
-``reference/<name>.json`` by ``PackagedList.write``, the rows of the provenance table of
-``reference/README.md`` are rewritten in place under the header the README has, and
-``enums.py`` is rendered by one ``render_enums`` call in the order the lists are declared,
-then formatted with ``ruff format`` and ``ruff check --fix``; where no list declares an
-enum, ``enums.py`` is left alone. Every file is made, the module formatted, before the first
-is written, and they are written as one: a write that fails puts back what the run
+fetches, a failed run's too. A fetch answers records or a finished ``PackagedList``. Then
+each list is written to ``reference/<name>.json`` by ``PackagedList.write``, the rows of the
+provenance table of ``reference/README.md`` are rewritten in place under its one header, and
+``enums.py`` is rendered by ``render_enums``, this module's, in the order the lists are
+declared, then formatted with ``ruff format`` and ``ruff check --fix``; where no list declares
+an enum, ``enums.py`` is left alone. Every file is made, the module formatted, before the
+first is written, and they are written as one: a write that fails puts back what the run
 replaced, so a run that fails writes nothing and is run again.
 
 ``--only`` fetches the lists it names and keeps every other list's file. ``--render-only``
 writes the provenance rows and ``enums.py`` from the packaged files alone, without a request
 or a key. A hook before the first request and one after the last write carry what a script
 writes beside the lists.
+
+The enum renderer stands here, in the frame that alone calls it, and not in the run-time
+module ``xippios.core.reference`` (ADR-0062, decision 13).
 """
 
 import argparse
 import importlib.util
 import inspect
+import keyword
 import re
 import subprocess
 import sys
 import tempfile
-from collections.abc import Awaitable, Callable, Collection, Iterator, Mapping, Sequence
+from collections import Counter
+from collections.abc import (
+    Awaitable,
+    Callable,
+    Collection,
+    Iterable,
+    Iterator,
+    Mapping,
+    Sequence,
+)
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, overload
+from typing import Any, cast
 
 import httpx
 
@@ -51,7 +67,7 @@ from xippios.core._loop import run as _run_coroutine
 from xippios.core.client import AsyncClient, RetryPolicy
 from xippios.core.errors import TransportError
 from xippios.core.models import UpstreamModel
-from xippios.core.reference import PackagedList, id_name_pairs, render_enums
+from xippios.core.reference import PackagedList
 from xippios.core.refresh.upstream import Snapshot
 from xippios.core.refresh.upstream import run as _run_snapshot
 
@@ -61,15 +77,14 @@ GENERATOR = "scripts/refresh_reference.py"
 """What the docstring of the generated ``enums.py`` names as its generator."""
 README = "README.md"
 """The file under ``reference/`` that holds the provenance table, one row per file."""
-HEADERS = {
-    "| File | Origin | Fetched |": False,
-    "| File | Origin | Fetched (UTC) | Records |": True,
-}
-"""The provenance table's two headers, each to whether its rows count the file's records:
-the one the template renders, and the FAS sources' with ``Records``."""
+HEADER = "| File | Origin | Fetched |"
+"""The provenance table's one header, the one sdk-template renders: no row counts its
+file's records (ADR-0062, decision 13)."""
 
-type Fetched = PackagedList | Sequence[Any]
-"""What a list's fetch answers: values, records or a finished ``PackagedList``."""
+type Record = UpstreamModel | Mapping[str, Any]
+"""One record a fetch answers: a model, kept by ``dump_upstream``, or a mapping as it is."""
+type Fetched = PackagedList | Sequence[Record]
+"""What a list's fetch answers: records or a finished ``PackagedList``."""
 type Fetch = Callable[[], Awaitable[Fetched] | Fetched]
 """A list's fetch: a function of no argument, async like the ``api/`` wrappers, or not."""
 type MemberNames = Mapping[Any, str] | Callable[[Sequence[Any]], Mapping[Any, str]]
@@ -85,25 +100,24 @@ _ROW = re.compile(r"\| `(?P<file>[^`]+)` \|")
 class Enumeration:
     """The enum a list makes in ``enums.py``: a ``StrEnum`` of its values, or an ``IntEnum``.
 
+    A ``StrEnum`` reads its values from the field its packaged file's ``param`` names, and its
+    key, which its docstring names and its class takes its name from, is the list's name; an
+    ``IntEnum`` reads the fields ``ids`` and ``names``, and its key is ``ids`` (ADR-0062,
+    decision 11).
+
     Attributes:
-        values: The field each value is read from, for a ``StrEnum``: the packaged file's
-            ``param`` by default, the one field of a list of values.
         ids: The field of each integer id, for an ``IntEnum`` of ``(id, name)`` pairs,
             e.g. ``"unitId"``; given with ``names``.
         names: The field of each id's name, e.g. ``"unitDescription"``.
-        key: The enum's key, which its docstring names and its class takes its name from:
-            the list's name for a ``StrEnum``, ``ids`` for an ``IntEnum``.
-        class_name: The class's name where core's default from ``key`` will not do, e.g.
+        class_name: The class's name where core's default from the key will not do, e.g.
             ``"ProgressStage"`` for ``progress_stages``.
         member_names: Members named by hand, per value or per id, where a derived name
             collides or there is none: a mapping, or a function of the list's values or
             pairs that returns one, for a rule that names many (``render_enums``).
     """
 
-    values: str | None = None
     ids: str | None = None
     names: str | None = None
-    key: str | None = None
     class_name: str | None = None
     member_names: MemberNames | None = None
 
@@ -116,16 +130,16 @@ class Listed:
         name: The list's name, its file under ``reference/`` without ``.json`` and the name
             ``--only`` takes, e.g. ``"commodities"`` or ``"element_QCL"``.
         fetch: Gets the list through the source's ``api/`` wrappers, never through a task
-            that answers from the package: values, which become records of one field
-            named by ``param``; records, a model's by ``dump_upstream`` and a mapping as
-            it is; or a finished ``PackagedList``, written as built. Values and records
+            that answers from the package: records, a model's by ``dump_upstream`` and a
+            mapping as it is, a list of values as records of one field named by ``param``
+            that the fetch makes; or a finished ``PackagedList``, written as built. Records
             are fetched when the fetch returns; a finished list carries its own
             ``fetched``, such as the wrapper's ``retrieved_at`` or the time of its first
             request.
         endpoint: The upstream operation the list comes from, the file's ``endpoint``:
-            needed for values and records, and where given, a finished list's must match.
+            needed for records, and where given, a finished list's must match.
         param: The upstream parameter the list feeds, the file's ``param``: ``name`` by
-            default for values and records, and where given, a finished list's must match.
+            default for records, and where given, a finished list's must match.
         enum: The enum the list makes in ``enums.py``, or ``None`` for a table.
         origin: The provenance row's Origin: a text, or a function of the list as written
             that returns it; ``None`` writes the list's endpoint in a code span.
@@ -137,6 +151,44 @@ class Listed:
     param: str | None = None
     enum: Enumeration | None = None
     origin: str | Callable[[PackagedList], str] | None = None
+
+
+@dataclass(frozen=True)
+class Lists:
+    """A source's reference refresh script's declaration, which ``run`` takes (ADR-0062).
+
+    It stands beside ``Snapshot``, the snapshot script's, so that both frames take one
+    declaration under one ``run``.
+
+    Attributes:
+        package: The source's import path, e.g. ``"xippios.example"``, as
+            ``PackagedList.load`` takes it: the frame writes into its directory as imported,
+            which must lie in the directory the script runs in.
+        lists: The lists, one ``Listed`` each, in the order of their enums in ``enums.py``.
+        packaged: The names of the lists the package declares it ships, such as its
+            ``params.PACKAGED_LISTS``: the lists must be exactly these, or the run stops
+            before a request, naming those declared on one side alone.
+        client: The client the fetches send through, the one the ``api/`` wrappers hold:
+            one attempt per request for the run, each counted, its configuration restored
+            after.
+        quota_header: The response header in which upstream reports the requests left in
+            its quota, e.g. ``"x-ratelimit-remaining"``, or ``None`` where it reports none.
+        before: Called once before the first request, after the command line and the
+            declaration are checked: what can stop the run before it spends a request,
+            such as parsing a snapshot's table that a file beside the lists is made from.
+        after: Called after the last write with the lists this run fetched, by name: what
+            a script writes beside the lists, an index or a manifest. A hook that raises
+            leaves the frame's files written, and the run says so before the error ends
+            it. Neither hook is called by ``--render-only``.
+    """
+
+    package: str
+    lists: Sequence[Listed]
+    packaged: Collection[str]
+    client: AsyncClient
+    quota_header: str | None = None
+    before: Callable[[], object] | None = None
+    after: Callable[[Mapping[str, PackagedList]], object] | None = None
 
 
 class _Meter:
@@ -229,8 +281,8 @@ def _check(lists: Sequence[Listed], packaged: Collection[str]) -> None:
 
     Raises:
         SystemExit: No list, a name that is no file's name or that two lists take, an
-            enum of ids without the field of their names, two enums of one key, or lists
-            other than those the package declares it ships, ``packaged``.
+            enum that names one of ``ids`` and ``names`` alone, two enums of one key, or
+            lists other than those the package declares it ships, ``packaged``.
     """
     if not lists:
         raise SystemExit("Nothing to fetch: declare the lists, one Listed each.")
@@ -243,7 +295,7 @@ def _check(lists: Sequence[Listed], packaged: Collection[str]) -> None:
     keys: set[str] = set()
     for listed in lists:
         if not isinstance(listed, Listed):
-            raise SystemExit(f"run takes one Listed per list, not {type(listed).__name__}")
+            raise SystemExit(f"Lists takes one Listed per list, not {type(listed).__name__}")
         if not _FILE.fullmatch(listed.name):
             raise SystemExit(
                 f"{listed.name!r}: a list's name is a file's name under reference/, without "
@@ -255,12 +307,12 @@ def _check(lists: Sequence[Listed], packaged: Collection[str]) -> None:
         enum = listed.enum
         if enum is None:
             continue
-        if (enum.ids is None) != (enum.names is None) or (enum.ids and enum.values):
+        if (enum.ids is None) != (enum.names is None):
             raise SystemExit(
-                f"{listed.name}: an Enumeration of ids names the field of their names too, "
-                "and one of values names neither"
+                f"{listed.name}: an Enumeration of ids names both ids and names, the fields "
+                "of the ids and of their names, and one of values names neither"
             )
-        key = enum.key or enum.ids or listed.name
+        key = enum.ids or listed.name
         if key in keys:
             raise SystemExit(f"two lists declare the enum of key {key}")
         keys.add(key)
@@ -292,29 +344,29 @@ def _origin(listed: Listed, packaged: PackagedList) -> str:
     return text
 
 
-def _table(text: str, readme: Path) -> tuple[int, bool]:
-    """Where the provenance table's header stands in ``text``, and whether it counts records.
+def _table(text: str, readme: Path) -> int:
+    """Where the provenance table's one header stands in ``text``.
 
     Raises:
-        SystemExit: ``text`` holds neither header followed by its separator line.
+        SystemExit: ``text`` holds no ``HEADER`` followed by its separator line, a README
+            under another header among them.
     """
     lines = text.split("\n")
     for index, line in enumerate(lines[:-1]):
-        if line in HEADERS and lines[index + 1].startswith("| --- |"):
-            return index, HEADERS[line]
-    headers = " or ".join(repr(header) for header in HEADERS)
-    raise SystemExit(f"{readme} has no provenance table headed {headers}; nothing was written")
+        if line == HEADER and lines[index + 1].startswith("| --- |"):
+            return index
+    raise SystemExit(f"{readme} has no provenance table headed {HEADER!r}; nothing was written")
 
 
 def _provenance(text: str, lists: Sequence[Listed], packaged: Mapping[str, PackagedList]) -> str:
     """``text``, a ``reference/README.md``, with the provenance rows of ``lists`` rewritten.
 
-    Each row is ``| `<name>.json` | <origin> | <fetched> |``, with the count of records after
-    ``fetched`` under the header with ``Records``, ``fetched`` in UTC to the second with ``Z``.
-    A list's row is rewritten where it stands; a row of a file no list declares, such as one
-    a hook writes, is kept; a row that names no file, the template's ``(none yet)``, is
-    dropped; and a list without a row gets one after the others, in the declared order. The
-    text around the table is kept.
+    Each row is ``| `<name>.json` | <origin> | <fetched> |``, ``fetched`` in UTC to the
+    second with ``Z``, and no row counts its file's records, since the one header has no
+    column for it. A list's row is rewritten where it stands; a row of a file no list
+    declares, such as one a hook writes, is kept; a row that names no file, the template's
+    ``(none yet)``, is dropped; and a list without a row gets one after the others, in the
+    declared order. The text around the table is kept.
 
     Args:
         text: The README as it stands.
@@ -324,14 +376,12 @@ def _provenance(text: str, lists: Sequence[Listed], packaged: Mapping[str, Packa
     Raises:
         SystemExit: The README holds no provenance table, or an origin would break its row.
     """
-    start, counted = _table(text, Path("reference", README))
+    start = _table(text, Path("reference", README))
     rows: dict[str, str] = {}
     for listed in lists:
         written = packaged[listed.name]
         cells = [f"`{listed.name}.json`", _origin(listed, written)]
         cells.append(f"{written.fetched.astimezone(UTC):%Y-%m-%dT%H:%M:%SZ}")
-        if counted:
-            cells.append(f"{len(written.records):,}")
         rows[f"{listed.name}.json"] = f"| {' | '.join(cells)} |"
     lines = text.split("\n")
     end = start + 2
@@ -352,6 +402,9 @@ def _enums(lists: Sequence[Listed], packaged: Mapping[str, PackagedList]) -> tup
 
     ``None`` where no list declares an enum, so that ``enums.py`` is left alone.
 
+    A ``StrEnum`` reads the field its file's ``param`` names and is keyed by the list's name,
+    an ``IntEnum`` reads its ids and names and is keyed by ``ids``.
+
     Raises:
         SystemExit: A record lacks the field an enum reads its values from.
         ValueError: ``render_enums`` or ``id_name_pairs`` refuses a list, as they say.
@@ -370,11 +423,11 @@ def _enums(lists: Sequence[Listed], packaged: Mapping[str, PackagedList]) -> tup
         written = packaged[listed.name]
         found: Sequence[str] | Sequence[tuple[int, str]]
         if enum.ids is not None and enum.names is not None:
-            key = enum.key or enum.ids
+            key = enum.ids
             found = id_name_pairs(written.records, id_field=enum.ids, name_field=enum.names)
         else:
-            key = enum.key or listed.name
-            field = enum.values or written.param
+            key = listed.name
+            field = written.param
             missing = [index for index, record in enumerate(written.records) if field not in record]
             if missing:
                 raise SystemExit(f"{listed.name}.json: record {missing[0]} has no field {field!r}")
@@ -416,8 +469,9 @@ def _fetched(listed: Listed) -> PackagedList:
     """Fetch ``listed`` and make its packaged list, stamped now unless the fetch built it.
 
     Raises:
-        SystemExit: A finished list that disagrees with the declaration, values or records
-            with no endpoint, or an answer that is neither.
+        SystemExit: A finished list that disagrees with the declaration, records with no
+            endpoint, an item that is no record, a plain value among them, or an answer
+            that is neither records nor a finished list.
     """
     answer = listed.fetch()
     if inspect.isawaitable(answer):
@@ -431,25 +485,31 @@ def _fetched(listed: Listed) -> PackagedList:
                 )
         return answer.model_copy(update={"fetched": answer.fetched.replace(microsecond=0)})
     fetched = datetime.now(UTC).replace(microsecond=0)
-    if isinstance(answer, str | bytes) or not isinstance(answer, Sequence):
+    given = cast(object, answer)  # a fetch that mypy does not check
+    if isinstance(given, str | bytes) or not isinstance(given, Sequence):
         raise SystemExit(
-            f"{listed.name}'s fetch answered a {type(answer).__name__}: it answers values, "
-            "records or a PackagedList; nothing was written"
+            f"{listed.name}'s fetch answered a {type(given).__name__}: it answers records "
+            "or a PackagedList; nothing was written"
         )
     if listed.endpoint is None:
         raise SystemExit(
-            f"{listed.name}'s fetch answers values or records: name its endpoint, the upstream "
+            f"{listed.name}'s fetch answers records: name its endpoint, the upstream "
             "operation, in its Listed; nothing was written"
         )
+    records: list[dict[str, Any]] = []
+    for index, item in enumerate(given):
+        if isinstance(item, UpstreamModel):
+            records.append(item.dump_upstream())
+        elif isinstance(item, Mapping):
+            records.append(dict(item))
+        else:
+            raise SystemExit(
+                f"{listed.name}'s fetch answered {_described(item)} at position {index}: a "
+                "fetch answers records, a model or a mapping each, or a PackagedList, and "
+                "makes a list of values records of one field named by its param; nothing "
+                "was written"
+            )
     param = listed.param or listed.name
-    records = [
-        item.dump_upstream()
-        if isinstance(item, UpstreamModel)
-        else dict(item)
-        if isinstance(item, Mapping)
-        else {param: item}
-        for item in answer
-    ]
     return PackagedList(param=param, endpoint=listed.endpoint, fetched=fetched, records=records)
 
 
@@ -514,22 +574,13 @@ def _commit(files: Mapping[Path, bytes]) -> None:
         raise
 
 
-def _refresh(
-    lists: Sequence[Listed],
-    argv: Sequence[str] | None,
-    *,
-    package: str,
-    packaged: Collection[str],
-    client: AsyncClient,
-    quota_header: str | None,
-    before: Callable[[], object] | None,
-    after: Callable[[Mapping[str, PackagedList]], object] | None,
-) -> int:
-    """The reference frame's run: ``run`` with a sequence of ``Listed``."""
-    _check(lists, packaged)
+def _refresh(declaration: Lists, argv: Sequence[str] | None) -> int:
+    """The reference frame's run: ``run`` with a ``Lists``."""
+    lists = declaration.lists
+    _check(lists, declaration.packaged)
     names = [listed.name for listed in lists]
     parser = argparse.ArgumentParser(
-        description=f"Refresh the packaged reference data of {package} from upstream."
+        description=f"Refresh the packaged reference data of {declaration.package} from upstream."
     )
     choice = parser.add_mutually_exclusive_group()
     choice.add_argument(
@@ -546,7 +597,7 @@ def _refresh(
     )
     args = parser.parse_args(argv)
     only: list[str] = args.only
-    directory = _directory(package)
+    directory = _directory(declaration.package)
     reference = directory / "reference"
     readme = reference / README
     text = readme.read_text(encoding="utf-8") if readme.is_file() else ""
@@ -568,9 +619,9 @@ def _refresh(
         raise SystemExit(f"{absent} is not packaged yet: {why}")
     written: dict[str, PackagedList] = {}
     if chosen:
-        if before is not None:
-            before()
-        with _metered(client, quota_header):
+        if declaration.before is not None:
+            declaration.before()
+        with _metered(declaration.client, declaration.quota_header):
             for listed in lists:
                 if listed.name in chosen:
                     written[listed.name] = _fetched(listed)
@@ -595,105 +646,501 @@ def _refresh(
         print(f"{enums.name}: left alone, no list declares an enum")  # noqa: T201
     else:
         print(f"{enums.name}: {module[1]} enums")  # noqa: T201
-    if chosen and after is not None:
+    if chosen and declaration.after is not None:
         try:
-            after(written)
+            declaration.after(written)
         except BaseException as error:
             print(f"after raised {type(error).__name__}: the files above stand written")  # noqa: T201
             raise
     return 0
 
 
-@overload
-def run(snapshot: Snapshot, argv: Sequence[str] | None = None) -> int: ...
+def run(declaration: Snapshot | Lists, argv: Sequence[str] | None = None) -> int:
+    """Run a source's refresh script on its declaration, a ``Snapshot`` or a ``Lists``.
 
-
-@overload
-def run(
-    lists: Sequence[Listed],
-    /,
-    argv: Sequence[str] | None = None,
-    *,
-    package: str,
-    packaged: Collection[str],
-    client: AsyncClient,
-    quota_header: str | None = None,
-    before: Callable[[], object] | None = None,
-    after: Callable[[Mapping[str, PackagedList]], object] | None = None,
-) -> int: ...
-
-
-def run(
-    snapshot: Snapshot | Sequence[Listed],
-    argv: Sequence[str] | None = None,
-    *,
-    package: str | None = None,
-    packaged: Collection[str] | None = None,
-    client: AsyncClient | None = None,
-    quota_header: str | None = None,
-    before: Callable[[], object] | None = None,
-    after: Callable[[Mapping[str, PackagedList]], object] | None = None,
-) -> int:
-    """Run a source's refresh script: its ``Snapshot``, or its packaged lists (ADR-0051).
-
-    ``run(snapshot)`` is the snapshot frame's run as it stands (ADR-0046), and
-    ``run(lists, package=..., packaged=..., client=...)`` the reference frame's: it
-    fetches every list of ``lists`` through ``client``, then writes each to
-    ``reference/<name>.json``, the provenance rows of ``reference/README.md`` and
-    ``enums.py`` as one, each file made, ``enums.py`` formatted by ruff, before the first
-    is written, and a write that fails puts back what it replaced. The command line takes
-    ``--only LIST [LIST ...]``, which fetches those lists alone and keeps every other
-    list's file, or ``--render-only``, which writes the rows and ``enums.py`` from the
-    packaged files without a request.
+    The one entry of both frames (ADR-0062, decision 2). ``run(SNAPSHOT)`` is the snapshot
+    frame's run, and ``run(LISTS)`` the reference frame's: it fetches every list of
+    ``LISTS.lists`` through ``LISTS.client``, then writes each to ``reference/<name>.json``,
+    the provenance rows of ``reference/README.md`` and ``enums.py`` as one, each file made,
+    ``enums.py`` formatted by ruff, before the first is written, and a write that fails puts
+    back what it replaced. The reference frame's command line takes ``--only LIST [LIST
+    ...]``, which fetches those lists alone and keeps every other list's file, or
+    ``--render-only``, which writes the rows and ``enums.py`` from the packaged files without
+    a request.
 
     Args:
-        snapshot: The snapshot's declaration, or the lists, one ``Listed`` each, in the
-            order of ``enums.py``.
+        declaration: The script's declaration: its ``Snapshot``, or its ``Lists``.
         argv: The command line's arguments, ``sys.argv[1:]`` by default.
-        package: The source's import path, e.g. ``"xippios.usda.psd"``: the frame writes
-            into its directory, which must lie in the directory the script runs in.
-        packaged: The names of the lists the package declares it ships, such as its
-            ``params.PACKAGED_LISTS``: the lists must be exactly these, or the run stops
-            before a request, naming those declared on one side alone.
-        client: The client the fetches send through: one attempt per request for the
-            run, each counted, its configuration restored after.
-        quota_header: The response header in which upstream reports the requests left in
-            its quota, e.g. ``"x-ratelimit-remaining"``, or ``None`` where it reports none.
-        before: Called once before the first request, after the command line and the
-            declaration are checked: what can stop the run before it spends a request,
-            such as parsing a snapshot's table that a list beside the lists is made from.
-        after: Called after the last write with the lists this run fetched, by name: what
-            a script writes beside the lists, an index or a manifest. Neither hook is
-            called by ``--render-only``. A hook that raises leaves the frame's files
-            written, and the run says so before the error ends it.
 
     Returns:
-        The exit status: 0. A fetch's error, an upstream error among them, is raised as it
-        is, after the requests sent are printed, and nothing is written.
+        The exit status. The reference frame's is 0: a fetch's error, an upstream error
+        among them, is raised as it is, after the requests sent are printed, and nothing is
+        written. The snapshot frame's is 1 where ``--check`` or ``--keyless`` finds a
+        difference.
 
     Raises:
-        SystemExit: A declaration the frame cannot run, lists other than ``packaged``, a
-            list ``--only`` does not know, a packaged file missing, or a README without
-            its provenance table, each before the first request; a fetch's answer that
-            does not fit its declaration, or a module ruff leaves failing, before the
-            first write.
-        TypeError: A snapshot given the lists' arguments, or lists without their package,
-            the lists it ships and their client.
+        SystemExit: What is neither declaration, before anything is read; for the lists, a
+            declaration the frame cannot run, lists other than ``packaged``, a list
+            ``--only`` does not know, a packaged file missing, or a README without its
+            provenance table, each before the first request; a fetch's answer that does
+            not fit its declaration, or a module ruff leaves failing, before the first
+            write.
     """
-    if isinstance(snapshot, Snapshot):
-        given = (package, packaged, client, quota_header, before, after)
-        if any(argument is not None for argument in given):
-            raise TypeError("a Snapshot takes argv alone: package, client and the hooks are lists'")
-        return _run_snapshot(snapshot, argv)
-    if package is None or packaged is None or client is None:
-        raise TypeError("run(lists, ...) takes the lists' package, packaged and client by keyword")
-    return _refresh(
-        snapshot,
-        argv,
-        package=package,
-        packaged=packaged,
-        client=client,
-        quota_header=quota_header,
-        before=before,
-        after=after,
+    given = cast(object, declaration)  # a script that mypy does not check
+    if isinstance(given, Lists):
+        return _refresh(given, argv)
+    if isinstance(given, Snapshot):
+        return _run_snapshot(given, argv)
+    raise SystemExit(
+        f"run takes one declaration, a Snapshot or a Lists, not a {type(given).__name__}: "
+        "declare the lists in Lists(package, lists, packaged, client) and hand run that. "
+        "Nothing was fetched or written."
     )
+
+
+# --- enums.py: the renderer, which the frame alone calls (ADR-0062, decision 13) ----------
+
+_LINE_LENGTH = 100
+"""The family's ``line-length``; a longer generated line carries ``# noqa: E501``."""
+
+
+def enum_member_name(value: str) -> str:
+    """An identifier for an enum member: ``"ANIMALS & PRODUCTS"`` → ``ANIMALS_AND_PRODUCTS``.
+
+    Upper case, ``&`` read as ``AND``, every other run of non-alphanumerics folded to one
+    underscore, a leading digit prefixed with an underscore.
+    """
+    name = re.sub(r"[^A-Z0-9]+", "_", value.upper().replace("&", " AND ")).strip("_")
+    if not name:
+        raise ValueError(f"no identifier can be made from {value!r}")
+    return f"_{name}" if name[0].isdigit() else name
+
+
+def id_name_pairs(
+    records: Iterable[Mapping[str, Any]], *, id_field: str, name_field: str
+) -> list[tuple[int, str]]:
+    """``(id, name)`` pairs from upstream's records, in upstream order, for ``render_enums``.
+
+    Args:
+        records: Upstream's records under upstream's field names, e.g. PSD's
+            ``commodityAttributes``.
+        id_field: The field holding the integer id, e.g. ``"attributeId"``; an ``int`` or
+            a string of ASCII digits without leading zeros (``"28"``, not ``"007"``).
+        name_field: The field holding the name, a string, e.g. ``"attributeName"``.
+
+    Raises:
+        ValueError: When a record lacks a field, its id is not an integer or has leading
+            zeros that ``int`` would drop, or its name is not a string. The message names
+            the field and the record's position, never the record.
+    """
+    pairs: list[tuple[int, str]] = []
+    for index, record in enumerate(records):
+        for field in (id_field, name_field):
+            if field not in record:
+                raise ValueError(f"record {index} has no field {field!r}")
+        ident, name = record[id_field], record[name_field]
+        if isinstance(ident, str) and ident.isascii() and ident.isdigit():
+            if len(ident) > 1 and ident.startswith("0"):
+                raise ValueError(
+                    f"record {index}: field {id_field!r} has leading zeros an integer id would lose"
+                )
+            ident = int(ident)
+        if not isinstance(ident, int) or isinstance(ident, bool):
+            raise ValueError(f"record {index}: field {id_field!r} is not an integer id")
+        if not isinstance(name, str):
+            raise ValueError(f"record {index}: field {name_field!r} is not a string")
+        pairs.append((ident, name))
+    return pairs
+
+
+_TEXT_RULE = "non-empty printable ASCII without a backslash or three double quotes"
+
+_BASES = frozenset({"IntEnum", "StrEnum"})
+"""The names the generated module imports, which no class of it may take."""
+
+_CLASS_NAME_LIMIT = _LINE_LENGTH - len("class (StrEnum):")
+"""84: the longest class name whose ``class`` line fits; ``ruff format`` cannot shorten one."""
+
+
+def _plain_text(text: str) -> bool:
+    """Whether ``text`` fits a generated docstring as it is: ``_TEXT_RULE``."""
+    return (
+        bool(text)
+        and text.isascii()
+        and text.isprintable()
+        and "\\" not in text
+        and '"""' not in text
+    )
+
+
+_AMBIGUOUS = frozenset({"I", "O", "l"})
+"""Names ruff flags as ambiguous (E741) and cannot fix: a member upstream's ``"I"`` names."""
+
+
+def _fit(line: str, *codes: str) -> str:
+    """``line`` with a ``# noqa`` for ``codes``, and for E501 when it is over 100 columns.
+
+    No tool can shorten an upstream value, a long key or a member name derived from a long
+    label, nor rename a member upstream's value names ``I`` or ``O`` (E741), so such a line
+    is exempted, not refused; ruff drops a code again where ``ruff format`` makes the line
+    fit (RUF100).
+    """
+    exempt = ("E501",) * (len(line) > _LINE_LENGTH) + codes
+    return f"{line}  # noqa: {', '.join(exempt)}" if exempt else line
+
+
+_HUMP = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
+"""Where a camelCase part starts a word: before an upper-case letter after a lower-case
+letter or a digit."""
+
+
+def _class_name(key: str) -> str:
+    """The default class name: each word of ``key`` capitalized, a camelCase hump kept.
+
+    ``attributeId`` → ``AttributeId``, ``partner2Code`` → ``Partner2Code``, ``state_alpha``
+    and ``STATE_ALPHA`` → ``StateAlpha``: a key splits into parts at each run of characters
+    that are no ASCII letters or digits, a part that holds a lower-case letter splits again
+    before each hump, and every word is capitalized. A part in upper case alone has no hump
+    (``STATE2ALPHA`` → ``State2alpha``), nor has an upper-case run (``HSCode`` →
+    ``Hscode``): such a key keeps the name it had before humps were kept.
+    """
+    words: list[str] = []
+    for part in re.split(r"[^A-Za-z0-9]+", key):
+        words += _HUMP.split(part) if re.search(r"[a-z]", part) else [part]
+    return "".join(word.capitalize() for word in words if word)
+
+
+def _unknown_keys(argument: str, given: Mapping[str, object], lists: Mapping[str, object]) -> None:
+    unknown = sorted(set(given) - set(lists))
+    if unknown:
+        raise ValueError(f"{argument} names lists that are not rendered: {unknown}")
+
+
+def _class_names(lists: Mapping[str, object], class_names: Mapping[str, str]) -> dict[str, str]:
+    """The class name per key, once every key is known to fit a docstring.
+
+    Raises:
+        ValueError: A key is not ``_TEXT_RULE``; a class name is no ASCII identifier, is a
+            keyword or one of ``_BASES``, which the module could not execute with, or is
+            longer than ``_CLASS_NAME_LIMIT``; two keys get one class name. The message
+            names the position.
+    """
+    names: dict[str, str] = {}
+    for index, key in enumerate(lists):
+        if not _plain_text(key):
+            raise ValueError(f"the key at position {index} of lists must be {_TEXT_RULE}")
+        given = class_names.get(key)
+        name = _class_name(key) if given is None else given
+        too_long = len(name) > _CLASS_NAME_LIMIT
+        refused = keyword.iskeyword(name) or name in _BASES or too_long
+        if not (name.isascii() and name.isidentifier()) or refused:
+            where = (
+                f"the class name derived from the key at position {index} of lists"
+                if given is None
+                else f"class_names for the key at position {index} of lists"
+            )
+            raise ValueError(
+                f"{where} must be an ASCII identifier, not a keyword, IntEnum or StrEnum, of "
+                f"at most {_CLASS_NAME_LIMIT} characters; set it in class_names"
+            )
+        names[key] = name
+    positions: dict[str, list[int]] = {}
+    for index, name in enumerate(names.values()):
+        positions.setdefault(name, []).append(index)
+    shared = [
+        f"{name!r} at positions {', '.join(map(str, where))}"
+        for name, where in positions.items()
+        if len(where) > 1
+    ]
+    if shared:
+        raise ValueError(f"class names collide: {'; '.join(shared)}; set them in class_names")
+    return names
+
+
+def _dates(lists: Mapping[str, object], fetched: str | Mapping[str, str]) -> dict[str, str]:
+    """The fetch date per key: ``fetched`` for every list, or each list's own.
+
+    Raises:
+        ValueError: A date is not ``_TEXT_RULE``, or a mapping lacks a key of ``lists``
+            or names one it does not hold.
+    """
+    if isinstance(fetched, str):
+        if not _plain_text(fetched):
+            raise ValueError(f"fetched must be {_TEXT_RULE}")
+        return dict.fromkeys(lists, fetched)
+    _unknown_keys("fetched", fetched, lists)
+    dates: dict[str, str] = {}
+    for index, key in enumerate(lists):
+        if key not in fetched:
+            raise ValueError(f"fetched has no date for the key at position {index} of lists")
+        if not _plain_text(fetched[key]):
+            raise ValueError(
+                f"fetched for the key at position {index} of lists must be {_TEXT_RULE}"
+            )
+        dates[key] = fetched[key]
+    return dates
+
+
+def _is_pair(item: object) -> bool:
+    return (
+        isinstance(item, tuple)
+        and len(item) == 2
+        and isinstance(item[0], int)
+        and not isinstance(item[0], bool)
+        and isinstance(item[1], str)
+    )
+
+
+def _kind(key: str, values: object) -> str:
+    """``"StrEnum"`` for a list of strings, ``"IntEnum"`` for a list of ``(id, name)`` pairs.
+
+    Raises:
+        ValueError: ``values`` is a string or empty, or is neither all strings nor all
+            pairs of an ``int`` and a ``str``; the message names what it found, by type.
+    """
+    if isinstance(values, str) or not isinstance(values, Sequence):
+        raise ValueError(
+            f"{key}: a list of values or of (id, name) pairs is needed, not {_described(values)}"
+        )
+    if not values:
+        raise ValueError(f"{key}: the list is empty; an enum needs at least one value")
+    if all(isinstance(item, str) for item in values):
+        return "StrEnum"
+    if all(_is_pair(item) for item in values):
+        return "IntEnum"
+    if isinstance(values[0], str) or _is_pair(values[0]):
+        fits = _is_pair if _is_pair(values[0]) else (lambda item: isinstance(item, str))
+        position = next(index for index, item in enumerate(values) if not fits(item))
+        found = (
+            f"item 0 is {_described(values[0])} and item {position} {_described(values[position])}"
+        )
+    else:
+        found = f"item 0 is {_described(values[0])}"
+    raise ValueError(
+        f"{key}: a list holds strings (a StrEnum) or (id, name) pairs of an int and a str (an "
+        f"IntEnum), as id_name_pairs builds them; {found}"
+    )
+
+
+def _described(item: object) -> str:
+    """What ``item`` is, by type, never by value: ``"a str"``, ``"a tuple of int, str"``."""
+    if _is_pair(item):
+        return "an (id, name) pair"
+    if isinstance(item, tuple):
+        return f"a tuple of {', '.join(type(part).__name__ for part in item) or 'nothing'}"
+    name = type(item).__name__
+    return f"{'an' if name[:1] in 'aeiou' else 'a'} {name}"
+
+
+def _derived(text: str) -> str | None:
+    """``enum_member_name(text)``, or ``None`` when ``text`` has nothing to derive it from."""
+    try:
+        return enum_member_name(text)
+    except ValueError:
+        return None
+
+
+def _acceptable(member: str) -> bool:
+    """Whether ``member`` is an ASCII identifier that an enum takes as a member.
+
+    An enum refuses ``mro`` and ``_sunder_`` names and makes no member of a name with a
+    double underscore in it, a ``__dunder__`` or a class-private ``_Class__name``; a
+    keyword is no identifier to assign to. A derived name never holds ``__``.
+    """
+    sunder = len(member) > 2 and member[0] == member[-1] == "_"
+    return (
+        member.isascii()
+        and member.isidentifier()
+        and not keyword.iskeyword(member)
+        and "__" not in member
+        and not sunder
+        and member != "mro"
+    )
+
+
+def _member_names[T](
+    key: str,
+    items: Sequence[T],
+    derived: Sequence[str | None],
+    labels: Sequence[str],
+    overrides: Mapping[T, str],
+) -> list[str]:
+    """Member names for ``items``: each item's override, else its derived name.
+
+    An override is taken before any name is derived, so a value with nothing to derive a
+    name from (``None`` in ``derived``) can be named by hand. ``labels`` describe the
+    items in messages.
+
+    Raises:
+        ValueError: When an override names an item the list does not hold, an item has
+            neither a derived name nor an override, a name is no identifier an enum
+            accepts, or two names collide.
+    """
+    held = set(items)
+    unknown = [item for item in overrides if item not in held]
+    if unknown:
+        raise ValueError(f"{key}: member_names names what the list does not hold: {unknown}")
+    hint = f"name it by hand in member_names={{{key!r}: {{...}}}}"
+    members: list[str] = []
+    for index, (item, name, label) in enumerate(zip(items, derived, labels, strict=True)):
+        if item in overrides:
+            members.append(overrides[item])
+        elif name is None:
+            raise ValueError(
+                f"{key}: no member name can be derived from {label} at position {index}; {hint}"
+            )
+        else:
+            members.append(name)
+    for index, (member, label) in enumerate(zip(members, labels, strict=True)):
+        if not _acceptable(member):
+            raise ValueError(
+                f"{key}: {member!r} for {label} at position {index} is not a member name an "
+                "enum accepts"
+            )
+    positions: dict[str, list[int]] = {}
+    for index, member in enumerate(members):
+        positions.setdefault(member, []).append(index)
+    colliding = [
+        f"{member!r} at positions {', '.join(map(str, where))}"
+        for member, where in sorted(positions.items())
+        if len(where) > 1
+    ]
+    if colliding:
+        raise ValueError(f"{key}: member names collide: {'; '.join(colliding)}")
+    return members
+
+
+def _str_members(
+    key: str, values: Sequence[str], overrides: Mapping[str, str]
+) -> list[tuple[str, str]]:
+    """``(member, literal)`` per value, the value written as ``ascii()`` writes it."""
+    derived = [_derived(value) for value in values]
+    labels = [repr(value) for value in values]
+    members = _member_names(key, values, derived, labels, overrides)
+    return [(member, ascii(value)) for member, value in zip(members, values, strict=True)]
+
+
+def _int_members(
+    key: str, pairs: Sequence[tuple[int, str]], overrides: Mapping[int, str]
+) -> list[tuple[str, str]]:
+    """``(member, literal)`` per pair: names from the names, ``_<id>`` where one repeats.
+
+    Raises:
+        ValueError: An id is listed twice, naming the key and the ids.
+    """
+    repeated = sorted(ident for ident, count in Counter(i for i, _ in pairs).items() if count > 1)
+    if repeated:
+        raise ValueError(f"{key}: ids listed more than once: {repeated}")
+    plain = [_derived(name) for _, name in pairs]
+    counts = Counter(name for name in plain if name is not None)
+    derived = [
+        name if name is None or counts[name] == 1 else f"{name}_{ident}"
+        for name, (ident, _) in zip(plain, pairs, strict=True)
+    ]
+    ids = [ident for ident, _ in pairs]
+    labels = [f"{name!r} (id {ident})" for ident, name in pairs]
+    members = _member_names(key, ids, derived, labels, overrides)
+    return [(member, f"{ident:d}") for member, ident in zip(members, ids, strict=True)]
+
+
+def render_enums(
+    lists: Mapping[str, Sequence[str] | Sequence[tuple[int, str]]],
+    *,
+    fetched: str | Mapping[str, str],
+    class_names: Mapping[str, str] | None = None,
+    member_names: Mapping[str, Mapping[Any, str]] | None = None,
+    generator: str = "the reference refresh script",
+) -> str:
+    r"""Python source for a source's ``enums.py``: one enum per packaged list (conventions §3).
+
+    The kind is inferred per list, so one module holds both: a list of strings renders a
+    ``StrEnum`` whose members are the upstream strings, verbatim; a list of ``(id, name)``
+    pairs, as ``id_name_pairs`` builds them, renders an ``IntEnum`` whose members are the
+    ids, so a member compares equal to the id in upstream's data, with ``_<id>`` appended
+    to a name several ids share (``TOTAL_DISAPPEARANCE_126``). Member names come from
+    ``enum_member_name``, or from ``member_names`` where a source names one by hand. Each
+    class's docstring is one line, ``Values of ``<key>`` (fetched <date>).``, which an MCP
+    tool's input schema shows an agent (conventions §8).
+
+    The output is plain and ASCII-only (ADR-0031): a value is written as ``ascii()``
+    writes it, so a quote, a backslash, a control character and every character outside
+    ASCII is escaped (``"Côte"`` as ``'C\xf4te'``) and the value is the same at runtime;
+    one member per line; ``__all__`` one name per line in the order of ``lists``; the
+    import names the kinds the module needs. A line longer than 100 columns carries
+    ``# noqa: E501``, and a member named ``I``, ``O`` or ``l``, which ruff flags as
+    ambiguous with no fix, ``# noqa: E741``. The refresh script runs ``ruff format`` and
+    ``ruff check --fix`` on the result, which choose the quotes, wrap what fits and sort
+    ``__all__`` (RUF022); the module is committed as formatted.
+
+    Args:
+        lists: Enum key to its values in upstream order: strings
+            (``{"state_alpha": ["AK", "AL"]}``) or ``(id, name)`` pairs
+            (``{"attributeId": [(4, "Area Harvested"), (20, "Beginning Stocks")]}``).
+        fetched: When the lists were fetched, as text: one date for the module
+            (``"2026-10-27"``), or one per key (``{"state_alpha": "2026-10-27",
+            "attributeId": "2026-10-23"}``) for lists fetched on different days.
+        class_names: Class name per key, e.g. ``{"progress_stages": "ProgressStage"}``;
+            by default each word of the key capitalized, a camelCase hump kept:
+            ``StateAlpha`` for ``state_alpha`` and ``AttributeId`` for ``attributeId``.
+        member_names: Member names set by hand, per key and value (an id for an
+            ``IntEnum``), for a value whose derived name collides or that has none (an
+            empty or a non-Latin label), e.g. ``{"short_desc": {"CORN, GRAIN": "CORN"}}``
+            or ``{"attributeId": {173: "TOTAL_USE"}}``. Taken before any name is derived;
+            each must be an identifier an enum accepts and unique in its list.
+        generator: What the module docstring names as its generator, e.g.
+            ``"scripts/refresh_reference.py"``.
+
+    Raises:
+        ValueError: A list is empty, a string, or mixes strings and pairs; ``generator``,
+            a date or a key is not non-empty printable ASCII or holds a backslash or three
+            double quotes; a class name is no ASCII identifier, is a keyword, ``IntEnum``
+            or ``StrEnum``, is longer than 84 characters, or two lists get one; an id is
+            listed twice; a value without an override has nothing to derive a member name
+            from; two members of one list share a name; a name in ``member_names`` is not
+            one an enum takes (``mro``, ``_x_``, any with ``__``); or ``fetched``,
+            ``class_names`` or ``member_names`` names a key ``lists`` does not hold,
+            ``fetched`` lacks one, or ``member_names`` names a value or an id its list does
+            not hold. A message names the argument and the position, a list's items by
+            type.
+    """
+    if not _plain_text(generator):
+        raise ValueError(f"generator must be {_TEXT_RULE}")
+    _unknown_keys("class_names", class_names or {}, lists)
+    _unknown_keys("member_names", member_names or {}, lists)
+    names = _class_names(lists, class_names or {})
+    dates = _dates(lists, fetched)
+    kinds: set[str] = set()
+    classes: list[list[str]] = []
+    for key, values in lists.items():
+        kind = _kind(key, values)
+        overrides = (member_names or {}).get(key, {})
+        members = (
+            _str_members(key, cast(Sequence[str], values), overrides)
+            if kind == "StrEnum"
+            else _int_members(key, cast(Sequence[tuple[int, str]], values), overrides)
+        )
+        kinds.add(kind)
+        classes.append(
+            [
+                f"class {names[key]}({kind}):",
+                _fit(f'    """Values of ``{key}`` (fetched {dates[key]})."""'),
+                "",
+                *(
+                    _fit(f"    {member} = {literal}", *("E741",) * (member in _AMBIGUOUS))
+                    for member, literal in members
+                ),
+            ]
+        )
+    lines = [
+        _fit(f'"""Enums of the packaged lists, generated by {generator}; do not edit by hand."""'),
+        "",
+    ]
+    if kinds:
+        lines += [f"from enum import {', '.join(sorted(kinds))}", ""]
+    if names:
+        lines += ["__all__ = [", *(f'    "{name}",' for name in names.values()), "]"]
+    else:
+        lines.append("__all__ = []")
+    for body in classes:
+        lines += ["", "", *body]
+    return "\n".join(lines) + "\n"

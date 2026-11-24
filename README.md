@@ -59,9 +59,8 @@ It gives a source package the things that should be identical across the family:
   `parse_decimal` reads a published figure.
 - **Reference data**: loaders for code lists shipped inside a package, `PackagedList`
   for a list fetched from one upstream operation (its file, the meta of an answer from
-  it, its writer), `matches`, `closest` and `nearest` for the list tasks and their
-  refusals, and `render_enums`, which generates one module of `StrEnum` and `IntEnum`
-  classes.
+  it, its writer), and `matches`, `closest` and `nearest` for the list tasks and their
+  refusals.
 - **Adapters** that turn task functions into MCP tools (`xippios.core.mcp`) and FastAPI
   routes (`xippios.core.http`) without any logic of their own.
 - **Test support**: a live-test gate, offline guarantees for every other test (no
@@ -902,62 +901,9 @@ codes that differ in case alone in a folded list are refused there with `ValueEr
 list, which the live comparison, `names_codes` and `NamedBy` read.
 
 Other code lists are read with `load_json`, and a source that packages a CSV file reads
-it itself (ADR-0059, decision 2). The refresh
-script generates `enums.py` from the lists with one `render_enums` call, then runs
-`ruff format` and `ruff check --fix` on it, and the module is committed as formatted:
-
-```python
-from xippios.core.reference import id_name_pairs, render_enums
-
-records = [
-    {"attributeId": 4, "attributeName": "Area Harvested"},
-    {"attributeId": 126, "attributeName": "Total Disappearance"},
-    {"attributeId": 173, "attributeName": "Total Disappearance"},
-]
-source = render_enums(
-    {
-        # Strings: a StrEnum, member names derived from the values.
-        "sector_desc": ["ANIMALS & PRODUCTS", "CROPS"],
-        # (id, name) pairs: an IntEnum, values the ids, in upstream order.
-        "attributeId": id_name_pairs(records, id_field="attributeId", name_field="attributeName"),
-    },
-    fetched={"sector_desc": "2026-10-27", "attributeId": "2026-10-24"},  # or one date
-    class_names={"sector_desc": "Sector"},  # attributeId gives AttributeId by default
-    generator="scripts/refresh_reference.py",
-)
-ENUMS.write_text(source, encoding="utf-8")
-# then: uv run ruff format src/xippios/example/enums.py
-#       uv run ruff check --fix src/xippios/example/enums.py
-```
-
-```python
-class AttributeId(IntEnum):
-    """Values of ``attributeId`` (fetched 2026-10-24)."""
-
-    AREA_HARVESTED = 4
-    TOTAL_DISAPPEARANCE_126 = 126
-    TOTAL_DISAPPEARANCE_173 = 173
-```
-
-An upstream whose ids are integers gets `IntEnum` (conventions §3), so a member compares
-equal to the id in upstream's data; a name several ids share gets `_<id>`. Each class's
-docstring is one line naming the list and its fetch date, which an MCP tool's input
-schema shows the agent (conventions §8). The output is plain and ASCII-only: values are
-written as `ascii()` writes them, every character outside ASCII as an escape
-(`'C\xf4te d\u2019Ivoire'`), one member per line, `__all__` in the order of the lists, and
-a line over 100 columns carries `# noqa: E501`; ruff chooses the quotes, wraps what fits
-and sorts `__all__`. A key, class name, fetch date or generator text that is not
-printable ASCII is refused, and so is an empty list, a repeated id, and a value with
-nothing to derive a member name from (an empty or a non-Latin label) or whose name
-collides; the refresh script names that member by hand, once:
-
-```python
-source = render_enums(
-    {"short_desc": values},
-    fetched="2026-10-27",
-    member_names={"short_desc": {"\u5317\u4eac": "BEIJING"}},
-)
-```
+it itself (ADR-0059, decision 2). `enums.py` is generated from the packaged lists by the
+reference refresh script's frame, which holds the renderer, as its section below has it
+(ADR-0062, decision 13).
 
 ### The names of codes in an answer
 
@@ -1185,9 +1131,9 @@ a zone read as GMT as HTTP has it, and one that is no HTTP date as sent, in a co
 ## The reference refresh script's frame
 
 A source's `scripts/refresh_reference.py`, which packages its lists under `reference/` and
-renders `enums.py` from them (conventions §3), declares one `Listed` per list and runs them;
-`xippios.core.refresh` does the rest (ADR-0051). sdk-template renders this script for a new
-source, which fills the declarations:
+renders `enums.py` from them (conventions §3), declares its lists in one `Lists`, one `Listed`
+per list, and hands that declaration to `run`; `xippios.core.refresh` does the rest
+(ADR-0062). sdk-template renders this script for a new source, which fills the declarations:
 
 ```python
 """Refresh the packaged reference data from upstream (``/refresh-reference-data``).
@@ -1204,96 +1150,135 @@ environment::
     uv run python scripts/refresh_reference.py --render-only       # no request, no key
 """
 
-from xippios.core.refresh import Enumeration, Listed, run
+from xippios.core.refresh import Enumeration, Listed, Lists, run
 
 from xippios.example import api
 from xippios.example._client import client
 from xippios.example.params import PACKAGED_LISTS
 
-QUOTA_HEADER = "x-ratelimit-remaining"
-"""The header in which upstream reports the requests left in its quota, or ``None``."""
 
-LISTS = (
-    # A list of values, packaged as records of one field named by the list: a StrEnum.
-    Listed(
-        "state_alpha",
-        lambda: api.get_param_values("state_alpha"),
-        endpoint="get_param_values",
-        enum=Enumeration(),
-        origin="`GET /api/get_param_values?param=state_alpha`",
+async def state_alpha() -> list[dict[str, str]]:
+    """The values of ``state_alpha``, as records of one field named by the list."""
+    return [{"state_alpha": value} for value in await api.get_param_values("state_alpha")]
+
+
+LISTS = Lists(
+    package="xippios.example",
+    lists=(
+        # A list of values, packaged as records of one field named by the list: a StrEnum.
+        Listed(
+            "state_alpha",
+            state_alpha,
+            endpoint="get_param_values",
+            enum=Enumeration(),
+            origin="`GET /api/get_param_values?param=state_alpha`",
+        ),
+        # A list of integer ids and names, packaged as upstream's records: an IntEnum.
+        Listed(
+            "unitsOfMeasure",
+            api.get_units_of_measure,
+            endpoint="GetUnitsOfMeasure",
+            enum=Enumeration(ids="unitId", names="unitDescription"),
+        ),
+        # A table, packaged as upstream's records, with no enum.
+        Listed("commodities", api.get_commodities, endpoint="GetCommodities"),
     ),
-    # A list of integer ids and names, packaged as upstream's records: an IntEnum.
-    Listed(
-        "unitsOfMeasure",
-        api.get_units_of_measure,
-        endpoint="GetUnitsOfMeasure",
-        enum=Enumeration(ids="unitId", names="unitDescription"),
-    ),
-    # A table, packaged as upstream's records, with no enum.
-    Listed("commodities", api.get_commodities, endpoint="GetCommodities"),
+    packaged=PACKAGED_LISTS,
+    client=client,
+    quota_header="x-ratelimit-remaining",
 )
-"""The packaged lists, in the order of their enums in ``enums.py``: ``PACKAGED_LISTS``."""
+"""The declaration: the lists, in the order of their enums in ``enums.py``."""
 
 if __name__ == "__main__":
-    raise SystemExit(
-        run(
-            LISTS,
-            package="xippios.example",
-            packaged=PACKAGED_LISTS,
-            client=client,
-            quota_header=QUOTA_HEADER,
-        )
-    )
+    raise SystemExit(run(LISTS))
 ```
 
-`run` is the one entry of both frames: given a `Snapshot` it is the snapshot frame's, as the
-section above has it, and given the lists it takes the package's import path, whose
-directory it writes into and which must lie in the directory the script runs in, the names
-of the lists the package declares it ships, and the client the fetches go through. The lists
-declared to `run` must be those of `packaged`, the package's `params.PACKAGED_LISTS` in
-the template's shape, or the run stops before a request and names the lists declared on one
-side alone; a source that declares its lists in two parts hands both, as
+`run(declaration, argv=None)` is the one entry of both frames: given a `Snapshot` it is the
+snapshot frame's, as the section above has it, and given a `Lists` the reference frame's
+(ADR-0062, decision 2). `Lists(package, lists, packaged, client, quota_header=None,
+before=None, after=None)` is a frozen dataclass beside `Snapshot`: the package's import path,
+whose directory the frame writes into and which must lie in the directory the script runs
+in, the lists, the names of the lists the package declares it ships, the client the fetches
+go through, the header of upstream's quota and the two hooks below. A script that hands `run`
+anything else, the lists alone among it, is stopped before anything is read. The lists
+declared must be those of `packaged`, the package's `params.PACKAGED_LISTS` in the template's
+shape, or the run stops before a request and names the lists declared on one side alone; a
+source that declares its lists in two parts hands both, as
 `[*PACKAGED_LISTS, *PACKAGED_TABLES]`. It fetches every list before it writes one, through that
 client with one attempt per request for the run, so a 5xx or a 429 spends no second call of
 upstream's quota, and prints the requests it sent and the quota left in `quota_header`, a
 failed run's too, a request that ended in a transport error counted as sent. A fetch answers
-values, which become records of one field named by the list's `param`, its name by default;
-records, a model's by `dump_upstream` and a mapping as it is; or a finished `PackagedList`,
-written as built. Values and records are stamped `fetched` when their fetch returned; a
-finished list carries its own moment, the wrapper's `retrieved_at`, its first request or the
-time its file was complete, and must name the `param` and `endpoint` its `Listed` declares,
-where it declares them.
+records, a model's by `dump_upstream` and a mapping as it is, kept under the list's `param`,
+its name by default, or a finished `PackagedList`, written as built. A list of values is
+records of one field named by its `param`, which the fetch makes, as `state_alpha` above
+does, and a fetch that answers a plain value stops the run before the first write, naming
+the list and the item's position (ADR-0062, decision 11). Records are stamped `fetched` when
+their fetch returned; a finished list carries its own moment, the wrapper's `retrieved_at`,
+its first request or the time its file was complete, and must name the `param` and
+`endpoint` its `Listed` declares, where it declares them.
 
 Each list is written to `reference/<name>.json` by `PackagedList.write`. The provenance
-table of `reference/README.md`, under `| File | Origin | Fetched |` or the FAS sources'
-`| File | Origin | Fetched (UTC) | Records |`, has each list's row rewritten where it stands,
-its Origin the `origin` text, the text a function of the written list returns, or the
-endpoint in a code span; a row of a file no list declares, such as `columns.csv`, is kept,
-the template's `(none yet)` is dropped, and a new list's row follows the others. `enums.py`
-is one `render_enums` call in the order the lists are declared, a `StrEnum` of a list's
-values, or of the field `Enumeration(values=...)` names, and an `IntEnum` of
-`Enumeration(ids=..., names=...)`, each with its `key`, `class_name` and `member_names`,
-which a function of the values may make, then formatted with `ruff format` and
-`ruff check --fix`, which read it from standard input under the configuration the repository
-gives `enums.py`; where no list declares an enum, `enums.py` is left alone. Every file is
-made, the module formatted, before the first is written, and the files are written as one:
-a write that fails halfway puts back each file the run replaced and removes each it made. So
-a run that fails, on a fetch, a render, ruff or a write, writes nothing.
-`--only LIST [LIST ...]` fetches those lists alone and keeps every other list's file, and
-`--render-only` writes the rows and `enums.py` from the packaged files alone, without a
-request or a key, as an adoption does after a core release changes the renderer.
+table of `reference/README.md` stands under the one header that sdk-template renders,
+`| File | Origin | Fetched |`, so no row counts its file's records, and a README under
+another header stops a run, and a render alone, before a request (ADR-0062, decision 13).
+Each list's row is rewritten where it stands, its Origin the `origin` text, the text a
+function of the written list returns, or the endpoint in a code span; a row of a file no list
+declares, such as one a hook writes, is kept, the template's `(none yet)` is dropped, and a
+new list's row follows the others. `enums.py` is rendered by the frame, which holds the
+renderer, in the order the lists are declared: a `StrEnum` of the values of the field that
+its file's `param` names, keyed by the list's name, or an `IntEnum` of
+`Enumeration(ids=..., names=...)`, keyed by `ids`, each with its `class_name` and
+`member_names`, which a function of the values may make. It is then formatted with
+`ruff format` and `ruff check --fix`, which read it from standard input under the
+configuration the repository gives `enums.py`; where no list declares an enum, `enums.py` is
+left alone. Every file is made, the module formatted, before the first is written, and the
+files are written as one: a write that fails halfway puts back each file the run replaced and
+removes each it made. So a run that fails, on a fetch, a render, ruff or a write, writes
+nothing. `--only LIST [LIST ...]` fetches those lists alone and keeps every other list's
+file, and `--render-only` writes the rows and `enums.py` from the packaged files alone,
+without a request or a key, as an adoption does after a core release changes the renderer.
 
-What a script writes beside its lists goes in two hooks of `run`, which `--render-only`
-calls neither of: `before`, called once the command line and the declarations are checked
-and before the first request, for what can stop the run before it spends one, as
-sdk-usda-nass parses the column table that its `columns.csv` is rebuilt from; and `after`,
-called after the last write with the lists the run fetched by name, for sdk-eurostat's index
-and test samples, sdk-usda-nass's `columns.csv` and sdk-usda-wasde's manifest. An `after`
-that raises leaves the frame's files written, whole, and the run says so before the error
-ends it: what the hook writes is the source's to make before it writes. The frame
-takes no option of a source's own: a script that keeps one, sdk-eurostat's `--samples` or
-sdk-usda-wasde's `--keep` and `--from`, reads it before the call and passes the rest as
-`argv`.
+An upstream whose ids are integers gets `IntEnum` (conventions §3), so a member compares
+equal to the id in upstream's data; a name several ids share gets `_<id>`:
+
+```python
+class AttributeId(IntEnum):
+    """Values of ``attributeId`` (fetched 2026-10-24)."""
+
+    AREA_HARVESTED = 4
+    TOTAL_DISAPPEARANCE_126 = 126
+    TOTAL_DISAPPEARANCE_173 = 173
+```
+
+Each class's docstring is one line naming the list and its fetch date, which an MCP tool's
+input schema shows the agent (conventions §8). The output is plain and ASCII-only: values are
+written as `ascii()` writes them, every character outside ASCII as an escape
+(`'C\xf4te d’Ivoire'`), one member per line, `__all__` in the order of the lists, and a
+line over 100 columns carries `# noqa: E501`; ruff chooses the quotes, wraps what fits and
+sorts `__all__`. A key, class name or fetch date that is not printable ASCII is refused, and
+so is an empty list, a repeated id, and a value with nothing to derive a member name from (an
+empty or a non-Latin label) or whose name collides; the script names that member by hand,
+once, in its list's `Enumeration`:
+
+```python
+Listed(
+    "short_desc",
+    short_desc,
+    endpoint="get_param_values",
+    enum=Enumeration(member_names={"北京": "BEIJING"}),
+)
+```
+
+What a script writes beside its lists goes in the two hooks of `Lists`, which
+`--render-only` calls neither of: `before`, called once the command line and the declaration
+are checked and before the first request, for what can stop the run before it spends one,
+such as the parse of a snapshot's table that a file beside the lists is rebuilt from; and
+`after`, called after the last write with the lists the run fetched by name, for what a
+script writes beside them, an index, test samples or a manifest. An `after` that raises
+leaves the frame's files written, whole, and the run says so before the error ends it: what
+the hook writes is the source's to make before it writes. The frame takes no option of a
+source's own: a script that keeps one, a `--samples` say, reads it before the call and passes
+the rest as `argv`.
 
 ## MCP server in five lines
 
@@ -2056,14 +2041,14 @@ fragment until the release assembles it.
 | `xippios.core.errors` | taxonomy, `UnknownCode`, `QueryTooLarge`, the refusal of a query over upstream's limit, response classification, `request_description` | alpha |
 | `xippios.core.redaction` | the one credential rule of the envelope, the recorder and replay, `REDACTED`, which a source's package imports from `xippios.core`, `register_data_name`, signed links | alpha |
 | `xippios.core.models` | `UpstreamModel` with `dump_upstream`, `Result`, `ResultMeta` with `published_at_naive`, `names`, the name of each code of a request and of the records, and `notes`, `NamedBy`, the mark of a record's code field, `ResultCap` with `paged` and `keep`, `parse`, `newer_than`, the filter of a vintage taken back | alpha |
-| `xippios.core.reference` | the packaged JSON loader, `PackagedList`, its `codes` and their `check` of an argument (`PackagedCodes`), `names_codes`, `matches`, `closest`, `nearest`, generated `StrEnum`/`IntEnum` modules | alpha |
+| `xippios.core.reference` | the packaged JSON loader, `PackagedList`, its `codes` and their `check` of an argument (`PackagedCodes`), `names_codes`, `matches`, `closest`, `nearest` | alpha |
 | `xippios.core.pagination` | `fetch_pages`, the one walk of pages, which refuses at its bound and returns nothing (a page-numbered endpoint maps the offset to its page), `fetch_counted`, the count before a query over upstream's limit | alpha |
 | `xippios.core.series` | `Ceiling`, the ceiling of a series over periods with its option on the MCP server, and `fetch_periods`, its requests in order | alpha |
 | `xippios.core.tenants` | `Tenants`, a multi-tenant source's tenants declared in the environment with one client each, `list_task`, the tool that names them, and `TenantLock` with `bind_tasks` and `tenant_instructions`, a server bound to one of them | alpha |
 | `xippios.core.contract` | `EnvVar`, a variable of the package contract | alpha |
 | `xippios.core.mcp` | tool registration with the argument check and the write server's `confirm` rule, `tool_functions`, result caps with the `offset` of a paged cap, error text, the one entry `main(build)` with option hooks, a tenant's option and the loopback rule for write and `loopback_only` servers, quiet request log, `ToolSet`, the package contract's tool set, built from a tasks module by `ToolSet.from_tasks`, built by `build_server` and registered by `register_tasks` | alpha |
 | `xippios.core.http` | router factory, problem details | alpha |
-| `xippios.core.refresh` | the frames of a source's scripts: the snapshot script's (`Snapshot`, `run`) and the reference refresh script's (`Listed`, `Enumeration`) | alpha |
+| `xippios.core.refresh` | the frames of a source's scripts, each declared in one object under the one `run(declaration)`: the snapshot script's (`Snapshot`) and the reference refresh script's (`Lists` of `Listed`, with `Enumeration`), whose frame holds the renderer of `enums.py` | alpha |
 | `xippios.core.testing` | live gate with the count of the requests that a live run sent, offline run, record (sync, sent once, read up to `max_read_bytes`, with the cut of a JSON array by `max_bytes=` and `keep=` and a source's `rewrite=` step, typed `Rewrite`), `send_once`, the fixture writer and the `sample` mark, replay with `sent_urls`, `sent_query` and `sent_bodies`, scrub of named secrets and of values read from the answer in their every encoded form, with its verify, `mcp_call`, `assert_write_tools` with what a preview reads, `keep_reserved_tenants`, `built_answers`, the check of a built answer's mark, `live` with `assert_list_current`, the nightly comparison of a packaged list, family check | alpha |
 
 Alpha: while core is 0.x, a new minor version may change the public surface, with no

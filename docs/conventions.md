@@ -10,8 +10,8 @@ cache bound, `BULK_TASKS`, the fixture cap and the `truncated` marker, the file-
 rules, the spared `key`, the packaged-answer rule and the packaged-list file,
 `published_at_naive`, the `None`-filter rule, `get_answer`, `matches` (§4), `UnknownCode`
 (§5), the frozen series and the period series (§4)), and ADR-0031's rules of 1.20
-(`render_enums`, the module committed as formatted, and what an enum's class docstring
-holds, §8), bind a source from its 0.3.0 adoption (§15), since the code that serves them
+(the generated `enums.py`, the module committed as formatted, and what an enum's class
+docstring holds, §8), bind a source from its 0.3.0 adoption (§15), since the code that serves them
 ships in core 0.3.0; until then a source records what its upstream answers and names a
 fixture over the cap in the PR
 description.
@@ -362,16 +362,21 @@ skip it (§8, §9; ADR-0040).
   from one parameter. The refresh script writes it with `PackagedList.write`, `fetched`
   the UTC time of the fetch to the second; the package reads it with
   `PackagedList.load(package, name)` (ADR-0041, decisions 4 and 5). Enums are
-  generated from it with one `xippios.core.reference.render_enums` call: one module, a
-  `StrEnum` per value list and an `IntEnum` per list of `(id, name)` pairs, each class
-  docstring naming its list and fetch date. The whole generated module, docstrings
-  included, is ASCII-only and passes `ruff check` and `ruff format --check` as committed,
-  after the refresh script's `ruff format && ruff check --fix` (ADR-0031,
-  decision 6). A source's `scripts/refresh_reference.py` declares its packaged lists to
-  core's frame, one `Listed` of `xippios.core.refresh` per list with its fetch, its enum and
-  its origin, and calls `run(lists, package=...)`, which fetches every list before it writes
-  one and then writes the packaged files, the provenance rows of `reference/README.md` and
-  `enums.py` (ADR-0051).
+  generated from it by the reference frame of `xippios.core.refresh`, which holds the
+  renderer (ADR-0062, decision 13): one module, a `StrEnum` per value list and an `IntEnum`
+  per list of `(id, name)` pairs, each class docstring naming its list and fetch date. The
+  whole generated module, docstrings included, is ASCII-only and passes `ruff check` and
+  `ruff format --check` as committed, after the refresh script's
+  `ruff format && ruff check --fix` (ADR-0031, decision 6). A source's
+  `scripts/refresh_reference.py` declares its packaged lists to core's frame in one `Lists`
+  of `xippios.core.refresh`, with its package, its client and one `Listed` per list with its
+  fetch, its enum and its origin, and calls `run(LISTS)`, which fetches every list before it
+  writes one and then writes the packaged files, the provenance rows of
+  `reference/README.md` and `enums.py` (ADR-0062, decision 2). A list's fetch answers records
+  or a finished `PackagedList`, a list of values as records of one field named by its
+  `param`, never plain values (ADR-0062, decision 11). The provenance table of
+  `reference/README.md` stands under the header that sdk-template renders,
+  `| File | Origin | Fetched |`, and under no other (ADR-0062, decision 13).
 
 ## 4. Result envelope and metadata
 
@@ -966,7 +971,7 @@ with sdk-template 0.4.0, which renders it (ADR-0063, decision 2).
   fails a description of 1,000 characters or more (ADR-0063, decision 9).
 - An enum's class docstring reaches the tool's input schema through the parameter type,
   so it holds what an agent needs, what the values are and the upstream list they come
-  from with its fetch date (what `render_enums` writes); maintainers' notes go into
+  from with its fetch date (what the reference frame writes); maintainers' notes go into
   comments, never into the docstring (ADR-0031, decision 6).
 - Read-only by default. A tool that writes to the upstream (CashCtrl) lives in a
   separate server entry point (`xippios-<source>-mcp-write`), takes `confirm: bool`
