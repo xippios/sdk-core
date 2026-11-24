@@ -411,21 +411,24 @@ WITH_READINGS = READINGS + TASKS.replace(
 def test_a_reading_beside_a_stem_that_holds_no_text_fails_naming_it(
     pytester: pytest.Pytester,
 ) -> None:
-    # ADR-0060, decision 9: the check reaches Region through Observation's field. It passes
-    # street_number and period_number, whose part before the suffix names no field, and
-    # code_label beside an integer code, since a code's label is no reading
-    # (https://github.com/xippios/sdk-usda-esr/issues/60, part 3).
+    # ADR-0060, decision 9: the check reaches Region through Observation's field, fails both
+    # suffixes beside a stem that holds no text (https://github.com/xippios/sdk-core/issues/474,
+    # part 10), and passes street_number and period_number, whose part before the suffix names
+    # no field.
     result = run_family(pytester, {"src/xippios/example/tasks.py": WITH_READINGS})
     result.assert_outcomes(passed=FAMILY_TESTS - 1, failed=1)
     result.stdout.fnmatch_lines(
         [
-            "*a reading <stem>_number stands beside a text field <stem> of its model; a name "
-            "whose part before the suffix names no field is upstream's own and passes "
-            "(conventions §3, ADR-0060, decisions 7 and 9):*",
+            "*a reading <stem>_number or <stem>_label stands beside a text field <stem> of its "
+            "model; a name whose part before the suffix names no field is upstream's own and "
+            "passes (conventions §3, ADR-0060, decisions 7 and 9):*",
+            "*- Region.code_label stands beside code, which holds int*",
             "*- Region.level_number stands beside level, which holds float*",
         ]
     )
-    text = WITH_READINGS.replace("    level: float\n", "    level: str | None\n")
+    text = WITH_READINGS.replace("    code: int\n", "    code: str | None\n").replace(
+        "    level: float\n", "    level: str | None\n"
+    )
     result = run_family(pytester, {"src/xippios/example/tasks.py": text})
     result.assert_outcomes(passed=FAMILY_TESTS)
 
