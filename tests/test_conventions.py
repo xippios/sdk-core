@@ -5,8 +5,8 @@ decision 6, the attribution check of its decision 7, the refusal of a hinted val
 amendment of 2026-11-22, the two sentences of a period series that ADR-0054's amendment of
 2026-11-22 words, a recorder's field of a request of ADR-0048, decision 7, the review
 checklist's sentence that holds an adoption against the two lists of the handover's section for
-the release, and ADR-0058's two: what a core patch keeps compatible, and the fourth reason for
-code with one consumer, as the definition of done and the review checklist name it.
+the release, ADR-0058's decision 2, what a core patch keeps compatible, and ADR-0059's rule for
+code with one consumer, as the definition of done, the review checklist and §15 name it.
 
 The organization's release check quotes the conventions from sdk-core's `main`, and a finding
 blocks only where it quotes the sentence that a change breaks

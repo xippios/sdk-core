@@ -99,6 +99,9 @@ consequences stand as written.
 Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/473: the amendment of 2026-11-22
 is taken back and `naive_time` leaves core for its one consumer, sdk-usda-esr, since ADR-0059,
 decision 4, ends the reason (d) that admitted it, so that decision 1's sentences on core's one
-reader no longer hold, every source hands `newer_than` its own reader of its vintage text, and in
-the first consequence sdk-usda-esr's filter reduces to the call with its own `_since`, whose
-wording stays, while decisions 2 to 6 and the other consequences stand as written.
+reader no longer hold and every source hands `newer_than` its own reader of its vintage text,
+decision 6's rule stands with a source's reader of a time without a zone in place of its example
+of `naive_time`, in the first consequence sdk-usda-esr's filter reduces to the call with its own
+`_since`, whose wording stays, and the third consequence no longer holds, since core ships no
+reader of a naive time, while decisions 2 to 5, the rest of decision 6 and the second and fourth
+consequences stand as written.
