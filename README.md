@@ -7,15 +7,15 @@ upstream API.
 It gives a source package the things that should be identical across the family:
 
 - **HTTP client** on `httpx` with retries, a per-source rate limiter, an optional
-  response cache (off by default; the in-memory one is bounded by TTL and size),
+  response cache (off by default; the in-memory one keeps each path prefix for its own
+  lifetime and bounds its entries and its bytes),
   one read timeout, 60 s unless a source raises it, and one `User-Agent`. Async at the core; `sync` derives the sync
   task functions from the async ones.
   A 429, a 5xx or a transport failure is retried for GET, HEAD and OPTIONS alone: a
   write is sent once, and its error says that it was sent once and that its outcome is
   unknown, or that nothing was sent where the connection failed.
-  `ClientConfig.cache_filter` narrows the cache to chosen requests. A body goes as JSON
-  (`json=`) or form-encoded (`data=`), and `post_json` and `delete_json` decode a write's
-  answer as `get_json` decodes a read's, `None` for one with no body. Two hooks,
+  A body goes as JSON (`json=`) or form-encoded (`data=`), and `post_json` decodes a
+  write's answer as `get_answer` decodes a read's, `None` for one with no body. Two hooks,
   `before_request` and `observe`, see each call and each response; `QuotaPolicy` uses
   them to wait out or refuse a request into a spent quota.
   `auth=None` sends one call without the client's key. `get_answer` returns the payload,
@@ -127,9 +127,11 @@ async def get_series_async(series_id: str, year: int = 2024) -> Result[list[Seri
         year: Four-digit year, e.g. ``2024``.
     """
     params = {"id": series_id, "year": year}
-    raw = await client.get_json("/v1/series", params=params)
-    rows = parse(list[Series], raw["data"], source="example", endpoint="series")
-    meta = ResultMeta(source="example", endpoint="series", request=params)
+    answer = await client.get_answer("/v1/series", params=params)
+    rows = parse(list[Series], answer.payload["data"], source="example", endpoint="series")
+    meta = ResultMeta(
+        source="example", endpoint="series", request=params, retrieved_at=answer.retrieved_at
+    )
     return Result(data=rows, meta=meta)
 
 
@@ -146,20 +148,20 @@ get_series = sync(get_series_async)  # same signature, same docstring, blocks un
 names a credential (`api_key`, `token`, `secret`, `sig`, ... as whole words) so an
 envelope is safe to hand to an agent or return over HTTP. A bare `key` is a credential
 only where a `KeyAuth` sends the key under that name, as above, which registers it
-for the process; elsewhere it is data, as Eurostat's SDMX series `key` is, and so is a
-`sort_key`. A link keeps its path and its other parameters and loses the credentials of
+for its source; in every other source it is data, also in a host that loads both, and so
+is a `sort_key`. A link keeps its path and its other parameters and loses the credentials of
 its query, a signed file link's `sig` or `X-Amz-Signature` say, as `scrub_url` writes
 them. The fixture recorder and the replay helpers redact by the same rule
 (`xippios.core.redaction`). A parameter the caller left `None` was not sent and is left
 out of `meta.request`, so a task passes its parameters as they are.
 
 A paging cursor whose name holds `token` as a whole word is data, and its source declares
-it so once, in `_client.py`; every name it does not declare keeps the rule:
+it so once, in `_client.py`, for itself; every name it does not declare keeps the rule:
 
 ```python
 from xippios.core.redaction import register_data_name
 
-register_data_name("next_token")  # X's cursor: kept in meta.request, fixtures and replay
+register_data_name("next_token", source="example")  # kept in meta.request, fixtures, replay
 ```
 
 Only a name with the whole word `token` and no other credential word can be declared,
@@ -416,7 +418,12 @@ client's configuration:
 ```python
 from xippios.core import AsyncClient, ClientConfig, KeyAuth, QuotaPolicy
 
-quota = QuotaPolicy(window=3600.0, source="example")  # spent for an hour unless told otherwise
+quota = QuotaPolicy(
+    limit_header="x-ratelimit-limit",  # no header is read unless the source names it
+    remaining_header="x-ratelimit-remaining",
+    window=3600.0,  # spent for an hour unless told otherwise
+    source="example",
+)
 config = quota.install(
     ClientConfig(source="example", version="0.1.0", base_url="https://api.example.org")
 )
@@ -425,19 +432,20 @@ quota.snapshot()  # None: no response observed yet
 
 
 async def get_series_async(series_id: str) -> object:
-    rows = await client.get_json("/v1/series", params={"id": series_id})
+    answer = await client.get_answer("/v1/series", params={"id": series_id})
     quota.snapshot()  # QuotaSnapshot(limit=1000, remaining=999, observed_at=..., resumes_at=None)
-    return rows
+    return answer.payload
 
 
 async def list_countries_async() -> object:
-    return await client.get_json("/files/countries.json", auth=None)  # public: no key sent
+    answer = await client.get_answer("/files/countries.json", auth=None)  # public: no key
+    return answer.payload
 ```
 
 The policy reads the quota headers of every response from the wire through
 `ClientConfig.observe`. Once a 429, or a response that leaves nothing, shows the quota
 spent, `ClientConfig.before_request` makes the next request wait until it is back if
-that is within the policy's `pause_cap` (30 s by default), with one warning in the log,
+that is within 30 s, the default `backoff_max`, with one warning in the log,
 and otherwise raises `RateLimitError` with `retry_after`, saying that nothing was sent.
 A request sent with `auth=None`, as `list_countries_async` sends one, or to another origin
 than the base URL's spends no quota: the policy neither holds it back nor reads its
@@ -497,10 +505,10 @@ reads the answers of the base URL's origin alone: a file host's 429 is core's pl
 A request the cache answers never waits: `before_request` runs after the cache lookup,
 and a cache hit carries the time its entry was stored in
 `response.extensions["xippios_cache_stored_at"]`, the hit's `retrieved_at`. A wrapper
-whose answer may come from the cache calls `get_answer()` instead of `get_json()`, the
-one call that stores an answer: a 200 once its body decoded and, with `parse=`, its
-payload parsed, so a body that fails is requested again on the next call. `get`,
-`get_json` and `request` read the cache and store nothing. The `Answer` carries the
+reads JSON through `get_answer()`, the one reader and the one call that stores an answer:
+a 200 once its body decoded and, with `parse=`, its payload parsed, so a body that fails
+is requested again on the next call. `get` and `request` read the cache and store
+nothing. The `Answer` carries the
 payload and `retrieved_at`, the stored time on a hit and on the miss that stored it,
 which reads the clock once for both.
 
@@ -515,6 +523,25 @@ A wrapper that returns a value it derives from the payload keeps the time with i
 `Answer` of that value's type, `Answer(codes, answer.retrieved_at)`, not as a pair of
 its own.
 
+The cache keeps the paths its lifetimes name, by the prefix of the request's URL path,
+the base URL's own path included, and the longest prefix wins:
+
+```python
+from xippios.core import MemoryCache
+
+cache = MemoryCache(
+    lifetimes={
+        "/v1/regions": 86400.0,  # a day
+        "/v1/files/": None,  # for the life of the process
+        "/v1/files/live/": 0,  # never stored
+    }
+)  # any other path is neither looked up nor stored
+```
+
+`MemoryCache()` keeps every path for 300 s. An entry is dropped once its lifetime has
+passed, and the cache holds at most 256 entries and 64 MiB of bodies in all
+(`maxsize=`, `max_bytes=`), the least recently used leaving first.
+
 The hooks are plain callables on `ClientConfig` (`before_request` may be async) for
 anything else that has to see each call or each response.
 
@@ -523,19 +550,19 @@ with a `retry_after` beyond `backoff_max` is raised after one attempt instead of
 retried into a spent quota; an `UpstreamError` for a 5xx leaves the retries as they are;
 any other error it returns, an `AuthError` say, ends them.
 
-`auth=` on `request`, `get`, `get_json`, `post_json`, `delete_json`, `get_answer` and
-`record` overrides the client's credentials for one call: `None` sends none, for a keyless
+`auth=` on `request`, `get`, `post_json`, `get_answer`, `download` and `record`
+overrides the client's credentials for one call: `None` sends none, for a keyless
 endpoint on the same host, and another `httpx.Auth` replaces them. `None` and the default
 share the cache; a call with an `httpx.Auth` of its own bypasses it, neither looked up nor
 stored.
 
-A write wrapper sends through `post_json` or `delete_json`, which apply `classify`, the
-hooks and the retry rule for a write as `request` does, never touch the cache, and decode
-the answer, `None` for one with no body:
+A write wrapper sends through `post_json`, which applies `classify`, the hooks and the
+retry rule for a write as `request` does, never touches the cache, and decodes the answer,
+`None` for one with no body, and a DELETE goes through `request`:
 
 ```python
 draft = await client.post_json("/drafts", json={"message": {"raw": raw}})  # decoded JSON
-await client.delete_json(f"/drafts/{draft['id']}")  # None: the answer is a 204
+await client.request("DELETE", f"/drafts/{draft['id']}")  # a 204, raised if an error
 ```
 
 A write, a `POST`, `PUT`, `PATCH` or `DELETE`, is sent once, after a 429 or a 5xx too,
@@ -628,15 +655,16 @@ exchange is the request's own, which the retry policy sends again where it would
 the exchange, a GET say. It reads the token answer
 and no other, so a `download` streams to its file, and the client sends its auth to the
 base URL's origin only. httpx keeps the token answer in the final response's `history`
-while that response lives; `get_json`, `get_answer` and the cache keep no response.
+while that response lives; `get_answer`, `post_json` and the cache keep no response.
 sdk-faostat's login and sdk-google-mail's refresh are its two token requests (ADR-0025).
 
 ## Files: download and decode
 
 An upstream that publishes files (a bulk dataset, a release's CSV or XLS) is read with
 `download`, which streams the body to disk under a temporary name and renames it when it
-is complete; the limiter, the hooks, `classify` and the retries apply as for `get()`, a
-retry restarting the file, and the response cache is never touched. The hooks see a
+is complete; it takes `params=`, `headers=` and `auth=` as `get()` does, the limiter,
+the hooks, `classify` and the retries apply as for `get()`, a retry restarting the file,
+and the response cache is never touched. The hooks see a
 success's status and headers only, since its body goes to the file unread, and a
 redirect raises `UpstreamError`:
 

@@ -1,7 +1,6 @@
 # ADR-0040: Bulk downloads and non-JSON payloads in core
 
-Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under
-https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0019
+Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0019 · Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/479
 
 ## Context
 
@@ -150,3 +149,18 @@ the definition of done's Tests block, the README and the docstrings of `download
 `Downloaded`, `decode_text`, `decode_csv`, `ClientConfig`, `xippios.core.redaction`,
 `register_tasks`, `router_from_tasks`, the family check, the fixtures, the recorder and
 `Scrub` state its decisions from 1.28 on.
+
+Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/479: in decision 3
+`cache_filter` leaves for a lifetime per path prefix on `MemoryCache`, the longest prefix of the
+request's URL path winning, `None` for the life of the process, `0` for nothing stored and no
+prefix for no cache, and the cache drops an entry once its lifetime has passed and bounds the bytes
+of the bodies it holds in all, 64 MiB by default, beside `cache_max_bytes`, the bound of one
+answer, which stays; in decision 1 `download` takes `params` and `headers` as its siblings take
+them; and in decision 6 the registries of credential names and of data names are kept for each
+source, by part 4 of the answer on https://github.com/xippios/sdk-core/issues/485, so that a query
+`KeyAuth` registers its name for the `source` that it then must name, `register_data_name` takes
+the source too, `ResultMeta` reads the names of its own source alone, a reader given no source, a
+testing helper's, reads those of every source with a credential of any one winning, and one
+source's key name no longer turns another source's data into `REDACTED` in a process that imports
+both, while decisions 2, 4 and 5, the rest of decisions 1, 3 and 6 and the consequences stand as
+written.

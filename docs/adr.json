@@ -687,6 +687,10 @@
         {
           "date": "2026-11-21",
           "by": "https://github.com/xippios/sdk-core/issues/364"
+        },
+        {
+          "date": "2026-11-24",
+          "by": "https://github.com/xippios/sdk-core/issues/479"
         }
       ],
       "amends": [],
@@ -741,7 +745,12 @@
       "status": "Accepted",
       "date": "2026-11-18",
       "decided_by": "the record it supersedes, restated under https://github.com/xippios/coordinate-core/issues/757",
-      "amended": [],
+      "amended": [
+        {
+          "date": "2026-11-24",
+          "by": "https://github.com/xippios/sdk-core/issues/479"
+        }
+      ],
       "amends": [],
       "supersedes": [
         "ADR-0019"

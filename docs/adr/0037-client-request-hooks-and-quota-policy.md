@@ -1,6 +1,6 @@
 # ADR-0037: Client request hooks and a quota policy
 
-Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0015 · Amended 2026-11-21 by https://github.com/xippios/sdk-core/issues/364
+Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0015 · Amended 2026-11-21 by https://github.com/xippios/sdk-core/issues/364 · Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/479
 
 ## Context
 
@@ -187,3 +187,20 @@ refuses an answer of a 1xx or a 3xx status, which is no final answer of its oper
 path. No recorder keeps a client built for one attempt: `rewrite=` runs a source's step inside
 `record`, and `send_once` sends a recording's one request, as `record` sends it, for a source that
 needs the answer itself. The rest of decision 6 stands.
+
+Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/479: in decision 2 `pause_cap`
+leaves, since no source passes it, so that the pause waits a spent quota out within 30 s, the
+default `backoff_max`, the one bound wherever the policy is installed, and `limit_header` and
+`remaining_header` default to `None` and `window` is given, since the three defaults were one
+gateway's values and both of the policy's direct callers pass `None` and a window of their own
+(https://github.com/xippios/sdk-core/issues/485, part 4); in decisions 3 and 4 the switch
+`raise_on_error` leaves `request`, and `get_json` and `delete_json` leave the client, by part 2 of
+the answer on https://github.com/xippios/sdk-core/issues/473, so that the client returns no error
+answer and a recording takes one through `send_once`; in decision 5 `get_answer` is the one reader
+of JSON and the one call that stores, `retrieved_at` is the client's fact for every answer, the
+oldest where a task assembles several, and a GET reads the cache only where the cache gives its
+path a lifetime other than `0`, which takes the place of `cache_filter` (ADR-0040, decision 3,
+amendment 2026-11-24); and in decision 7 `post_json` alone decodes a write's answer and a DELETE
+goes through `request`, while decisions 1 and 6, the rest of decisions 2 to 5 and 7, and the
+consequences, but their clause on `cache_filter`, whose place a path's lifetime of `0` takes,
+stand as written.
