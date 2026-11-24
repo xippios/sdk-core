@@ -46,8 +46,8 @@ EXPORTS = {
         "QueryTooLarge", "fetch_counted",
         # the one walk of pages, which refuses at its bound (ADR-0034, amendment 2026-11-24)
         "fetch_pages",
-        # the name of each country code in an answer's meta (ADR-0056)
-        "names_codes",
+        # the names of a request's codes and of a record's in an answer's meta (ADR-0067)
+        "names_codes", "NamedBy",
         # a source's tool functions and their names, without the mcp extra (ADR-0063)
         "tool_functions", "tool_name",
     },

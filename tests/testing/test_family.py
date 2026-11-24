@@ -11,6 +11,7 @@ import pytest
 
 from xippios.core.http import router_from_tasks
 from xippios.core.mcp import ToolSet, build_server
+from xippios.core.models import _holds_text
 from xippios.core.testing import family
 from xippios.core.testing.family import FamilySource, _cell_tasks, _status_table_tasks
 
@@ -477,42 +478,39 @@ def test_a_key_class_that_names_another_slug_than_the_package_s_fails(
         assert passing not in result.stdout.str(), passing
 
 
-COUNTRIES = """
-from xippios.core import PackagedList, names_codes
+MARKED = """
+from typing import Annotated
 
-COUNTRIES = PackagedList.model_validate(
-    {
-        "param": "countries",
-        "endpoint": "lists",
-        "fetched": "2026-10-23T09:00:00Z",
-        "records": [{"countryCode": "CN", "countryName": "Comoros"}],
-    }
-).codes("countryCode", "countryName")
+from xippios.core import NamedBy, UpstreamModel
+
+
+class Row(UpstreamModel):
+    item_code: Annotated[int, NamedBy("item")]
+    item: int
 """
 
-WITH_A_COUNTRY = TASKS.replace(
-    "async def get_series_async(series_id: str, year",
-    'async def get_series_async(series_id: str, country_code: str = "CN", year',
+RETURNING_THE_ROW = TASKS.replace(
+    "async def list_regions_async() -> Result[list[str]]:",
+    "async def list_regions_async() -> Result[list[Row]]:",
+).replace(
+    "return Result[list[str]](data=[], meta=META)", "return Result[list[Row]](data=[], meta=META)"
 )
 
 
-def test_a_task_that_takes_a_country_fails_at_once_until_its_answer_names_it(
+def test_a_record_whose_code_is_named_by_no_text_fails_at_once_until_it_is(
     pytester: pytest.Pytester,
 ) -> None:
-    # ADR-0056: no release warns first (https://github.com/xippios/sdk-core/issues/359, part 4).
-    unnamed = run_family(pytester, {"src/xippios/example/tasks.py": COUNTRIES + WITH_A_COUNTRY})
-    unnamed.assert_outcomes(passed=FAMILY_TESTS - 1, failed=1)
-    unnamed.stdout.fnmatch_lines(
+    # ADR-0067, decision 8: the check reads the model's declaration and no parameter's name.
+    wrong = run_family(pytester, {"src/xippios/example/tasks.py": MARKED + RETURNING_THE_ROW})
+    wrong.assert_outcomes(passed=FAMILY_TESTS - 1, failed=1)
+    wrong.stdout.fnmatch_lines(
         [
-            "*test_family_country_codes_are_named_in_the_answer*",
-            "*- tasks.get_series takes country_code, which names_codes does not name and "
-            "UNNAMED_CODES does not exempt*",
+            "*test_family_code_names_are_declared_on_the_model*",
+            "*- Row.item_code is named by item, which holds int, not text*",
         ]
     )
-    named = COUNTRIES + WITH_A_COUNTRY.replace(
-        "async def get_series_async",
-        "@names_codes(country_code=COUNTRIES)\nasync def get_series_async",
-    )
+    # A text of another length, so that the import does not read the first run's bytecode.
+    named = MARKED.replace("    item: int", "    item: str | None = None") + RETURNING_THE_ROW
     run_family(pytester, {"src/xippios/example/tasks.py": named}).assert_outcomes(
         passed=FAMILY_TESTS
     )
@@ -776,7 +774,7 @@ class Kind(str):
     ],
 )
 def test_text_is_a_str_or_a_subclass_none_allowed_beside_it(annotation: Any, text: bool) -> None:
-    assert family._holds_text(annotation) is text
+    assert _holds_text(annotation) is text
 
 
 def _family_at(package_dir: Path) -> FamilySource:

@@ -449,7 +449,7 @@ COMTRADE_REASON = (
 )
 
 ALPHA_3_HINTS = {"CHE": "CHE is the ISO alpha-3 code of 757 (Switzerland): pass 757."}
-"""sdk-comtrade's hint table: an ISO alpha-3 code is no code of upstream's (ADR-0056, 8)."""
+"""sdk-comtrade's hint table: an ISO alpha-3 code is no code of upstream's (ADR-0067, 11)."""
 
 
 def partners() -> PackagedCodes:
