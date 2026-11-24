@@ -155,7 +155,7 @@ def cells(row: str) -> list[str]:
 
 
 def test_the_frame_fetches_writes_and_checks(site: Site, out: Path) -> None:
-    """Rows 35 c and 67 c of sdk-template: the frame writes a file row and a row without a
+    """As sdk-template's tests had it: the frame writes a file row and a row without a
     file, and ``--check`` compares without writing; the table ``Not fetched`` stands with its
     heading where it has no row (https://github.com/xippios/sdk-core/issues/363)."""
     with pytest.raises(SystemExit, match="Nothing to fetch"):
@@ -186,7 +186,7 @@ def test_the_frame_fetches_writes_and_checks(site: Site, out: Path) -> None:
 
 
 def test_a_statement_the_attribution_lacks_stops_the_run(site: Site, out: Path) -> None:
-    """Row 35 b of sdk-template: every run checks the attribution and stops before writing
+    """As sdk-template's tests had it: every run checks the attribution and stops before writing
     on a copyright, licence or terms it does not record; a recorded one is quoted under
     Attribution with no second period after its own (#123)."""
     url = site.page("guide.html", "<p>Guide</p><footer>&copy; 2026 Example Ltd.</footer>\n")

@@ -258,7 +258,7 @@ def test_the_refusal_is_back_after_marked_tests():
 def test_offline_tests_cannot_reach_the_network(
     pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Row 7: nothing enforced "no network in the default test run".
+    # Nothing enforced "no network in the default test run".
     monkeypatch.setenv(LIVE_ENV, "1")
     pytester.makepyfile(OFFLINE_TESTS)
     result = pytester.runpytest("-p", "xippios.core.testing.plugin", "--strict-markers")
@@ -334,7 +334,7 @@ def test_a_live_test_keeps_the_limiter():
 def test_offline_tests_never_wait_on_the_rate_limiter(
     pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Rows 12 and 18: a burst=1 source waited 1 s per replay.
+    # A burst=1 source waited 1 s per replay.
     monkeypatch.setenv(LIVE_ENV, "1")
     write_ep_case(pytester)
     pytester.makepyfile(LIMITER_TESTS)
@@ -469,7 +469,7 @@ def test_an_offline_test_after_them_starts_without_it():
 def test_every_memory_cache_is_empty_around_an_offline_test(
     pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Row 39 b: each source cleared its caches by hand.
+    # Each source cleared its caches by hand.
     monkeypatch.setenv(LIVE_ENV, "1")
     pytester.makepyfile(CACHE_TESTS)
     result = pytester.runpytest("-p", "xippios.core.testing.plugin", "--strict-markers")
@@ -511,7 +511,7 @@ def test_an_offline_test_after_it_resets_the_snapshot():
 def test_a_live_run_ends_with_the_quota_left(
     pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch, gate: str, lines: int
 ) -> None:
-    # Row 44 b: a release PR reports the quota a live run left.
+    # A release PR reports the quota a live run left.
     monkeypatch.setenv(LIVE_ENV, gate)
     pytester.makepyfile(SUMMARY_TESTS)
     result = pytester.runpytest("-p", "xippios.core.testing.plugin", "--strict-markers")
@@ -818,7 +818,7 @@ ENV_VARS = (
 
 @pytest.mark.usefixtures("shell_keys")
 def test_offline_tests_send_the_placeholder_key(pytester: pytest.Pytester) -> None:
-    # Row 12: every source carried this fixture by hand (sdk-template 0.1.5).
+    # Every source carried this fixture by hand (sdk-template 0.1.5).
     # The variables are the secret ones of _client.ENV_VARS, which the source declares once
     # (https://github.com/xippios/sdk-core/issues/475, part 6).
     write_source(pytester, KEY_CLIENT, PLACEHOLDER_TESTS)
@@ -1221,7 +1221,7 @@ def test_and_the_next_test_gets_them_back_again():
 def test_request_logger_levels_are_restored_after_every_test(
     pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Row 8: core restored the levels in its own conftest only.
+    # Core restored the levels in its own conftest only.
     monkeypatch.setenv(LIVE_ENV, "1")
     for name in REQUEST_LOGGERS:
         logging.getLogger(name).setLevel(logging.NOTSET)
@@ -1260,7 +1260,7 @@ async def test_runs_on_asyncio(anyio_backend):
 def test_anyio_tests_run_on_asyncio_without_a_fixture_of_the_source(
     pytester: pytest.Pytester,
 ) -> None:
-    # Every source's conftest.py carried this fixture (C12); the plugin has it now. Enabled
+    # Every source's conftest.py carried this fixture; the plugin has it now. Enabled
     # through pytest_plugins, as a source does, it is registered after anyio's own, which
     # is parametrised by installed backend and would give the test id a suffix.
     pytester.makeconftest(PLUGIN_CONFTEST)

@@ -483,7 +483,7 @@ def test_replay_fixture_is_typed_as_replay_fixture(replay_fixture: ReplayFixture
 async def test_a_truncated_array_records_replays_and_decodes(
     respx_mock: respx.MockRouter, replay_fixture: ReplayFixture, fixtures_dir: Path
 ) -> None:
-    # Row 43: a list over the fixture cap keeps its first elements.
+    # A list over the fixture cap keeps its first elements.
     respx_mock.get(f"{BASE}/v1/rows").respond(200, json=[{"n": n} for n in range(1000)])
     client = AsyncClient(ClientConfig(source="example", version="1", base_url=BASE))
     recorded = await record.async_fn(
@@ -548,7 +548,7 @@ async def test_a_download_replays_its_sample_body_and_the_mark_survives(
     fixtures_dir: Path,
     config: ClientConfig,
 ) -> None:
-    # Row 125: the replay fixture carries the sample the parser tests
+    # The replay fixture carries the sample the parser tests
     # read, marked a sample, so `truncated` keeps meaning the recorder's cut.
     whole = b"<report>" + b"<page/>" * 1000 + b"</report>"
     sample = b"<report><page/></report>"
@@ -573,7 +573,7 @@ async def test_a_download_replays_its_sample_body_and_the_mark_survives(
 
 def test_sent_query_is_the_last_query_scrubbed(respx_mock: respx.MockRouter) -> None:
     # Two sources each carried it, as sent_query and as _sent; a third reads
-    # route.calls.last inline (row 36 a).
+    # route.calls.last inline.
     route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
     with pytest.raises(AssertionError, match="received no request"):
         sent_query(route)
@@ -656,7 +656,7 @@ def test_recorded_query_is_the_scrubbed_recorded_query(tmp_path: Path) -> None:
 def test_a_recorded_answer_is_served_at_another_url(
     respx_mock: respx.MockRouter, tmp_path: Path
 ) -> None:
-    # Two sources each carried _mount_recorded_404 (row 41 b): the empty
+    # Two sources each carried _mount_recorded_404: the empty
     # 404 recorded for 1900 stands in for a year without data inside a range.
     request = httpx.Request("GET", f"{BASE}/v1/year/1900")
     path = tmp_path / "data" / "unknown_year.json"

@@ -538,7 +538,7 @@ async def test_a_cache_hit_carries_the_time_its_entry_was_stored(
 async def test_get_answer_is_retrieved_when_it_arrived_or_when_its_entry_was_stored(
     respx_mock: respx.MockRouter,
 ) -> None:
-    # Queue row 39 a: a source's wrappers returned (records, stored_at) tuples.
+    # A source's wrappers returned (records, stored_at) tuples.
     respx_mock.get(f"{BASE}/v1/x").respond(200, json={"n": 1})
     cache = MemoryCache(lifetimes={"/": None})
     client = AsyncClient(ClientConfig(source="example", version="1", base_url=BASE, cache=cache))
@@ -694,7 +694,7 @@ def test_decode_json_refuses_a_body_that_is_not_json() -> None:
     )
     assert info.value.raw == "<html>oops</html>"
     assert info.value.source == "example"
-    assert (info.value.__cause__, info.value.__suppress_context__) == (None, True)  # row 42
+    assert (info.value.__cause__, info.value.__suppress_context__) == (None, True)
     with pytest.raises(ValidationError, match=r"^response from /v1/data is not JSON: "):
         decode_json(response, path="/v1/data")
     with pytest.raises(ValidationError, match=r"^response is not JSON: Extra data at line 1 "):

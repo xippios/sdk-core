@@ -67,7 +67,7 @@ def test_the_default_note_promises_no_filter() -> None:
 
 
 def test_a_capped_list_with_an_integer_start_says_where_to_resume() -> None:
-    # Row 21 b: an offset-paged task records start in meta.request.
+    # An offset-paged task records start in meta.request.
     capped = json.loads(cap_result(envelope(500, request={"start": 100}), ResultCap(max_rows=10)))
     assert capped["note"] == (
         "showing 10 of 500 rows (cap: 10 rows or 65536 bytes); narrow the query to see the "
