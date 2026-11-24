@@ -54,7 +54,7 @@ async def test_the_one_key_class_sends_the_key_where_it_travels(
     header: str | None,
     value: str,
 ) -> None:
-    # One class for the four values of the template's one question (ADR-0059, decision 7).
+    # One class for the four places a key travels (ADR-0059, decision 7).
     route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
     await AsyncClient(config, auth=auth).get("/v1/x", params={"year": 2024})
     sent = route.calls.last.request

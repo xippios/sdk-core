@@ -33,5 +33,7 @@
     `tests/test_live.py` (sdk-comtrade `:50`, sdk-eurostat `:71`, sdk-faostat `:74`,
     sdk-usda-esmis `:49`, sdk-usda-esr `:59`, sdk-usda-gats `:62`, sdk-usda-nass `:27`,
     sdk-usda-psd `:46`, sdk-usda-wasde `:152`, sdk-x `:53`) — `test_upstream_answers` reads
-    `config.timeouts.to_httpx()`, which becomes `httpx.Timeout(10.0,
-    read=config.read_timeout)` for as long as the probe stands — mypy fails at `timeouts`.
+    `config.timeouts.to_httpx()`, and the adoption deletes the probe, which leaves in this
+    release with the family check's contract tests
+    (https://github.com/xippios/sdk-core/issues/477), so no source edits it first — until
+    it leaves, mypy fails at `timeouts`.

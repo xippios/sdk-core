@@ -107,7 +107,7 @@ class EnvKeyAuth(httpx.Auth):
 
 
 KeyLocation = Literal["query", "header", "bearer", "basic"]
-"""Where ``KeyAuth`` sends the key: the four values of the template's ``api_key_location``."""
+"""Where ``KeyAuth`` sends the key: a query parameter, a header, a bearer or basic auth."""
 
 _LOCATIONS: Final[tuple[KeyLocation, ...]] = get_args(KeyLocation)
 _NAMED: Final = {"query": "query parameter", "header": "header"}
@@ -116,19 +116,21 @@ _NAMED: Final = {"query": "query parameter", "header": "header"}
 class KeyAuth(EnvKeyAuth):
     """Send the key where upstream documents it: a query parameter, a header, a bearer, basic auth.
 
-    The family's one key class (ADR-0059, decision 7). ``location`` names where the key
-    travels and ``name`` the parameter or header that carries it, the values of the
-    template's answers ``api_key_location`` and ``api_key_name``:
+    The family's one key class (ADR-0059, decision 7), which a source builds in its
+    ``_client.py``. ``location`` names where the key travels, and ``name`` the query
+    parameter or the header that carries it, as upstream's documentation names it:
 
-    - ``"query"``: the query parameter ``name``, ``?key=<key>``. Building one registers
-      ``name`` as a credential name for the whole process (``xippios.core.redaction``): its
-      value is ``REDACTED`` in every ``ResultMeta.request``, every recorded fixture and every
-      URL ``sent_urls`` gives, also where the name is no credential by itself, as ``key`` is
-      not (ADR-0040, decision 6).
-    - ``"header"``: the header ``name``, ``X-Api-Key: <key>``.
-    - ``"bearer"``: ``Authorization: Bearer <key>``, with no ``name``.
-    - ``"basic"``: the key as the HTTP basic user name and an empty password, with no
-      ``name``.
+    - ``"query"``: the key goes as the query parameter ``name`` of every request,
+      ``?key=<key>`` for ``name="key"``. Building one registers ``name`` as a credential
+      name for the whole process (``xippios.core.redaction``): its value is ``REDACTED`` in
+      every ``ResultMeta.request``, every recorded fixture and every URL ``sent_urls``
+      gives, also where the name is no credential by itself, as ``key`` is not (ADR-0040,
+      decision 6).
+    - ``"header"``: the key goes as the value of the header ``name``,
+      ``X-Api-Key: <key>`` for ``name="X-Api-Key"``.
+    - ``"bearer"``: the key goes as ``Authorization: Bearer <key>``; no ``name``.
+    - ``"basic"``: the key goes as the HTTP basic user name with an empty password,
+      ``Authorization: Basic`` and the two in base64; no ``name``.
 
     The key is read from ``env_var`` on the first request, an explicit ``key`` winning, as
     ``EnvKeyAuth`` reads it.
