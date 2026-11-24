@@ -193,26 +193,13 @@ VALUES = {"VA": "VA", "AK": "AK", "TX": "TX"}
 """Bare values, sdk-usda-nass's ``state_alpha`` in shape: each value is its own name."""
 
 
-def test_closest_takes_a_cutoff_that_finds_a_short_code() -> None:
-    # One wrong letter of two is a ratio of 0.5 (https://github.com/xippios/sdk-core/issues/111).
-    assert closest("VS", VALUES) == []  # difflib's 0.6, the default as before
-    assert closest("VS", VALUES, cutoff=0.5) == [("VA", "VA")]
-
-
-@pytest.mark.parametrize(
-    ("value", "expected"),
-    [("US", [("US", "United States")]), ("wheat", [("0410000", "Wheat")]), ("whea", [])],
-)
-def test_the_cutoff_holds_for_the_codes_and_the_names(
-    value: str, expected: list[tuple[str, str]]
-) -> None:
-    assert closest(value, CODES, cutoff=1.0) == expected
-
-
-@pytest.mark.parametrize("cutoff", [-0.1, 1.5])
-def test_a_cutoff_outside_zero_to_one_is_refused(cutoff: float) -> None:
-    with pytest.raises(ValueError, match=r"cutoff must be in \[0\.0, 1\.0\]"):
-        closest("VS", VALUES, cutoff=cutoff)
+def test_closest_needs_difflib_s_default_similarity_and_takes_no_cutoff() -> None:
+    # One wrong letter of two is a ratio of 0.5, under difflib's 0.6: no code is named. The
+    # keyword that lowered it had no caller (https://github.com/xippios/sdk-core/issues/475).
+    assert closest("VS", VALUES) == []
+    assert closest("VA ", {"VA": "Virginia"}) == [("VA", "Virginia")]
+    with pytest.raises(TypeError, match="cutoff"):
+        closest("VS", VALUES, cutoff=0.5)  # type: ignore[call-arg]
 
 
 ESR_COMMODITIES = {902: "Soybean Oil", 1001: "Flaxseed", 104: "Wheat - White"}

@@ -29,8 +29,6 @@ def test_invalid_request_text() -> None:
 
 
 def test_query_too_large_is_printed_by_the_name_both_sources_print() -> None:
+    # Its message is held by tests/test_errors.py alone.
     error = QueryTooLarge(85_535, limit=50_000, narrow="Narrow the filters.")
-    assert error_to_text(error) == (
-        "error: QueryTooLarge: query would return 85,535 records; upstream serves at most "
-        "50,000 per call. Narrow the filters."
-    )
+    assert error_to_text(error) == f"error: QueryTooLarge: {error}"

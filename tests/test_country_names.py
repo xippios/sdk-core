@@ -264,6 +264,11 @@ def test_a_code_the_list_lacks_withholds_the_answer_with_the_lists_refusal() -> 
     )
     assert "names the country of each code it is for" in str(refused.value)
     assert "the answer is withheld" in str(refused.value)
+    # Checked after the call: upstream was asked, so the check's switch leaves out that nothing
+    # was sent (https://github.com/xippios/sdk-core/issues/481, part 1).
+    assert "(fetched 2026-10-23). Did you mean " in str(refused.value)
+    assert "Upstream was asked" in str(refused.value)
+    assert "Nothing was sent" not in str(refused.value)
     with pytest.raises(InvalidRequestError) as typed:
         get_unchecked(reporter_code="CHE")
     assert not isinstance(typed.value, UnknownCode)
@@ -273,6 +278,7 @@ def test_a_code_the_list_lacks_withholds_the_answer_with_the_lists_refusal() -> 
     )
     # A value of the other type withholds the answer by the same reason (ADR-0056, decision 3).
     assert str(typed.value).endswith("so the answer is withheld.")
+    assert "Nothing was sent" not in str(typed.value)
 
 
 @names_codes(country_code=COUNTRIES)

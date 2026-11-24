@@ -226,7 +226,8 @@ def test_errors_name_the_source_slug_and_the_prefixed_variables() -> None:
         tenants.require("work")
     assert str(info.value) == (
         "unknown tenant 'work'; no tenant is declared; set FICTIVE_ACCOUNTS and, per name, "
-        "FICTIVE_<NAME>_REFRESH_TOKEN; 'demo' is declared by FICTIVE_DEMO_REFRESH_TOKEN alone"
+        "FICTIVE_<NAME>_REFRESH_TOKEN; 'demo' is declared by FICTIVE_DEMO_REFRESH_TOKEN alone. "
+        "Nothing was sent."
     )
     assert info.value.source == MAIL_SOURCE
 
@@ -338,7 +339,7 @@ def test_require_returns_a_declared_name_and_lists_them_otherwise(
     with pytest.raises(InvalidRequestError) as info:
         tenants.require("nope")
     message = str(info.value)
-    assert message == "unknown tenant 'nope'; declared tenants: xa, xb, demo"
+    assert message == "unknown tenant 'nope'; declared tenants: xa, xb, demo. Nothing was sent."
     assert info.value.source == SOURCE
     assert_no_value(message)
 
@@ -349,7 +350,8 @@ def test_require_without_any_declaration_names_the_variables() -> None:
     assert str(info.value) == (
         "unknown tenant 'demo'; no tenant is declared; set FICTIVE_SRC_TENANTS and, per "
         "name, FICTIVE_SRC_<NAME>_SUBDOMAIN and FICTIVE_SRC_<NAME>_API_KEY; 'demo' is "
-        "declared by FICTIVE_SRC_DEMO_SUBDOMAIN and FICTIVE_SRC_DEMO_API_KEY alone"
+        "declared by FICTIVE_SRC_DEMO_SUBDOMAIN and FICTIVE_SRC_DEMO_API_KEY alone. Nothing was "
+        "sent."
     )
 
 
@@ -362,11 +364,11 @@ def test_require_names_the_variables_of_an_absent_reserved_tenant(
         make().require("demo")
     assert str(info.value) == (
         "unknown tenant 'demo'; declared tenants: xa; 'demo' is declared by "
-        "FICTIVE_SRC_DEMO_SUBDOMAIN and FICTIVE_SRC_DEMO_API_KEY alone"
+        "FICTIVE_SRC_DEMO_SUBDOMAIN and FICTIVE_SRC_DEMO_API_KEY alone. Nothing was sent."
     )
     with pytest.raises(InvalidRequestError) as info:
         make().require("nope")
-    assert str(info.value) == "unknown tenant 'nope'; declared tenants: xa"
+    assert str(info.value) == "unknown tenant 'nope'; declared tenants: xa. Nothing was sent."
 
 
 def test_require_refuses_a_malformed_list(monkeypatch: pytest.MonkeyPatch) -> None:
