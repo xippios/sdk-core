@@ -1,10 +1,12 @@
 """Register a tool set's tasks as MCP tools.
 
-Each tool keeps the task's signature and docstring, the metadata of an ``Annotated``
-parameter included, so the SDK derives the input schema and the description from them.
-The body awaits the task's async twin, turns taxonomy errors into text flagged
-``is_error`` and applies the result cap: the tool's own from the tool set's ``caps``,
-else the family default (ADR-0038).
+Each tool keeps the task's signature, the metadata of an ``Annotated`` parameter
+included, so the SDK derives the input schema from it. Its description is the text of the
+task's docstring before ``Args:``, and each argument's text under ``Args:`` describes that
+argument in the input schema, unless the parameter's ``Annotated`` metadata declares a
+description of its own (ADR-0063, decision 9). The body awaits the task's async twin,
+turns taxonomy errors into text flagged ``is_error`` and applies the result cap: the
+tool's own from the tool set's ``caps``, else the family default (ADR-0038).
 
 ``build_server`` builds a server from one ``ToolSet``, the package contract's, and
 ``register_tasks`` registers a tool set on a server a host builds from several; both take
@@ -25,6 +27,7 @@ Building a server also quiets the request log of httpx and httpx2
 import functools
 import inspect
 import logging
+import re
 import typing
 import weakref
 from collections.abc import Awaitable, Callable, Mapping
@@ -36,6 +39,7 @@ from mcp.server.context import CallNext, HandlerResult, ServerMiddleware, Server
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.utilities.func_metadata import FuncMetadata, func_metadata
 from mcp.types import CallToolResult, ToolAnnotations
+from pydantic.fields import FieldInfo
 
 from xippios.core._loop import as_async
 from xippios.core._tasks import tool_name
@@ -182,6 +186,91 @@ def _declared(metadata: FuncMetadata) -> list[str]:
     return [field.alias or name for name, field in fields.items()]
 
 
+_ARGS = "Args:"
+"""The line that opens a docstring's arguments, at the docstring's own indentation (§8)."""
+
+_ENTRY = re.compile(r"(?P<name>\*{0,2}[A-Za-z_]\w*)\s*(?:\([^)]*\))?\s*:(?:\s+(?P<text>.*))?$")
+"""An argument's first line under ``Args:``: its name, its type in parentheses, its text."""
+
+
+def _docstring_parts(fn: Callable[..., Any]) -> tuple[list[str], list[str]]:
+    """The lines of ``fn``'s docstring before ``Args:``, and those of its ``Args:`` block.
+
+    The block ends at the next line of the docstring's own indentation, the ``Returns:`` or
+    ``Raises:`` that follows it say. A docstring without ``Args:`` is its first part whole.
+    """
+    lines = (inspect.getdoc(fn) or "").splitlines()
+    start = next((i for i, line in enumerate(lines) if line.rstrip() == _ARGS), None)
+    if start is None:
+        return lines, []
+    block: list[str] = []
+    for line in lines[start + 1 :]:
+        if line.strip() and not line[0].isspace():
+            break
+        block.append(line)
+    return lines[:start], block
+
+
+def _description(fn: Callable[..., Any]) -> str:
+    """A tool's description: the text of its task's docstring before ``Args:``.
+
+    What follows ``Args:``, a ``Returns:`` or ``Raises:`` section after it included, is no
+    part of it: each argument's text reaches the input schema instead, by
+    ``_argument_texts`` (ADR-0063, decision 9). The family check holds it under 1,000
+    characters.
+    """
+    return "\n".join(_docstring_parts(fn)[0]).strip()
+
+
+def _argument_texts(fn: Callable[..., Any]) -> dict[str, str]:
+    """Each argument's text under ``Args:`` of ``fn``'s docstring, by the argument's name.
+
+    An entry is a line at the block's least indentation that opens with a name, its type in
+    parentheses if any, and a colon; its text is the rest of that line and every line below
+    it up to the next entry, as the docstring wraps it, the indentation they share removed.
+    An entry without text gives none.
+    """
+    block = _docstring_parts(fn)[1]
+    depths = [len(line) - len(line.lstrip()) for line in block if line.strip()]
+    if not depths:
+        return {}
+    depth = min(depths)
+    entries: dict[str, list[str]] = {}
+    current: list[str] | None = None
+    for line in block:
+        at_depth = bool(line.strip()) and len(line) - len(line.lstrip()) == depth
+        entry = _ENTRY.match(line[depth:]) if at_depth else None
+        if entry is not None:
+            current = entries.setdefault(entry["name"].lstrip("*"), [])
+            current.append(entry["text"] or "")
+        elif current is not None:
+            current.append(line)
+    texts = {name: inspect.cleandoc("\n".join(lines)) for name, lines in entries.items()}
+    return {name: text for name, text in texts.items() if text}
+
+
+def _declares_a_description(annotation: Any) -> bool:
+    """Whether ``annotation`` is ``Annotated`` with a ``Field`` that holds a description."""
+    if typing.get_origin(annotation) is not Annotated:
+        return False
+    return any(
+        isinstance(meta, FieldInfo) and meta.description is not None
+        for meta in typing.get_args(annotation)[1:]
+    )
+
+
+def _with_text(parameter: inspect.Parameter, text: str | None) -> inspect.Parameter:
+    """``parameter`` described by ``text``, its argument's text under ``Args:``.
+
+    A parameter whose ``Annotated`` metadata declares a description keeps it, since it is
+    the parameter's own, and so does a parameter without an annotation or without text.
+    """
+    annotation = parameter.annotation
+    if not text or annotation is inspect.Parameter.empty or _declares_a_description(annotation):
+        return parameter
+    return parameter.replace(annotation=Annotated[annotation, pydantic.Field(description=text)])
+
+
 _OFFSET_HELP = {
     "first": "Rows of the answer already shown, to skip: the note of a cut answer names the "
     "next offset. 0, the default, starts at the first row.",
@@ -216,8 +305,10 @@ def _as_tool(
     The hints are resolved with ``include_extras=True``, so a ``Field`` constraint, a
     description or a validator that an ``Annotated`` parameter declares reaches the
     argument model, the input schema and the argument check
-    (https://github.com/xippios/sdk-core/issues/68). The tool returns the capped result
-    as text, or a ``XippiosError`` as the family's text flagged ``is_error``.
+    (https://github.com/xippios/sdk-core/issues/68). A parameter that declares no
+    description takes its argument's text under ``Args:`` as one (ADR-0063, decision 9).
+    The tool returns the capped result as text, or a ``XippiosError`` as the family's text
+    flagged ``is_error``.
 
     A paged cap adds ``offset: int = 0``, at least 0, after the task's parameters: the
     tool takes it off the call, runs the task without it and hands it to ``cap_result``,
@@ -226,8 +317,10 @@ def _as_tool(
     target = as_async(fn)
     hints = typing.get_type_hints(fn, include_extras=True)
     signature = inspect.signature(fn)
+    texts = _argument_texts(fn)
     parameters = [
-        p.replace(annotation=hints.get(p.name, p.annotation)) for p in signature.parameters.values()
+        _with_text(p.replace(annotation=hints.get(p.name, p.annotation)), texts.get(p.name))
+        for p in signature.parameters.values()
     ]
     if cap.paged:
         parameters = _with_offset(parameters, cap)
@@ -254,7 +347,9 @@ def register_tasks(server: MCPServer, tool_set: ToolSet) -> list[str]:
 
     A host builds one server from the tool sets of several packages, each tool with its
     own package's caps; a tool without a cap of its own takes the family default, 200
-    rows or 64 KB (ADR-0038). The tool set was checked when it was built, so nothing is
+    rows or 64 KB (ADR-0038). A tool's description is the text of its task's docstring
+    before ``Args:``, and each argument's text under ``Args:`` describes it in the input
+    schema (ADR-0063, decision 9). The tool set was checked when it was built, so nothing is
     refused here (ADR-0063, decision 3). A tool set that writes, ``read_only=False``,
     marks its tools read-only false and destructive. Whether ``server`` is then held to
     loopback is the host's to apply from the tool set's ``read_only`` and
@@ -296,7 +391,7 @@ def register_tasks(server: MCPServer, tool_set: ToolSet) -> list[str]:
         server.add_tool(
             tool,
             name=name,
-            description=inspect.getdoc(fn) or "",
+            description=_description(fn),
             annotations=annotations,
             structured_output=False,
         )

@@ -408,8 +408,8 @@ def list_task(
         tenants: The source's registry.
         name: The task's ``__name__``, e.g. ``"list_organisations"``; the MCP tool is
             named from it (``cashctrl_list_organisations``).
-        doc: The docstring, which is the tool description; ``None`` gives a default
-            written for agents that says "tenants".
+        doc: The docstring, whose text before ``Args:`` is the tool description;
+            ``None`` gives a default written for agents that says "tenants".
 
     Raises:
         ValueError: ``name`` is not a Python identifier.

@@ -937,9 +937,12 @@ with sdk-template 0.4.0, which renders it (ADR-0063, decision 2).
 ## 8. MCP conventions
 
 - Register task functions, not endpoint wrappers. Tool name `<source>_<verb>_<noun>`.
-- The function docstring is the tool description: first line one sentence, then an
-  `Args:` block explaining every parameter with examples of valid values. Agents read
-  this; write it for them.
+- A task's docstring opens with one sentence, then an `Args:` block explaining every
+  parameter with examples of valid values. Agents read it; write it for them.
+  A tool's description is the text of its task's docstring before `Args:`, under 1,000
+  characters, and the MCP adapter carries each argument's text under `Args:` into the tool's
+  input schema, so what one argument needs stands on its line there, and the family check
+  fails a description of 1,000 characters or more (ADR-0063, decision 9).
 - An enum's class docstring reaches the tool's input schema through the parameter type,
   so it holds what an agent needs, what the values are and the upstream list they come
   from with its fetch date (what `render_enums` writes); maintainers' notes go into
@@ -1413,8 +1416,21 @@ standalone from the package. A task named in `BULK_TASKS` gets no route:
   (`from xippios.core.testing.family import *  # noqa: F403`), so it runs in every
   source's CI, and a source keeps no copy of its checks. The package under test is the
   one package with a `tasks.py` under `src/xippios/` (ADR-0035, decision 8, and its
-  amendment of 2026-11-24). A source's write server is its own to test (ADR-0042).
-- Every task function has at least one fixture-backed test and one live smoke test.
+  amendment of 2026-11-24).
+  The family check holds the package contract of §8, `mcp.build()` a `ToolSet` of
+  `_client.SOURCE`, `mcp.server` the tools of `build_server(mcp.build())` and `mcp.ENV_VARS`
+  the `_client.ENV_VARS` itself, and of a write server `mcp_write.build()` a tool set that
+  writes, the entry points of §8 in `[project.scripts]`, each at its module's `run`, every
+  task of `tasks.__all__` and `tasks_write.__all__` re-exported by the package, and every
+  tool's description under 1,000 characters (ADR-0063, decisions 8 and 9).
+  The tools of a source's write server are its own to test, with `assert_write_tools` (ADR-0042,
+  decision 1).
+  A source does not test again what core's adapters answer for every source, a refused or
+  undeclared argument, the flag of an error answer and the problem details of a route, and
+  keeps the test of a refusal of its own (ADR-0063, decision 8).
+- Every task function has at least one fixture-backed test and one live smoke test, and no
+  probe of upstream's base URL stands beside them, since every task's smoke test reaches
+  upstream (ADR-0063, decision 8).
 - Two tests of the family check hold names that §1 and §3 give, with no opt-in.
   The family check fails a read task, one of `tasks.__all__`, bulk or not, whose name starts with
   none of the five read verbs of §1, `list_`, `get_`, `search_`, `count_` or `download_`

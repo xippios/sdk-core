@@ -1286,8 +1286,13 @@ def run() -> None:  # entry point: xippios-example-mcp = "xippios.example.mcp:ru
     main(build)
 ```
 
-Tool names are `<source>_<function>` (`example_get_series`), the docstring is the tool
-description, the signature is the input schema. Results are capped at 200 rows or
+Tool names are `<source>_<function>` (`example_get_series`), the signature is the input
+schema, and the docstring's text before `Args:` is the tool's description, under 1,000
+characters, which the family check holds. Each argument's text under `Args:` describes it
+in the input schema, unless the parameter's `Annotated` metadata declares a description of
+its own (ADR-0063, decision 9): the description of the example's `get_series` is "Fetch
+one series for a year.", and its input schema describes `series_id` and `year` by their
+lines under `Args:`. Results are capped at 200 rows or
 64 KB with a note on how to narrow the query, and a capped list whose `meta.request`
 records an integer `start` says where to resume (`; resume with start=200`), unless not
 even its first row fits, which the note then says instead. A model that holds one list of
@@ -1568,11 +1573,28 @@ source whose `_client`, `tasks` or `tasks_write` module holds a `Tenants` regist
 exactly one tenant, the parameter its registry declares, `Tenants(..., param="org")`, once,
 required, a `str`, the tenant list excepted, with no opt-in. The check reads signatures
 only, so a task that takes one tenant and opens another's client is the review's to find.
+
+It holds the package contract as a host reads it too (ADR-0063, decision 8): `mcp.build()`
+returns a `ToolSet` of `_client.SOURCE`, `mcp.server` lists the tools of
+`build_server(mcp.build())`, and `mcp.ENV_VARS` is `_client.ENV_VARS` itself; a source with
+`tasks_write.py` has `mcp_write.py`, whose `build()` returns a tool set that writes.
+`[project.scripts]` names `xippios-example-mcp = "xippios.example.mcp:run"`, or, for a
+source with a write server, `xippios-example-mcp-read` at `mcp:run` and
+`xippios-example-mcp-write` at `mcp_write:run`, a script of the package's own beside them.
+The package re-exports every task of `tasks.__all__` and `tasks_write.__all__` from its
+`__init__.py`, and every tool's description, the text of its docstring before `Args:`, is
+under 1,000 characters (ADR-0063, decision 9). So a source keeps no test of its own of
+these, nor of what core's adapters answer for every source, an undeclared or refused
+argument, the flag of an error answer and a route's problem details, and keeps the test of
+a refusal of its own (conventions §10). Its live suite is one smoke test per task, with no
+probe of upstream's base URL beside them.
+
 A write
-server is its source's to test, with `await assert_write_tools(mcp_write.build(), write_tasks,
-read_server=read_server, router=router)`: a write tool set, its tools exactly the write tasks,
-each taking `confirm: bool = False` last, and none of them on the read server or the router. A source whose adapters drop a task, or whose README table is stale, fails CI
-before a reviewer looks. The package under test is the one `tasks.py` under
+server's tools are its source's to test, with `await assert_write_tools(mcp_write.build(),
+write_tasks, read_server=read_server, router=router)`: a write tool set, its tools exactly
+the write tasks, each taking `confirm: bool = False` last, and none of them on the read
+server or the router. A source whose adapters drop a task, or whose README table is stale,
+fails CI before a reviewer looks. The package under test is the one `tasks.py` under
 `src/xippios/`.
 
 `assert_write_tools` holds the preview of each write task too, in two parts (ADR-0050):
