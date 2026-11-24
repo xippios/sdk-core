@@ -4,7 +4,8 @@ Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, res
 https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0018 ·
 Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/484 ·
 Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/494 ·
-Decision 3 constrained by ADR-0069 (2026-11-24)
+Decision 3 constrained by ADR-0069 (2026-11-24) ·
+Decision 2 changed in part by ADR-0070 (2026-11-24)
 
 ## Context
 
@@ -147,3 +148,10 @@ ADR-0069 (https://github.com/xippios/sdk-core/issues/484), decision 3, adds to d
 constraint that the missing `concurrency` group of `publish.yml` imposes on when a release PR
 merges: a release PR is not merged while another release run waits at `pypi`. The rest of
 decision 3, the other decisions and the amendments above stand as written.
+
+ADR-0070 (https://github.com/xippios/sdk-core/issues/561), decision 3, changes decision 2 in
+part: a release PR is told by its title, `X.Y.Z Release`, or by the `release` label, as the
+organization's conventions check tells it, and no longer by its version, since core's `main`
+carries the coming version before its tag and core's release PR raises none (ADR-0070,
+decisions 1 and 2). The rest of decision 2, the other decisions, the amendments and the
+paragraph above stand as written.
