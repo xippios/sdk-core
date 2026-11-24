@@ -12,14 +12,14 @@ import importlib
 import json
 import sys
 from collections.abc import Iterable, Mapping
-from datetime import date
+from datetime import UTC, date, datetime
 from enum import StrEnum
 from typing import Any
 
 import pytest
 from pydantic import Field
 
-from xippios.core import PackagedCodes, PackagedList, UpstreamModel
+from xippios.core import Answer, PackagedCodes, PackagedList, UpstreamModel
 from xippios.core.reference import _read_text
 from xippios.core.testing import live
 from xippios.core.testing.live import assert_list_current
@@ -74,7 +74,7 @@ def head(gone: int, new: int, changed: int, packaged: int = 3, served: int = 3) 
     )
 
 
-def failure(codes: PackagedCodes, current: Iterable[Any], **options: Any) -> list[str]:
+def failure(codes: PackagedCodes, current: Any, **options: Any) -> list[str]:
     """The lines of the failure ``assert_list_current`` fails the test with."""
     with pytest.raises(pytest.fail.Exception) as failed:
         assert_list_current(codes, current, **options)
@@ -223,6 +223,49 @@ def test_a_list_that_holds_neither_records_nor_codes_fails_naming_the_item(
     assert "Brazil" not in lines[0]
 
 
+RETRIEVED = datetime(2026, 11, 24, 8, 0, tzinfo=UTC)
+"""When an ``api/`` wrapper's ``Answer`` was retrieved, which the comparison does not read."""
+
+
+def test_an_answer_is_compared_as_the_list_it_holds() -> None:
+    """https://github.com/xippios/sdk-core/issues/577: an ``api/`` wrapper answers an
+    ``Answer`` (https://github.com/xippios/sdk-core/issues/479), which the comparison reads
+    by its ``payload``: it passes and fails as the records or codes it holds do."""
+    argentina = {"countryCode": "AR", "countryName": "Argentina", "regionCode": "R04"}
+    models = [Country.model_validate(record) for record in RECORDS]
+    assert_list_current(TEXT_CODES, Answer(RECORDS, RETRIEVED))
+    assert_list_current(TEXT_CODES, Answer(models, RETRIEVED))
+    assert_list_current(TEXT_CODES, Answer(["E4", "US", "BR"], RETRIEVED))
+    for current in ([RECORDS[0], RECORDS[2], argentina], ["US", "E4", "AR"]):
+        assert failure(TEXT_CODES, Answer(current, RETRIEVED)) == failure(TEXT_CODES, current)
+    renamed = [RECORDS[0], {**RECORDS[1], "countryName": "Brasil"}, RECORDS[2]]
+    assert failure(TEXT_CODES, Answer(renamed, RETRIEVED))[1:] == ["- changed: 'BR'"]
+
+
+@pytest.mark.parametrize(
+    ("payload", "kind"),
+    [({"data": RECORDS}, "a dict"), ("US", "a str"), (None, "a NoneType")],
+    ids=["body", "text", "none"],
+)
+def test_an_answer_that_holds_no_list_fails_naming_its_payloads_type(
+    payload: object, kind: str
+) -> None:
+    """https://github.com/xippios/sdk-core/issues/577: an ``Answer`` of the body that holds
+    the records, of a text or of no list at all is refused as a list that holds neither
+    records nor codes is, naming the payload's type and never a value, and says to hand the
+    records."""
+    answer: Any = Answer(payload, RETRIEVED)
+    lines = failure(TEXT_CODES, answer)
+    assert len(lines) == 1, lines
+    assert lines[0].startswith(
+        f"packaged list countries: the list upstream serves now is an Answer of {kind}: "
+    ), lines
+    assert "hand the records" in lines[0], lines
+    assert lines[0].endswith(" (ADR-0055)"), lines
+    for value in ("Brazil", "'US'", "data"):
+        assert value not in lines[0]
+
+
 def test_a_packaged_side_given_is_read_as_the_current_one() -> None:
     assert failure(TEXT_CODES, RECORDS, packaged=[{"countryName": "Brazil"}]) == [
         "packaged list countries: the packaged list: record 0 has no field 'countryCode' (ADR-0055)"
@@ -360,6 +403,49 @@ def test_the_collected_test_fails_naming_codes_and_never_records(
     shown = result.stdout.str()
     for value in ("United States", "Argentina", "Brazil", "European Union"):
         assert value not in shown
+
+
+ANSWERED = (
+    LIVE_MODULE.replace(
+        "from xippios.core import PackagedList\n",
+        "from datetime import UTC, datetime\n\nfrom xippios.core import Answer, PackagedList\n",
+    )
+    .replace(
+        '    return json.loads((UPSTREAM / "countries.json").read_text(encoding="utf-8"))\n',
+        '    records = json.loads((UPSTREAM / "countries.json").read_text(encoding="utf-8"))\n'
+        "    return Answer(records, datetime.now(UTC))\n",
+    )
+    .replace(
+        '    return [row["regionCode"] for row in json.loads('
+        '(UPSTREAM / "regions.json").read_text())]\n',
+        '    rows = json.loads((UPSTREAM / "regions.json").read_text())\n'
+        '    return Answer([row["regionCode"] for row in rows], datetime.now(UTC))\n',
+    )
+)
+"""``tests/test_live.py`` whose two fetches answer as ``api/`` wrappers do, an ``Answer`` each,
+one of records and one of bare codes, the second async."""
+
+
+def test_the_collected_test_compares_a_fetch_that_answers_an_answer(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """https://github.com/xippios/sdk-core/issues/577: an entry's fetch may be an ``api/``
+    wrapper, whose ``Answer`` the test compares by its ``payload``, passing and failing as
+    for the records or codes it holds."""
+    assert ANSWERED.count("Answer(") == 2, "both fetches answer an Answer"
+    monkeypatch.setenv(LIVE_ENV, "1")
+    result = run_live(pytester, {"tests/test_live.py": ANSWERED}, "-v")
+    result.assert_outcomes(passed=3)
+    upstream = [RECORDS[0], RECORDS[2], {**RECORDS[1], "countryCode": "AR"}]
+    changes: dict[str, str | None] = {
+        "tests/test_live.py": ANSWERED,
+        "tests/upstream/countries.json": json.dumps(upstream),
+        "tests/upstream/regions.json": json.dumps([REGIONS[0]]),
+    }
+    result = run_live(pytester, changes)
+    result.assert_outcomes(passed=1, failed=2)
+    result.stdout.fnmatch_lines(["*packaged list countries*1 gone, 1 new, 0 changed*"])
+    result.stdout.fnmatch_lines(["*packaged list regions (fetched 2026-10-23)*", "- gone: 'R04'"])
 
 
 def test_an_offline_run_fetches_nothing(
