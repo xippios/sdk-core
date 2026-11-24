@@ -1,8 +1,8 @@
 - `xippios.core.data_gov` leaves core for the shared package `sdk-usda-fas` of the sources
-  behind api.data.gov, import `xippios.usda.fas`, with `Gateway`, `NoDataForYear`, `API_KEY_ENV`
-  and the module's other names and tests, and the refusal of a spent quota before sending says
-  "quota" with the policy's `source` for every policy. `fetch_periods` takes a source's own
-  error for a period without data in its `skip`.
+  behind api.data.gov, import `xippios.usda.fas`, with its public names `Gateway`,
+  `API_KEY_ENV`, `NoDataForYear` and `REMAINING_HEADER`, and its tests, and the refusal of a
+  spent quota before sending says "quota" with the policy's `source` for every policy.
+  `fetch_periods` takes a source's own error for a period without data in its `skip`.
   (ADR-0065, ADR-0032, §7, https://github.com/xippios/sdk-core/issues/485)
   - Hand-apply: `src/xippios/usda/psd/_client.py` (sdk-usda-psd) — line 31 imports `API_KEY_ENV`
     and `Gateway` from `xippios.usda.fas`, by the names that its first release exports, and the
@@ -24,17 +24,20 @@
     `xippios.core` where the render does not — every import of the shared package fails
     without the dependency, and ruff sorts it as the source's own without the second.
     `tests/test_client.py` (sdk-usda-psd, sdk-usda-esr, sdk-usda-gats) — the import of
-    `xippios.core.data_gov` (lines 31, 32 and 32) and the seven tests that the shared package
-    holds under the same names leave, `test_the_client_is_wired_for_the_gateway`,
+    `xippios.core.data_gov` (lines 31, 32 and 32) names `xippios.usda.fas`, the module
+    docstring (sdk-usda-psd lines 7 to 9, sdk-usda-esr 8 to 10, sdk-usda-gats 8 and 9) calls
+    the gateway the shared package's, tested there, in place of core's, and six tests leave,
     `test_invalid_key_is_an_auth_error_naming_the_code_and_the_variable`,
     `test_every_documented_key_code_is_an_auth_error`,
     `test_a_403_without_a_gateway_code_falls_through_to_core`,
     `test_the_gateway_not_found_is_a_not_found_error`, `test_other_statuses_fall_through_to_core`
-    and `test_core_retries_a_429_only_within_its_backoff`, and a test that stays reads the
-    refusal before sending as core words it, `quota spent (`, in place of `api.data.gov quota of
-    the key in DATA_GOV_API_KEY spent` (sdk-usda-psd lines 298 and 299, sdk-usda-esr 418 and
-    419, sdk-usda-gats 297 to 300) — the import fails the whole file, and core's subject of the
-    quota left with the gateway.
+    and `test_core_retries_a_429_only_within_its_backoff`, and the shared package's tests cover
+    them, two under the same names, while `test_the_client_is_wired_for_the_gateway` stays,
+    since it reads the source's own `_client.py`, and a test that stays reads the refusal before
+    sending as core words it, `quota spent (`, in place of
+    `api.data.gov quota of the key in DATA_GOV_API_KEY spent` (sdk-usda-psd lines 298 and 299,
+    sdk-usda-esr 418 and 419, sdk-usda-gats 297 to 300) — the file fails at the import until it
+    names `xippios.usda.fas`, and core's subject of the quota left with the gateway.
     `tests/test_tasks.py` (sdk-usda-psd, sdk-usda-esr) — imports `NoDataForYear` from
     `xippios.usda.fas` (lines 15 and 16) — the file fails at the import until it does.
     `tests/test_slices.py` (sdk-usda-psd, sdk-usda-esr) — imports `NoDataForYear` from

@@ -74,9 +74,10 @@ this record to say how the gateway leaves.
 - sdk-usda-psd, sdk-usda-esr and sdk-usda-gats stay on core 0.4.x, which holds the module, until
   they adopt 0.5.0, and their bound on core keeps 0.5.0 out, so no release of `sdk-usda-fas`
   comes first. At its adoption each imports `Gateway` and its names from `xippios.usda.fas`,
-  declares the dependency on `xippios-usda-fas`, and drops its tests of the gateway that the
-  shared package now holds, seven of them under the same names in all three. The handover's
-  part for 0.5.0 states it without a source's name.
+  declares the dependency on `xippios-usda-fas`, and drops six tests of the gateway, named
+  alike in all three, which the shared package's tests cover, two under the same names, while
+  `test_the_client_is_wired_for_the_gateway` stays, since it reads the source's own
+  `_client.py`. The handover's part for 0.5.0 states it without a source's name.
 - The refusal of a spent quota before sending no longer names the key's variable, which told an
   operator which of the shared keys is spent. The adoption of sdk-usda-esr with the shared
   package overturns decision 2 if the refusal that an agent meets no longer tells it what to
