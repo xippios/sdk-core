@@ -724,6 +724,66 @@ def test_both_records_keep_their_question_and_adr_0041_its_last_amendment() -> N
     assert len(records["ADR-0041"]["amended"]) == 2
 
 
+# §6 and ADR-0011: no write is repeated, and a failed write says its outcome is unknown (decided
+# by the human in https://github.com/xippios/sdk-core/issues/480).
+
+SENT_ONCE_QUESTION = WALK_QUESTION  # one question decided the walk and the write sent once
+
+
+def test_adr_0011_lets_its_two_switches_go_in_one_sentence_after_the_ways() -> None:
+    first, once = amendments("ADR-0011", "2026-11-24")
+    assert first.startswith(f"Amended by {WAYS}"), "step 2's sentence stands first"
+    assert once.startswith(f"Amended by {SENT_ONCE_QUESTION}"), once[:60]
+    assert once.endswith("."), "the sentence ends the record"
+    assert ". " not in once, "one sentence"
+    for name in (
+        "`IDEMPOTENT_METHODS` alone",
+        "after a 429",
+        "decision 1 holds for `GET`, `HEAD` and `OPTIONS`",
+        "a renewing bearer's flow sends a write refused with a status of its `renew_on` no "
+        "second time",
+        "decision 3",
+        "`retry_non_idempotent`",
+        "`retry_transport_errors`",
+        "no keyword and no mark",
+        "the request was sent once and that its outcome is unknown",
+        "nothing was sent where the connection failed",
+        "a 4xx",
+        "names the read",
+    ):
+        assert name in once, f"ADR-0011's amendment does not name {name!r}"
+    records = json.loads(INDEX.read_text(encoding="utf-8"))["records"]
+    found = next(r for r in records if r["id"] == "ADR-0011")
+    assert found["amended"][-2:] == [
+        {"date": "2026-11-24", "by": WAYS_QUESTION},
+        {"date": "2026-11-24", "by": SENT_ONCE_QUESTION},
+    ]
+
+
+def test_section_6_repeats_a_read_alone_and_says_what_became_of_a_failed_write() -> None:
+    retries = sentence(section(6), "Retries with exponential backoff and jitter")
+    assert "`GET`, `HEAD` and `OPTIONS` alone" in retries, retries
+    assert "retry_non_idempotent" not in section(6), "the switch left the client"
+    once = sentence(section(6), "A request that upstream bills and a request that writes")
+    for name in (
+        "no `POST`, `PUT`, `PATCH` or `DELETE`, not after a 429",
+        "`RetryPolicy(max_attempts=1)`",
+        "that the request was sent once and that its outcome is unknown",
+        "nothing was sent where the connection failed",
+        "a write task's docstring names the read",
+        "ADR-0061, decision 10",
+        "ADR-0011, amendment 2026-11-24",
+    ):
+        assert name in once, f"§6: {once!r} does not name {name!r}"
+    bearer = sentence(section(7), "The base keeps the bearer until 60 seconds")
+    for name in (
+        "sends a read again, once",
+        "a write's refusal goes back to its caller and the next request exchanges first",
+        "ADR-0011, amendment 2026-11-24",
+    ):
+        assert name in bearer, f"§7: {bearer!r} does not name {name!r}"
+
+
 # §8: what a write tool's preview shows, and its check (sdk-core#182, decided by the human in
 # https://github.com/xippios/sdk-core/issues/369). The confirm rule stays ADR-0036's, decision 9.
 

@@ -46,10 +46,14 @@ def test_single_attempt_never_retries() -> None:
     assert RetryPolicy(max_attempts=1).delay(1) is None
 
 
-def test_retry_policy_defaults_spare_writes() -> None:
-    policy = RetryPolicy()
-    assert policy.retry_transport_errors is True
-    assert policy.retry_non_idempotent is False
+def test_the_policy_has_no_switch_for_a_write_or_a_transport_failure() -> None:
+    # The method alone decides what is repeated (ADR-0011, amendment 2026-11-24).
+    fields = {field.name for field in dataclasses.fields(RetryPolicy)}
+    assert fields == {"max_attempts", "backoff_base", "backoff_max", "jitter"}
+    with pytest.raises(TypeError):
+        RetryPolicy(retry_non_idempotent=True)  # type: ignore[call-arg]
+    with pytest.raises(TypeError):
+        RetryPolicy(retry_transport_errors=False)  # type: ignore[call-arg]
 
 
 def test_validation() -> None:

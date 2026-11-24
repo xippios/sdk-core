@@ -14,33 +14,26 @@ __all__ = ["ClientConfig", "RateLimit", "RetryPolicy"]
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class RetryPolicy:
-    """Exponential backoff with jitter (conventions §6, ADR-0011).
+    """Exponential backoff with jitter for a read (conventions §6, ADR-0011).
 
-    A 429 is retried for every method. A 5xx and a transport failure are retried for
-    idempotent methods only (GET, HEAD, OPTIONS) unless ``retry_non_idempotent`` is set.
-    Another 4xx is never retried.
+    A read, a ``GET``, ``HEAD`` or ``OPTIONS`` request, is retried after a 429, a 5xx or a
+    transport failure, and never after another 4xx. A write, a request of any other method,
+    is sent once whatever the policy says, since a repeat can apply it twice (ADR-0011,
+    amendment 2026-11-24).
 
     Attributes:
-        max_attempts: Total attempts including the first; ``1`` disables retries.
+        max_attempts: Total attempts of a read, the first included; ``1`` sends every
+            request once, as the client of a source whose reads upstream bills does.
         backoff_base: Delay in seconds before the first retry, doubled on each further one.
         backoff_max: Upper bound for one delay. A ``Retry-After`` beyond it stops retrying,
             so the caller sees the ``RateLimitError`` instead of a long silent wait.
         jitter: Randomise each delay within ``[delay / 2, delay]``.
-        retry_transport_errors: Also retry timeouts and connection failures; for which
-            methods follows ``retry_non_idempotent``.
-        retry_non_idempotent: Also retry a 5xx and a transport failure for the other
-            methods (POST, PUT, PATCH, DELETE). Off by default: such a request may have
-            been applied before the failure, and a repeat can apply it twice. Set it
-            only where upstream makes a repeated write safe, e.g. by an idempotency key
-            it honours, or where the client only reads through POST.
     """
 
     max_attempts: int = 4
     backoff_base: float = 0.5
     backoff_max: float = 30.0
     jitter: bool = True
-    retry_transport_errors: bool = True
-    retry_non_idempotent: bool = False
 
     def __post_init__(self) -> None:
         if self.max_attempts < 1:
@@ -110,7 +103,7 @@ class ClientConfig:
             (conventions §6); a source whose upstream builds a large answer slowly raises
             it, e.g. ``180.0``. Connecting, sending a request and waiting for a pooled
             connection take 10 s each, the family's.
-        retry: Retry policy for 429, 5xx and transport failures.
+        retry: Retry policy of a read after a 429, a 5xx or a transport failure.
         rate_limit: Client-side limit; ``None`` disables it.
         cache: Backend for GET responses; ``None`` disables caching. Every GET looks it
             up, and ``get_answer`` alone stores in it, a 200 once the body decoded.

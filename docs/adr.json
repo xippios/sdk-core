@@ -191,6 +191,10 @@
         {
           "date": "2026-11-24",
           "by": "https://github.com/xippios/sdk-core/issues/474"
+        },
+        {
+          "date": "2026-11-24",
+          "by": "https://github.com/xippios/sdk-core/issues/480"
         }
       ],
       "amends": [],

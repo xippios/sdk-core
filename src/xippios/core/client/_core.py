@@ -38,8 +38,8 @@ from xippios.core.errors import (
     UpstreamError,
     ValidationError,
     XippiosError,
+    _failed_in_transit,
     _raise,
-    error_from_exception,
     raise_for_status,
     request_description,
 )
@@ -291,6 +291,9 @@ class AsyncClient:
         ``UpstreamError`` for a 5xx stops the retries, ADR-0037) and sees the final
         response first; otherwise a 4xx/5xx that survives the retry policy is raised as
         the matching error from the taxonomy; a transport failure as ``TransportError``.
+        A write, any method but ``GET``, ``HEAD`` and ``OPTIONS``, is sent once, and the
+        error of one that met a 5xx or failed in transit says what became of it (ADR-0011,
+        amendment 2026-11-24).
         Nothing is stored in the cache here: ``get_answer`` stores an answer once it has
         decoded it, so a body that fails to decode is requested again (conventions §6).
 
@@ -468,7 +471,9 @@ class AsyncClient:
             ValueError: Both ``json`` and ``data``, before anything is sent; or the body
                 passes ``max_read_bytes``, once that much is read: ``observe`` has seen
                 the answer's status and headers, its body unread.
-            TransportError: The request or its body failed in transit.
+            TransportError: The request or its body failed in transit; a write's says that
+                the request was sent once and that its outcome is unknown, or that nothing
+                was sent where the connection failed.
         """
         if json is not None and data is not None:
             raise ValueError("pass json= or data=, not both: a request has one body")
@@ -496,7 +501,7 @@ class AsyncClient:
             finally:
                 await streamed.aclose()
         except httpx.RequestError as exc:
-            raise error_from_exception(exc, source=self.source) from exc
+            raise _failed_in_transit(exc, method=method, source=self.source) from exc
         observe = self.config.observe
         if body is None:
             if observe is not None:
@@ -562,9 +567,9 @@ class AsyncClient:
         """POST and decode a JSON answer, ``None`` for an answer with no body.
 
         The write counterpart of ``get_json``: ``request("POST", ...)``, so ``classify``,
-        the hooks, the limiter and the retry rule apply as they do there, a 5xx or a
-        transport failure retried only where ``RetryPolicy.retry_non_idempotent`` allows
-        it (ADR-0011), and the cache is neither read nor written. An answer with no body
+        the hooks and the limiter apply as they do there, the request is sent once, after a
+        429 or a 5xx too, its error saying what became of it (ADR-0011), and the cache is
+        neither read nor written. An answer with no body
         at all, a 204 say, returns ``None``; any other body is decoded as ``get_json``
         decodes it.
 
@@ -597,10 +602,9 @@ class AsyncClient:
     ) -> Any:
         """DELETE and decode a JSON answer, ``None`` for an answer with no body.
 
-        ``post_json`` for a DELETE, which sends no body: ``request("DELETE", ...)``, a
-        5xx or a transport failure retried only where
-        ``RetryPolicy.retry_non_idempotent`` allows it (ADR-0011), and the cache neither
-        read nor written. An answer with no body at all, a 204 say, returns ``None``.
+        ``post_json`` for a DELETE, which sends no body: ``request("DELETE", ...)``, sent
+        once (ADR-0011), and the cache neither read nor written. An answer with no body at
+        all, a 204 say, returns ``None``.
 
         Args:
             path: Path joined onto the base URL, e.g. ``"/drafts/r-1"``.

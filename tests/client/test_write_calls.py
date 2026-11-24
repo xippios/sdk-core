@@ -9,6 +9,7 @@ import respx
 from xippios.core.client import AsyncClient, ClientConfig, MemoryCache, RetryPolicy
 from xippios.core.errors import (
     InvalidRequestError,
+    RateLimitError,
     UpstreamError,
     ValidationError,
     XippiosError,
@@ -129,10 +130,13 @@ async def test_a_write_call_goes_through_classify_and_the_write_retry_rule(
         ]
     )
     sleeper = Sleeper()
-    with pytest.raises(UpstreamError):
-        await write(make_client(sleeper), method, "/v1/x")
-    assert route.call_count == 2  # a 429 retried, a 5xx to a write not (ADR-0011)
-    assert sleeper.calls == [1.0]
+    client = make_client(sleeper)
+    with pytest.raises(RateLimitError):
+        await write(client, method, "/v1/x")
+    with pytest.raises(UpstreamError, match=r"its outcome is unknown\.$"):
+        await write(client, method, "/v1/x")
+    assert route.call_count == 2  # neither a 429 nor a 5xx to a write is repeated (ADR-0011)
+    assert sleeper.calls == []
 
     def classify(response: httpx.Response) -> XippiosError | None:
         if response.json().get("success") is False:

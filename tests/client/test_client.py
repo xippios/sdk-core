@@ -108,6 +108,7 @@ async def test_gives_up_after_max_attempts(
         await client.get("/v1/x")
     assert info.value.status == 500
     assert info.value.body == "down"
+    assert str(info.value) == "500 from GET /v1/x: down", "a read's error says nothing of it"
     assert route.call_count == 3
     assert sleeper.calls == [0.1, 0.2]
 
@@ -168,13 +169,27 @@ async def test_transport_error_retried_for_get_only(
     client = AsyncClient(config, sleep=sleeper)
     await client.get("/v1/x")
     assert get.call_count == 2
-    with pytest.raises(TransportError, match="ConnectError"):
+    with pytest.raises(TransportError, match=r"^ConnectError: nope\. Nothing was sent\.$"):
         await client.request("POST", "/v1/x", json={"a": 1})
     assert post.call_count == 1
     assert sleeper.calls == [0.1]  # the GET's retry; none for the POST
 
 
+@pytest.mark.anyio
+async def test_a_read_that_fails_in_transit_says_nothing_of_what_was_sent(
+    respx_mock: respx.MockRouter, config: ClientConfig, sleeper: Sleeper
+) -> None:
+    route = respx_mock.get(f"{BASE}/v1/x").mock(side_effect=httpx.ReadTimeout("slow"))
+    client = AsyncClient(config, sleep=sleeper)
+    with pytest.raises(TransportError) as info:
+        await client.get("/v1/x")
+    assert str(info.value) == "ReadTimeout: slow"
+    assert route.call_count == 3
+
+
 NON_IDEMPOTENT = ["POST", "PUT", "PATCH", "DELETE"]
+SENT_ONCE = "The request was sent once and its outcome is unknown."
+NOTHING_SENT = "Nothing was sent."
 
 
 @pytest.mark.anyio
@@ -182,57 +197,101 @@ NON_IDEMPOTENT = ["POST", "PUT", "PATCH", "DELETE"]
 async def test_5xx_to_a_write_is_returned_after_one_attempt(
     respx_mock: respx.MockRouter, config: ClientConfig, sleeper: Sleeper, method: str
 ) -> None:
-    # sdk-cashctrl: a booking answered 503 after it was applied must not be repeated.
+    # A booking answered 503 after it was applied must not be repeated, and its error says
+    # that nobody knows whether it was.
     route = respx_mock.route(method=method, url=f"{BASE}/v1/x").respond(503, text="busy")
     client = AsyncClient(config, sleep=sleeper)
     response = await client.request(method, "/v1/x", json={"a": 1}, raise_on_error=False)
     assert response.status_code == 503
     assert route.call_count == 1
-    with pytest.raises(UpstreamError):
+    with pytest.raises(UpstreamError) as info:
         await client.request(method, "/v1/x", json={"a": 1})
+    assert str(info.value) == f"503 from {method} /v1/x: busy. {SENT_ONCE}"
     assert route.call_count == 2
     assert sleeper.calls == []
 
 
 @pytest.mark.anyio
-async def test_a_write_is_retried_when_the_policy_allows(
-    respx_mock: respx.MockRouter, sleeper: Sleeper
+@pytest.mark.parametrize("method", NON_IDEMPOTENT)
+async def test_a_write_is_sent_once_after_a_429(
+    respx_mock: respx.MockRouter, config: ClientConfig, sleeper: Sleeper, method: str
 ) -> None:
-    route = respx_mock.post(f"{BASE}/v1/x").mock(
-        side_effect=[
-            httpx.Response(503),
-            httpx.ConnectError("nope"),
-            httpx.Response(200, json={"id": 7}),
-        ]
-    )
-    config = ClientConfig(
-        source="example",
-        version="1",
-        base_url=BASE,
-        retry=RetryPolicy(backoff_base=0.1, jitter=False, retry_non_idempotent=True),
-    )
-    client = AsyncClient(config, sleep=sleeper)
-    response = await client.request("POST", "/v1/x", json={"a": 1})
-    assert response.json() == {"id": 7}
-    assert route.call_count == 3  # a 5xx and a transport failure, each retried
-    assert sleeper.calls == [0.1, 0.2]
-
-
-@pytest.mark.anyio
-async def test_429_to_a_write_is_retried(
-    respx_mock: respx.MockRouter, config: ClientConfig, sleeper: Sleeper
-) -> None:
-    route = respx_mock.post(f"{BASE}/v1/x").mock(
+    # Upstream refused it before acting, so its error keeps upstream's words.
+    route = respx_mock.route(method=method, url=f"{BASE}/v1/x").mock(
         side_effect=[
             httpx.Response(429, headers={"Retry-After": "1"}),
             httpx.Response(200, json={"id": 7}),
         ]
     )
     client = AsyncClient(config, sleep=sleeper)
-    response = await client.request("POST", "/v1/x", json={"a": 1})
-    assert response.json() == {"id": 7}
-    assert route.call_count == 2
-    assert sleeper.calls == [1.0]
+    with pytest.raises(RateLimitError) as info:
+        await client.request(method, "/v1/x", json={"a": 1})
+    assert info.value.retry_after == 1.0
+    assert str(info.value) == f"429 from {method} /v1/x: Too Many Requests"
+    assert route.call_count == 1
+    assert sleeper.calls == []
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("status", "cls"), [(400, UpstreamError), (404, NotFoundError), (409, UpstreamError)]
+)
+async def test_a_write_refused_with_a_4xx_keeps_upstream_s_words(
+    respx_mock: respx.MockRouter,
+    config: ClientConfig,
+    sleeper: Sleeper,
+    status: int,
+    cls: type[XippiosError],
+) -> None:
+    route = respx_mock.delete(f"{BASE}/v1/x").respond(status, text="refused")
+    client = AsyncClient(config, sleep=sleeper)
+    with pytest.raises(cls) as info:
+        await client.request("DELETE", "/v1/x")
+    assert str(info.value) == f"{status} from DELETE /v1/x: refused"
+    assert route.call_count == 1
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("failure", "said"),
+    [
+        (httpx.ConnectError("refused"), f"ConnectError: refused. {NOTHING_SENT}"),
+        (httpx.ConnectTimeout("no connection"), f"ConnectTimeout: no connection. {NOTHING_SENT}"),
+        (
+            httpx.PoolTimeout("no free connection"),
+            f"PoolTimeout: no free connection. {NOTHING_SENT}",
+        ),
+        (httpx.WriteError("cut"), f"WriteError: cut. {SENT_ONCE}"),
+        (httpx.ReadTimeout("slow"), f"ReadTimeout: slow. {SENT_ONCE}"),
+        (httpx.RemoteProtocolError("closed."), f"RemoteProtocolError: closed. {SENT_ONCE}"),
+        (httpx.ReadTimeout(""), f"ReadTimeout. {SENT_ONCE}"),
+        (httpx.ConnectTimeout(""), f"ConnectTimeout. {NOTHING_SENT}"),
+    ],
+    ids=[
+        "connect",
+        "connect-timeout",
+        "pool",
+        "write",
+        "read-timeout",
+        "closed",
+        "read-timeout-without-text",
+        "connect-timeout-without-text",
+    ],
+)
+async def test_a_write_that_fails_in_transit_says_what_was_sent(
+    respx_mock: respx.MockRouter, sleeper: Sleeper, failure: httpx.RequestError, said: str
+) -> None:
+    route = respx_mock.post(f"{BASE}/v1/x").mock(side_effect=[failure, httpx.Response(200)])
+    # No policy repeats a write: ten attempts allowed, one sent.
+    config = ClientConfig(
+        source="example", version="1", base_url=BASE, retry=RetryPolicy(max_attempts=10)
+    )
+    client = AsyncClient(config, sleep=sleeper)
+    with pytest.raises(TransportError) as info:
+        await client.request("POST", "/v1/x", json={"a": 1})
+    assert str(info.value) == said
+    assert route.call_count == 1
+    assert sleeper.calls == []
 
 
 @pytest.mark.anyio
@@ -248,20 +307,6 @@ async def test_5xx_to_an_idempotent_method_is_still_retried(
     assert response.status_code == 200
     assert route.call_count == 2
     assert sleeper.calls == [0.1]
-
-
-@pytest.mark.anyio
-async def test_retry_transport_errors_off_wins_over_retry_non_idempotent(
-    respx_mock: respx.MockRouter, sleeper: Sleeper
-) -> None:
-    route = respx_mock.post(f"{BASE}/v1/x").mock(side_effect=httpx.ConnectError("nope"))
-    policy = RetryPolicy(retry_transport_errors=False, retry_non_idempotent=True)
-    config = ClientConfig(source="example", version="1", base_url=BASE, retry=policy)
-    client = AsyncClient(config, sleep=sleeper)
-    with pytest.raises(TransportError):
-        await client.request("POST", "/v1/x", json={"a": 1})
-    assert route.call_count == 1
-    assert sleeper.calls == []
 
 
 @pytest.mark.anyio

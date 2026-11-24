@@ -76,7 +76,8 @@ def test_message_names_method_and_path_never_the_host(status: int, cls: type[Xip
     error = error_from_response(response, source="example")
     assert isinstance(error, cls)
     message = str(error)
-    assert message == f"{status} from POST /api/v1/journal/create.json: refused"
+    said = f". {SENT_ONCE}" if status >= 500 else ""  # a write's 5xx says it was sent once
+    assert message == f"{status} from POST /api/v1/journal/create.json: refused{said}"
     assert "acme-holding" not in message
     assert "cashctrl.test" not in message
     assert "lang=" not in message
@@ -149,6 +150,46 @@ def test_a_429_with_an_overflowing_date_is_a_rate_limit_error() -> None:
 
 def test_parse_retry_after_keeps_a_large_finite_delay() -> None:
     assert parse_retry_after(str(10**12)) == 1e12
+
+
+SENT_ONCE = "The request was sent once and its outcome is unknown."
+
+
+def _answer(method: str, status: int, body: str = "") -> httpx.Response:
+    return httpx.Response(
+        status, text=body, request=httpx.Request(method, "https://api.example.test/v1/x")
+    )
+
+
+@pytest.mark.parametrize("method", ["POST", "PUT", "PATCH", "DELETE"])
+def test_a_5xx_to_a_write_says_it_was_sent_once_and_its_outcome_is_unknown(method: str) -> None:
+    # The client sends a write once (ADR-0011, amendment 2026-11-24): a gateway's 502 can
+    # stand in front of a write that the application completed.
+    error = error_from_response(_answer(method, 502, "bad gateway"), source="example")
+    assert isinstance(error, UpstreamError)
+    assert str(error) == f"502 from {method} /v1/x: bad gateway. {SENT_ONCE}"
+
+
+def test_upstream_s_sentence_keeps_its_one_full_stop() -> None:
+    error = error_from_response(_answer("POST", 503, "Try again later."))
+    assert str(error) == f"503 from POST /v1/x: Try again later. {SENT_ONCE}"
+
+
+def test_a_5xx_without_a_body_or_a_reason_leaves_no_empty_colon() -> None:
+    assert _answer("POST", 599).reason_phrase == ""
+    assert str(error_from_response(_answer("POST", 599))) == f"599 from POST /v1/x. {SENT_ONCE}"
+
+
+@pytest.mark.parametrize(
+    ("method", "status"),
+    [("GET", 503), ("HEAD", 500), ("OPTIONS", 504), ("POST", 400), ("POST", 429), ("DELETE", 404)],
+)
+def test_a_read_s_5xx_and_a_write_s_4xx_keep_their_words(method: str, status: int) -> None:
+    # A read is repeated, and upstream refused a 4xx before acting on it.
+    response = _answer(method, status)
+    assert str(error_from_response(response)) == (
+        f"{status} from {method} /v1/x: {response.reason_phrase}"
+    )
 
 
 def test_transport_error_from_httpx() -> None:

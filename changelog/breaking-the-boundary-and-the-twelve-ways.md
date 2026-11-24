@@ -18,27 +18,22 @@
     `tests/test_tasks.py::test_every_problem_is_named_at_once` asserts the joined message
     (ADR-0061, decisions 3 and 7).
     `src/xippios/cashctrl/tasks_write.py` (sdk-cashctrl) — `_refuse` and its `_check_*` and
-    `_choices` helpers raise at the first problem, and the error of a write that failed says
-    that its outcome is unknown —
+    `_choices` helpers raise at the first problem —
     `tests/test_tasks_write.py::test_an_update_refuses_its_arguments_before_any_request`,
     `test_update_order_refuses_its_arguments_before_any_request` and
     `test_an_update_refuses_a_wrong_custom_name_before_the_read` assert every problem at once
-    (ADR-0061, decisions 7 and 10).
+    (ADR-0061, decision 7).
     `src/xippios/cashctrl/api/_form.py` (sdk-cashctrl) — `_custom_problems` names the first
     problem — the same three tests (ADR-0061, decision 7).
-    `src/xippios/google/mail/tasks_write.py` (sdk-google-mail) — the error of a write that
-    failed says that its outcome is unknown — no test breaks, and the review holds it
-    (ADR-0061, decision 10).
     `src/xippios/usda/wasde/tasks.py` (sdk-usda-wasde) — `read_report_text` renamed
     `get_report_text`, and `get_balance_sheet`, which picks the matrices of a commodity and a
     region for the caller from the packaged list, leaves with its entry of `MCP_CAPS` —
     `test_family_read_tasks_start_with_a_read_verb` fails on `read_report_text`, and the
     `test_*balance_sheet*` tests of `tests/test_tasks.py` and `test_get_balance_sheet_live`
     leave with the task (ADR-0061, decision 3, ADR-0060, decisions 4 and 8).
-    `src/xippios/x/tasks.py` (sdk-x) — `lookup_users` renamed `get_users`, and the client whose
-    reads upstream bills takes `RetryPolicy(max_attempts=1)` in `_client.py` —
+    `src/xippios/x/tasks.py` (sdk-x) — `lookup_users` renamed `get_users` —
     `test_family_read_tasks_start_with_a_read_verb` fails on `lookup_users`, and
-    `tests/test_contract.py` names the tool (ADR-0061, decisions 3 and 10).
+    `tests/test_contract.py` names the tool (ADR-0061, decision 3).
     `src/xippios/<package>/__init__.py` (sdk-cashctrl, sdk-usda-wasde, sdk-x) — the renamed
     tasks re-exported under their new names — an import of an old name fails.
     `README.md` (sdk-cashctrl, sdk-usda-wasde, sdk-x, sdk-usda-nass, sdk-comtrade,

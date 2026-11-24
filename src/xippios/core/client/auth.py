@@ -23,6 +23,7 @@ import httpx
 from pydantic import SecretStr
 
 from xippios.core.errors import (
+    IDEMPOTENT_METHODS,
     AuthError,
     ConfigError,
     NotFoundError,
@@ -228,11 +229,14 @@ class RenewingBearerAuth(httpx.Auth):
     ``RENEWAL_MARGIN``, 60 seconds, the flow sends the token request first, with the
     request's ``User-Agent`` where the token request sets none, and keeps the bearer and
     when it lapses; then it sends the request with ``Authorization: Bearer <token>``. An
-    answer whose status is in ``renew_on``, 401 by default, makes one more exchange and
-    sends the request again, once, and that answer goes back to the client as it is. A
-    request that finds an exchange running on its event loop waits for it and sends the
-    bearer it brought: two first requests exchange once, and two requests refused with one
-    bearer renew it once.
+    answer to a read whose status is in ``renew_on``, 401 by default, makes one more
+    exchange and sends the read again, once, and that answer goes back to the client as it
+    is. A write, a request of any method but ``GET``, ``HEAD`` and ``OPTIONS``, is sent
+    once (ADR-0011, amendment 2026-11-24): its refusal goes back to the client, which
+    raises it, and the refused bearer is dropped, so that the next request exchanges
+    first. A request that finds an exchange running on its event loop waits for it and
+    sends the bearer it brought: two first requests exchange once, and two requests
+    refused with one bearer renew it once.
 
     The exchange runs inside httpx's auth flow, below the client's limiter, hooks, cache and
     ``classify``: it is not paced or observed, and a token answer that ``token_refused`` or
@@ -257,9 +261,9 @@ class RenewingBearerAuth(httpx.Auth):
         clock: Monotonic seconds, replaceable in tests.
 
     Attributes:
-        renew_on: The statuses of an answer that make one more exchange, ``{401}``; a
-            source whose upstream refuses a bearer with another status too sets its own on
-            the class.
+        renew_on: The statuses of an answer that make one more exchange for a read and
+            drop the bearer after a write, ``{401}``; a source whose upstream refuses a
+            bearer with another status too sets its own on the class.
         source: As given.
         margin: Seconds before the bearer's ``expires_in`` runs out that it is renewed,
             ``RENEWAL_MARGIN``, which no constructor argument changes; two sources' tests
@@ -390,6 +394,16 @@ class RenewingBearerAuth(httpx.Auth):
             self._bearer = None
             self._lapses_at = 0.0
 
+    def _forget(self, refused: SecretStr) -> None:
+        """Drop ``refused`` while it is the bearer held, so that the next request exchanges.
+
+        A bearer that another request renewed meanwhile stays.
+        """
+        with self._bearer_lock:
+            if self._bearer is refused:
+                self._bearer = None
+                self._lapses_at = 0.0
+
     def _holds(self, name: str) -> bool:
         """Whether ``credential`` finds ``name``; the testing plugin's pin asks it."""
         return name in self._given or bool(os.environ.get(name))
@@ -439,7 +453,10 @@ class RenewingBearerAuth(httpx.Auth):
         """The httpx hook: exchange without a current bearer, sign, renew once on refusal.
 
         A token answer is read here; the answer of the signed request is handed back to
-        the client unread, its status alone looked at.
+        the client unread, its status alone looked at. A read refused with a status of
+        ``renew_on`` is renewed and sent again; a write is sent once (ADR-0011, amendment
+        2026-11-24), so its refusal goes back and the next request exchanges first, since
+        an exchange here would hand the token answer back as the write's.
         """
         token = self._current()
         if token is None:
@@ -451,6 +468,9 @@ class RenewingBearerAuth(httpx.Auth):
         _sign(request, token)
         response = yield request
         if response.status_code in self.renew_on:
+            if request.method not in IDEMPOTENT_METHODS:
+                self._forget(token)
+                return
             refused = token
             async with self._exchange_lock():
                 token = self._current()

@@ -12,7 +12,7 @@ import httpx
 import respx
 from pydantic import BaseModel
 
-from xippios.core.client.retry import IDEMPOTENT_METHODS
+from xippios.core.errors import IDEMPOTENT_METHODS
 from xippios.core.models import Result
 
 __all__ = ["assert_projection", "assert_write_tools", "mcp_call", "mcp_call_text"]

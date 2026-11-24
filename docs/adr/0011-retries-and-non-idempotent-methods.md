@@ -1,6 +1,6 @@
 # ADR-0011: Retries — a 429 for every method, a 5xx and a transport failure for idempotent ones
 
-Status: Accepted · Date: 2026-10-23 · Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/474
+Status: Accepted · Date: 2026-10-23 · Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/474 · Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/480
 
 ## Context
 
@@ -73,3 +73,16 @@ that upstream bills and a request that writes are sent once, so that a source se
 `RetryPolicy(max_attempts=1)` on a client whose reads upstream bills, and the error of a write
 that failed says that its outcome is unknown, while core's own retry of a write follows
 https://github.com/xippios/sdk-core/issues/480.
+
+Amended by https://github.com/xippios/sdk-core/issues/480: the client repeats a request of
+`IDEMPOTENT_METHODS` alone, after a 429 as after a 5xx or a transport failure, and sends a
+request of any other method once, `POST`, `PUT`, `PATCH` and `DELETE` among them, so that
+decision 1 holds for `GET`, `HEAD` and `OPTIONS` and decision 2 for every failure, decision 3
+leaves with `RetryPolicy`'s `retry_non_idempotent` and `retry_transport_errors`, no keyword and
+no mark taking their place, the consequences on an idempotency key and on a read through `POST`
+lapse, a renewing bearer's flow sends a write refused with a status of its `renew_on` no second
+time and drops the refused bearer, so that the next request exchanges first, the error of a
+write that met a 5xx or failed in transit says that the request was sent once and that its
+outcome is unknown, or that nothing was sent where the connection failed, while a 4xx, a 429
+among them, keeps upstream's words, since upstream refused the request before acting on it, and
+a write task's docstring names the read that shows whether a failed write was applied.

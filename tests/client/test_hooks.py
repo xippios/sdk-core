@@ -58,18 +58,19 @@ async def test_before_request_runs_once_per_call_not_per_retry(
         events.seen.append("sent")
         return httpx.Response(503) if len(events.seen) < 3 else httpx.Response(200, json={})
 
-    respx_mock.post(f"{BASE}/v1/x").mock(side_effect=answer)
-    config = make(before_request=before, retry=RetryPolicy(retry_non_idempotent=True))
+    # A read, since a write is never retried; its body shows the request built is the call's.
+    respx_mock.get(f"{BASE}/v1/x").mock(side_effect=answer)
+    config = make(before_request=before)
     client = AsyncClient(
         config,
         auth=KeyAuth("EXAMPLE_API_KEY", location="header", name="X-Api-Key"),
         sleep=events.sleep,
     )
     await client.request(
-        "POST", "/v1/x", params={"a": 1}, json={"b": 2}, headers={"X-Request": "one"}
+        "GET", "/v1/x", params={"a": 1}, json={"b": 2}, headers={"X-Request": "one"}
     )
-    assert events.seen[0] == "before POST /v1/x"
-    assert events.seen.count("before POST /v1/x") == 1
+    assert events.seen[0] == "before GET /v1/x"
+    assert events.seen.count("before GET /v1/x") == 1
     assert events.seen.count("sent") == 2
     (request,) = built
     assert request.url.params["a"] == "1"
