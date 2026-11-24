@@ -492,7 +492,7 @@ async def test_get_answer_parses_its_payload_into_the_type_it_is_given(
     stored = cache.get(key)
     assert stored is not None
     stored_then = dataclasses.replace(stored, stored_at=1_792_400_000.0)  # on 2026-10-19
-    cache.set(key, stored_then, lifetime=None)
+    cache.set(key, stored_then, path="/v1/regions")
     hit = await client.get_answer("/v1/regions", parse=list[Region], endpoint="regions")
     stored_on = datetime(2026, 10, 19, 8, 53, 20, tzinfo=UTC)
     assert hit == Answer([Region(region_code="AF"), Region(region_code="EU")], stored_on)
@@ -550,7 +550,7 @@ async def test_get_answer_is_retrieved_when_it_arrived_or_when_its_entry_was_sto
     stored = cache.get(key)
     assert stored is not None
     stored_then = dataclasses.replace(stored, stored_at=1_792_400_000.0)  # on 2026-10-19
-    cache.set(key, stored_then, lifetime=None)
+    cache.set(key, stored_then, path="/v1/x")
     hit = await client.get_answer("/v1/x")
     assert hit == Answer({"n": 1}, datetime(2026, 10, 19, 8, 53, 20, tzinfo=UTC))
 

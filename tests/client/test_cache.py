@@ -1,10 +1,12 @@
+import inspect
 from typing import Any
 
 import httpx
 import pytest
 
 from xippios.core.client import CachedResponse, ClientConfig, MemoryCache, cache_key
-from xippios.core.client.cache import DEFAULT_LIFETIMES, WIRE_HEADERS, strip_wire_headers
+from xippios.core.client import cache as cache_module
+from xippios.core.client.cache import WIRE_HEADERS, strip_wire_headers
 
 
 class Clock:
@@ -32,7 +34,7 @@ def test_key_ignores_parameter_order_and_hides_values() -> None:
 def test_an_entry_expires_once_its_lifetime_has_passed() -> None:
     clock = Clock()
     cache = MemoryCache(lifetimes={"/v1/": 60}, clock=clock)
-    cache.set("k", entry(clock), lifetime=60)
+    cache.set("k", entry(clock), path="/v1/x")
     clock.now += 59
     assert cache.get("k") is not None
     clock.now += 2
@@ -43,7 +45,7 @@ def test_an_entry_expires_once_its_lifetime_has_passed() -> None:
 def test_no_lifetime_keeps_an_entry_for_the_life_of_the_process() -> None:
     clock = Clock()
     cache = MemoryCache(lifetimes={"/v1/files/": None}, clock=clock)
-    cache.set("k", entry(clock), lifetime=None)
+    cache.set("k", entry(clock), path="/v1/files/a.csv")
     clock.now += 10_000_000
     assert cache.get("k") is not None
 
@@ -51,10 +53,10 @@ def test_no_lifetime_keeps_an_entry_for_the_life_of_the_process() -> None:
 def test_lru_eviction_prefers_recently_used() -> None:
     clock = Clock()
     cache = MemoryCache(maxsize=2, clock=clock)
-    cache.set("a", entry(clock, b"a"), lifetime=300)
-    cache.set("b", entry(clock, b"b"), lifetime=300)
+    cache.set("a", entry(clock, b"a"), path="/v1/a")
+    cache.set("b", entry(clock, b"b"), path="/v1/b")
     assert cache.get("a") is not None  # touch a, so b is the oldest
-    cache.set("c", entry(clock, b"c"), lifetime=300)
+    cache.set("c", entry(clock, b"c"), path="/v1/c")
     assert cache.get("b") is None
     assert cache.get("a") is not None
     assert cache.get("c") is not None
@@ -63,10 +65,10 @@ def test_lru_eviction_prefers_recently_used() -> None:
 def test_clear() -> None:
     clock = Clock()
     cache = MemoryCache(clock=clock)
-    cache.set("k", entry(clock), lifetime=300)
+    cache.set("k", entry(clock), path="/v1/x")
     cache.clear()
     assert len(cache) == 0
-    assert cache.size == 0
+    assert cache._bytes == 0
 
 
 # -- a lifetime per path prefix (https://github.com/xippios/sdk-core/issues/479, part 1) ----
@@ -76,29 +78,46 @@ def test_the_longest_prefix_gives_a_path_its_lifetime() -> None:
     cache = MemoryCache(
         lifetimes={"/v1/": 300.0, "/v1/regions": 86400.0, "/v1/files/": None, "/v1/live/": 0}
     )
-    assert cache.lifetime("/v1/regions") == 86400.0
-    assert cache.lifetime("/v1/regions/7") == 86400.0, "a prefix, not a whole path"
-    assert cache.lifetime("/v1/series") == 300.0
-    assert cache.lifetime("/v1/files/a.csv") is None
-    assert cache.lifetime("/v1/live/now") == 0
-    assert cache.lifetime("/v2/regions") == 0, "a path no prefix matches is not cached"
+    assert cache._lifetime("/v1/regions") == 86400.0
+    assert cache._lifetime("/v1/regions/7") == 86400.0, "a prefix, not a whole path"
+    assert cache._lifetime("/v1/series") == 300.0
+    assert cache._lifetime("/v1/files/a.csv") is None
+    assert cache._lifetime("/v1/live/now") == 0
+    assert cache._lifetime("/v2/regions") == 0, "a path no prefix matches is not cached"
+
+
+def test_a_path_of_lifetime_zero_or_of_no_prefix_is_not_stored() -> None:
+    clock = Clock()
+    cache = MemoryCache(lifetimes={"/v1/": 300.0, "/v1/live/": 0}, clock=clock)
+    cache.set("live", entry(clock), path="/v1/live/now")
+    cache.set("other", entry(clock), path="/v2/regions")
+    cache.set("kept", entry(clock), path="/v1/regions")
+    assert (cache.get("live"), cache.get("other")) == (None, None)
+    assert cache.get("kept") is not None
+    assert (len(cache), cache._bytes) == (1, 1)
 
 
 def test_the_default_keeps_every_path_for_300_seconds() -> None:
     cache = MemoryCache()
-    assert dict(cache.lifetimes) == dict(DEFAULT_LIFETIMES) == {"/": 300.0}
-    assert cache.lifetime("/v1/anything") == 300.0
+    assert dict(cache.lifetimes) == {"/": 300.0}
+    assert cache._lifetime("/v1/anything") == 300.0
     with pytest.raises(TypeError):
         cache.lifetimes["/v1/"] = 1.0  # type: ignore[index]
 
 
-def test_a_lifetime_of_zero_stores_nothing_and_drops_the_entry_it_replaces() -> None:
-    clock = Clock()
-    cache = MemoryCache(clock=clock)
-    cache.set("k", entry(clock), lifetime=300)
-    cache.set("k", entry(clock), lifetime=0)
-    assert cache.get("k") is None
-    assert (len(cache), cache.size) == (0, 0)
+def test_the_cache_adds_no_public_name_but_its_two_bounds() -> None:
+    # The lifetime of a path and the bytes held are the cache's own: only core reads them,
+    # and a caller names lifetimes= and max_bytes= alone (review of #518).
+    assert {"lifetime", "size"}.isdisjoint(dir(MemoryCache))
+    assert "DEFAULT_LIFETIMES" not in cache_module.__all__
+    assert "lifetime" not in dir(cache_module.CacheBackend)
+    assert list(inspect.signature(MemoryCache).parameters) == [
+        "lifetimes",
+        "maxsize",
+        "max_bytes",
+        "clock",
+    ]
+    assert list(inspect.signature(MemoryCache.set).parameters) == ["self", "key", "value", "path"]
 
 
 @pytest.mark.parametrize(
@@ -124,39 +143,39 @@ def test_a_bad_lifetime_or_bound_is_refused(arguments: dict[str, Any], message: 
 def test_an_expired_entry_is_dropped_at_the_next_call_whatever_its_key() -> None:
     # Before, an expired entry stayed until its own key was asked for again.
     clock = Clock()
-    cache = MemoryCache(clock=clock)
-    cache.set("old", entry(clock, b"o" * 10), lifetime=60)
-    cache.set("kept", entry(clock, b"k" * 5), lifetime=None)
+    cache = MemoryCache(lifetimes={"/v1/": 60.0, "/v1/kept": None}, clock=clock)
+    cache.set("old", entry(clock, b"o" * 10), path="/v1/old")
+    cache.set("kept", entry(clock, b"k" * 5), path="/v1/kept")
     clock.now += 61
-    cache.set("new", entry(clock, b"n" * 3), lifetime=60)
-    assert (len(cache), cache.size) == (2, 8)
+    cache.set("new", entry(clock, b"n" * 3), path="/v1/new")
+    assert (len(cache), cache._bytes) == (2, 8)
     clock.now += 61
     assert cache.get("kept") is not None
-    assert (len(cache), cache.size) == (1, 5)
+    assert (len(cache), cache._bytes) == (1, 5)
 
 
 def test_the_bytes_held_in_all_are_bounded_and_the_oldest_used_leave_first() -> None:
     clock = Clock()
     cache = MemoryCache(max_bytes=10, clock=clock)
-    cache.set("a", entry(clock, b"a" * 4), lifetime=300)
-    cache.set("b", entry(clock, b"b" * 4), lifetime=300)
+    cache.set("a", entry(clock, b"a" * 4), path="/v1/a")
+    cache.set("b", entry(clock, b"b" * 4), path="/v1/b")
     assert cache.get("a") is not None  # touch a, so b is the oldest used
-    cache.set("c", entry(clock, b"c" * 4), lifetime=300)
+    cache.set("c", entry(clock, b"c" * 4), path="/v1/c")
     assert cache.get("b") is None
     assert cache.get("a") is not None
     assert cache.get("c") is not None
-    assert cache.size == 8
-    cache.set("a", entry(clock, b"a" * 6), lifetime=300)  # replaced: its old bytes leave
-    assert cache.size == 10
+    assert cache._bytes == 8
+    cache.set("a", entry(clock, b"a" * 6), path="/v1/a")  # replaced: its old bytes leave
+    assert cache._bytes == 10
 
 
 def test_a_body_over_the_byte_bound_is_not_stored() -> None:
     clock = Clock()
     cache = MemoryCache(max_bytes=10, clock=clock)
-    cache.set("a", entry(clock, b"a" * 4), lifetime=300)
-    cache.set("big", entry(clock, b"x" * 11), lifetime=300)
+    cache.set("a", entry(clock, b"a" * 4), path="/v1/a")
+    cache.set("big", entry(clock, b"x" * 11), path="/v1/big")
     assert cache.get("big") is None
-    assert (len(cache), cache.size) == (1, 4), "nothing was evicted for it"
+    assert (len(cache), cache._bytes) == (1, 4), "nothing was evicted for it"
 
 
 def test_the_bound_by_default_holds_eight_answers_at_the_client_s_bound() -> None:

@@ -438,12 +438,12 @@ import pytest
 from xippios.core.client import MemoryCache
 from xippios.core.client.cache import CachedResponse
 
-CACHE = MemoryCache()  # module-level, as a source keeps its client's
+CACHE = MemoryCache(lifetimes={"/": None})  # module-level, as a source keeps its client's
 ENTRY = CachedResponse(status=200, headers=(), content=b"{}", stored_at=0.0)
 
 
 def test_an_offline_test_stores_an_entry():
-    CACHE.set("k", ENTRY, lifetime=None)
+    CACHE.set("k", ENTRY, path="/v1/k")
     assert len(CACHE) == 1
 
 
@@ -453,7 +453,7 @@ def test_the_next_test_starts_without_it():
 
 @pytest.mark.live
 def test_a_live_test_keeps_what_it_stores():
-    CACHE.set("k", ENTRY, lifetime=None)
+    CACHE.set("k", ENTRY, path="/v1/k")
 
 
 @pytest.mark.live
