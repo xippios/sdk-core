@@ -1,17 +1,19 @@
-"""The reference frame, ``xippios.core.refresh`` (ADR-0051): a source's lists declared and run
-against answers served in memory.
+"""The reference frame, ``xippios.core.refresh`` (ADR-0062): a source's lists declared in one
+``Lists`` and run against answers served in memory.
 
 The tests of sdk-template's script, ``tests/test_reference_data.py`` and the refresh's part of
 ``scripts/prove.sh`` there (#40, #64), moved here with the frame, one ``Listed`` per list in
 place of the script's three dicts: each request sent once and counted, a failed run that
 writes nothing, ``--only`` and ``--render-only`` as one choice, and a value list and an id list
 rendered into one ``enums.py`` as ruff leaves it. The frame's own rules follow them: what a
-fetch answers and when it was fetched, the provenance table under the header each README
-has, ``enums.py`` in the declared order, the hooks, and the one ``run`` of both frames. respx
-answers every request, so nothing leaves the process.
+fetch answers and when it was fetched, the provenance table under its one header,
+``enums.py`` in the declared order, the hooks, and the one ``run`` of both frames, which takes
+one declaration. respx answers every request, so nothing leaves the process.
 """
 
+import dataclasses
 import importlib
+import inspect
 import io
 import subprocess
 import sys
@@ -36,11 +38,12 @@ from xippios.core import (
     UpstreamModel,
     XippiosError,
 )
-from xippios.core.refresh import Enumeration, Listed, Snapshot, run
+from xippios.core.refresh import Enumeration, Listed, Lists, Snapshot, run
 
 BASE = "https://api.example.org"
 HEADER = "| File | Origin | Fetched |\n| --- | --- | --- |\n"
-FAS_HEADER = "| File | Origin | Fetched (UTC) | Records |\n| --- | --- | --- | --- |\n"
+RECORDS_HEADER = "| File | Origin | Fetched (UTC) | Records |\n| --- | --- | --- | --- |\n"
+"""A second header with a count of records, which the frame no longer knows (ADR-0062)."""
 INTRO = "# Reference data for Example\n\nOne row per file.\n\n"
 README = f"{INTRO}{HEADER}| (none yet) | | |\n"
 RUFF = 'line-length = 100\n\n[lint]\nselect = ["E", "W", "F", "I", "UP", "RUF"]\n'
@@ -100,11 +103,12 @@ def source(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Source:
 
 
 def values(client: AsyncClient, param: str) -> Callable[[], Any]:
-    """The wrapper of ``get_param_values`` for ``param``: an async fetch of its values."""
+    """The fetch of a list of values through ``get_param_values`` for ``param``: async, its
+    values made records of one field named by ``param``, as a script makes them."""
 
-    async def fetch() -> list[str]:
+    async def fetch() -> list[dict[str, str]]:
         answer = (await client.get_answer("/get_param_values", params={"param": param})).payload
-        return [str(value) for value in answer]
+        return [{param: str(value)} for value in answer]
 
     return fetch
 
@@ -124,34 +128,30 @@ def units(client: AsyncClient) -> Callable[[], Any]:
     return fetch
 
 
-def arguments(source: Source, lists: Sequence[Listed], hooks: dict[str, Any]) -> dict[str, Any]:
-    """``run``'s keywords: the package, the names it ships, by default those declared, and
-    the client, then ``hooks``."""
+def declared(source: Source, lists: Sequence[Listed], fields: dict[str, Any]) -> Lists:
+    """The script's declaration: the package, ``lists``, the names it ships, by default
+    those declared, and the client, with ``fields`` over them."""
     shipped = [listed.name for listed in lists if isinstance(listed, Listed)]
-    return {
-        "package": source.package,
-        "packaged": shipped,
-        "client": source.client,
-        **hooks,
-    }
+    given = {"package": source.package, "packaged": shipped, "client": source.client, **fields}
+    return Lists(lists=lists, **given)
 
 
-def go(source: Source, lists: Sequence[Listed], *args: str, **hooks: Any) -> tuple[int, str]:
+def go(source: Source, lists: Sequence[Listed], *args: str, **fields: Any) -> tuple[int, str]:
     """The script's ``run`` with ``args``: its exit status and what it printed."""
     printed = io.StringIO()
     with redirect_stdout(printed):
-        status = run(lists, list(args), **arguments(source, lists, hooks))
+        status = run(declared(source, lists, fields), list(args))
     return status, printed.getvalue()
 
 
 def go_raising(
-    source: Source, lists: Sequence[Listed], *args: str, **hooks: Any
+    source: Source, lists: Sequence[Listed], *args: str, **fields: Any
 ) -> tuple[BaseException, str]:
     """``go`` for a run that raises: what it raised and what it printed before."""
     printed = io.StringIO()
     raised = (XippiosError, SystemExit, ValueError, OSError, RuntimeError)
     with redirect_stdout(printed), pytest.raises(raised) as error:
-        run(lists, list(args), **arguments(source, lists, hooks))
+        run(declared(source, lists, fields), list(args))
     return error.value, printed.getvalue()
 
 
@@ -162,10 +162,19 @@ def two_value_lists(source: Source) -> list[Listed]:
     ]
 
 
-def stamped(source: Source, name: str, endpoint: str, day: int, records: list[Any]) -> None:
-    """Package ``name`` as a run fetched it on 2026-10-``day``."""
+def stamped(
+    source: Source,
+    name: str,
+    endpoint: str,
+    day: int,
+    records: list[Any],
+    *,
+    param: str | None = None,
+) -> None:
+    """Package ``name`` as a run fetched it on 2026-10-``day``, its ``param`` by default its
+    name."""
     fetched = datetime(2026, 10, day, 9, 15, tzinfo=UTC)
-    PackagedList(param=name, endpoint=endpoint, fetched=fetched, records=records).write(
+    PackagedList(param=param or name, endpoint=endpoint, fetched=fetched, records=records).write(
         source.file(name)
     )
 
@@ -190,9 +199,9 @@ def test_each_request_is_sent_once_and_a_failed_run_writes_nothing(source: Sourc
 
 
 def test_a_run_writes_every_list_then_its_rows_and_its_enums(source: Source) -> None:
-    """Every list is fetched, then written by ``PackagedList.write``, a list of values as
-    records of one field named by the list; the provenance rows and ``enums.py`` follow, and
-    the run prints what it sent and the quota upstream reported."""
+    """Every list is fetched, then written by ``PackagedList.write``, a list of values as the
+    records of one field named by the list that its fetch makes; the provenance rows and
+    ``enums.py`` follow, and the run prints what it sent and the quota upstream reported."""
     with respx.mock(base_url=BASE) as upstream:
         upstream.get("/get_param_values").respond(
             200, json=["AK", "CA"], headers={"x-ratelimit-remaining": "41"}
@@ -315,12 +324,18 @@ def test_a_value_list_and_an_id_list_render_into_one_module(source: Source) -> N
 
 
 def test_enums_follow_the_declared_order_and_take_names_by_hand(source: Source) -> None:
-    """The classes stand in the order the lists are declared, whatever their names. A list
-    names the field its values are read from, its key and class name, and members by hand,
-    as a mapping or from the values, and a table declares no enum."""
+    """The classes stand in the order the lists are declared, whatever their names. A list's
+    ``StrEnum`` reads its values from the field its file's ``param`` names, takes the list's
+    name as its key, and a class name and members by hand, as a mapping or from the values,
+    and a table declares no enum."""
     stamped(source, "zone", "get_param_values", 20, [{"zone": "B"}, {"zone": "A"}])
     stamped(
-        source, "stages", "api_GET", 21, [{"unit_desc": "PCT PLANTED"}, {"unit_desc": "$ / BU"}]
+        source,
+        "stages",
+        "api_GET",
+        21,
+        [{"unit_desc": "PCT PLANTED"}, {"unit_desc": "$ / BU"}],
+        param="unit_desc",
     )
     stamped(source, "commodities", "GetCommodities", 22, [{"code": "01", "name": "Wheat"}])
 
@@ -332,7 +347,8 @@ def test_enums_follow_the_declared_order_and_take_names_by_hand(source: Source) 
         Listed(
             "stages",
             values(source.client, "unit_desc"),
-            enum=Enumeration(values="unit_desc", class_name="ProgressStage", member_names=dollars),
+            param="unit_desc",
+            enum=Enumeration(class_name="ProgressStage", member_names=dollars),
         ),
         Listed("commodities", values(source.client, "commodities")),
     ]
@@ -376,10 +392,11 @@ def test_nothing_is_written_when_the_render_fails(source: Source) -> None:
 # --- what a fetch answers, and when it was fetched -----------------------------------------
 
 
-def test_a_fetch_answers_values_records_or_a_finished_list(source: Source) -> None:
-    """Values become records of one field named by the list's ``param``, records keep
-    upstream's names, a model's by ``dump_upstream``, and a finished list is written as built,
-    its ``fetched`` and ``note`` its own; the others are stamped when their fetch returned."""
+def test_a_fetch_answers_records_or_a_finished_list(source: Source) -> None:
+    """Records keep upstream's names, a model's by ``dump_upstream`` and a mapping's as it
+    is, under the list's ``param``, its name by default, and a finished list is written as
+    built, its ``fetched`` and ``note`` its own; the others are stamped when their fetch
+    returned."""
     built = datetime(2026, 11, 1, 8, 0, 5, tzinfo=UTC)
 
     def finished() -> PackagedList:
@@ -392,7 +409,7 @@ def test_a_fetch_answers_values_records_or_a_finished_list(source: Source) -> No
         )
 
     lists = [
-        Listed("area_QCL", lambda: ["4", "8"], endpoint="getCodeList", param="area"),
+        Listed("area_QCL", lambda: [{"area": "4"}], endpoint="getCodeList", param="area"),
         Listed("unitsOfMeasure", units(source.client), endpoint="GetUnitsOfMeasure"),
         Listed("regions", lambda: [{"regionCode": "1", "extra": None}], endpoint="GetRegions"),
         Listed("progress_stages", finished),
@@ -403,7 +420,8 @@ def test_a_fetch_answers_values_records_or_a_finished_list(source: Source) -> No
         go(source, lists)
     end = datetime.now(UTC)
     area = source.packaged("area_QCL")
-    assert (area.param, area.records) == ("area", [{"area": "4"}, {"area": "8"}])
+    assert (area.param, area.records) == ("area", [{"area": "4"}])
+    assert source.packaged("regions").param == "regions"
     assert source.packaged("unitsOfMeasure").records == [{"unitId": 4, "unitDescription": "Bales"}]
     assert source.packaged("regions").records == [{"regionCode": "1", "extra": None}]
     stages = source.packaged("progress_stages")
@@ -412,10 +430,29 @@ def test_a_fetch_answers_values_records_or_a_finished_list(source: Source) -> No
         assert start <= source.packaged(name).fetched <= end
 
 
+@pytest.mark.parametrize(
+    ("answer", "found"),
+    [(["4", "8"], "a str at position 0"), ([{"area": "4"}, 8], "an int at position 1")],
+)
+def test_a_fetch_that_answers_plain_values_is_refused(
+    source: Source, answer: list[Any], found: str
+) -> None:
+    """ADR-0062, decision 11: the fetch that answers plain values leaves, so an item that is
+    no record, a model or a mapping, stops the run before the first write, and the message
+    names the list, the item's type and its position, never its value."""
+    before = source.files()
+    listed = Listed("area_QCL", lambda: answer, endpoint="getCodeList", param="area")
+    error, _ = go_raising(source, [listed])
+    assert isinstance(error, SystemExit)
+    assert str(error).startswith(f"area_QCL's fetch answered {found}: a fetch answers records,")
+    assert "'4'" not in str(error)
+    assert source.files() == before
+
+
 def test_a_finished_list_agrees_with_its_declaration(source: Source) -> None:
     """A finished list that names another ``param`` or ``endpoint`` than its declaration,
-    values with no endpoint to name, and an answer that is neither stop the run, and nothing
-    is written."""
+    records with no endpoint to name, and an answer that is neither stop the run, and
+    nothing is written."""
     fetched = datetime(2026, 11, 1, tzinfo=UTC)
 
     def other() -> PackagedList:
@@ -425,14 +462,30 @@ def test_a_finished_list_agrees_with_its_declaration(source: Source) -> None:
     cases = {
         "a's fetch built a list of endpoint 'Other'": Listed("a", other, endpoint="GetA"),
         "a's fetch built a list of param 'b'": Listed("a", other, param="a"),
-        "a's fetch answers values or records: name its endpoint": Listed("a", lambda: ["x"]),
-        "a's fetch answered a str": Listed("a", lambda: "x", endpoint="GetA"),
+        "a's fetch answers records: name its endpoint": Listed("a", lambda: [{"a": "x"}]),
+        "a's fetch answered a str": Listed(
+            "a",
+            lambda: "x",  # type: ignore[arg-type,return-value]
+            endpoint="GetA",
+        ),
     }
     for message, listed in cases.items():
         error, _ = go_raising(source, [listed])
         assert isinstance(error, SystemExit)
         assert message in str(error), error
     assert source.files() == before
+
+
+def test_an_enumeration_names_no_field_of_values_and_no_key() -> None:
+    """ADR-0062, decision 11: ``Enumeration.values`` and ``.key`` leave; a ``StrEnum`` reads
+    the field its file's ``param`` names and takes the list's name as its key, an ``IntEnum``
+    the fields of its ids and names and ``ids`` as its key."""
+    assert [field.name for field in dataclasses.fields(Enumeration)] == [
+        "ids",
+        "names",
+        "class_name",
+        "member_names",
+    ]
 
 
 def test_the_declaration_is_checked_before_a_request(source: Source) -> None:
@@ -443,10 +496,13 @@ def test_the_declaration_is_checked_before_a_request(source: Source) -> None:
         "two lists are named a": [Listed("a", fetch), Listed("a", fetch)],
         "two lists declare the enum of key a": [
             Listed("a", fetch, enum=Enumeration()),
-            Listed("b", fetch, enum=Enumeration(key="a")),
+            Listed("b", fetch, enum=Enumeration(ids="a", names="name")),
         ],
-        "an Enumeration of ids names the field of their names too": [
+        "a: an Enumeration of ids names both ids and names": [
             Listed("a", fetch, enum=Enumeration(ids="id"))
+        ],
+        "b: an Enumeration of ids names both ids and names": [
+            Listed("b", fetch, enum=Enumeration(names="name"))
         ],
         "a list's name is a file's name under reference/": [Listed("../a", fetch)],
         "Nothing to fetch": [],
@@ -491,19 +547,28 @@ def test_the_rows_are_rewritten_in_place_under_the_header_found(source: Source) 
     assert "README.md: the rows of 3 lists" in printed, printed
 
 
-def test_the_fas_header_takes_the_count_of_records(source: Source) -> None:
-    """The FAS sources' table, ``Fetched (UTC)`` and ``Records``, keeps its header, and each
-    row counts its file's records with a thousands separator."""
-    stamped(
-        source, "HS6Commodities", "GATSData_GetHS6Commodities", 28, [{"c": n} for n in range(2909)]
-    )
-    source.readme.write_text(f"{INTRO}{FAS_HEADER}| `HS6Commodities.json` | x | y | 1 |\n")
-    origin = "`GET https://api.fas.usda.gov/api/gats/HS6Commodities` (`GATSData_GetHS6Commodities`)"
-    lists = [Listed("HS6Commodities", values(source.client, "c"), origin=origin)]
+def test_the_frame_knows_one_header_and_counts_no_records(source: Source) -> None:
+    """ADR-0062, decision 13: the frame knows the one header that sdk-template renders, so no
+    row counts its file's records, and a README under a second header, one with ``Records``,
+    stops a run, and a render alone, before anything is fetched or written, naming the one
+    header it takes."""
+    stamped(source, "commodities", "GetCommodities", 28, [{"c": n} for n in range(2909)])
+    lists = [Listed("commodities", values(source.client, "c"))]
     go(source, lists, "--render-only")
     assert source.readme.read_text() == (
-        f"{INTRO}{FAS_HEADER}| `HS6Commodities.json` | {origin} | 2026-10-28T09:15:00Z | 2,909 |\n"
+        f"{INTRO}{HEADER}| `commodities.json` | `GetCommodities` | 2026-10-28T09:15:00Z |\n"
     )
+    source.readme.write_text(f"{INTRO}{RECORDS_HEADER}| `commodities.json` | x | y | 1 |\n")
+    before = source.files()
+    headed = "has no provenance table headed '| File | Origin | Fetched |'; nothing was written"
+    with respx.mock(base_url=BASE, assert_all_called=False) as upstream:
+        route = upstream.route()
+        for args in ((), ("--render-only",)):
+            error, _ = go_raising(source, lists, *args)
+            assert isinstance(error, SystemExit)
+            assert str(error).endswith(headed), error
+    assert route.call_count == 0
+    assert source.files() == before
 
 
 def test_an_origin_is_the_endpoint_a_text_or_made_from_the_list(source: Source) -> None:
@@ -529,8 +594,8 @@ def test_an_origin_is_the_endpoint_a_text_or_made_from_the_list(source: Source) 
 
 
 def test_a_readme_without_the_table_stops_the_run_before_a_request(source: Source) -> None:
-    """A README that holds neither header stops a run, and a render alone, before anything
-    is fetched or written; so does an origin that would break its row."""
+    """A README that holds no header of the table stops a run, and a render alone, before
+    anything is fetched or written; so does an origin that would break its row."""
     lists = two_value_lists(source)
     source.readme.write_text(f"{INTRO}| File | Fetched |\n| --- | --- |\n")
     with respx.mock(base_url=BASE, assert_all_called=False) as upstream:
@@ -713,23 +778,40 @@ def test_the_lists_are_those_the_package_declares(source: Source) -> None:
     assert source.files() == before
 
 
-def test_run_takes_either_declaration(source: Source, tmp_path: Path) -> None:
-    """``run`` takes a ``Snapshot`` as step 16 made it, or the lists with their package, the
-    lists it ships and the client; a snapshot given the lists' arguments, and lists without
-    them, are refused."""
+def test_run_takes_one_declaration_of_either_frame(source: Source, tmp_path: Path) -> None:
+    """ADR-0062, decision 2: ``run(declaration, argv=None)`` is the one signature of both
+    frames, given a ``Snapshot`` or a ``Lists``, a frozen dataclass of seven fields beside it;
+    the overloads and the lists' keywords leave, and what is neither declaration is refused
+    before anything is read or fetched."""
+    parameters = inspect.signature(run).parameters
+    assert list(parameters) == ["declaration", "argv"]
+    assert parameters["argv"].default is None
+    assert [field.name for field in dataclasses.fields(Lists)] == [
+        "package",
+        "lists",
+        "packaged",
+        "client",
+        "quota_header",
+        "before",
+        "after",
+    ]
+    lists = two_value_lists(source)
+    declaration = Lists(source.package, lists, ("state_alpha", "unit"), source.client)
+    assert (declaration.quota_header, declaration.before, declaration.after) == (None, None, None)
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        declaration.package = "elsewhere"  # type: ignore[misc]
     snapshot = Snapshot(name="Example", slug="example", pages=(), out=tmp_path / "upstream")
     with pytest.raises(SystemExit, match="Nothing to fetch: declare the snapshot's pages"):
         run(snapshot, [])
     with pytest.raises(SystemExit, match="Nothing to fetch: declare the snapshot's pages"):
-        run(snapshot=snapshot, argv=[])
-    with pytest.raises(TypeError, match="a Snapshot takes argv alone"):
-        run(snapshot, [], package=source.package)  # type: ignore[call-overload]
-    with pytest.raises(TypeError, match="the lists' package, packaged and client"):
-        run(two_value_lists(source), [])  # type: ignore[call-overload]
-    with pytest.raises(TypeError, match="the lists' package, packaged and client"):
-        run(  # type: ignore[call-overload]
-            two_value_lists(source), [], package=source.package, client=source.client
-        )
+        run(declaration=snapshot, argv=[])
+    before = source.files()
+    with respx.mock(base_url=BASE, assert_all_called=False) as upstream:
+        route = upstream.route()
+        with pytest.raises(SystemExit, match=r"^run takes one declaration, a Snapshot or a Lists"):
+            run(lists, [])  # type: ignore[arg-type]
+    assert route.call_count == 0
+    assert source.files() == before
 
 
 def test_a_package_outside_the_working_directory_is_refused(
@@ -743,14 +825,11 @@ def test_a_package_outside_the_working_directory_is_refused(
     error, _ = go_raising(source, two_value_lists(source), "--render-only")
     assert isinstance(error, SystemExit)
     assert "outside the directory the script runs in" in str(error), error
+    nowhere = Lists(
+        "nowhere.at.all", two_value_lists(source), ("state_alpha", "unit"), source.client
+    )
     with pytest.raises(SystemExit, match=r"nowhere\.at\.all is not importable"):
-        run(
-            two_value_lists(source),
-            [],
-            package="nowhere.at.all",
-            packaged=("state_alpha", "unit"),
-            client=source.client,
-        )
+        run(nowhere, [])
 
 
 # --- the README's short script -------------------------------------------------------------
@@ -814,11 +893,14 @@ def test_the_readmes_short_script_runs_on_the_frame(
     example: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The short script that sdk-template renders, as the README's section on the frame
-    holds it, declares lists that the frame fetches, writes and renders as they stand."""
+    holds it, declares its lists in one ``Lists`` that the frame fetches, writes and renders
+    as they stand, and hands ``run`` that declaration alone."""
     readme = (ROOT / "README.md").read_text()
     section = readme.split("## The reference refresh script's frame\n", 1)[1]
     script = section.split("```python\n", 1)[1].split("```\n", 1)[0]
     assert 40 <= len(script.splitlines()) <= 60, len(script.splitlines())
+    assert "from xippios.core.refresh import Enumeration, Listed, Lists, run\n" in script
+    assert "    raise SystemExit(run(LISTS))\n" in script
     monkeypatch.setattr(sys, "argv", ["scripts/refresh_reference.py"])
     namespace: dict[str, Any] = {"__name__": "__main__", "__file__": "scripts/refresh_reference.py"}
     with respx.mock(base_url=BASE) as upstream:
@@ -838,6 +920,8 @@ def test_the_readmes_short_script_runs_on_the_frame(
         "state_alpha.json",
         "unitsOfMeasure.json",
     ]
+    state = PackagedList.model_validate_json((example / "reference/state_alpha.json").read_text())
+    assert state.records == [{"state_alpha": "AK"}, {"state_alpha": "CA"}]
     enums = (example / "enums.py").read_text()
     assert "class StateAlpha(StrEnum):" in enums
     assert "class UnitId(IntEnum):" in enums
@@ -855,3 +939,18 @@ def test_the_readmes_short_script_runs_on_the_frame(
             exec(compile(script, "README.md", "exec"), {**namespace})
     assert "Declared by the package alone: regions." in str(exited.value), exited.value
     assert route.call_count == 0, "the package's own lists are checked before a request"
+
+
+def test_the_readmes_examples_are_written_as_the_renderer_writes_them() -> None:
+    """The README's section on the frame says that ``enums.py`` writes every character
+    outside ASCII as an escape: its example of an escaped value is the one ``ascii()``
+    writes, and its code, the member named by hand among it, is ASCII as the module is."""
+    readme = (ROOT / "README.md").read_text()
+    section = readme.split("## The reference refresh script's frame\n", 1)[1].split("\n## ", 1)[0]
+    value = "C" + chr(0xF4) + "te d" + chr(0x2019) + "Ivoire"
+    assert f"(`{value!a}`)" in section
+    blocks = section.split("```python\n")[1:]
+    assert len(blocks) == 3, len(blocks)
+    for block in blocks:
+        code = block.split("```\n", 1)[0]
+        assert code.isascii(), code
