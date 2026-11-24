@@ -1107,7 +1107,8 @@ from xippios.example.params import PACKAGED_LISTS
 
 async def state_alpha() -> list[dict[str, str]]:
     """The values of ``state_alpha``, as records of one field named by the list."""
-    return [{"state_alpha": value} for value in await api.get_param_values("state_alpha")]
+    answer = await api.get_param_values("state_alpha")
+    return [{"state_alpha": value} for value in answer.payload]
 
 
 LISTS = Lists(
@@ -1157,13 +1158,17 @@ client with one attempt per request for the run, so a 5xx or a 429 spends no sec
 upstream's quota, and prints the requests it sent and the quota left in `quota_header`, a
 failed run's too, a request that ended in a transport error counted as sent. A fetch answers
 records, a model's by `dump_upstream` and a mapping as it is, kept under the list's `param`,
-its name by default, or a finished `PackagedList`, written as built. A list of values is
-records of one field named by its `param`, which the fetch makes, as `state_alpha` above
-does, and a fetch that answers a plain value stops the run before the first write, naming
-the list and the item's position (ADR-0062, decision 11). Records are stamped `fetched` when
-their fetch returned; a finished list carries its own moment, the wrapper's `retrieved_at`,
-its first request or the time its file was complete, and must name the `param` and
-`endpoint` its `Listed` declares, where it declares them.
+its name by default, or a finished `PackagedList`, written as built. An `api/` wrapper's
+`Answer` whose `payload` is those records is read by its payload, so a wrapper that takes no
+argument is a fetch as it stands, as `api.get_commodities` above is, and an `Answer` of
+anything else, the body that holds the records say, stops the run before the first write. A
+list of values is records of one field named by its `param`, which the fetch makes, as
+`state_alpha` above does, and a fetch that answers a plain value stops the run before the
+first write, naming the list and the item's position (ADR-0062, decision 11). Records, an
+`Answer`'s too, are stamped `fetched` when their fetch returned; a finished list carries its
+own moment, the wrapper's `retrieved_at`, its first request or the time its file was
+complete, and must name the `param` and `endpoint` its `Listed` declares, where it declares
+them.
 
 Each list is written to `reference/<name>.json` by `PackagedList.write`. The provenance
 table of `reference/README.md` stands under the one header that sdk-template renders,
@@ -1659,20 +1664,17 @@ test, which `tests/test_live.py` collects with one line beside its declaration o
 
 ```python
 # tests/test_live.py
+from functools import partial
+
 from xippios.core.testing.live import *  # noqa: F403
 
 from xippios.example import api
 from xippios.example.params import COMMODITIES, COUNTRIES, PARTNERS  # PackagedList.codes(...)
 
-
-async def partner_areas() -> list[dict[str, object]]:
-    return (await api.reference_rows("partnerAreas.json")).payload  # upstream's records
-
-
 LIVE_LISTS = {  # each packaged list compared, by its file reference/<name>.json
-    "commodities": (COMMODITIES, api.get_commodities),  # a wrapper's UpstreamModel records
+    "commodities": (COMMODITIES, api.get_commodities),  # an Answer of UpstreamModel records
     "countries": (COUNTRIES, api.get_countries),
-    "partnerAreas": (PARTNERS, partner_areas),
+    "partnerAreas": (PARTNERS, partial(api.reference_rows, "partnerAreas.json")),  # mappings
 }
 NO_LIVE_LIST = {  # each packaged list not compared, with the reason
     "progress_stages": "Derived from a year of weekly rows: no endpoint serves the list.",
@@ -1684,7 +1686,10 @@ NO_LIVE_LIST = {  # each packaged list not compared, with the reason
 (`PackagedList.codes`, above), whose `code` is the field the records are compared by, and
 the function that fetches the list now. It takes no argument and returns, or awaits, the
 records under upstream's field names, mappings or `UpstreamModel` instances, or the bare
-codes, text or integers, which are compared by code alone. A code gone from upstream's list,
+codes, text or integers, which are compared by code alone, either of them as they stand or
+as the `payload` of an `api/` wrapper's `Answer`, so a wrapper is a fetch as it stands, and
+an `Answer` of anything else, the body that holds the records say, fails the test. A code
+gone from upstream's list,
 a code new in it and a code whose record changed fail the run, in any order of the list, and
 the failure names the codes, the first 20 of each kind, and never a record:
 

@@ -19,7 +19,8 @@ The lists must be those the package declares it ships, ``packaged``, its
 ``params.PACKAGED_LISTS``. Every list is fetched before anything is written, through
 ``client`` with one attempt per request, each counted, so a 5xx or a 429 spends no second
 call of upstream's quota; the requests sent and the quota left are printed after the
-fetches, a failed run's too. A fetch answers records or a finished ``PackagedList``. Then
+fetches, a failed run's too. A fetch answers records, a wrapper's ``Answer`` of them, read
+by its ``payload``, or a finished ``PackagedList``. Then
 each list is written to ``reference/<name>.json`` by ``PackagedList.write``, the rows of the
 provenance table of ``reference/README.md`` are rewritten in place under its one header, and
 ``enums.py`` is rendered by ``render_enums``, this module's, in the order the lists are
@@ -64,7 +65,7 @@ from typing import Any, cast
 import httpx
 
 from xippios.core._loop import run as _run_coroutine
-from xippios.core.client import AsyncClient, RetryPolicy
+from xippios.core.client import Answer, AsyncClient, RetryPolicy
 from xippios.core.errors import TransportError
 from xippios.core.models import UpstreamModel
 from xippios.core.reference import PackagedList
@@ -83,10 +84,12 @@ file's records (ADR-0062, decision 13)."""
 
 type Record = UpstreamModel | Mapping[str, Any]
 """One record a fetch answers: a model, kept by ``dump_upstream``, or a mapping as it is."""
-type Fetched = PackagedList | Sequence[Record]
-"""What a list's fetch answers: records or a finished ``PackagedList``."""
+type Fetched = PackagedList | Sequence[Record] | Answer[Sequence[Record]]
+"""What a list's fetch answers: records, an ``api/`` wrapper's ``Answer`` whose ``payload``
+is the records, read as they are, or a finished ``PackagedList``."""
 type Fetch = Callable[[], Awaitable[Fetched] | Fetched]
-"""A list's fetch: a function of no argument, async like the ``api/`` wrappers, or not."""
+"""A list's fetch: a function of no argument, async like the ``api/`` wrappers, or not; a
+wrapper that takes no argument is one as it stands, its ``Answer`` read by its ``payload``."""
 type MemberNames = Mapping[Any, str] | Callable[[Sequence[Any]], Mapping[Any, str]]
 """Members named by hand, per value or id, or made from the list's values or pairs."""
 
@@ -132,10 +135,11 @@ class Listed:
         fetch: Gets the list through the source's ``api/`` wrappers, never through a task
             that answers from the package: records, a model's by ``dump_upstream`` and a
             mapping as it is, a list of values as records of one field named by ``param``
-            that the fetch makes; or a finished ``PackagedList``, written as built. Records
-            are fetched when the fetch returns; a finished list carries its own
-            ``fetched``, such as the wrapper's ``retrieved_at`` or the time of its first
-            request.
+            that the fetch makes; a wrapper's ``Answer`` whose ``payload`` is those records,
+            such as ``api.get_regions`` itself; or a finished ``PackagedList``, written as
+            built. Records, an ``Answer``'s too, are fetched when the fetch returns; a
+            finished list carries its own ``fetched``, such as the wrapper's
+            ``retrieved_at`` or the time of its first request.
         endpoint: The upstream operation the list comes from, the file's ``endpoint``:
             needed for records, and where given, a finished list's must match.
         param: The upstream parameter the list feeds, the file's ``param``: ``name`` by
@@ -470,8 +474,9 @@ def _fetched(listed: Listed) -> PackagedList:
 
     Raises:
         SystemExit: A finished list that disagrees with the declaration, records with no
-            endpoint, an item that is no record, a plain value among them, or an answer
-            that is neither records nor a finished list.
+            endpoint, an item that is no record, a plain value among them, an ``Answer``
+            whose payload is no sequence, or an answer that is neither records, an
+            ``Answer`` of them nor a finished list.
     """
     answer = listed.fetch()
     if inspect.isawaitable(answer):
@@ -486,6 +491,15 @@ def _fetched(listed: Listed) -> PackagedList:
         return answer.model_copy(update={"fetched": answer.fetched.replace(microsecond=0)})
     fetched = datetime.now(UTC).replace(microsecond=0)
     given = cast(object, answer)  # a fetch that mypy does not check
+    if isinstance(given, Answer):
+        # A wrapper's answer: its payload is the records, its retrieved_at left unread.
+        given = cast(object, given.payload)
+        if isinstance(given, str | bytes) or not isinstance(given, Sequence):
+            raise SystemExit(
+                f"{listed.name}'s fetch answered an Answer of {_described(given)}: an Answer's "
+                "payload is the records, so hand the records, not the body that holds them; "
+                "nothing was written"
+            )
     if isinstance(given, str | bytes) or not isinstance(given, Sequence):
         raise SystemExit(
             f"{listed.name}'s fetch answered a {type(given).__name__}: it answers records "
