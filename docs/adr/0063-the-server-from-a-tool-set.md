@@ -82,7 +82,9 @@ change of the family check.
      `xippios.core.mcp.cli`, and `tool_name`, `tool_functions`, `ResultCap` and `ConfigError` from
      `xippios.core`;
    - a narrowed copy of a tool set, for a host's list of tools, is `dataclasses.replace`, which
-     checks the copy as decision 3 checks a tool set, so a copy that drops a task drops its cap;
+     checks the copy as decision 3 checks a tool set, so the caller drops the cap of each task it
+     drops, with `caps=` beside `tasks=` in the same `replace`, else the check of decision 3
+     refuses the copy with a `ValueError` naming the key;
    - a tool set's hooks are applied without a server and without a command line, by
      `option_defaults()` and the hook of decision 7, so a host holds a package's options at the
      values its entry point holds without options; an option that an empty command line leaves

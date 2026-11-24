@@ -72,8 +72,10 @@ class ToolSet:
     checked when it is built, before any server is: a write tool set's every task takes
     ``confirm: bool = False``, every key of ``caps`` names one of its tasks, and a paged
     cap fits its task (ADR-0063, decision 3). ``dataclasses.replace`` gives a narrowed
-    copy, a host's list of tools say, and checks it as a new tool set, so a copy that
-    drops a task drops its cap too.
+    copy, a host's list of tools say, and checks it as a new tool set, so the caller drops
+    the cap of each task it drops, with ``caps=`` beside ``tasks=`` in the same
+    ``replace``, else the check of a key of ``caps`` refuses the copy with a
+    ``ValueError`` naming the key (ADR-0063, decision 4).
 
     Args:
         source: Source slug, e.g. ``"example"``; prefixes every tool name.
