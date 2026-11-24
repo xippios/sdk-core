@@ -106,7 +106,10 @@ with it; ADR-0058, decision 2, stands.
 
 Amended by https://github.com/xippios/sdk-core/issues/555: a piece that a maintainer's answer adds
 enters core with fewer than two consumers when that answer decided it, beside decision 5's two
-consumers and decision 4's part of the family's contract, since every decided addition is in 0.5.0
+consumers and decision 4's part of the family's contract, so that decision 4's "alone", in "one
+consumer is enough for the family's contract alone", and its "the maintainer's decision on a step's
+design question stops being a reason of its own" give way for a piece that a maintainer's answer to
+a question names as added and stand for every other piece, since every decided addition is in 0.5.0
 (https://github.com/xippios/sdk-core/issues/485, part 6) and nothing decided is removed, and the
 record of its mechanism names the answer and the piece with its one consumer or with none, as the
 release's statement of core's surface names it too (ADR-0068, decision 6), so that decision 8's
