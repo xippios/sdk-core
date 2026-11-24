@@ -1065,34 +1065,12 @@ each row on one line, a line feed in a note or a reason written as a space.
 
 The last line of `FETCHED.md` names the file's form, `<!-- form 1 of the FETCHED.md that
 xippios.core.refresh writes -->`, and every change of core that rewords what the frame writes
-raises it (`FORM`). `compare_fetched` compares a committed file of that form with the
-declaration, sends no request and returns the lines that differ (ADR-0046, decision 6):
-
-```python
-from xippios.core.refresh import compare_fetched
-
-compare_fetched(SNAPSHOT)  # [] where the file agrees
-# ["line 41 holds: | pages/api.md | https://docs.example.org/old | ...",
-#  "line 41 should hold: | pages/api.md | https://docs.example.org/api | ...",
-#  "pages/terms.md: a row names it, and the file is missing"]
-```
-
-It judges every line that follows from the declaration and the frame's own text, each declared
-page's row with its file, URL, status and the clauses of its flags, the rows of `Not fetched`
-that the declaration gives, the row of `OBSERVED.md`, the form of each ETag's cell, and each
-row's file under `docs/upstream/`, with no file without a row in the subdirectories that a row
-writes to. What only a response knows it reads back from the file and does not judge: the time
-of the fetch, an ETag's value, Last-Modified, sizes and hashes, a redirect, a note that `note`
-makes, the rows of the pages that `linked` found and of the files that `split` made, the
-sections of `sections`, the attribution's clause on a page whose answer the run did not read,
-the host a page redirects to and the row of a page's 403 before its second origin. A row that
-no declared page owns is a difference unless the snapshot declares `linked`, so a snapshot
-that links no page declares none. A missing file, one without the mark, a copy's or
-sdk-template's stub, and one of an older form are not judged, since the next run that fetches
-writes the present form. The family check calls it for every source, on the declaration that
-its script names `SNAPSHOT` at its top level, so the script imports and declares alone, sends
-no request and writes no file while it loads, its run under `if __name__ == "__main__":`
-(conventions §3).
+raises it (`FORM`), so a file that the frame wrote tells itself from a copy's (ADR-0062,
+decision 8). No check reads a committed `FETCHED.md` without a request: `--check` at a refresh
+is the one comparison, and each refresh writes the file whole (ADR-0062, decision 9). The
+script names its declaration `SNAPSHOT` at its top level, which imports and declares alone,
+sends no request and writes no file, its run under `if __name__ == "__main__":`, the form that
+sdk-template renders (conventions §3).
 
 Beside `reduce`, `canonical` and `linked`, a snapshot declares the hooks for what some
 sources do beyond that, and every hook stops the run with `changed(url, what)` on a page
@@ -2023,7 +2001,7 @@ fragment until the release assembles it.
 | `xippios.core.contract` | `EnvVar`, a variable of the package contract | alpha |
 | `xippios.core.mcp` | tool registration with the argument check and the write server's `confirm` rule, `tool_functions`, result caps with the `offset` of a paged cap, error text, CLI with option hooks and the loopback rule for write and `loopback_only` servers, `serve_tenants`, quiet request log, `ToolSet`, the package contract's tool set, built by `build_server` and registered by `register_tasks` | alpha |
 | `xippios.core.http` | router factory, problem details | alpha |
-| `xippios.core.refresh` | the frames of a source's scripts: the snapshot script's (`Snapshot`, `run`, and `compare_fetched`, the check of a committed `FETCHED.md` without a request) and the reference refresh script's (`Listed`, `Enumeration`) | alpha |
+| `xippios.core.refresh` | the frames of a source's scripts: the snapshot script's (`Snapshot`, `run`) and the reference refresh script's (`Listed`, `Enumeration`) | alpha |
 | `xippios.core.testing` | live gate with the count of the requests that a live run sent, offline run, record (sent once, read up to `max_read_bytes`, with `max_bytes=`, `array_key=`, `keep=` and a source's `rewrite=` step, typed `Rewrite`), `send_once`, `record_task`, the fixture writer and the `sample` mark, replay with `sent_urls`, `sent_query` and `sent_bodies`, scrub of named secrets and of values read from the answer with a plain verify, `mcp_call`, `assert_write_tools` with what a preview reads, `keep_reserved_tenants`, `built_answers`, the check of a built answer's mark, `live` with `assert_list_current`, the nightly comparison of a packaged list, family check | alpha |
 
 Alpha: while core is 0.x, a new minor version may change the public surface, with no

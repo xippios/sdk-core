@@ -188,8 +188,8 @@ skip it (§8, §9; ADR-0040).
   `FETCHED.md` is written as the source's hooks make it (ADR-0046, decision 3).
   The script names its `Snapshot` `SNAPSHOT` at its top level, which imports and declares
   alone, sends no request and writes no file, its run standing under
-  `if __name__ == "__main__":`, so that the family check can load it by its path (ADR-0046,
-  decision 6).
+  `if __name__ == "__main__":`, the form that sdk-template renders, which the review holds
+  while no check of core reads the script (ADR-0062, decision 3).
 - `Fetched` in `FETCHED.md` is the UTC time of the run in ISO 8601 with an explicit `Z`
   (`2026-10-24T09:15:00Z`), never a local date or time. A table that a Markdown pipe
   table cannot hold, one with merged cells (`rowspan`, `colspan`) or with a table nested
@@ -202,22 +202,10 @@ skip it (§8, §9; ADR-0040).
   without a zone read as GMT as every HTTP date is, and one that is no HTTP date as sent,
   in a code span (ADR-0046, decision 4).
   The frame ends `FETCHED.md` with one line that names the file's form, and a change of core
-  that rewords what the frame writes into the file raises the form (ADR-0046, decision 6).
-  The family check fails a source whose committed `FETCHED.md`, of the form its core writes,
-  differs from its `SNAPSHOT` in a line that follows from the declaration or the frame's own
-  text, in a declared page's row, its file, URL, status or the clauses of its flags, in the
-  form of an ETag's cell, or by a row whose file is missing or a file without a row in a
-  subdirectory that the frame writes to, and it sends no request (ADR-0046, decision 6).
-  What only a response knows is read back from the file and not judged: the time of the
-  fetch, an ETag's value, Last-Modified, sizes and hashes, a redirect, a note that the
-  snapshot's `note` makes, the rows of the pages that `linked` found and of the files that
-  `split` made, the sections that `sections` writes, the attribution's clause on a page whose
-  answer the run did not read, the host a page redirects to and the row of a page's 403
-  before its second origin (ADR-0046, decision 6).
-  A source passes the check while its script declares no `SNAPSHOT`, or while its
-  `FETCHED.md` is missing or holds no mark of the form its core writes, so an adoption PR,
-  which fetches nothing, meets it, and the source is held from its first refresh on
-  (ADR-0046, decision 6).
+  that rewords what the frame writes into the file raises the form (ADR-0062, decision 8).
+  No check compares a committed `FETCHED.md` with its script's declaration without a request:
+  `--check` at a refresh is the one comparison, and each refresh writes the file whole
+  (ADR-0062, decision 9).
 - A vendor's documentation is reproduced in the snapshot for reference (ADR-0028,
   decision 4): `FETCHED.md` carries the copyright line as the documentation
   states it (`© 2026 CashCtrl Ltd.`) and the URL the text was fetched from. A vendor's
