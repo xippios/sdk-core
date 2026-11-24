@@ -9,10 +9,11 @@ Each rule that a source is held to stands here once, in the section of its subje
 sentence that cites its record, with at most one case for each of its parts, the invented
 source `example`'s, while core's README says how core's names are called and the records tell
 each rule's history (ADR-0068, decisions 1 to 3).
-What binds in core, this file among it, names no source but `example`, and a step of the
-organization's conventions check that finds each source's names from its template answers is
-planned with the organization's package after the sources' first wave, so no release of core
-waits for it (ADR-0065, decisions 5 and 6; https://github.com/xippios/.github/issues/169).
+What binds in core, this file among it, names no source but `example` outside the citation
+of a record, and a step of the organization's conventions check that finds each source's names
+from its template answers is planned with the organization's package after the sources' first
+wave, so no release of core waits for it (ADR-0065, decisions 5 and 6;
+https://github.com/xippios/.github/issues/169).
 
 ## 1. Naming
 
@@ -26,9 +27,11 @@ waits for it (ADR-0065, decisions 5 and 6; https://github.com/xippios/.github/is
 | Env var for a key | `<SOURCE>_API_KEY`, or the issuer's variable when one key serves several sources (ADR-0032); per tenant of a multi-tenant source in the source's own scheme (§7, ADR-0042) | `EXAMPLE_API_KEY`, `EXAMPLE_ACME_API_KEY` |
 
 `<source>` names the data provider and, where one provider has several APIs, the API, in
-upstream's own name. The slug `example` is the invented source's, the one source that core's
-documents and tests name, and no source of the family takes it (ADR-0065, decision 4). The
-family's sources are listed where they are loaded, not here (ADR-0068, decision 2).
+upstream's own name, with the one departure that ADR-0025 records, the family's own name for a
+product that upstream names otherwise. The slug `example` is the invented source's, the one
+source that core's documents and tests name, and no source of the family takes it (ADR-0065,
+decision 4). The family's sources are listed where they are loaded, not here (ADR-0068,
+decision 2).
 No domain prefixes (`ag`, `agri`): sources are domain-neutral; grouping happens via
 GitHub topics (`xippios-sdk`) and the org README.
 
