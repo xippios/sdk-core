@@ -134,8 +134,11 @@ value as given; `UnknownCode`, the refusal of a value of the other type of decis
 of an empty list say `Nothing was sent.` after their first sentence, as do core's other
 refusals before a request, those of `check_dest(dest, *, source=None)`, a function exported
 from `xippios.core` that `download` calls and that a task calls before its first request when
-it sends one before its download, and of `Tenants.require` for an unknown tenant, since
-conventions §5 state that a task calls each of them before any request of the call; core gives
+it sends one before its download, whose consumers are the three copies that it replaces,
+sdk-cashctrl's `check_dest` in `api/_download.py`, which three of its tasks call before
+their first request, and the `_target` of sdk-faostat's and of sdk-usda-esmis's `tasks.py`,
+and of `Tenants.require` for an unknown tenant, since conventions §5 state that a task calls
+each of them before any request of the call; core gives
 no helper for a source's own refusals, which each source words with the sentence itself;
 `names_codes`, which checks an answer's codes after the call, leaves the sentence out by a
 switch of core's own check and says that upstream was asked; and decision 5 keeps `code`,

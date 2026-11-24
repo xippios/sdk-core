@@ -2000,7 +2000,7 @@ fragment until the release assembles it.
 
 | Module | What | Status |
 | --- | --- | --- |
-| `xippios.core.client` | httpx client, retries, rate limit, cache with a byte bound, quota policy, request hooks, the one key class, the renewing bearer, `get_answer`, `download`, `decode_csv` | alpha |
+| `xippios.core.client` | httpx client, retries, rate limit, cache with a byte bound, quota policy, request hooks, the one key class, the renewing bearer, `get_answer`, `download`, `check_dest`, the check of a download's `dest` before a task's first request, `decode_csv` | alpha |
 | `xippios.core.errors` | taxonomy, `UnknownCode`, `QueryTooLarge`, the refusal of a query over upstream's limit, response classification, `request_description` | alpha |
 | `xippios.core.redaction` | the one credential rule of the envelope, the recorder and replay, `REDACTED`, which a source's package imports from `xippios.core`, `register_data_name`, signed links | alpha |
 | `xippios.core.models` | `UpstreamModel` with `dump_upstream`, `Result`, `ResultMeta` with `published_at_naive` and `names`, the name of each country code of a request, `ResultCap` with `paged` and `keep`, `parse`, `newer_than`, the filter of a vintage taken back | alpha |
