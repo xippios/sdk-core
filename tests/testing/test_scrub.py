@@ -357,3 +357,22 @@ def test_an_exchange_without_the_secret_passes_the_decoding() -> None:
     fixture = fixture_from_response(response, scrub=Scrub(secrets=[INVENTED]))
     assert fixture.response.body == body
     assert fixture.request.url == str(response.request.url)
+
+
+# Each JSON-unescape round halves a run of backslashes, so a run counts as rounds against the
+# bound: a JSON string with 128 literal backslashes and no secret is refused, a false refusal
+# that writes no secret, and 127 are written (the review of
+# https://github.com/xippios/sdk-core/pull/587, round 2).
+
+
+def test_a_json_string_of_127_backslashes_is_written() -> None:
+    body = json.dumps({"path": "\\" * 127})
+    fixture = fixture_from_response(_sent(response_body=body), scrub=Scrub(secrets=[INVENTED]))
+    assert fixture.response.body == body
+
+
+def test_a_json_string_of_128_backslashes_is_refused_at_the_bound() -> None:
+    body = json.dumps({"path": "\\" * 128})
+    refusal = r"^the scrubbed fixture holds text in the response body that still decodes after 8 "
+    with pytest.raises(ValueError, match=refusal):
+        fixture_from_response(_sent(response_body=body), scrub=Scrub(secrets=[INVENTED]))
