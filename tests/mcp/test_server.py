@@ -1,3 +1,4 @@
+import dataclasses
 import functools
 import logging
 import sys
@@ -296,26 +297,21 @@ def test_tool_functions_refuse_an_entry_that_names_another_function() -> None:
 
 
 @pytest.mark.anyio
-async def test_a_server_is_held_by_the_tool_sets_registered_on_it() -> None:
-    # ADR-0063, decision 5: main reads the hold from what the tool sets say, read_only and
-    # loopback_only, where is_write_server and is_loopback_only kept registries of their own.
-    from xippios.core.mcp.server import _hold
+async def test_a_server_keeps_no_hold_of_its_own() -> None:
+    # ADR-0063, decisions 5 and 7: main reads the hold from the tool set it builds the server
+    # from, read_only and loopback_only, and a host from each tool set it registers.
+    from xippios.core.mcp import server as module
 
     held = build_server(ToolSet("example", [get_series], loopback_only=True))
-    assert _hold(held) == "read"
     tool = (await held.list_tools())[0]
     assert tool.annotations is not None
     assert tool.annotations.read_only_hint is True
-    assert _hold(build_server(ToolSet("example", [get_series]))) is None
-    # a write tool set holds its server whatever loopback_only says
-    assert _hold(build_server(ToolSet("example", [create_thing], read_only=False))) == "write"
-    server = build_server(ToolSet("example", []))
-    register_tasks(server, ToolSet("example", [get_series], loopback_only=True))
-    assert _hold(server) == "read"
-    register_tasks(server, ToolSet("example", [plain]))
-    assert _hold(server) == "read", "once held, the server stays held"
-    register_tasks(server, ToolSet("example", [create_thing], read_only=False))
-    assert _hold(server) == "write"
+    assert not hasattr(module, "_hold")
+    assert {f.name for f in dataclasses.fields(module._ServerRecord)} == {
+        "arguments",
+        "added",
+        "checking",
+    }
 
 
 @pytest.mark.anyio

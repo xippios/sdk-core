@@ -537,8 +537,9 @@ TENANTS = Tenants(
     param="org",
     fields=("API_KEY",),
     reserved=("demo",),
+    noun="organisation",
 )
-LOCK = TenantLock(TENANTS, "demo", noun="organisation")
+LOCK = TenantLock(TENANTS, "demo")
 
 
 async def get_org_data_async(org: str, country_code: str) -> Result[int]:

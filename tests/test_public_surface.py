@@ -75,8 +75,6 @@ EXPORTS = {
         "tool_name",
         # what the host imports (https://github.com/xippios/sdk-core/issues/170, ADR-0063)
         "LOOPBACK_HOSTS", "quiet_request_logging", "register_tasks", "tool_functions",
-        # the serve command of a multi-tenant source (ADR-0042, decision 1)
-        "serve_tenants",
         # the tool set of the package contract (ADR-0026, amendment 2026-11-18, point c)
         "ToolSet",
     },

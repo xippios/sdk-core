@@ -123,10 +123,22 @@ def test_attributes_and_repr_name_the_scheme_only(monkeypatch: pytest.MonkeyPatc
     assert tenants.param == "org"
     assert tenants.fields == FIELDS
     assert tenants.reserved == ("demo",)
+    assert tenants.noun is None, "the parameter stands for the noun"
     assert repr(tenants) == (
         "Tenants('fictive-src', var_prefix='FICTIVE_SRC', list_var='FICTIVE_SRC_TENANTS', "
-        "param='org', fields=('SUBDOMAIN', 'API_KEY'), reserved=('demo',))"
+        "param='org', fields=('SUBDOMAIN', 'API_KEY'), reserved=('demo',), noun=None)"
     )
+
+
+def test_the_registry_holds_the_noun_of_one_tenant() -> None:
+    """The word the serve command's help and a bound server's sentence use for one tenant.
+
+    The registry's, where the serve command took it before 0.5.0
+    (https://github.com/xippios/sdk-core/issues/476, part 4).
+    """
+    tenants = make(noun="organisation")
+    assert tenants.noun == "organisation"
+    assert repr(tenants).endswith("reserved=('demo',), noun='organisation')")
 
 
 @pytest.mark.parametrize(
@@ -146,6 +158,8 @@ def test_attributes_and_repr_name_the_scheme_only(monkeypatch: pytest.MonkeyPatc
         ({"reserved": "demo"}, TypeError, "reserved is a sequence"),
         ({"reserved": ("Demo",)}, ValueError, "reserved name 'Demo' is not lower-case"),
         ({"reserved": ("demo", "demo")}, ValueError, "reserved name given twice: demo"),
+        ({"noun": ""}, ValueError, "noun must be a word such as 'organisation', or None"),
+        ({"noun": " "}, ValueError, "noun must be a word such as 'organisation', or None"),
     ],
 )
 def test_construction_refuses_a_malformed_scheme(
@@ -199,7 +213,7 @@ def test_the_variable_prefix_names_the_variables_and_the_slug_the_source(
     assert tenants.var("work", "REFRESH_TOKEN") == "FICTIVE_WORK_REFRESH_TOKEN"
     assert repr(tenants) == (
         "Tenants('fictive-mail', var_prefix='FICTIVE', list_var='FICTIVE_ACCOUNTS', "
-        "param='account', fields=('REFRESH_TOKEN',), reserved=('demo',))"
+        "param='account', fields=('REFRESH_TOKEN',), reserved=('demo',), noun=None)"
     )
     monkeypatch.setenv(MAIL_LIST_VAR, "work")
     monkeypatch.setenv("FICTIVE_DEMO_REFRESH_TOKEN", "demo-token")
