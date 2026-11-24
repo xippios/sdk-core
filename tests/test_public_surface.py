@@ -84,8 +84,6 @@ EXPORTS = {
         "Credentials", "NotFetched", "Page", "Response", "Row", "Section", "Snapshot",
         "Statement", "changed", "decode", "dump_json", "load_json", "run",
         "Enumeration", "Listed",
-        # the check of a committed FETCHED.md without a request (ADR-0046, decision 6)
-        "compare_fetched",
     },
 }  # fmt: skip
 

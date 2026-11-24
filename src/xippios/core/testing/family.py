@@ -92,19 +92,7 @@ than one fails every test here, naming the option. The repository's files (``REA
   module's ``__all__``, a parameter the task does not take or that holds none of the words,
   a parameter that ``names_codes`` names as well, or that gives no reason fails, so a stale
   exemption does not pass. The check reads signatures: a country inside a free-form mapping
-  is the review's;
-- the committed ``docs/upstream/FETCHED.md`` agrees with the ``Snapshot`` that the source's
-  ``scripts/refresh_upstream.py`` names ``SNAPSHOT`` at its top level, by
-  ``xippios.core.refresh.compare_fetched``, which sends no request: the lines that follow from
-  the declaration and the frame's own text, each declared page's row, the form of an ETag's
-  cell and each row's file on the disk, with what only a response knows read back
-  (conventions §3, ADR-0046, decision 6). The script is loaded by its path only where its top
-  level assigns ``SNAPSHOT``, so a copy of the template's skeleton, whose dependencies the
-  project may not install, is never run; while it loads, the frame's fetch is refused. A
-  source passes with no script, with a script that declares no ``Snapshot`` under that name,
-  and with a ``FETCHED.md`` that is missing or holds no mark of the form that its core writes,
-  so an adoption, which fetches nothing, meets it, and the source is held from its first
-  refresh on. A script that does not load fails the check, which is never skipped.
+  is the review's.
 
 A write server is its source's to test: the family check reads ``tasks_write`` for the
 task checks and the status table only (ADR-0042).
@@ -121,7 +109,6 @@ under its new path (ADR-0040). The cap binds a source from its 0.3.0 adoption
 (conventions, header of 1.14), so the step warns in template v0.2.1 and fails from v0.3.0.
 """
 
-import ast
 import importlib
 import importlib.util
 import inspect
@@ -130,14 +117,12 @@ import re
 import sys
 import tomllib
 import typing
-import urllib.request
 from collections.abc import Callable, Iterator, Mapping
-from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from types import ModuleType
-from typing import Any, NoReturn
+from typing import Any
 
 import pydantic
 import pytest
@@ -157,7 +142,6 @@ __all__ = [
     "test_family_core_is_bound_to_one_minor",
     "test_family_country_codes_are_named_in_the_answer",
     "test_family_every_packaged_list_is_declared_for_the_live_run",
-    "test_family_fetched_md_agrees_with_the_snapshot",
     "test_family_fetched_md_lists_observed_md_in_a_row_of_its_own",
     "test_family_http_router_routes_the_tasks",
     "test_family_mcp_server_registers_the_tasks",
@@ -1301,116 +1285,3 @@ def test_family_every_packaged_list_is_declared_for_the_live_run(
     (https://github.com/xippios/sdk-core/issues/359, part 4).
     """
     _fail(_live_declaration_problems(family_source), _LIVE_INTRO)
-
-
-_SNAPSHOT_SCRIPT = "scripts/refresh_upstream.py"
-"""The source's snapshot script, whose ``SNAPSHOT`` the check holds ``FETCHED.md`` to."""
-_SNAPSHOT = "SNAPSHOT"
-_SNAPSHOT_INTRO = (
-    f"{_FETCHED} differs from the {_SNAPSHOT} of {_SNAPSHOT_SCRIPT} in what the declaration "
-    "decides (conventions §3, ADR-0046, decision 6); a refresh mends it, uv run "
-    f"{_SNAPSHOT_SCRIPT}, which writes the file from the declaration as it stands:"
-)
-
-
-class _SentAtLoad(RuntimeError):
-    """A request that the snapshot script sent while the family check loaded it."""
-
-
-def _refuse(*args: object, **kwargs: object) -> NoReturn:
-    raise _SentAtLoad(
-        f"{_SNAPSHOT_SCRIPT} sends a request while it loads, which the family check refuses"
-    )
-
-
-@contextmanager
-def _sending_nothing() -> Iterator[None]:
-    """Refuse urllib's opener and ``urlopen`` while a snapshot script loads.
-
-    The frame fetches through urllib's opener, so a script that runs its snapshot at its top
-    level stops before its first request, and before it writes, since the frame writes after
-    its last request.
-    """
-    opener, urlopen = urllib.request.build_opener, urllib.request.urlopen
-    urllib.request.build_opener = _refuse
-    urllib.request.urlopen = _refuse
-    try:
-        yield
-    finally:
-        urllib.request.build_opener, urllib.request.urlopen = opener, urlopen
-
-
-def _assigns_snapshot(tree: ast.Module) -> bool:
-    """Whether the top level of a module assigns the name ``SNAPSHOT``."""
-    for node in tree.body:
-        if isinstance(node, ast.Assign):
-            targets = node.targets
-        elif isinstance(node, ast.AnnAssign) and node.value is not None:
-            targets = [node.target]
-        else:
-            continue
-        if any(isinstance(target, ast.Name) and target.id == _SNAPSHOT for target in targets):
-            return True
-    return False
-
-
-def _snapshot_script(root: Path) -> ModuleType | None:
-    """The repository's ``scripts/refresh_upstream.py``, loaded where it assigns ``SNAPSHOT``.
-
-    ``None`` without the script, or where its top level assigns no ``SNAPSHOT``: a copy of the
-    template's skeleton, which runs by its ``# /// script`` block with what the project may not
-    install, is read and never run. The script is loaded by its path under a name of its own,
-    so its ``if __name__ == "__main__":`` block does not run, and the frame's fetch refuses
-    meanwhile (ADR-0046, decision 6).
-
-    Args:
-        root: The repository's root, ``FamilySource.root``.
-
-    Raises:
-        BaseException: What ends the script's parse or its load: an error, a request refused,
-            pytest's skip, fail or exit, or a ``SystemExit``.
-    """
-    path = root / _SNAPSHOT_SCRIPT
-    if not path.is_file():
-        return None
-    if not _assigns_snapshot(ast.parse(path.read_bytes(), filename=_SNAPSHOT_SCRIPT)):
-        return None
-    spec = importlib.util.spec_from_file_location("_xippios_family_refresh_upstream", path)
-    if spec is None or spec.loader is None:  # pragma: no cover - a .py path always has both
-        raise ImportError(f"{_SNAPSHOT_SCRIPT} cannot be loaded")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module  # a dataclass of the script looks itself up
-    with _sending_nothing():
-        spec.loader.exec_module(module)
-    return module
-
-
-def test_family_fetched_md_agrees_with_the_snapshot(family_source: FamilySource) -> None:
-    """``FETCHED.md`` agrees with the script's ``SNAPSHOT`` where it decides (conventions §3).
-
-    The committed ``docs/upstream/FETCHED.md`` is compared with the ``Snapshot`` that
-    ``scripts/refresh_upstream.py`` names ``SNAPSHOT`` at its top level, by
-    ``xippios.core.refresh.compare_fetched``, which sends no request, and each differing line
-    is named (ADR-0046, decision 6). A source passes with no script, with a script that
-    declares no ``Snapshot`` under that name and with a file that the frame has not written in
-    the form its core writes, so it is held from its first refresh on. A script that does not
-    load, or sends a request while it loads, fails the check, which is never skipped.
-    """
-    from xippios.core.refresh import Snapshot, compare_fetched
-
-    try:
-        module = _snapshot_script(family_source.root)
-    except KeyboardInterrupt:  # the person's, not the script's
-        raise
-    except BaseException as exc:  # an error, a skip, a fail or an exit: none skips the check
-        pytest.fail(
-            f"{_SNAPSHOT_SCRIPT} does not load, so the family check cannot read its "
-            f"{_SNAPSHOT} ({type(exc).__name__}: {exc}): its top level imports and declares "
-            "alone, with no request and no write, and runs the snapshot under "
-            'if __name__ == "__main__"',
-            pytrace=False,
-        )
-    snapshot = getattr(module, _SNAPSHOT, None)
-    if not isinstance(snapshot, Snapshot):
-        return
-    _fail(compare_fetched(snapshot, family_source.root / "docs" / "upstream"), _SNAPSHOT_INTRO)

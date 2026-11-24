@@ -53,7 +53,6 @@ USER_AGENT = "xippios-example refresh_upstream (+https://github.com/xippios)"
 HAND = "written by hand: what upstream does but never documents; not fetched or checked"
 SPLIT = "one of the files split from one page; Bytes and sha256 are the page's"
 MARK = "<!-- form 1 of the FETCHED.md that xippios.core.refresh writes -->"
-UNREAD = ", a page this script does not read, so no run checks it"
 ROOT = Path(__file__).resolve().parents[2]
 
 Answer = tuple[int, dict[str, str], bytes]
@@ -1464,438 +1463,16 @@ def test_a_rows_note_is_made_from_its_answer(site: Site, out: Path) -> None:
     assert fetched(out) == before
 
 
-# --- the check of the committed FETCHED.md without a request ----------------------------
+# --- a cell on one line, the file read at its line feeds, and the mark of its form --------
 #
-# https://github.com/xippios/sdk-core/issues/428 (ADR-0046, decision 6): compare_fetched
-# compares a committed FETCHED.md of the frame's form with the declaration and sends no
-# request. Each kind it judges has a test that a change of the declaration fails, and each
-# kind it reads back a test that a changed value passes.
+# https://github.com/xippios/sdk-core/issues/434: the frame wrote a value into its cell as given,
+# so a line feed broke the table, and --check split the file at every character that splits a
+# text into lines, where the frame splits it at line feeds alone. --check at a refresh is the one
+# comparison of a snapshot, and no check reads a committed FETCHED.md without a request
+# (ADR-0062, decision 9).
 
 FEED = "https://example.org/feed.xml"
 GUIDE = f"{BASE}/guide.html"
-SPEC = f"{BASE}/openapi.json"
-PDF = b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n<< /Producer (Copyright 2026 Example) >>\n%%EOF\n"
-
-
-def full_snapshot(site: Site, out: Path) -> Snapshot:
-    """A declaration with a row of every kind that the check judges, written by the frame."""
-    site.page(
-        "guide.html",
-        "<p>Guide</p><footer>&copy; 2026 Example Ltd.</footer>",
-        {"ETag": '"v1"', "Last-Modified": "Mon, 16 Nov 2026 10:00:00 GMT"},
-    )
-    site.page("openapi.json", '{"openapi": "3.1.0"}\n')
-    site.routes[f"{BASE}/admin"] = (302, {"Location": "https://login.example.net/sso"}, b"")
-    snapshot = declare(
-        out,
-        Page(GUIDE, "pages/guide.html", note="as served"),
-        Page(SPEC, "openapi/openapi.json", note="verbatim"),
-        Page(site.page("items.json", "[]"), "samples/items.json", sample=True),
-        Page(site.page("status.html", "<p>OK</p>"), stable=False, note="a nonce"),
-        Page(f"{BASE}/admin", status=302, note="a login on another host"),
-        attribution=(Statement("\N{COPYRIGHT SIGN} 2026 Example Ltd.", GUIDE, "the footer"),),
-        not_fetched=(NotFetched(FEED, "a feed, no documentation"),),
-        capture="The guide is kept as served.\n\nThe API document is kept verbatim.",
-    )
-    assert go(snapshot) == 0
-    site.requests.clear()
-    site.sleeps.clear()
-    return snapshot
-
-
-def compared(site: Site, snapshot: Snapshot, out: Path) -> list[str]:
-    """The lines that ``compare_fetched`` names, having sent no request and waited for none."""
-    lines = refresh.compare_fetched(snapshot, out)
-    assert not site.requests, "no request"
-    assert not site.sleeps, "no pause"
-    return lines
-
-
-def edit(out: Path, old: str, new: str) -> None:
-    """Edit the committed FETCHED.md by hand."""
-    text = fetched(out)
-    assert old in text, old
-    (out / "FETCHED.md").write_text(text.replace(old, new))
-
-
-def pages_replaced(snapshot: Snapshot, at: int, **fields: Any) -> Snapshot:
-    pages = list(snapshot.pages)
-    pages[at] = replace(pages[at], **fields)
-    return replace(snapshot, pages=tuple(pages))
-
-
-def test_the_check_passes_the_file_the_frame_wrote_and_sends_no_request(
-    site: Site, out: Path
-) -> None:
-    """A file as the frame wrote it agrees with its declaration, with OBSERVED.md and without
-    it; the check sends no request, and reads the snapshot's own directory by default."""
-    snapshot = full_snapshot(site, out)
-    assert compared(site, snapshot, out) == []
-    assert refresh.compare_fetched(snapshot) == []
-    (out / "OBSERVED.md").write_text("# Observed\n")
-    assert go(snapshot) == 0
-    site.requests.clear()
-    site.sleeps.clear()
-    assert compared(site, snapshot, out) == []
-
-
-@pytest.mark.parametrize(
-    ("change", "held", "given"),
-    [
-        pytest.param(
-            lambda s: pages_replaced(s, 1, url=f"{BASE}/v2/openapi.json"),
-            f"| openapi/openapi.json | {SPEC} |",
-            f"| openapi/openapi.json | {BASE}/v2/openapi.json |",
-            id="a-page-s-url",
-        ),
-        pytest.param(
-            lambda s: replace(
-                s,
-                attribution=(Statement("\N{COPYRIGHT SIGN} 2026 Example AG", GUIDE, "the footer"),),
-            ),
-            "- `\N{COPYRIGHT SIGN} 2026 Example Ltd.`",
-            "- `\N{COPYRIGHT SIGN} 2026 Example AG`",
-            id="a-statement-s-text",
-        ),
-        pytest.param(
-            lambda s: replace(s, not_fetched=(NotFetched(FEED, "an RSS feed"),)),
-            f"| {FEED} | (not requested) | - | a feed, no documentation |",
-            f"| {FEED} | (not requested) | - | an RSS feed |",
-            id="a-row-of-not-fetched",
-        ),
-        pytest.param(
-            lambda s: replace(s, capture="The guide is converted.\n\nThe API document is kept."),
-            "The guide is kept as served.",
-            "The guide is converted.",
-            id="the-capture",
-        ),
-        pytest.param(
-            lambda s: replace(s, pages=s.pages[:1] + s.pages[2:]),
-            f"| openapi/openapi.json | {SPEC} |",
-            None,
-            id="a-page-removed",
-        ),
-        pytest.param(
-            lambda s: replace(s, pages=(*s.pages, Page(f"{BASE}/terms.html", "pages/terms.html"))),
-            None,
-            f"| pages/terms.html | {BASE}/terms.html | - | 200 |",
-            id="a-page-added",
-        ),
-        pytest.param(
-            lambda s: pages_replaced(s, 0, note="as fetched"),
-            "| as served |",
-            "| as fetched |",
-            id="a-page-s-note",
-        ),
-        pytest.param(
-            lambda s: pages_replaced(s, 2, sample=False),
-            "| a sample: an answer of the API, kept verbatim; no test fixture |",
-            "| samples/items.json |",
-            id="a-page-s-flag",
-        ),
-        pytest.param(
-            lambda s: pages_replaced(s, 4, status=301),
-            f"| {BASE}/admin | 302 |",
-            f"| {BASE}/admin | 301 |",
-            id="an-unread-page-s-status",
-        ),
-    ],
-)
-def test_a_change_of_the_declaration_is_named_by_its_lines(
-    site: Site,
-    out: Path,
-    change: Any,
-    held: str | None,
-    given: str | None,
-) -> None:
-    """Each kind the check judges: the line the file holds and the line the declaration gives
-    in its place."""
-    snapshot = full_snapshot(site, out)
-    lines = compared(site, change(snapshot), out)
-    assert lines, "the change is named"
-    assert all(re.match(r"line \d+ (holds|should hold): ", line) for line in lines), lines
-    if held is not None:
-        assert any(" holds: " in line and held in line for line in lines), lines
-    if given is not None:
-        assert any(" should hold: " in line and given in line for line in lines), lines
-
-
-def test_a_new_observed_md_is_named_until_its_row_stands(site: Site, out: Path) -> None:
-    """The row of OBSERVED.md follows the disk: a file that the committed FETCHED.md does not
-    list yet is named."""
-    snapshot = full_snapshot(site, out)
-    (out / "OBSERVED.md").write_text("# Observed\n")
-    (line,) = compared(site, snapshot, out)
-    assert re.fullmatch(rf"line \d+ should hold: \| OBSERVED\.md \| (- \| ){{7}}{HAND} \|", line)
-
-
-def test_the_check_holds_each_row_s_file_to_the_disk(site: Site, out: Path) -> None:
-    """Each row's file stands under docs/upstream/, and no file of a subdirectory that a row
-    writes to lacks a row; a file at the top and one under another subdirectory are not the
-    frame's, as its removal of stale files is bounded."""
-    snapshot = full_snapshot(site, out)
-    (out / "pages/guide.html").unlink()
-    (out / "samples/extra.json").write_text("[]")
-    (out / "notes.txt").write_text("kept by hand")
-    (out / "old").mkdir()
-    (out / "old/page.md").write_text("an old page")
-    assert compared(site, snapshot, out) == [
-        "pages/guide.html: a row names it, and the file is missing",
-        "samples/extra.json: the file has no row",
-    ]
-
-
-def test_the_check_holds_the_form_of_an_etag_s_cell(site: Site, out: Path) -> None:
-    """An ETag's value is read back, its form judged: a code span on a row that ends in the
-    allowlist mark, and ``-`` for a page whose body changes on every request."""
-    snapshot = full_snapshot(site, out)
-    edit(out, '`"v1"`', '`"v2"`')
-    assert compared(site, snapshot, out) == []
-    edit(out, f" {ALLOWLIST}", "")
-    held, given = compared(site, snapshot, out)
-    assert " holds: | pages/guide.html |" in held
-    assert not held.endswith(ALLOWLIST)
-    assert given.endswith(f'| `"v2"` | 2026-11-16T10:00:00Z | as served | {ALLOWLIST}')
-    edit(out, '`"v2"` |', '"v2" |')
-    held, given = compared(site, snapshot, out)
-    assert '| "v2" |' in held
-    assert '| `"v2"` |' in given
-    assert go(snapshot) == 0
-    site.requests.clear()
-    site.sleeps.clear()
-    url, at = cells(file_row(fetched(out), "(no file)"))[1:3]
-    edit(out, f"| {url} | {at} | 200 | - | - | - |", f"| {url} | {at} | 200 | - | - | `x` |")
-    assert len(compared(site, snapshot, out)) == 2, "a page with stable=False has no ETag"
-
-
-def test_what_only_a_response_knows_is_read_back(site: Site, out: Path) -> None:
-    """The time of the fetch, Last-Modified, Bytes, sha256, an ETag's value and the host a page
-    redirects to are read back, and a changed value passes."""
-    snapshot = full_snapshot(site, out)
-    text = fetched(out)
-    measures = cells(file_row(text, "openapi/openapi.json"))[4:6]
-    moved = re.sub(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", "2020-01-02T03:04:05Z", text)
-    moved = moved.replace(" | ".join(measures), " | ".join(["7", "0" * 64]))
-    moved = moved.replace('`"v1"`', '`W/"other"`')
-    moved = moved.replace("| 302 | login.example.net |", "| 302 | sso.example.net |")
-    assert moved.count("2020-01-02T03:04:05Z") == 5, "four rows' Fetched, one Last-Modified"
-    (out / "FETCHED.md").write_text(moved)
-    assert compared(site, snapshot, out) == []
-
-
-def test_a_note_made_from_an_answer_is_read_back_and_a_flag_s_clause_is_judged(
-    site: Site, out: Path
-) -> None:
-    """With the snapshot's ``note``, a row's own note is read back, and the clauses of its
-    page's flags, which the declaration gives, are still judged."""
-
-    def note(row: Row) -> str:
-        return f"{row.note}; {len(row.response.body)} bytes"
-
-    snapshot = declare(
-        out,
-        Page(
-            site.page("openapi.json", '{"openapi": "3.1.0"}'), "openapi/openapi.json", note="as is"
-        ),
-        Page(site.page("items.json", "[]"), "samples/items.json", sample=True, note="two items"),
-        note=note,
-    )
-    assert go(snapshot) == 0
-    site.requests.clear()
-    site.sleeps.clear()
-    edit(out, "| as is; 20 bytes |", "| as is; 2,000 paths |")
-    assert compared(site, snapshot, out) == []
-    edit(out, "a sample: an answer of the API, kept verbatim; no test fixture; ", "")
-    held, given = compared(site, snapshot, out)
-    assert held.endswith("| two items; 2 bytes |")
-    assert given.endswith(
-        "| a sample: an answer of the API, kept verbatim; no test fixture; two items; 2 bytes |"
-    )
-
-
-def linked_and_split(site: Site, out: Path) -> Snapshot:
-    """A declaration whose ``linked`` finds a page and whose ``split`` makes two files."""
-    newest = site.page("release-7.html", "<p>Release 7</p>")
-    index = site.page("releases.html", f"<a href='{newest}'>Release 7</a>")
-    toc = site.page("toc.html", "<h1>A</h1><p>alpha</p><h1>B</h1><p>beta</p>")
-
-    def linked(row: Row) -> tuple[Page, ...]:
-        if row.page.url != index:
-            return ()
-        href = re.search(rb"href='([^']+)'", row.response.body)
-        assert href is not None
-        return (Page(href[1].decode(), "pages/release.html", note="the newest"),)
-
-    def split(page: Page, response: Response) -> dict[str, bytes]:
-        parts = re.findall(rb"<h1>(\w)</h1><p>(\w+)</p>", response.body)
-        return {f"entries/{name.decode().lower()}.md": text + b"\n" for name, text in parts}
-
-    snapshot = declare(
-        out,
-        Page(index, "pages/releases.html"),
-        Page(toc, split=True, note="one file per heading"),
-        linked=linked,
-        split=split,
-    )
-    assert go(snapshot) == 0
-    site.requests.clear()
-    site.sleeps.clear()
-    return snapshot
-
-
-def test_the_pages_linked_found_and_the_files_split_made_are_read_back(
-    site: Site, out: Path
-) -> None:
-    """A row of a page that ``linked`` found and a file that ``split`` made are read back; a
-    row that no declared page owns is named in a snapshot that declares no ``linked``."""
-    snapshot = linked_and_split(site, out)
-    assert compared(site, snapshot, out) == []
-    edit(
-        out,
-        f"| pages/release.html | {BASE}/release-7.html |",
-        f"| pages/release.html | {BASE}/release-8.html |",
-    )
-    edit(out, "| entries/b.md |", "| entries/beta.md |")
-    (out / "entries/b.md").rename(out / "entries/beta.md")
-    assert compared(site, snapshot, out) == []
-    unlinked = replace(snapshot, linked=Snapshot.linked)
-    (line,) = compared(site, unlinked, out)
-    assert re.match(rf"line \d+ holds: \| pages/release\.html \| {re.escape(BASE)}/release-8", line)
-
-
-def test_a_section_of_the_source_s_own_and_the_clause_of_an_unread_page_are_read_back(
-    site: Site, out: Path
-) -> None:
-    """What ``sections`` renders from answers is read back, and so is the clause of a
-    statement whose page the run did not read, which follows the page's answer; without the
-    hook a section is named."""
-    bundle = site.page("bundle.txt", "products: comtrade, tariffline")
-    layout = site.page("layout.pdf", PDF)
-
-    def sections(rows: Sequence[Row]) -> list[Section]:
-        names = rows[0].response.body.decode().split(": ")[1].split(", ")
-        return [Section("Products found", "\n".join(f"- {name}" for name in names))]
-
-    snapshot = declare(
-        out,
-        Page(bundle, note="the bundle"),
-        Page(layout, "files/layout.pdf"),
-        attribution=(Statement("Copyright 2026 Example", layout, "the PDF's producer"),),
-        sections=sections,
-    )
-    assert go(snapshot) == 0
-    site.requests.clear()
-    site.sleeps.clear()
-    assert UNREAD in flat(fetched(out))
-    edit(out, "- tariffline\n", "- tariffline\n- goods\n")
-    assert compared(site, snapshot, out) == []
-    lines = compared(site, replace(snapshot, sections=Snapshot.sections), out)
-    assert any(re.match(r"line \d+ holds: ## Products found$", line) for line in lines)
-    site.routes[layout] = (200, {"Content-Type": "text/plain"}, b"Copyright 2026 Example")
-    assert go(snapshot) == 0
-    site.requests.clear()
-    site.sleeps.clear()
-    assert UNREAD not in flat(fetched(out)), "the page is read now"
-    assert compared(site, snapshot, out) == []
-
-
-def test_a_refused_origin_and_a_redirect_are_read_back(site: Site, out: Path) -> None:
-    """The row of a page's 403 before its second origin and a redirect are read back; the row
-    of the file names one of the page's two URLs, or it is named."""
-    canonical = f"{BASE}/faq"
-    origin = "https://origin.example.net/faq"
-    site.routes[canonical] = (403, {"Content-Type": "text/html"}, b"<p>Access Denied</p>")
-    site.routes[origin] = (200, {"Content-Type": "text/html"}, b"<p>FAQ</p>")
-    site.routes[f"{BASE}/old.html"] = (301, {"Location": GUIDE}, b"")
-    site.page("guide.html", "<p>Guide</p>")
-    snapshot = declare(
-        out,
-        Page(canonical, "pages/faq.html", origin=origin, note="the FAQ"),
-        Page(f"{BASE}/old.html", "pages/guide.html"),
-    )
-    assert go(snapshot) == 0
-    site.requests.clear()
-    site.sleeps.clear()
-    assert compared(site, snapshot, out) == []
-    edit(out, f"redirected (301) to {GUIDE}", f"redirected (308) to {BASE}/guide/")
-    edit(out, f"| 403 | - | answers 403 to this script; kept from {origin} |", "| 403 | - | gone |")
-    assert compared(site, snapshot, out) == []
-    edit(
-        out, f"| pages/faq.html | {origin} |", "| pages/faq.html | https://mirror.example.net/faq |"
-    )
-    held, given = compared(site, snapshot, out)
-    assert "holds: | pages/faq.html | https://mirror.example.net/faq |" in held
-    assert given.endswith("| the FAQ |")
-    assert f"should hold: | pages/faq.html | {canonical} |" in given
-
-
-# Findings 1 and 2 of the review of https://github.com/xippios/sdk-core/pull/429, and what more
-# the frame writes one way and the check could read another: each shape below is a file as the
-# frame wrote it, which the check passes.
-
-AWKWARD_NOTES = [
-    pytest.param("1 bytes ", id="a-space-at-the-end"),
-    pytest.param(" opening with a space", id="a-space-at-the-start"),
-    pytest.param("  ", id="spaces-alone"),
-    pytest.param("one line\N{LINE SEPARATOR}and a line separator", id="a-line-separator"),
-    pytest.param("one line\x85and a next-line mark", id="a-next-line-mark"),
-    pytest.param("a pipe | and a backslash \\", id="a-pipe-and-a-backslash"),
-]
-
-
-@pytest.mark.parametrize("note", AWKWARD_NOTES)
-def test_a_cell_is_read_as_the_frame_writes_it(site: Site, out: Path, note: str) -> None:
-    """Finding 1: a cell keeps its own white space and the characters that split a text into
-    lines but not a line of FETCHED.md, in a note that ``note`` makes and in the note of a page
-    that ``linked`` found, both read back."""
-    index = site.page("index.html", "<p>Index</p>")
-    found = site.page("found.html", "<p>Found</p>")
-
-    def made(row: Row) -> str:
-        return note
-
-    by_hook = declare(out, Page(index, "pages/index.html", note="the index"), note=made)
-    assert go(by_hook) == 0
-    site.requests.clear()
-    site.sleeps.clear()
-    assert compared(site, by_hook, out) == []
-
-    def linked(row: Row) -> tuple[Page, ...]:
-        return (Page(found, "pages/found.html", note=note),) if row.page.url == index else ()
-
-    by_link = declare(out, Page(index, "pages/index.html", note="the index"), linked=linked)
-    assert go(by_link) == 0
-    site.requests.clear()
-    site.sleeps.clear()
-    assert compared(site, by_link, out) == []
-
-
-def test_a_carriage_return_is_read_where_the_frame_or_the_checkout_put_it(
-    site: Site, out: Path
-) -> None:
-    """A note holding a carriage return stays one line, and a checkout that ends every line of
-    the file the frame wrote in CRLF passes."""
-
-    def note(row: Row) -> str:
-        return "one line\rand a carriage return"
-
-    snapshot = declare(out, Page(site.page("a.html", "<p>A</p>"), "pages/a.html"), note=note)
-    assert go(snapshot) == 0
-    site.requests.clear()
-    site.sleeps.clear()
-    assert compared(site, snapshot, out) == []
-    plain = declare(out, Page(site.page("a.html", "<p>A</p>"), "pages/a.html"))
-    assert go(plain) == 0
-    site.requests.clear()
-    site.sleeps.clear()
-    path = out / "FETCHED.md"
-    path.write_bytes(path.read_bytes().replace(b"\n", b"\r\n"))
-    assert compared(site, plain, out) == []
-
-
-# https://github.com/xippios/sdk-core/issues/434: the frame wrote a value into its cell as given,
-# so a line feed broke the table, and --check split the file at every character that splits a
-# text into lines, where the frame splits it at line feeds alone.
 
 LINE_FEEDS = [
     pytest.param("one line\nand a line feed", id="a-line-feed"),
@@ -1909,7 +1486,7 @@ def test_a_line_feed_in_a_note_or_a_reason_keeps_its_row_on_one_line(
 ) -> None:
     """A line feed in a page's note, in a note that ``note`` makes and in a reason of Not
     fetched is written as a space, as a paragraph of the frame writes it, so every row stays one
-    line, and ``--check`` and ``compare_fetched`` pass the file right after the write."""
+    line, and ``--check`` passes the file right after the write."""
     site.routes[f"{BASE}/admin"] = (401, {}, b"")
 
     def made(row: Row) -> str:
@@ -1930,9 +1507,6 @@ def test_a_line_feed_in_a_note_or_a_reason_keeps_its_row_on_one_line(
     assert sum(line.endswith(f"| {written} |") for line in lines) == 4, "two rows and two reasons"
     assert all(line.startswith("| ") for line in lines if written in line)
     assert go(snapshot, "--check") == 0
-    site.requests.clear()
-    site.sleeps.clear()
-    assert compared(site, snapshot, out) == []
 
 
 @pytest.mark.parametrize(
@@ -1950,7 +1524,7 @@ def test_check_reads_the_file_at_its_line_feeds_as_the_frame_wrote_it(
 ) -> None:
     """A note that holds a character that splits a text into lines, but not a line of
     FETCHED.md, is written as given, and ``--check`` passes the file right after the write,
-    reading it at its line feeds as ``compare_fetched`` does."""
+    reading it at its line feeds alone."""
     snapshot = declare(out, Page(site.page("a.html", "<p>A</p>"), "pages/a.html", note=note))
     assert go(snapshot) == 0
     assert f"| {note} |" in (out / "FETCHED.md").read_bytes().decode()
@@ -1959,109 +1533,23 @@ def test_check_reads_the_file_at_its_line_feeds_as_the_frame_wrote_it(
     assert "differs" not in capsys.readouterr().out
 
 
-def test_a_declared_note_that_reads_like_a_redirect_is_the_page_s(site: Site, out: Path) -> None:
-    """A page's own note that the frame's redirect clause could be read as, alone and after a
-    redirect the page followed, is judged as the declaration gives it."""
-    site.routes[f"{BASE}/old.html"] = (301, {"Location": GUIDE}, b"")
-    site.page("guide.html", "<p>Guide</p>")
-    own = f"redirected (301) to {BASE}/v2/guide.html"
-    snapshot = declare(
-        out,
-        Page(site.page("a.html", "<p>A</p>"), "pages/a.html", note=own),
-        Page(f"{BASE}/old.html", "pages/guide.html", note=own),
-    )
-    assert go(snapshot) == 0
-    site.requests.clear()
-    site.sleeps.clear()
-    assert compared(site, snapshot, out) == []
-    lines = compared(site, pages_replaced(snapshot, 1, note="moved"), out)
-    assert any(" should hold: " in line and line.endswith("; moved |") for line in lines), lines
-
-
-@pytest.mark.parametrize(
-    ("capture", "section"),
-    [
-        pytest.param(
-            "## A paragraph that opens like a heading\n\nThe second paragraph.",
-            "- one",
-            id="a-capture-that-opens-like-a-heading",
-        ),
-        pytest.param(
-            # 87 columns of words: the wrap at 88 puts "##" at the second line's start
-            " ".join(["eighty-six"] * 7) + " characters ## read like a heading once wrapped.",
-            "- one",
-            id="a-capture-wrapped-to-a-heading",
-        ),
-        pytest.param(
-            "## Files and pages\n\nA paragraph named as the frame's heading.",
-            "- one",
-            id="a-capture-named-as-the-table-s-heading",
-        ),
-        pytest.param(
-            "The capture.",
-            "\n".join(
-                [
-                    "## Files and pages",
-                    "",
-                    TABLE_HEADER,
-                    "| --- " * 9 + "|",
-                    "| quoted.md | https://example.org/q | - | 200 | - | - | - | - | - |",
-                ]
-            ),
-            id="a-section-that-quotes-the-frame-s-table",
-        ),
-    ],
-)
-def test_a_source_s_own_text_that_reads_like_the_frame_s_is_its_own(
-    site: Site, out: Path, capture: str, section: str
+def test_check_reads_a_checkout_that_ends_its_lines_in_crlf(
+    site: Site, out: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Finding 2: in a snapshot that declares ``sections``, a line of the capture or of a section
-    that reads like a heading or a table of the frame's is the source's own text, judged where
-    the declaration gives it and read back where an answer does; a paragraph added to the
-    capture by hand is still named."""
-
-    def sections(rows: Sequence[Row]) -> list[Section]:
-        return [Section("Found", section)]
-
-    snapshot = declare(
-        out,
-        Page(site.page("guide.html", "<p>Guide</p>"), "pages/guide.html", note="as served"),
-        not_fetched=(NotFetched(FEED, ""),),
-        capture=capture,
-        sections=sections,
-    )
+    """A checkout that ends every line of the file the frame wrote in CRLF passes ``--check``,
+    which drops the carriage return before each line feed."""
+    snapshot = declare(out, Page(site.page("a.html", "<p>A</p>"), "pages/a.html"))
     assert go(snapshot) == 0
-    site.requests.clear()
-    site.sleeps.clear()
-    assert compared(site, snapshot, out) == []
-    edit(out, "\n## Found\n", "\nA paragraph added by hand.\n\n## Found\n")
-    lines = compared(site, snapshot, out)
-    assert any(re.match(r"line \d+ holds: A paragraph added by hand\.$", line) for line in lines)
-
-
-def test_a_file_the_frame_has_not_written_in_its_form_is_not_judged(site: Site, out: Path) -> None:
-    """A missing file, a file without the mark, as a copy's or sdk-template's stub, and a file
-    of an older form pass until the next run that fetches; a file of a later form is named,
-    since this core cannot judge it."""
-    snapshot = full_snapshot(site, out)
-    changed = fetched(out).replace("| as served |", "| as a copy wrote it |")
-    for text in (changed.replace(MARK, ""), changed.replace("form 1 of", "form 0 of")):
-        (out / "FETCHED.md").write_text(text)
-        assert compared(site, snapshot, out) == []
-    (out / "FETCHED.md").write_text(changed)
-    assert compared(site, snapshot, out) != [], "the present form is judged"
-    (out / "FETCHED.md").write_text(changed.replace("form 1 of", "form 2 of"))
-    assert compared(site, snapshot, out) == [
-        "FETCHED.md is of form 2, which a later xippios-core writes: this one writes and "
-        "judges form 1"
-    ]
-    (out / "FETCHED.md").unlink()
-    assert compared(site, snapshot, out) == []
+    path = out / "FETCHED.md"
+    path.write_bytes(path.read_bytes().replace(b"\n", b"\r\n"))
+    capsys.readouterr()
+    assert go(snapshot, "--check") == 0
+    assert "differs" not in capsys.readouterr().out
 
 
 def test_fetched_md_ends_with_the_mark_of_its_form(site: Site, out: Path) -> None:
-    """The frame's last line of FETCHED.md names the file's form, one line that the check
-    tells exactly."""
+    """The frame's last line of FETCHED.md names the file's form, so a file that the frame wrote
+    tells itself from a copy's and from an older frame's (ADR-0062, decision 8)."""
     assert upstream.FORM == 1
     assert go(declare(out, Page(site.page("guide.html", "<p>Guide</p>"), "pages/guide.html"))) == 0
     assert fetched(out).endswith(f"`\n\n{MARK}\n")
@@ -2166,10 +1654,10 @@ when a line feed in a cell came to be written as a space
 
 
 def test_a_change_of_what_the_frame_writes_raises_the_form() -> None:
-    """https://github.com/xippios/sdk-core/issues/428: the check judges a file of the form the
-    frame writes, so a change of anything the frame writes into FETCHED.md raises FORM. A
-    change of the render fails here until FORM is raised and the new render's digest stands
-    under it, every earlier entry kept as it is."""
+    """https://github.com/xippios/sdk-core/issues/428: the mark names the form of the file that
+    the frame writes, so a change of anything the frame writes into FETCHED.md raises FORM
+    (ADR-0062, decision 8). A change of the render fails here until FORM is raised and the new
+    render's digest stands under it, every earlier entry kept as it is."""
     assert sorted(FORMS) == list(range(1, upstream.FORM + 1))
     digest = hashlib.sha256(every_sentence_rendered().encode()).hexdigest()
     assert digest == FORMS[upstream.FORM], (
@@ -2218,7 +1706,4 @@ def test_the_readmes_short_script_runs_on_the_frame(site: Site, out: Path) -> No
         "terms.md",
     ]
     assert go(local, "--check") == 0
-    site.requests.clear()
-    assert refresh.compare_fetched(local) == [], "the family check holds what the frame wrote"
-    assert not site.requests
     assert local.linked is Snapshot.linked, "a snapshot that links no page declares no linked"

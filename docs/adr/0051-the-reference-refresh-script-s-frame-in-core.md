@@ -1,6 +1,6 @@
 # ADR-0051: The reference refresh script's frame in core
 
-Status: Accepted · Date: 2026-11-22 · Decided by https://github.com/xippios/sdk-core/issues/370
+Status: Superseded by ADR-0062 · Date: 2026-11-22 · Decided by https://github.com/xippios/sdk-core/issues/370
 
 ## Context
 

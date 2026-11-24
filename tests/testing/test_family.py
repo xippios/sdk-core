@@ -2,10 +2,7 @@
 
 import importlib
 import json
-import re
 import sys
-import time
-import urllib.request
 from pathlib import Path
 from types import ModuleType
 from typing import Annotated, Any
@@ -14,7 +11,6 @@ import pytest
 
 from xippios.core.http import router_from_tasks
 from xippios.core.mcp import build_server
-from xippios.core.refresh import Response, Row, Snapshot, upstream
 from xippios.core.testing import family
 from xippios.core.testing.family import FamilySource, _cell_tasks, _status_table_tasks
 
@@ -129,7 +125,7 @@ SOURCE: dict[str, str] = {
     "tests/test_family.py": "from xippios.core.testing.family import *  # noqa: F403\n",
 }
 
-FAMILY_TESTS = 19
+FAMILY_TESTS = 18
 
 
 def run_family(
@@ -1436,199 +1432,3 @@ def test_the_family_check_and_the_live_test_read_one_declaration(
     result = run_family(pytester, {**tree, "tests/test_live.py": skipping})
     result.assert_outcomes(passed=FAMILY_TESTS - 1, failed=1, skipped=1)
     result.stdout.fnmatch_lines([f"*- tests/test_live.py skips at its import, {UNREAD}*"])
-
-
-# The committed FETCHED.md held to the SNAPSHOT of the source's snapshot script (ADR-0046,
-# decision 6, https://github.com/xippios/sdk-core/issues/428), on made-up source trees: one not
-# ported, one with a copy's file, one with a file of an older form, one of the present form
-# that agrees and one that differs.
-
-GUIDE_URL = "https://docs.example.org/guide.html"
-SNAPSHOT_SCRIPT = '''"""Refresh the upstream documentation snapshot in docs/upstream/."""
-
-from pathlib import Path
-
-from xippios.core.refresh import Page, Snapshot, run
-
-ROOT = Path(__file__).resolve().parents[1]
-
-SNAPSHOT = Snapshot(
-    name="Example",
-    slug="example",
-    pages=(Page("{url}", "pages/guide.html", note="{note}"),),
-    capture="The guide is kept as served.",
-    out=ROOT / "docs/upstream",
-)
-{statement}
-if __name__ == "__main__":
-    raise SystemExit(run(SNAPSHOT))
-'''
-
-# The template's skeleton as a source keeps it before its port: a script run by its block,
-# with what the project does not install, and no SNAPSHOT.
-COPY_SCRIPT = '''# /// script
-# requires-python = ">=3.12"
-# dependencies = ["markdownify-never-installed"]
-# ///
-"""Refresh the upstream documentation snapshot in docs/upstream/."""
-
-import markdownify_never_installed
-
-PAGE_URL = "https://docs.example.org/guide.html"
-
-if __name__ == "__main__":
-    markdownify_never_installed.main()
-'''
-
-SNAPSHOT_INTRO = (
-    "docs/upstream/FETCHED.md differs from the SNAPSHOT of scripts/refresh_upstream.py in what "
-    "the declaration decides (conventions §3, ADR-0046, decision 6); a refresh mends it, uv run "
-    "scripts/refresh_upstream.py, which writes the file from the declaration as it stands:"
-)
-NOT_LOADED = (
-    "scripts/refresh_upstream.py does not load, so the family check cannot read its SNAPSHOT"
-)
-
-
-def script(note: str = "as served", statement: str = "") -> str:
-    """The ported script, its page's note and a statement at its top level given."""
-    return SNAPSHOT_SCRIPT.format(url=GUIDE_URL, note=note, statement=statement)
-
-
-def snapshot_tree(note: str = "as served") -> dict[str, str | None]:
-    """A ported source, its script and the FETCHED.md the frame writes from its SNAPSHOT."""
-    text = script(note)
-    namespace: dict[str, Any] = {"__file__": "made-up/scripts/refresh_upstream.py"}
-    exec(compile(text, "refresh_upstream.py", "exec"), namespace)
-    snapshot: Snapshot = namespace["SNAPSHOT"]
-    page, body = snapshot.pages[0], b"<p>Guide</p>"
-    answer = Response(GUIDE_URL, 200, body, "text/html", None, None, ())
-    rows = [Row(page, answer, body, page.note)]
-    return {
-        "scripts/refresh_upstream.py": text,
-        "docs/upstream/FETCHED.md": upstream.render_fetched(
-            snapshot, rows, "2026-11-22T09:00:00Z", False
-        ),
-        "docs/upstream/pages/guide.html": body.decode(),
-    }
-
-
-def snapshot_problems(root: Path, files: dict[str, str | None]) -> list[str]:
-    """The lines the check fails with for a source of ``files`` at ``root``, none on a pass."""
-    _write(root, files)
-    try:
-        family.test_family_fetched_md_agrees_with_the_snapshot(_rooted(root))
-    except pytest.fail.Exception as failed:
-        lines, pytrace = str(failed).splitlines(), failed.pytrace
-    else:
-        return []
-    assert not pytrace, "the failure shows no frame"
-    return lines
-
-
-def test_a_source_that_has_not_ported_its_snapshot_script_passes(tmp_path: Path) -> None:
-    """No script, and a copy of the skeleton with a copy's FETCHED.md: the copy is read and
-    never run, since running it would import what the project does not install."""
-    assert snapshot_problems(tmp_path, {}) == []
-    copy: dict[str, str | None] = {
-        "scripts/refresh_upstream.py": COPY_SCRIPT,
-        "docs/upstream/FETCHED.md": FETCHED_MD.format(row=""),
-    }
-    assert snapshot_problems(tmp_path, copy) == []
-
-
-@pytest.mark.parametrize("given", ["missing", "a-copy-s", "of-an-older-form"])
-def test_a_ported_source_passes_until_the_frame_writes_its_fetched_md(
-    tmp_path: Path, given: str
-) -> None:
-    """The adoption ports the script and fetches nothing: a missing file, a copy's file and a
-    file of an older form pass, whatever they say, until the next run that fetches."""
-    files = snapshot_tree(note="as fetched")
-    written = files["docs/upstream/FETCHED.md"]
-    assert written is not None
-    present = f"form {upstream.FORM} of"
-    files["docs/upstream/FETCHED.md"] = {
-        "missing": None,
-        "a-copy-s": FETCHED_MD.format(row=""),
-        "of-an-older-form": written.replace(present, f"form {upstream.FORM - 1} of"),
-    }[given]
-    files["scripts/refresh_upstream.py"] = script(note="as served")
-    assert snapshot_problems(tmp_path, files) == []
-
-
-def test_a_fetched_md_of_the_present_form_is_held_to_the_snapshot(tmp_path: Path) -> None:
-    """The file the frame wrote passes; once the declaration changes, the check fails naming
-    each differing line and the refresh that mends it."""
-    files = snapshot_tree()
-    assert snapshot_problems(tmp_path, files) == []
-    problems = snapshot_problems(tmp_path, {"scripts/refresh_upstream.py": script("as fetched")})
-    assert problems[0] == SNAPSHOT_INTRO
-    held, given = problems[1:]
-    row = r"\| pages/guide\.html \| .* \| as"
-    assert re.fullmatch(rf"- line \d+ holds: {row} served \|", held)
-    assert re.fullmatch(rf"- line \d+ should hold: {row} fetched \|", given)
-    (tmp_path / "docs" / "upstream" / "pages" / "guide.html").unlink()
-    problems = snapshot_problems(tmp_path, {"scripts/refresh_upstream.py": script()})
-    missing = "- pages/guide.html: a row names it, and the file is missing"
-    assert problems == [SNAPSHOT_INTRO, missing]
-
-
-def test_a_snapshot_name_that_holds_no_snapshot_passes(tmp_path: Path) -> None:
-    """A script whose SNAPSHOT is not yet a Snapshot declares none under that name."""
-    files = {**snapshot_tree(), "scripts/refresh_upstream.py": 'SNAPSHOT = "the port follows"\n'}
-    assert snapshot_problems(tmp_path, files) == []
-
-
-@pytest.mark.parametrize(
-    ("statement", "why"),
-    [
-        (
-            "import absent_converter_of_the_source",
-            "(ModuleNotFoundError: No module named 'absent_converter_of_the_source')",
-        ),
-        (
-            'import urllib.request\nurllib.request.urlopen("https://docs.example.org/")',
-            "(_SentAtLoad: scripts/refresh_upstream.py sends a request while it loads, which the "
-            "family check refuses)",
-        ),
-        (
-            "run(SNAPSHOT, [])",
-            "(_SentAtLoad: scripts/refresh_upstream.py sends a request while it loads, which the "
-            "family check refuses)",
-        ),
-        ("raise SystemExit(2)", "(SystemExit: 2)"),
-        (
-            'import pytest\npytest.skip("no key here", allow_module_level=True)',
-            "(Skipped: no key here)",
-        ),
-    ],
-    ids=["an-import", "a-request", "a-run", "an-exit", "a-skip"],
-)
-def test_a_script_that_does_not_load_offline_fails_saying_why(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, statement: str, why: str
-) -> None:
-    """The script loads with no request and no write, its run under its main guard: one that
-    does not fails the check, which is never skipped, and urllib is given back after it."""
-    monkeypatch.setattr(time, "sleep", lambda seconds: None)
-    opener, urlopen = urllib.request.build_opener, urllib.request.urlopen
-    files = {**snapshot_tree(), "scripts/refresh_upstream.py": script(statement=statement)}
-    assert snapshot_problems(tmp_path, files) == [
-        f"{NOT_LOADED} {why}: its top level imports and declares alone, with no request and no "
-        'write, and runs the snapshot under if __name__ == "__main__"'
-    ]
-    assert (urllib.request.build_opener, urllib.request.urlopen) == (opener, urlopen)
-    written = (tmp_path / "docs" / "upstream" / "FETCHED.md").read_text(encoding="utf-8")
-    assert written == files["docs/upstream/FETCHED.md"], "nothing written"
-
-
-def test_the_family_check_holds_a_sources_fetched_md_to_its_snapshot(
-    pytester: pytest.Pytester,
-) -> None:
-    files = snapshot_tree()
-    result = run_family(pytester, files)
-    result.assert_outcomes(passed=FAMILY_TESTS)
-    result = run_family(pytester, {**files, "scripts/refresh_upstream.py": script("as fetched")})
-    result.assert_outcomes(passed=FAMILY_TESTS - 1, failed=1)
-    result.stdout.fnmatch_lines(
-        [f"*{SNAPSHOT_INTRO}*", "*- line * should hold: | pages/guide.html | * | as fetched |*"]
-    )
