@@ -91,11 +91,20 @@ had judged no source.
    is written, one request at a time after the snapshot's `pause`, two seconds by default, each
    URL retried at most once after a network error or a 5xx; no browser is imitated. Only a keyed
    sample sends a credential, to the origin of its base URL alone, as ADR-0037, decision 4, has
-   it for the client, and a keyed sample follows no redirect and is never retried; neither a
+   it for the client, and a keyed sample follows no redirect and is never retried by the frame;
+   a renewing auth sends it once more after a refused bearer (ADR-0025); neither a
    credential nor a token is written, and `FETCHED.md` names the variables that a login reads,
-   never their values (ADR-0028, decision 7). The frame's reader of a JSON answer takes a name of its own, since the
+   never their values (ADR-0028, decision 7). The run counts each request that the client sent
+   for a page, the token requests of a renewing auth and its resend among them, which the
+   client's answer keeps in its `history` as statuses alone, with no body, header or request,
+   and a token request whose answer the auth refuses ends the run uncounted
+   (https://github.com/xippios/sdk-core/issues/579). The frame's reader of a JSON answer takes a name of its own, since the
    root's `load_json` is another function, and the `indent` of that reader and of the frame's
-   JSON writer leaves (https://github.com/xippios/sdk-core/issues/475, part 7).
+   JSON writer leaves (https://github.com/xippios/sdk-core/issues/475, part 7). A second reader,
+   `parse_json`, parses a JSON answer, refuses a key twice and returns the document as served,
+   held to no form, for a hook that writes nothing of it again; `read_json` reads through it,
+   and a source keeps no reader of its own that refuses a duplicate key alone (ADR-0059,
+   decision 5; https://github.com/xippios/sdk-core/issues/579).
 5. **What a source's hooks carry.** Carried from ADR-0046, decision 5, without the fields that
    leave it. A page that gives several files is a page marked `split`, whose files the
    snapshot's `split` makes: one source, sdk-cashctrl, needs it, and it stays, since no hook of
@@ -239,7 +248,9 @@ had judged no source.
     first file is written, through the declaration's client with one attempt per request for the
     run, so a 5xx or a 429 spends no second call of upstream's quota, and the run prints the
     requests it sent and the quota left in `quota_header`, a failed run's too, a request that
-    ended in a transport error counted as sent. Every file the run writes is made before the first
+    ended in a transport error counted as sent, and each token request and resend of a renewing
+    auth counted from the answer's `history`, while one whose answer the auth refused is not
+    (https://github.com/xippios/sdk-core/issues/579). Every file the run writes is made before the first
     write: the packaged files in a temporary directory outside the repository, the rows, and
     `enums.py` formatted by `ruff format` and `ruff check --fix` under the configuration the
     repository gives its path. The files are then written as one: a write that fails halfway, or
