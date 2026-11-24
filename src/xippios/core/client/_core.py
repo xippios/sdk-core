@@ -273,9 +273,8 @@ class AsyncClient:
         """
         if json is not None and data is not None:
             raise ValueError("pass json= or data=, not both: a request has one body")
-        pool = self._pool()
         method = method.upper()
-        probe = pool.build_request(method, path, params=params)
+        probe = self._pool().build_request(method, path, params=params)
         # A call with credentials of its own may get another answer: no cache for it. Any
         # explicit auth counts, also a form httpx accepts beyond the annotation (a tuple).
         reach = self._reach(auth)
@@ -284,6 +283,74 @@ class AsyncClient:
             cached = self.config.cache.get(slot.key)
             if cached is not None:
                 return _from_cache(cached, probe), None
+        classify = None if self.config.classify is None else _ClassifyOnce(self.config.classify)
+        response = await self._send(
+            method,
+            path,
+            reach=reach,
+            params=params,
+            json=json,
+            data=data,
+            headers=headers,
+            read=_read_whole,
+            classify=classify,
+        )
+        return response, slot
+
+    async def _send(
+        self,
+        method: str,
+        path: str,
+        *,
+        reach: _Reach,
+        params: Params = None,
+        json: Any = None,
+        data: Mapping[str, Any] | None = None,
+        headers: Mapping[str, str] | None = None,
+        read: Callable[[httpx.Response], Awaitable[httpx.Response | None]],
+        keep: Callable[[httpx.Response], Awaitable[None]] | None = None,
+        classify: "_ClassifyOnce | None" = None,
+        once: bool = False,
+    ) -> httpx.Response:
+        """The client's one request path: ``request``'s, the recorder's and ``download``'s.
+
+        ``before_request`` runs once per call, before the limiter, with the request built as
+        each attempt builds it and marked where its credentials go, and an error it raises
+        sends nothing (ADR-0037, decision 1). Each attempt then waits for the limiter, builds
+        the request afresh, marks it, sends it with ``reach``'s auth and hands the streamed
+        answer to ``read``, which reads what the caller takes of it. ``observe`` sees what
+        ``read`` returns; where ``read`` leaves the body unread and returns ``None``, it sees
+        the streamed answer, and a hook that reads that body meets ``httpx.ResponseNotRead``,
+        which counts as nothing observed (ADR-0040). ``keep`` then acts on the answer while
+        its stream is open, and the stream is closed.
+
+        The attempts go by ``send_with_retries``: a read is retried as the policy allows,
+        ``classify`` asked before each retry, a write is sent once (ADR-0011), and the final
+        answer is raised for, ``classify``'s error first, then its status. ``once`` is the
+        recorder's request: one attempt whatever the method and the policy, ``classify`` not
+        asked and the answer returned whatever its status, a failure in transit raised as
+        ``TransportError`` (ADR-0037, decision 6).
+
+        Args:
+            method: HTTP method, in upper case.
+            path: Path joined onto the base URL, or an absolute URL.
+            reach: Where the call's credentials go (``_reach``).
+            params: Query parameters.
+            json: JSON body.
+            data: Form body.
+            headers: Extra headers for this request only.
+            read: Reads an attempt's streamed answer: the answer the caller takes, or
+                ``None`` where its body is left unread.
+            keep: Acts on an attempt's answer after ``observe``, its stream still open,
+                e.g. ``download``'s writing a success's body to the file.
+            classify: The source's ``classify``, called at most once per answer.
+            once: Send one attempt and raise nothing for the answer's status.
+
+        Returns:
+            The final answer as ``read`` returned it, or the streamed one, its stream closed,
+            where ``read`` left its body unread.
+        """
+        pool = self._pool()
         before_request = self.config.before_request
         if before_request is not None:
             # Built as each attempt is, before auth applies; a change to it is not sent.
@@ -296,20 +363,35 @@ class AsyncClient:
                 await outcome
         observe = self.config.observe
 
-        async def send() -> httpx.Response:
+        async def attempt() -> httpx.Response:
             if self._bucket is not None:
                 await self._bucket.acquire(self._sleep)
             request = pool.build_request(
                 method, path, params=params, json=json, data=data, headers=headers
             )
-            response = await pool.send(request, auth=reach.mark(request))
-            if observe is not None:
-                observe(response)
-            return response
+            streamed = await pool.send(request, auth=reach.mark(request), stream=True)
+            try:
+                answer = await read(streamed)
+                if answer is None:
+                    answer = streamed
+                    if observe is not None:
+                        with contextlib.suppress(httpx.ResponseNotRead):
+                            observe(answer)
+                elif observe is not None:
+                    observe(answer)
+                if keep is not None:
+                    await keep(answer)
+            finally:
+                await streamed.aclose()
+            return answer
 
-        classify = None if self.config.classify is None else _ClassifyOnce(self.config.classify)
+        if once:
+            try:
+                return await attempt()
+            except httpx.RequestError as exc:
+                raise _failed_in_transit(exc, method=method, source=self.source) from exc
         response = await send_with_retries(
-            send,
+            attempt,
             policy=self.config.retry,
             method=method,
             source=self.source,
@@ -321,7 +403,7 @@ class AsyncClient:
             if classified is not None:
                 raise classified
         raise_for_status(response, source=self.source)
-        return response, slot
+        return response
 
     def _store(self, slot: "_Slot", response: httpx.Response, stored_at: float) -> None:
         """Keep a 200 within ``cache_max_bytes`` in ``slot``, stored at ``stored_at``."""
@@ -362,12 +444,13 @@ class AsyncClient:
         ``xippios.core.testing.send_once`` sends through it, and ``record`` through that,
         which refuses an answer of a 1xx or a 3xx status (ADR-0066, decision 4), so a
         recording is one live exchange (ADR-0037, decision 6): never retried, whatever
-        ``config.retry`` says, and never answered from the cache nor stored in it.
-        ``before_request`` runs once and the limiter paces the request, as for
-        ``request``, and ``observe`` sees the answer; ``classify`` is not asked, since
-        nothing is retried or raised. The client's auth reaches the base URL's origin
-        only, and the request carries the marks ``xippios_auth`` and ``xippios_origin``,
-        as every request the client builds does (ADR-0037, decision 4). The body is read up
+        ``config.retry`` says, and never answered from the cache nor stored in it. It goes
+        the client's one request path, ``_send``, as ``request`` does: ``before_request``
+        runs once, the limiter paces the request and ``observe`` sees the answer;
+        ``classify`` is not asked, since nothing is retried or raised. The client's auth
+        reaches the base URL's origin only, and the request carries the marks
+        ``xippios_auth`` and ``xippios_origin``, as every request the client builds does
+        (ADR-0037, decision 4). The body is read up
         to ``max_read_bytes`` as decoded, and no further (ADR-0040, decision 5).
 
         Args:
@@ -394,50 +477,42 @@ class AsyncClient:
         """
         if json is not None and data is not None:
             raise ValueError("pass json= or data=, not both: a request has one body")
-        pool = self._pool()
-        method = method.upper()
-        reach = self._reach(auth)
-        before_request = self.config.before_request
-        if before_request is not None:
-            built = pool.build_request(
-                method, path, params=params, json=json, data=data, headers=headers
-            )
-            reach.mark(built)
-            outcome = before_request(built)
-            if inspect.isawaitable(outcome):
-                await outcome
-        if self._bucket is not None:
-            await self._bucket.acquire(self._sleep)
-        request = pool.build_request(
-            method, path, params=params, json=json, data=data, headers=headers
-        )
-        try:
-            streamed = await pool.send(request, auth=reach.mark(request), stream=True)
-            try:
-                body = await _read_within(streamed, max_read_bytes)
-            finally:
+        over = False
+
+        async def read(streamed: httpx.Response) -> httpx.Response | None:
+            nonlocal over
+            body = await _read_within(streamed, max_read_bytes)
+            if body is None:
+                # Past the bound: closed before observe sees its status and headers, so a
+                # hook finds it closed and its elapsed time set, as for a whole answer.
+                over = True
                 await streamed.aclose()
-        except httpx.RequestError as exc:
-            raise _failed_in_transit(exc, method=method, source=self.source) from exc
-        observe = self.config.observe
-        if body is None:
-            if observe is not None:
-                with contextlib.suppress(httpx.ResponseNotRead):
-                    observe(streamed)
+                return None
+            return httpx.Response(
+                streamed.status_code,
+                headers=strip_wire_headers(streamed.headers.multi_items()),
+                content=body,
+                request=streamed.request,
+            )
+
+        response = await self._send(
+            method.upper(),
+            path,
+            reach=self._reach(auth),
+            params=params,
+            json=json,
+            data=data,
+            headers=headers,
+            read=read,
+            once=True,
+        )
+        if over:
             raise ValueError(
-                f"{request_description(streamed)} answered a body over {max_read_bytes} "
+                f"{request_description(response)} answered a body over {max_read_bytes} "
                 "bytes, the recording's max_read_bytes; reading stopped there and nothing is "
                 "written: narrow the request, or raise max_read_bytes and cut the body with "
                 "max_bytes"
             )
-        response = httpx.Response(
-            streamed.status_code,
-            headers=strip_wire_headers(streamed.headers.multi_items()),
-            content=body,
-            request=streamed.request,
-        )
-        if observe is not None:
-            observe(response)
         return response
 
     async def get(
@@ -627,61 +702,40 @@ class AsyncClient:
                 transport failure that is not retried; ``dest`` is untouched.
         """
         target = check_dest(dest, source=self.source)
-        pool = self._pool()
         reach = self._reach(auth)
         handle, name = tempfile.mkstemp(
             dir=target.parent, prefix=f".{target.name}.", suffix=".part"
         )
         os.close(handle)
         partial = Path(name)
+        classify = (
+            None
+            if self.config.classify is None
+            else _ClassifyOnce(unread_is_none(self.config.classify))
+        )
+        written = 0
+
+        async def read(streamed: httpx.Response) -> httpx.Response | None:
+            # A success's body goes to the file unread, so a hook reading it sees nothing, as
+            # classify does (unread_is_none); an error's is read up to BODY_LIMIT.
+            return None if streamed.is_success else await head_of(streamed)
+
+        async def keep(response: httpx.Response) -> None:
+            nonlocal written
+            if response.is_success and (classify is None or classify(response) is None):
+                written = await stream_to(response, partial)
+
         try:
-            before_request = self.config.before_request
-            if before_request is not None:
-                built = pool.build_request("GET", url, params=params, headers=headers)
-                reach.mark(built)
-                outcome = before_request(built)
-                if inspect.isawaitable(outcome):
-                    await outcome
-            observe = self.config.observe
-            classify = (
-                None
-                if self.config.classify is None
-                else _ClassifyOnce(unread_is_none(self.config.classify))
-            )
-            written = 0
-
-            async def send() -> httpx.Response:
-                nonlocal written
-                if self._bucket is not None:
-                    await self._bucket.acquire(self._sleep)
-                request = pool.build_request("GET", url, params=params, headers=headers)
-                streamed = await pool.send(request, auth=reach.mark(request), stream=True)
-                try:
-                    response = streamed if streamed.is_success else await head_of(streamed)
-                    if observe is not None:
-                        # A success's body goes to the file unread: a hook reading it sees
-                        # nothing, as classify does (unread_is_none).
-                        with contextlib.suppress(httpx.ResponseNotRead):
-                            observe(response)
-                    if response.is_success and (classify is None or classify(response) is None):
-                        written = await stream_to(response, partial)
-                finally:
-                    await streamed.aclose()
-                return response
-
-            response = await send_with_retries(
-                send,
-                policy=self.config.retry,
-                method="GET",
-                source=self.source,
-                sleep=self._sleep,
+            response = await self._send(
+                "GET",
+                url,
+                reach=reach,
+                params=params,
+                headers=headers,
+                read=read,
+                keep=keep,
                 classify=classify,
             )
-            if classify is not None:
-                classified = classify(response)
-                if classified is not None:
-                    raise classified
-            raise_for_status(response, source=self.source)
             if not response.is_success:
                 raise UpstreamError(
                     f"{response.status_code} from {request_description(response)}: a download "
@@ -927,6 +981,12 @@ def _rows(
                 f"{prefix}{name} is not CSV the csv module reads: {exc}", raw="", source=source
             )
         )
+
+
+async def _read_whole(response: httpx.Response) -> httpx.Response:
+    """``response`` with its body read whole, as httpx's own ``send`` reads it: ``request``'s."""
+    await response.aread()
+    return response
 
 
 async def _read_within(response: httpx.Response, limit: int | None) -> bytes | None:
