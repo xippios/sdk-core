@@ -449,12 +449,15 @@ def test_the_header_names_no_source_but_example_outside_a_record_s_citation() ->
     # https://github.com/xippios/sdk-core/pull/553).
     text = flat(CONVENTIONS.read_text(encoding="utf-8").split("\n## 1.", 1)[0])
     rule = sentence(text, "names no source but `example`")
-    # §2 and §3 cite a public decision on an issue, so the sentence names that citation too
-    # (finding 11 of the conventions check on
-    # https://github.com/xippios/sdk-core/pull/552#issuecomment-7138691721).
-    assert "outside the citation of a record or of a public decision" in rule, (
-        f"the header: {rule!r}"
+    # §2 and §3 cite a public decision on an issue, so the sentence names every citation that
+    # the test of what core may name admits (finding 11 of the conventions check on
+    # https://github.com/xippios/sdk-core/pull/552#issuecomment-7138691721, and finding 1 of
+    # the review of https://github.com/xippios/sdk-core/pull/556).
+    exception = (
+        "outside the citation of a public record of the organization, which is an issue, a pull "
+        "request, a record or a report"
     )
+    assert exception in rule, f"the header: {rule!r}"
 
 
 def test_the_conventions_word_the_organization_s_check_as_planned() -> None:

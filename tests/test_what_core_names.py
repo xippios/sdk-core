@@ -255,6 +255,24 @@ def test_the_records_the_reports_and_the_changelog_are_not_read(tmp_path: Path, 
     assert findings(tmp_path) == []
 
 
+@pytest.mark.parametrize(
+    "planted",
+    [
+        # Each begins with a word that a name of the tree begins with, and is another name
+        # (finding 2 of the review of https://github.com/xippios/sdk-core/pull/556).
+        "TENANT" + "_PLANTED_API_KEY",
+        "API" + "_PLANTED_KEY",
+        "NEXT" + "_PLANTED_TOKEN",
+        "OTHER" + "_PLANTED_SECRET",
+        "PLACEHOLDER" + "_PLANTED_KEY",
+        "HIDDEN" + "_PLANTED_PASSWORD",
+        "REFRESH" + "_PLANTED_TOKEN",
+    ],
+)
+def test_a_variable_that_only_begins_like_an_allowed_one_fails(planted: str) -> None:
+    assert names_in(f"`{planted}` is read") == [(1, "credential's variable", planted)]
+
+
 def test_a_host_outside_the_list_fails_however_it_starts() -> None:
     # A host that begins like an allowed one is another host.
     planted = "api.example.org.elsewhere" + ".gov"
