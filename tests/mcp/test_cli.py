@@ -363,7 +363,6 @@ TENANTS = Tenants(
     param="org",
     fields=("SUBDOMAIN", "API_KEY"),
     reserved=("demo",),
-    validate={"SUBDOMAIN": lambda value: value if value.isalnum() else _refuse(value)},
 )
 LOCK = TenantLock(TENANTS, "demo", noun="organisation")
 TEXT = "Fictive via xippios."
@@ -372,8 +371,16 @@ SENTENCE = (
 )
 
 
-def _refuse(value: str) -> str:
-    raise ValueError(f"not one label: {value}")
+def check_subdomain(name: str) -> str:
+    """A source's own check of a tenant's subdomain, one label; its message quotes no value."""
+    subdomain = TENANTS.field(name, "SUBDOMAIN")
+    if not subdomain.isalnum():
+        variable = TENANTS.var(name, "SUBDOMAIN")
+        raise ConfigError(
+            f"{variable} does not hold a valid SUBDOMAIN for tenant {name!r}",
+            source=TENANTS.source,
+        )
+    return subdomain
 
 
 @pytest.fixture
@@ -540,7 +547,7 @@ def test_an_error_of_the_check_stops_the_process_and_names_no_value(
             build(),
             build,
             TENANTS,
-            check=lambda name: TENANTS.field(name, "SUBDOMAIN"),
+            check=check_subdomain,
             argv=["--org", "xa"],
         )
     assert info.value.code == 2

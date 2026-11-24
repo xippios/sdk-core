@@ -590,16 +590,20 @@ async def get_series_async(org: str, series_id: str, year: int = 2024) -> Result
     return Result[list[int]](data=[year], meta=meta)
 
 
-async def list_regions_async() -> Result[list[str]]:
-    """List the regions a series can be asked for, the same for every organisation."""
-    return Result[list[str]](data=[], meta=ResultMeta(source="example", endpoint="regions"))
+async def list_regions_async(org: str) -> Result[list[str]]:
+    """List the regions a series can be asked for, the same for every organisation.
+
+    Args:
+        org: A declared organisation, e.g. ``demo``.
+    """
+    meta = ResultMeta(source="example", endpoint="regions", tenant=org)
+    return Result[list[str]](data=[], meta=meta)
 
 
 get_series = sync(get_series_async)
 list_regions = sync(list_regions_async)
 list_organisations = list_task(TENANTS, name="list_organisations")
 
-NO_TENANT_TASKS = frozenset({"list_regions"})
 __all__ = ["get_series", "list_organisations", "list_regions"]
 '''
 
@@ -619,14 +623,16 @@ async def create_series_async(org: str, name: str, confirm: bool = False) -> Res
     return Result[str](data=name, meta=meta)
 
 
-async def rename_series_async(name: str, confirm: bool = False) -> Result[str]:
+async def rename_series_async(org: str, name: str, confirm: bool = False) -> Result[str]:
     """Rename a series, or preview it unless confirmed.
 
     Args:
+        org: A declared organisation, e.g. ``demo``.
         name: The series name, e.g. ``"corn"``.
         confirm: ``True`` writes; ``False`` previews.
     """
-    return Result[str](data=name, meta=ResultMeta(source="example", endpoint="rename"))
+    meta = ResultMeta(source="example", endpoint="rename", tenant=org)
+    return Result[str](data=name, meta=meta)
 
 
 create_series = sync(create_series_async)
@@ -643,7 +649,7 @@ TENANT_README = """# xippios-example
 | --- | --- | --- | --- |
 | `series` | `get_series(org, series_id, year=2024)` | `example_get_series` | alpha |
 | none | `list_organisations()` | `example_list_organisations` | alpha |
-| `regions` | `list_regions()` | `example_list_regions` | alpha |
+| `regions` | `list_regions(org)` | `example_list_regions` | alpha |
 | `create`, `rename` | `create_series`, `rename_series` | write server | alpha |
 """
 
@@ -654,41 +660,52 @@ TENANT_SOURCE: dict[str, str | None] = {
 }
 
 
-def test_a_multi_tenant_source_passes_with_its_tenant_list_and_a_declared_task(
-    pytester: pytest.Pytester,
-) -> None:
-    """Every task takes ``org`` but the tenant list and ``list_regions``, which is declared."""
-    write = TENANT_WRITE_TASKS.replace(
-        '__all__ = ["create_series", "rename_series"]',
-        'NO_TENANT_TASKS = frozenset({"rename_series"})\n'
-        '__all__ = ["create_series", "rename_series"]',
-    )
-    result = run_family(pytester, {**TENANT_SOURCE, "src/xippios/example/tasks_write.py": write})
+def test_a_multi_tenant_source_passes_with_its_tenant_list(pytester: pytest.Pytester) -> None:
+    """Every task takes ``org`` but the tenant list, read and write alike."""
+    write = {"src/xippios/example/tasks_write.py": TENANT_WRITE_TASKS}
+    result = run_family(pytester, {**TENANT_SOURCE, **write})
     result.assert_outcomes(passed=FAMILY_TESTS)
+
+
+def _untenanted(text: str, task: str, endpoint: str) -> str:
+    """``text`` with ``task`` taking no ``org``, as a task that touches no tenant would."""
+    for given, taken in (
+        (f"{task}_async(org: str, ", f"{task}_async("),
+        (f"{task}_async(org: str)", f"{task}_async()"),
+        (f'endpoint="{endpoint}", tenant=org', f'endpoint="{endpoint}"'),
+    ):
+        text = text.replace(given, taken)
+    return text
 
 
 def test_a_task_of_a_multi_tenant_source_that_takes_no_tenant_fails_naming_it(
     pytester: pytest.Pytester,
 ) -> None:
-    """The source opts into nothing: a ``Tenants`` registry makes it multi-tenant."""
-    undeclared = TENANT_TASKS.replace('NO_TENANT_TASKS = frozenset({"list_regions"})\n', "")
+    """The source opts into nothing: a ``Tenants`` registry makes it multi-tenant.
+
+    A task its module names in ``NO_TENANT_TASKS`` fails as any other: the declaration left
+    core in 0.5.0 (ADR-0036, amendment 2026-11-24).
+    """
+    regions = _untenanted(TENANT_TASKS, "list_regions", "regions")
+    declared = regions + 'NO_TENANT_TASKS = frozenset({"list_regions"})\n'
+    rename = _untenanted(TENANT_WRITE_TASKS, "rename_series", "rename")
     changes = {
         **TENANT_SOURCE,
-        "src/xippios/example/tasks.py": undeclared,
-        "src/xippios/example/tasks_write.py": TENANT_WRITE_TASKS,
+        "src/xippios/example/tasks.py": declared,
+        "src/xippios/example/tasks_write.py": rename,
     }
     result = run_family(pytester, changes)
     result.assert_outcomes(passed=FAMILY_TESTS - 1, failed=1)
     result.stdout.fnmatch_lines(
         [
             "*every task of a multi-tenant source takes exactly one tenant, org, the parameter "
-            "its Tenants registry declares, required*NO_TENANT_TASKS*",
+            "its Tenants registry declares, required, the tenant list excepted (conventions §7):",
             "*- tasks.list_regions takes no org*",
             "*- tasks_write.rename_series takes no org*",
         ]
     )
     # A registry its tasks module holds, imported or its own, makes it multi-tenant too.
-    own = undeclared.replace(
+    own = regions.replace(
         "from xippios.example._client import TENANTS\n",
         "from xippios.core import Tenants\n\n"
         'TENANTS = Tenants("example", list_var="EXAMPLE_ORGS", param="org", fields=("K",))\n',
@@ -778,7 +795,6 @@ async def list_regions_async() -> Result[list[str]]:
 
 list_regions = sync(list_regions_async)
 list_orgs = list_task(TENANTS, name="list_orgs")
-NO_TENANT_TASKS = frozenset({"list_regions"})
 '''
 
 
@@ -809,20 +825,18 @@ def _tenant_family(
     family.test_family_tasks_take_one_tenant(source)
 
 
-def test_the_tenant_list_a_declared_task_and_an_annotated_tenant_pass(
-    tenant_forms: ModuleType,
-) -> None:
+def test_the_tenant_list_and_an_annotated_tenant_pass(tenant_forms: ModuleType) -> None:
     # get_one takes org first, get_two last: the registry names it, not its place.
-    _tenant_family(tenant_forms, ["get_one", "get_two", "list_regions", "list_orgs"])
+    _tenant_family(tenant_forms, ["get_one", "get_two", "list_orgs"])
 
 
 def test_the_tenant_parameter_is_the_one_the_registry_declares(tenant_forms: ModuleType) -> None:
     """The review's probe: the tasks share invoice_id, yet the registry declares org."""
     with pytest.raises(pytest.fail.Exception) as failed:
-        _tenant_family(tenant_forms, ["get_invoice", "get_journal", "list_regions"])
+        _tenant_family(tenant_forms, ["get_invoice", "get_journal", "list_orgs"])
     assert str(failed.value).splitlines()[1:] == ["- tasks.get_journal takes no org"]
     with pytest.raises(pytest.fail.Exception) as failed:
-        _tenant_family(tenant_forms, ["get_one", "list_regions"], registry="ACCOUNTS")
+        _tenant_family(tenant_forms, ["get_one", "list_orgs"], registry="ACCOUNTS")
     assert str(failed.value).splitlines()[1:] == ["- tasks.get_one takes no account"]
 
 
@@ -843,21 +857,19 @@ def test_a_tenant_parameter_with_a_default_or_of_several_tenants_fails(
     tenant_forms: ModuleType, task: str, problem: str
 ) -> None:
     with pytest.raises(pytest.fail.Exception) as failed:
-        _tenant_family(tenant_forms, ["get_one", "list_regions", task])
+        _tenant_family(tenant_forms, ["get_one", "list_orgs", task])
     assert str(failed.value).splitlines()[1:] == [f"- {problem}"]
 
 
-def test_a_declared_name_outside_all_fails_and_one_tenant_checks_nothing(
+def test_a_declaration_beside_the_tasks_excepts_nothing_and_one_tenant_checks_nothing(
     tenant_forms: ModuleType,
 ) -> None:
+    """``NO_TENANT_TASKS`` is read no more: neither its tasks nor its stale names count."""
     declared = frozenset({"list_regions", "list_old_regions"})
     tenant_forms.NO_TENANT_TASKS = declared  # type: ignore[attr-defined]
     with pytest.raises(pytest.fail.Exception) as failed:
         _tenant_family(tenant_forms, ["get_one", "list_regions"])
-    assert str(failed.value).splitlines()[1:] == [
-        "- NO_TENANT_TASKS of xippios.example_forms.tasks names ['list_old_regions'], not in its "
-        "__all__"
-    ]
+    assert str(failed.value).splitlines()[1:] == ["- tasks.list_regions takes no org"]
     _tenant_family(tenant_forms, ["get_one", "get_each", "list_regions"], multi_tenant=False)
 
 

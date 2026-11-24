@@ -1,13 +1,12 @@
 """Tenants and list_task: declaration in the environment, lookup, one client per tenant.
 
-The tests of the two copies that return to core (ADR-0042, decision 1):
-sdk-cashctrl's ``tests/test_tenants.py``, core's own tests at ``cb8ecdf`` with the close of
-a replaced client (queue row 24 b), and sdk-google-mail's ``list_task(..., source=)``; and
-the variable prefix apart from the source slug (ADR-0036, decision 1). All on
-fictitious sources whose variables no shell sets.
+The tests of the two copies that return to core (ADR-0042, decision 1),
+sdk-cashctrl's ``tests/test_tenants.py`` and core's own tests at ``cb8ecdf``, and the
+variable prefix apart from the source slug (ADR-0036, decision 1). A field's check, a
+client rebuilt on a changed variable and ``list_task(source=)`` left core in 0.5.0
+(ADR-0036, amendment 2026-11-24). All on invented sources whose variables no shell sets.
 """
 
-import asyncio
 import os
 import threading
 from collections.abc import Callable
@@ -63,20 +62,12 @@ def placeholder_api_key() -> None:
     return None
 
 
-def check_subdomain(value: str) -> str:
-    lowered = value.lower()
-    if not lowered.replace("-", "").isalnum():
-        raise ValueError(f"not a subdomain: {value}")  # quotes the value on purpose
-    return lowered
-
-
 def make(**overrides: object) -> Tenants:
     arguments: dict[str, object] = {
         "list_var": LIST_VAR,
         "param": "org",
         "fields": FIELDS,
         "reserved": ("demo",),
-        "validate": {"SUBDOMAIN": check_subdomain},
     }
     arguments.update(overrides)
     return Tenants(SOURCE, **arguments)  # type: ignore[arg-type]
@@ -155,13 +146,6 @@ def test_attributes_and_repr_name_the_scheme_only(monkeypatch: pytest.MonkeyPatc
         ({"reserved": "demo"}, TypeError, "reserved is a sequence"),
         ({"reserved": ("Demo",)}, ValueError, "reserved name 'Demo' is not lower-case"),
         ({"reserved": ("demo", "demo")}, ValueError, "reserved name given twice: demo"),
-        ({"validate": {"HOST": check_subdomain}}, ValueError, "fields not in fields: HOST"),
-        ({"hints": {"HOST": "a host"}}, ValueError, "hints names fields not in fields: HOST"),
-        (
-            {"validate": {}, "hints": {"SUBDOMAIN": "the subdomain alone"}},
-            ValueError,
-            "hints names fields without a validate check: SUBDOMAIN",
-        ),
     ],
 )
 def test_construction_refuses_a_malformed_scheme(
@@ -169,6 +153,22 @@ def test_construction_refuses_a_malformed_scheme(
 ) -> None:
     with pytest.raises(error, match=match):
         make(**overrides)
+
+
+@pytest.mark.parametrize("keyword", ["validate", "hints"])
+def test_the_registry_takes_no_check_of_a_value(keyword: str) -> None:
+    """A field's check is its one source's, on the value ``field`` returns.
+
+    ``validate=`` and ``hints=`` went back to it in 0.5.0 (ADR-0059, decision 2).
+    """
+    with pytest.raises(TypeError, match=keyword):
+        Tenants(
+            "example",
+            list_var="EXAMPLE_TENANTS",
+            param="org",
+            fields=("SUBDOMAIN",),
+            **{keyword: {}},  # type: ignore[arg-type]
+        )
 
 
 def test_construction_refuses_an_empty_source() -> None:
@@ -364,13 +364,16 @@ def test_require_refuses_a_malformed_list(monkeypatch: pytest.MonkeyPatch) -> No
 # -- field --------------------------------------------------------------------------------
 
 
-def test_field_returns_the_value_stripped_and_checked(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(LIST_VAR, "xa")
-    monkeypatch.setenv("FICTIVE_SRC_XA_SUBDOMAIN", "  Acme-Books ")
-    monkeypatch.setenv("FICTIVE_SRC_XA_API_KEY", f" {HIDDEN_KEY}\n")
-    tenants = make()
-    assert tenants.field("xa", "SUBDOMAIN") == "acme-books"  # normalised by the check
-    assert tenants.field("xa", "API_KEY") == HIDDEN_KEY  # no check: stripped only
+def test_field_returns_the_value_stripped_and_unchecked(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The source checks the value's shape itself, its message quoting no value."""
+    monkeypatch.setenv("EXAMPLE_TENANTS", "acme")
+    monkeypatch.setenv("EXAMPLE_ACME_SUBDOMAIN", "  Acme-Books ")
+    monkeypatch.setenv("EXAMPLE_ACME_API_KEY", f" {HIDDEN_KEY}\n")
+    tenants = Tenants(
+        "example", list_var="EXAMPLE_TENANTS", param="org", fields=("SUBDOMAIN", "API_KEY")
+    )
+    assert tenants.field("acme", "SUBDOMAIN") == "Acme-Books"
+    assert tenants.field("acme", "API_KEY") == HIDDEN_KEY
 
 
 @pytest.mark.parametrize("value", [None, "", "   "])
@@ -384,70 +387,6 @@ def test_a_missing_field_names_the_variable(
         make().field("xa", "SUBDOMAIN")
     expected = "FICTIVE_SRC_XA_SUBDOMAIN is not set; export the SUBDOMAIN of tenant 'xa'"
     assert str(info.value) == expected
-
-
-@pytest.mark.parametrize("value", ["evil.com/x?", "a_b", f"{HIDDEN_SUBDOMAIN}.x"])
-def test_a_refused_value_names_the_variable_and_not_the_value(
-    monkeypatch: pytest.MonkeyPatch, value: str
-) -> None:
-    monkeypatch.setenv(LIST_VAR, "xa")
-    monkeypatch.setenv("FICTIVE_SRC_XA_SUBDOMAIN", value)
-    with pytest.raises(ConfigError) as info:
-        make().field("xa", "SUBDOMAIN")
-    message = str(info.value)
-    assert message == "FICTIVE_SRC_XA_SUBDOMAIN does not hold a valid SUBDOMAIN for tenant 'xa'"
-    assert value not in message
-    assert info.value.__cause__ is None
-    assert info.value.__context__ is None  # the check's error, which quotes it, is not kept
-
-
-HINT = "set the subdomain alone, e.g. acme for acme.example.org"
-
-
-@pytest.mark.parametrize("value", ["evil.com/x?", f"{HIDDEN_SUBDOMAIN}.x"])
-def test_a_refused_value_ends_with_the_field_s_hint_and_not_the_value(
-    monkeypatch: pytest.MonkeyPatch, value: str
-) -> None:
-    monkeypatch.setenv(LIST_VAR, "xa")
-    monkeypatch.setenv("FICTIVE_SRC_XA_SUBDOMAIN", value)
-    with pytest.raises(ConfigError) as info:
-        make(hints={"SUBDOMAIN": HINT}).field("xa", "SUBDOMAIN")
-    message = str(info.value)
-    assert message == (
-        "FICTIVE_SRC_XA_SUBDOMAIN does not hold a valid SUBDOMAIN for tenant 'xa'; " + HINT
-    )
-    assert value not in message
-    assert "not a subdomain" not in message  # the check's own text quotes the value
-    assert info.value.__context__ is None
-
-
-def test_a_hint_is_for_a_refused_value_only(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(LIST_VAR, "xa")
-    tenants = make(hints={"SUBDOMAIN": HINT})
-    with pytest.raises(ConfigError) as info:
-        tenants.field("xa", "SUBDOMAIN")
-    assert str(info.value) == (
-        "FICTIVE_SRC_XA_SUBDOMAIN is not set; export the SUBDOMAIN of tenant 'xa'"
-    )
-    monkeypatch.setenv("FICTIVE_SRC_XA_SUBDOMAIN", "Acme")
-    assert tenants.field("xa", "SUBDOMAIN") == "acme"
-
-
-def test_a_check_failing_with_any_exception_refuses_the_value(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def broken(value: str) -> str:
-        raise TypeError(f"cannot check {value}")  # quotes the value on purpose
-
-    monkeypatch.setenv(LIST_VAR, "xa")
-    monkeypatch.setenv("FICTIVE_SRC_XA_SUBDOMAIN", HIDDEN_SUBDOMAIN)
-    with pytest.raises(ConfigError) as info:
-        make(validate={"SUBDOMAIN": broken}).field("xa", "SUBDOMAIN")
-    assert str(info.value) == (
-        "FICTIVE_SRC_XA_SUBDOMAIN does not hold a valid SUBDOMAIN for tenant 'xa'"
-    )
-    assert info.value.__cause__ is None
-    assert info.value.__context__ is None
 
 
 def test_field_of_an_undeclared_tenant_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -479,12 +418,12 @@ class Builder:
         self.built.append(name)
         subdomain = self.tenants.field(name, "SUBDOMAIN")
         config = ClientConfig(
-            source=SOURCE,
+            source=self.tenants.source,
             version="1",
             base_url=f"https://{subdomain}.example.test/api",
             rate_limit=RATE,
         )
-        auth = BasicKeyAuth(self.tenants.var(name, "API_KEY"), source=SOURCE)
+        auth = BasicKeyAuth(self.tenants.var(name, "API_KEY"), source=self.tenants.source)
         return AsyncClient(config, auth=auth, transport=self.transport)
 
 
@@ -505,30 +444,32 @@ def test_each_tenant_has_its_own_client(monkeypatch: pytest.MonkeyPatch) -> None
     assert a._bucket is not b._bucket
 
 
-@pytest.mark.parametrize("variable", ["FICTIVE_SRC_XA_SUBDOMAIN", "FICTIVE_SRC_XA_API_KEY"])
-def test_a_changed_value_builds_a_new_client(
-    monkeypatch: pytest.MonkeyPatch, variable: str
+@pytest.mark.parametrize("field", ["SUBDOMAIN", "API_KEY"])
+def test_a_changed_variable_keeps_the_client_until_reset(
+    monkeypatch: pytest.MonkeyPatch, field: str
 ) -> None:
-    monkeypatch.setenv(LIST_VAR, "xa")
-    declare(monkeypatch, "xa")
-    tenants = make()
+    """One client per tenant: ``reset()`` is the one way to a new one.
+
+    No code of the family changes a tenant's variables after start, so the registry reads
+    them when it builds and never compares them again (ADR-0036, amendment 2026-11-24).
+    """
+    tenants = Tenants(
+        "example", list_var="EXAMPLE_TENANTS", param="org", fields=("SUBDOMAIN", "API_KEY")
+    )
+    monkeypatch.setenv("EXAMPLE_TENANTS", "acme")
+    monkeypatch.setenv("EXAMPLE_ACME_SUBDOMAIN", "acme")
+    monkeypatch.setenv("EXAMPLE_ACME_API_KEY", "acme-placeholder")  # pragma: allowlist secret
     build = Builder(tenants)
-    first = tenants.client_for("xa", build)
-    monkeypatch.setenv(variable, "other")
-    second = tenants.client_for("xa", build)
+    first = tenants.client_for("acme", build)
+    monkeypatch.setenv(tenants.var("acme", field), "other")
+    assert tenants.client_for("acme", build) is first
+    assert build.built == ["acme"]
+    tenants.reset()
+    second = tenants.client_for("acme", build)
     assert second is not first
-    assert tenants.client_for("xa", build) is second
-    assert build.built == ["xa", "xa"]
-
-
-def test_a_variable_set_later_builds_a_new_client(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(LIST_VAR, "xa")
-    declare(monkeypatch, "xa", key=False)
-    tenants = make()
-    build = Builder(tenants)
-    first = tenants.client_for("xa", build)
-    monkeypatch.setenv("FICTIVE_SRC_XA_API_KEY", "")
-    assert tenants.client_for("xa", build) is not first  # unset and empty differ
+    assert build.built == ["acme", "acme"]
+    if field == "SUBDOMAIN":
+        assert second.config.base_url == "https://other.example.test/api"
 
 
 def test_the_cache_keeps_no_value(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -548,18 +489,16 @@ def test_client_for_refuses_an_undeclared_tenant_without_building() -> None:
     assert build.built == []
 
 
-@pytest.mark.parametrize("value", [None, "", "evil.com/x?"])
-def test_a_missing_or_malformed_value_is_a_config_error(
+@pytest.mark.parametrize("value", [None, "", "   "])
+def test_a_missing_value_is_a_config_error(
     monkeypatch: pytest.MonkeyPatch, value: str | None
 ) -> None:
     monkeypatch.setenv(LIST_VAR, "xa")
     if value is not None:
         monkeypatch.setenv("FICTIVE_SRC_XA_SUBDOMAIN", value)
     tenants = make()
-    with pytest.raises(ConfigError, match="FICTIVE_SRC_XA_SUBDOMAIN") as info:
+    with pytest.raises(ConfigError, match="FICTIVE_SRC_XA_SUBDOMAIN is not set"):
         tenants.client_for("xa", Builder(tenants))
-    if value:
-        assert value not in str(info.value)
 
 
 @pytest.mark.anyio
@@ -592,82 +531,20 @@ def test_reset_drops_every_client(monkeypatch: pytest.MonkeyPatch) -> None:
     assert build.built == ["xa", "xa"]
 
 
-class Closes:
-    """Records, on ``client``, every ``aclose`` call and the loop's thread it ran on."""
-
-    def __init__(self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
-        self.threads: list[str] = []
-
-        async def aclose() -> None:
-            asyncio.get_running_loop()  # an aclose that runs outside a loop fails here
-            self.threads.append(threading.current_thread().name)
-
-        monkeypatch.setattr(client, "aclose", aclose)
-
-
-@pytest.mark.anyio
-async def test_a_replaced_client_is_closed_on_the_running_loop(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Queue row 24 (b): a changed value builds a new client and closes the one it replaces."""
-    monkeypatch.setenv(LIST_VAR, "xa")
-    declare(monkeypatch, "xa")
-    tenants = make()
-    build = Builder(tenants)
-    first = tenants.client_for("xa", build)
-    closes = Closes(first, monkeypatch)
-    assert tenants.client_for("xa", build) is first
-    monkeypatch.setenv("FICTIVE_SRC_XA_API_KEY", "another-placeholder")  # pragma: allowlist secret
-    second = tenants.client_for("xa", build)
-    assert second is not first
-    assert closes.threads == [], "scheduled on this loop, run once the caller yields"
-    await asyncio.sleep(0)
-    assert closes.threads == [threading.current_thread().name]
-    await asyncio.sleep(0)  # the done callback runs one step later
-    assert tenants._closing == set(), "the task is let go once it is done"
-
-
-def test_a_replaced_client_is_closed_on_core_s_loop_outside_any_loop(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv(LIST_VAR, "xa")
-    declare(monkeypatch, "xa")
-    tenants = make()
-    build = Builder(tenants)
-    first = tenants.client_for("xa", build)
-    closes = Closes(first, monkeypatch)
-    monkeypatch.setenv("FICTIVE_SRC_XA_SUBDOMAIN", "other")
-    assert tenants.client_for("xa", build) is not first
-    assert closes.threads == ["xippios-core-loop"], "the loop every sync facade uses"
-
-
-@pytest.mark.anyio
-async def test_a_replaced_client_releases_its_pool(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The real ``aclose``: the pool the replaced client used on this loop is closed."""
-    monkeypatch.setenv(LIST_VAR, "xa")
-    declare(monkeypatch, "xa")
-    tenants = make()
-    transport = httpx.MockTransport(lambda request: httpx.Response(200, json={}))
-    build = Builder(tenants, transport)
-    first = tenants.client_for("xa", build)
-    await first.get("/fiscalperiod/list.json")
-    (pool,) = first._pools.values()
-    monkeypatch.setenv("FICTIVE_SRC_XA_SUBDOMAIN", "other")
-    tenants.client_for("xa", build)
-    await asyncio.sleep(0)
-    assert pool.is_closed
-
-
 def test_reset_drops_without_closing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A dropped client's pools go with it: nothing awaits its ``aclose``."""
     monkeypatch.setenv(LIST_VAR, "xa")
     declare(monkeypatch, "xa")
     tenants = make()
     first = tenants.client_for("xa", Builder(tenants))
-    closes = Closes(first, monkeypatch)
+    closed: list[AsyncClient] = []
+
+    async def aclose() -> None:
+        closed.append(first)
+
+    monkeypatch.setattr(first, "aclose", aclose)
     tenants.reset()
-    assert closes.threads == []
+    assert closed == []
 
 
 def test_client_for_builds_once_under_concurrent_calls(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -710,21 +587,19 @@ def test_list_task_returns_the_names_in_the_envelope(monkeypatch: pytest.MonkeyP
     assert task().data == ["xc", "demo"]  # read on every call
 
 
-def test_list_task_names_the_source_it_is_given(monkeypatch: pytest.MonkeyPatch) -> None:
-    """sdk-google-mail's ``source=``: a registry several sources share names each one's."""
+def test_list_task_names_its_registry_s_source(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``meta.source`` is the registry's slug, whatever prefix its variables carry."""
     monkeypatch.setenv(MAIL_LIST_VAR, "work")
-    tenants = Tenants(
-        "fictive",
-        list_var=MAIL_LIST_VAR,
-        param="account",
-        fields=("REFRESH_TOKEN",),
-        reserved=("demo",),
-    )
-    task = list_task(tenants, name="list_accounts", source=MAIL_SOURCE)
-    result = task()
+    result = list_task(make_mail(), name="list_accounts")()
     assert result.data == ["work"]
     assert (result.meta.source, result.meta.endpoint) == (MAIL_SOURCE, "list_accounts")
-    assert list_task(make_mail(), name="list_accounts")().meta.source == MAIL_SOURCE
+
+
+def test_list_task_takes_no_other_source() -> None:
+    """``source=`` had no caller and left core in 0.5.0 (ADR-0036, amendment 2026-11-24)."""
+    tenants = Tenants("example", list_var="EXAMPLE_TENANTS", param="org", fields=("API_KEY",))
+    with pytest.raises(TypeError, match="source"):
+        list_task(tenants, name="list_tenants", source="other")  # type: ignore[call-arg]
 
 
 def test_list_task_marks_its_task_for_a_bound_server() -> None:
