@@ -261,6 +261,9 @@ class RenewingBearerAuth(httpx.Auth):
             source whose upstream refuses a bearer with another status too sets its own on
             the class.
         source: As given.
+        margin: Seconds before the bearer's ``expires_in`` runs out that it is renewed,
+            ``RENEWAL_MARGIN``, which no constructor argument changes; two sources' tests
+            read it (ADR-0059, decision 2).
     """
 
     renew_on: ClassVar[frozenset[int]] = frozenset({401})
@@ -277,6 +280,7 @@ class RenewingBearerAuth(httpx.Auth):
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self.source = source
+        self.margin = RENEWAL_MARGIN
         self._clock = clock
         self._given = {
             name: value if isinstance(value, SecretStr) else SecretStr(value)
@@ -423,7 +427,7 @@ class RenewingBearerAuth(httpx.Auth):
         if response.status_code != 200:
             raise self.token_refused(response)
         bearer = self.read_token(response)
-        lapses_at = self._clock() + max(0.0, bearer.expires_in - RENEWAL_MARGIN)
+        lapses_at = self._clock() + max(0.0, bearer.expires_in - self.margin)
         with self._bearer_lock:
             self._bearer = bearer.token
             self._lapses_at = lapses_at

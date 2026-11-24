@@ -2,9 +2,9 @@
   leaves, and core keeps the other timeouts at 10 s each. What no source calls leaves the
   client: `decode_text`, the response branch and `delimiter=` of `decode_csv`, which reads a
   comma-separated file or text stream, `decode_json` from the two lists, while it stays in its
-  module, `RenewingBearerAuth(margin=)` with its attribute, the bearer renewed 60 s before it
-  lapses, the client's `async with`, whose place `aclose()` takes, and the second strip of a
-  cached answer's wire headers.
+  module, `RenewingBearerAuth(margin=)`, the bearer renewed 60 s before it lapses and its
+  attribute `margin` kept at that value, the client's `async with`, whose place `aclose()`
+  takes, and the second strip of a cached answer's wire headers.
   (ADR-0059, §6, §7, https://github.com/xippios/sdk-core/issues/475)
   - Hand-apply: `src/xippios/comtrade/_client.py` (sdk-comtrade) — at `:32`, `:57`, `:204`
     and `:233`, `TIMEOUTS = Timeouts(read=180.0)` with `timeouts=TIMEOUTS` becomes
@@ -37,3 +37,6 @@
     release with the family check's contract tests
     (https://github.com/xippios/sdk-core/issues/477), so no source edits it first — until
     it leaves, mypy fails at `timeouts`.
+    `tests/test_client.py` (sdk-faostat `:191`, `:205`) and `tests/test_auth.py`
+    (sdk-google-mail `:113`) — nothing: they read `auth.margin`, which stays at
+    `RENEWAL_MARGIN` — only the constructor's `margin=` leaves, which neither passes.

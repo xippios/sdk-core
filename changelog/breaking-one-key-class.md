@@ -21,15 +21,15 @@
     `BearerAuth(API_KEY_ENV, ...)` become `KeyAuth(API_KEY_ENV, location="bearer", ...)`,
     `key=WRONG_KEY` kept — `tests/test_record_fixture.py` fails at the script's import, and
     mypy over `scripts/` at the name.
-    `src/xippios/cashctrl/_client.py` (sdk-cashctrl) — at `:36` and `:384`,
+    `src/xippios/cashctrl/_client.py` (sdk-cashctrl) — at `:36` and `:393`,
     `BasicKeyAuth(TENANTS.var(org, "API_KEY"), source=SOURCE)` becomes
     `KeyAuth(TENANTS.var(org, "API_KEY"), location="basic", source=SOURCE)` with its import
     — until it stands every test fails at the import of `_client.py`.
-    `scripts/record_fixture.py` (sdk-cashctrl) — at `:184` and `:1112`,
+    `scripts/record_fixture.py` (sdk-cashctrl) — at `:197` and `:1165`,
     `BasicKeyAuth(key_var, key=..., source=SOURCE)` becomes `KeyAuth(key_var,
     location="basic", key=..., source=SOURCE)` — `tests/test_record_fixture.py` fails at the
     script's import, and mypy over `scripts/` at the name.
-    `tests/test_client.py` (sdk-usda-gats `:132`, sdk-usda-esr `:115`) — `auth.header ==
-    "X-Api-Key"` becomes `(auth.location, auth.name) == ("header", "X-Api-Key")` — the
-    gateway's auth is a `KeyAuth`, whose `name` holds the header, and the test fails at
-    `header`.
+    `tests/test_client.py` (sdk-usda-gats `:132`, sdk-usda-esr `:116`, sdk-usda-psd `:91`) —
+    `auth.header == "X-Api-Key"` becomes `(auth.location, auth.name) == ("header",
+    "X-Api-Key")` — the gateway's auth is a `KeyAuth`, whose `name` holds the header, and the
+    test fails at `header`.
