@@ -1,6 +1,6 @@
 # ADR-0042: The recorder extras stay the source's, and the multi-tenant kit returns to core
 
-Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0024 · Amended 2026-11-21 by https://github.com/xippios/sdk-core/issues/364
+Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0024 · Amended 2026-11-21 by https://github.com/xippios/sdk-core/issues/364 · Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/483
 
 ## Context
 
@@ -108,3 +108,13 @@ one send is public, `send_once`. Decision 6 stands for the kit's return in 0.4.0
 JSON body's decoded strings returns for the values a rewrite step replaced (ADR-0048, decision 2),
 while `Scrub(host=...)`, `Scrub(rewrite=...)`, the percent-encoded matching and the host check stay
 out. Decision 3's plain verify is the rule by which ADR-0048 checks a step's values.
+
+Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/483: in decision 1 the
+percent-encoded matching of a secret returns to core with the form behind a JSON escape, by part 4
+of the answer, while `Scrub(host=...)`, `Scrub(rewrite=...)` and the host check stay out, and in
+decision 3 `Scrub` replaces and verifies each value it names or reads in its every form, each
+character as given, percent-encoded in either hex case or behind a JSON escape, so that a recording
+whose secret appears only so is refused by core, and a recording through `response_secrets` goes
+through `record`, the sync function that takes the place of `record_sync` (ADR-0066, decisions 8
+and 11), while decisions 2, 4, 5 and 6, the rest of decisions 1 and 3, the consequences and the
+amendment of 2026-11-21 but for its percent-encoded matching stand as written.

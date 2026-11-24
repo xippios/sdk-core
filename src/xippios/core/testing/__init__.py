@@ -3,14 +3,14 @@
 Six things live here: the pytest plugin, which gates live tests and keeps the run
 offline (no network for the session; no rate-limit wait and a placeholder key in every
 test not marked live; ADR-0035); fixture recording, one request sent once and read up
-to a bound, a final answer only, with secrets scrubbed in memory and verified before the
-write (``Scrub``), a large answer cut on request (``max_bytes=``, ADR-0040), a source's
-own rewrite step run and checked before the write (``rewrite=``, a ``Rewrite``), the one
-send without the write (``send_once``) and the writer (``write_fixture``, ``fixture_text``;
-ADR-0048), and the recording of every exchange of a task, all written or none
-(``record_task``; ADR-0057); fixture replay through ``respx``, with what was sent and
-recorded as plain values (``sent_urls``, ``sent_query``, ``sent_bodies``,
-``recorded_query``, ``response_from_fixture``);
+to a bound, a final answer only, with secrets scrubbed in memory in their every encoded
+form and verified before the write (``Scrub``), a large JSON array cut on request
+(``max_bytes=``), a source's own rewrite step run and checked before the write
+(``rewrite=``, a ``Rewrite``), the one send without the write (``send_once``) and the
+writer (``write_fixture``, ``fixture_text``), ``record`` and ``send_once`` sync under
+their plain names, their ``async_fn`` awaited on a loop (ADR-0066); fixture replay
+through ``respx``, with what was sent and recorded as plain values (``sent_urls``,
+``sent_query``, ``sent_bodies``, ``recorded_query``, ``response_from_fixture``);
 helpers for adapters (``mcp_call``, ``mcp_call_text``, ``assert_write_tools`` for a write
 server), for times read around a call (``assert_time_between``) and for a multi-tenant
 source's environment (``keep_reserved_tenants``); the family conformance check,
@@ -28,7 +28,7 @@ Enable the plugin in a repo's ``tests/conftest.py``::
     pytest_plugins = ["xippios.core.testing.plugin"]
 
 This package exports what consumers import. The pieces the plugin and the recorder
-are built from (``replay``, ``mount_fixture``, ``REQUEST_ID_HEADERS``, the ``scrub_*``
+are built from (``replay``, ``REQUEST_ID_HEADERS``, the ``scrub_*``
 functions, ``LIVE_ENV``, ``PLACEHOLDER_KEY``, ...) are importable from their modules,
 ``xippios.core.testing.replay``, ``.fixtures``, ``.scrub`` and ``.plugin``.
 
@@ -63,14 +63,7 @@ from xippios.core.testing.fixtures import (
     response_from_fixture,
     write_fixture,
 )
-from xippios.core.testing.record import (
-    record,
-    record_sync,
-    record_task,
-    record_task_sync,
-    send_once,
-    send_once_sync,
-)
+from xippios.core.testing.record import record, send_once
 from xippios.core.testing.replay import ReplayFixture, sent_bodies, sent_query, sent_urls
 from xippios.core.testing.scrub import REDACTED, Scrub
 
@@ -93,13 +86,9 @@ __all__ = [
     "mcp_call",
     "mcp_call_text",
     "record",
-    "record_sync",
-    "record_task",
-    "record_task_sync",
     "recorded_query",
     "response_from_fixture",
     "send_once",
-    "send_once_sync",
     "sent_bodies",
     "sent_query",
     "sent_urls",

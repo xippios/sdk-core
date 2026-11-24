@@ -1,10 +1,11 @@
 """The sentences of `docs/conventions.md` that the cases of ADR-0043 stand on, and ADR-0055's,
-the preview rule of ADR-0050, the recording of a task's exchanges of ADR-0057, the names of a
+the preview rule of ADR-0050, the recorder's names, a task's fixtures and a secret's encoded
+forms of ADR-0066, the names of a
 request's country codes of ADR-0056, the snapshot script's form, the mark of FETCHED.md's form
 and the one comparison of a snapshot of ADR-0062, the attribution check of ADR-0046, decision 7,
 the refusal of a hinted value of ADR-0041's amendment of 2026-11-22, the two sentences of a
 period series that ADR-0054's amendment of 2026-11-22 words, a recorder's field of a request of
-ADR-0048, decision 7, the review checklist's sentence that holds an adoption against the two
+ADR-0066, decision 7, the review checklist's sentence that holds an adoption against the two
 lists of the handover's section for the release, ADR-0058's decision 2, what a core patch keeps
 compatible, ADR-0059's rule for code with one consumer, as the definition of done, the
 review checklist and §15 name it, and the publisher's shared package of ADR-0065 in §7 and §12.
@@ -981,51 +982,51 @@ def test_the_preview_record_keeps_its_question() -> None:
     assert (found["decided_by"], found["amended"]) == (PREVIEW_QUESTION, amended)
 
 
-# §10, the layout of fixtures and the recorder: the recording of every exchange of a task
-# (sdk-core#174, decided by the human in https://github.com/xippios/sdk-core/issues/376).
+# §10, the layout of fixtures and the recorder: a task's fixtures, the recorder's plain names and
+# a secret's encoded forms (decided by the human in https://github.com/xippios/sdk-core/issues/483).
 
-TASK_RECORD = "ADR-0057"
+RECORDER_RECORD = "ADR-0066"
 
-TASK_RULES = [
+RECORDER_RULES = [
     pytest.param(
         "The exchanges of one recording of a task are numbered in the order the task made them",
         (
             "the first as `<case>.json`",
             "from the second on, as `<case>_<k>.json`",
-            "beyond its last exchange writes nothing",
-            "ADR-0057, decision 6",
+            "ADR-0066, decision 10",
         ),
         id="s10-the-numbering",
     ),
     pytest.param(
-        "`record_task` records every exchange that a task makes through any client",
-        (
-            "each sent once",
-            "none answered from the cache",
-            "writes all of them or none",
-            "no token request inside an auth flow",
-            "refuses a task that downloads",
-        ),
-        id="s10-what-a-task-s-recording-holds",
+        "`record` and `send_once` are the sync functions under their plain names",
+        ("`record.async_fn`", "`send_once.async_fn`", "ADR-0066, decision 8"),
+        id="s10-the-plain-names",
     ),
     pytest.param(
-        "`record_task` reads every answer of a task whole",
-        ("as the task's client reads it", "`max_read_bytes` bounds none of them"),
-        id="s10-a-task-s-answers-read-whole",
+        "The scrub replaces and verifies each such value in its every form",
+        ("percent-encoded", "behind a JSON escape", "ADR-0066, decision 11"),
+        id="s10-a-secret-s-encoded-forms",
     ),
 ]
 
 
-@pytest.mark.parametrize(("phrase", "names"), TASK_RULES)
-def test_each_rule_of_a_task_s_recording_is_one_sentence_that_cites_adr_0057(
+@pytest.mark.parametrize(("phrase", "names"), RECORDER_RULES)
+def test_each_rule_of_the_recorder_is_one_sentence_that_cites_adr_0066(
     phrase: str, names: tuple[str, ...]
 ) -> None:
     rule = sentence(section(10), phrase)
-    for name in (TASK_RECORD, *names):
+    for name in (RECORDER_RECORD, *names):
         assert name in rule, f"§10: {rule!r} does not name {name!r}"
 
 
-def test_a_recorder_redacts_a_field_of_a_request_and_drops_none_by_adr_0048() -> None:
+def test_the_recording_of_a_task_is_no_rule_of_core_any_more() -> None:
+    # ADR-0066, decision 9: record_task went back to its one source, and its refusal of a
+    # numbered file beyond the last exchange with it.
+    for gone in ("record_task", "ADR-0057", "ADR-0048", "beyond its last exchange writes nothing"):
+        assert gone not in section(10), f"§10 still names {gone!r}"
+
+
+def test_a_recorder_redacts_a_field_of_a_request_and_drops_none_by_adr_0066() -> None:
     # §10, the recorder's rewrite step: what it writes for a field of a request that it must
     # not keep, the maintainer's answer on https://github.com/xippios/sdk-core/issues/439. It
     # drops none of a request's fields, and says nothing of an answer's.
@@ -1033,7 +1034,7 @@ def test_a_recorder_redacts_a_field_of_a_request_and_drops_none_by_adr_0048() ->
     for name in ("of a request that it must not keep", "drops none of them", "key by key"):
         assert name in rule, f"§10: {rule!r} does not name {name!r}"
     assert "drops no field" not in rule, f"§10: {rule!r} reaches an answer's fields"
-    assert "ADR-0048, decision 7" in rule, f"§10: {rule!r} does not cite its record"
+    assert "ADR-0066, decision 7" in rule, f"§10: {rule!r} does not cite its record"
 
 
 # §3, the snapshot: the script's form, the mark of FETCHED.md's form, and no check of a committed

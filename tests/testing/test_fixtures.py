@@ -1,6 +1,7 @@
 import base64
 import gzip
 import hashlib
+import inspect
 import json
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,7 @@ from xippios.core.testing import (
     fixture_path,
     fixture_text,
     load_fixture,
+    record,
     write_fixture,
 )
 from xippios.core.testing.fixtures import REQUEST_ID_HEADERS
@@ -81,11 +83,13 @@ def test_write_fixture_writes_a_rewritten_fixture_as_record_lays_it_out(tmp_path
 
 
 def test_the_marks_are_written_for_a_cut_or_a_sample_body_only() -> None:
-    full = b"a,b\n" + b"1,2\n" * 40
-    cut = fixture_from_response(_answer(full, "text/csv"), max_bytes=12)
+    rows = ("[" + ", ".join(f'{{"n": {n}}}' for n in range(40)) + "]").encode()
+    cut = fixture_from_response(_answer(rows, "application/json"), max_bytes=12)
     written = json.loads(fixture_text(cut))["response"]
     assert MARKS & written.keys() == {"truncated", "original_bytes", "original_count", "sha256"}
-    assert (written["truncated"], written["original_count"]) == (True, None)
+    assert (written["truncated"], written["original_count"]) == (True, 40)
+
+    full = b"a,b\n" + b"1,2\n" * 40
 
     whole = fixture_from_response(_answer(full, "text/csv"))
     marks = {
@@ -239,20 +243,6 @@ def _answer(content: bytes, content_type: str) -> httpx.Response:
     return httpx.Response(200, content=content, headers=headers, request=request)
 
 
-def test_max_bytes_cuts_a_text_at_a_character_boundary(tmp_path: Path) -> None:
-    # Row 46 (sdk-usda-nass): a bulk text file of hundreds of MB as a fixture.
-    full = "Région\tValue\n" + "Île-de-France\t1\n" * 50
-    fixture = fixture_from_response(_answer(full.encode(), "text/plain"), max_bytes=15)
-    assert fixture.response.body == "Région\tValue\n"  # 14 bytes: byte 15 is half of "Î"
-    response = fixture.response
-    assert (response.truncated, response.original_bytes) == (True, len(full.encode()))
-    assert response.sha256 == hashlib.sha256(full.encode()).hexdigest()
-    assert response.original_count is None
-    path = tmp_path / "f.json"
-    path.write_text(json.dumps(fixture.model_dump(mode="json")))
-    assert load_fixture(path) == fixture
-
-
 def test_max_bytes_cuts_a_json_array_at_an_element_boundary_of_its_text() -> None:
     # Row 43 (sdk-usda-gats): list fixtures over the 256 KiB cap. Upstream's text is kept:
     # 1.50 stays 1.50 and a long figure keeps its digits, as a Decimal parser needs.
@@ -267,21 +257,6 @@ def test_max_bytes_cuts_a_json_array_at_an_element_boundary_of_its_text() -> Non
         fixture_from_response(_answer(body.encode(), "application/json"), max_bytes=20)
 
 
-def test_max_bytes_never_keeps_part_of_a_secret() -> None:
-    request = httpx.Request("GET", "https://api.example.test/v1/export")
-    answer = httpx.Response(200, content=b"name\nacme-tenant\n" * 20, request=request)
-    scrub = Scrub(secrets=["acme-tenant"])
-    fixture = fixture_from_response(answer, scrub=scrub, max_bytes=13)  # "...\nacme-ten"
-    assert fixture.response.body == "name\n"
-    fixture = fixture_from_response(answer, scrub=scrub, max_bytes=19)  # "...-tenant\nna"
-    assert fixture.response.body == f"name\n{REDACTED}\nna"
-    first = httpx.Response(200, content=b"acme-tenant\n" * 20, request=request)
-    with pytest.raises(ValueError, match=r"^max_bytes: a cut at 5 bytes keeps nothing"):
-        fixture_from_response(first, scrub=scrub, max_bytes=5)
-    with pytest.raises(ValueError, match=r"^max_bytes: a cut at 1 bytes keeps nothing"):
-        fixture_from_response(_answer("Île".encode() * 10, "text/plain"), max_bytes=1)
-
-
 def _envelope(rows: str) -> str:
     """Quick Stats' shape: the rows under ``data`` between two other members."""
     return '{"count": 50, "data": [\n' + rows + '], "note": "Île"}\n'
@@ -293,35 +268,8 @@ ROWS = '  {"id": 0, "v": 1.50},\n  {"id": 1, "v": 2.50},\n' + "".join(
 ENVELOPE = _envelope(ROWS + '  {"id": 49}\n')
 
 
-def test_max_bytes_cuts_the_array_a_top_level_key_names() -> None:
-    # Row 127 (sdk-usda-nass): Quick Stats answers {"data": [...]}, and its recorded chunks
-    # were too large to keep; the rest of the object stays as upstream wrote it.
-    kept = _envelope('  {"id": 0, "v": 1.50},\n  {"id": 1, "v": 2.50}')  # cut after the second
-    answer = _answer(ENVELOPE.encode(), "application/json")
-    fixture = fixture_from_response(answer, max_bytes=len(kept.encode()), array_key="data")
-    response = fixture.response
-    assert response.body == kept
-    assert json.loads(response.body)["data"][1] == {"id": 1, "v": 2.5}
-    assert (response.truncated, response.original_count) == (True, 50)
-    assert response.original_bytes == len(ENVELOPE.encode())
-    assert response.sha256 == hashlib.sha256(ENVELOPE.encode()).hexdigest()
-    one_byte_less = fixture_from_response(
-        answer, max_bytes=len(kept.encode()) - 1, array_key="data"
-    )
-    assert json.loads(one_byte_less.response.body)["data"] == [{"id": 0, "v": 1.5}]
-
-
 def test_max_bytes_keeps_the_last_elements_on_request() -> None:
     # Row 127 (sdk-usda-psd): a list ordered oldest first lost the years its tests read.
-    kept = '{"count": 50, "data": [\n  {"id": 48, "v": 2.00},\n  {"id": 49}\n], "note": "Île"}\n'
-    answer = _answer(ENVELOPE.encode(), "application/json")
-    fixture = fixture_from_response(
-        answer, max_bytes=len(kept.encode()), array_key="data", keep="last"
-    )
-    assert fixture.response.body == kept
-    assert json.loads(fixture.response.body)["data"][-1] == {"id": 49}  # upstream's last
-    assert (fixture.response.truncated, fixture.response.original_count) == (True, 50)
-
     array = (
         "[\n" + "".join(f'  {{"year": {1960 + i}}},\n' for i in range(63)) + '  {"year": 2023}\n]\n'
     )
@@ -329,35 +277,35 @@ def test_max_bytes_keeps_the_last_elements_on_request() -> None:
         _answer(array.encode(), "application/json"), max_bytes=40, keep="last"
     )
     assert last.response.body == '[\n  {"year": 2022},\n  {"year": 2023}\n]\n'
-    assert last.response.original_count == 64
+    assert (last.response.truncated, last.response.original_count) == (True, 64)
+
+
+def test_max_bytes_cuts_a_json_array_alone() -> None:
+    # ADR-0066, decision 12: a text that is not JSON and a JSON object over the bound are
+    # recorded as a small real answer, and array_key is gone with the cut of an object.
+    text = ("Région\tValue\n" + "Île-de-France\t1\n" * 50).encode()
+    with pytest.raises(ValueError, match=r"^max_bytes: a text that is not JSON cannot be cut"):
+        fixture_from_response(_answer(text, "text/plain"), max_bytes=15)
+    with pytest.raises(ValueError, match=r"^max_bytes: a JSON body that is not an array cannot"):
+        fixture_from_response(_answer(ENVELOPE.encode(), "application/json"), max_bytes=50)
+    for function in (fixture_from_response, record):
+        assert "array_key" not in inspect.signature(function).parameters
 
 
 @pytest.mark.parametrize(
     ("body", "options", "reason"),
     [
-        (ENVELOPE, {}, "a JSON object is cut by the array that a top-level key names"),
-        (ENVELOPE, {"keep": "last"}, "a JSON object is cut by the array that a top-level key"),
-        (ENVELOPE, {"array_key": "rows"}, "the JSON object has no top-level key 'rows'"),
-        (ENVELOPE, {"array_key": "count"}, "the top-level key 'count' holds no JSON array"),
-        ("[" + "1, " * 30 + "2]", {"array_key": "data"}, "array_key names a top-level key of"),
-        ("a\tb\n" * 30, {"array_key": "data"}, "array_key names a top-level key of a JSON"),
-        ("a\tb\n" * 30, {"keep": "last"}, "keep='last' keeps the last elements of a JSON array"),
-        ('"' + "x" * 60 + '"', {}, "a JSON body that is not an array or an object"),
+        (ENVELOPE, {}, "a JSON body that is not an array cannot be cut"),
+        (ENVELOPE, {"keep": "last"}, "a JSON body that is not an array cannot be cut"),
+        ('"' + "x" * 60 + '"', {}, "a JSON body that is not an array cannot be cut"),
+        ("a\tb\n" * 30, {}, "a text that is not JSON cannot be cut"),
+        ("a\tb\n" * 30, {"keep": "last"}, "a text that is not JSON cannot be cut"),
         (
-            _envelope('  {"id": 0, "v": 1.50}\n'),
-            {"array_key": "data"},
-            "the JSON array's first element alone is over 50 bytes with the rest of the object",
+            '[{"id": 0, "v": "' + "x" * 60 + '"}]',
+            {"keep": "last"},
+            "the JSON array's last element alone is over 50 bytes",
         ),
-        (
-            _envelope('  {"id": 0, "v": 1.50}\n'),
-            {"array_key": "data", "keep": "last"},
-            "the JSON array's last element alone is over 50 bytes with the rest of the object",
-        ),
-        (
-            '{"data": [], "note": "' + "x" * 60 + '"}',
-            {"array_key": "data"},
-            "the JSON array is empty",
-        ),
+        ("[" + " " * 60 + "]", {}, "the JSON array is empty"),
     ],
 )
 def test_max_bytes_refuses_a_cut_it_cannot_make_of_a_json_body(
@@ -367,14 +315,12 @@ def test_max_bytes_refuses_a_cut_it_cannot_make_of_a_json_body(
         fixture_from_response(_answer(body.encode(), "text/plain"), max_bytes=50, **options)
 
 
-def test_array_key_and_keep_need_max_bytes() -> None:
-    choices: list[dict[str, Any]] = [{"array_key": "data"}, {"keep": "last"}]
-    for options in choices:
-        with pytest.raises(ValueError, match=r"^array_key and keep='last' choose what max_bytes"):
-            fixture_from_response(_response(), **options)
+def test_keep_needs_max_bytes() -> None:
+    with pytest.raises(ValueError, match=r"^keep='last' chooses what max_bytes cuts, and max_byt"):
+        fixture_from_response(_response(), keep="last")
     with pytest.raises(ValueError, match=r"^keep must be 'first' or 'last'"):
         fixture_from_response(_response(), max_bytes=5, keep="middle")  # type: ignore[arg-type]
-    whole = fixture_from_response(_response(), max_bytes=100, array_key="data", keep="last")
+    whole = fixture_from_response(_response(), max_bytes=100, keep="last")
     assert whole.response.body == '{"ok": true}'  # within max_bytes: neither looked at
     assert not whole.response.truncated
 

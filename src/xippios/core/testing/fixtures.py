@@ -8,15 +8,15 @@ decoded response. Bodies are stored as text; the headers that describe wire enco
 are dropped because the body is already decoded, and so are the headers that only
 identify a request (``REQUEST_ID_HEADERS``), which change with every recording.
 
-A recording may cut a large body (``max_bytes=``, ADR-0040, decision 5): the response is
-then marked ``truncated`` and keeps the full body's size, its sha256 and, for a JSON
-array, its length. A source may replace a download's body with a sample of the file it
+A recording may cut a large body that is a JSON array (``max_bytes=``, ADR-0066, decision
+12): the response is then marked ``truncated`` and keeps the full body's size, its sha256
+and the array's length. A source may replace a download's body with a sample of the file it
 cut itself, marked ``sample`` with the same three fields (ADR-0020, decision 6, as
 amended). A fixture neither cut nor a sample is written without those fields, as
 fixtures were before them, and every fixture written before them loads.
 
 A source's rewrite step runs inside ``fixture_from_response`` (``rewrite=``), between the
-scrub and the check that none of the values it replaced survives (ADR-0048, decisions 1 and
+scrub and the check that none of the values it replaced survives (ADR-0066, decisions 1 and
 2), and an answer that is no final answer of its operation, a 1xx or a 3xx, is refused
 before anything is kept (decision 4). ``write_fixture`` writes a ``Fixture`` as ``record``
 writes it, so a source that writes the fixture itself lays it out as core does.
@@ -210,7 +210,7 @@ def fixture_path(root: Path, endpoint: str, case: str) -> Path:
 
 Rewrite = Callable[[Fixture], tuple[Fixture, Iterable[str]]]
 """A source's rewrite step: the scrubbed ``Fixture`` in, the fixture rewritten and the values
-it replaced out (ADR-0048, decision 1)."""
+it replaced out (ADR-0066, decision 1)."""
 
 
 def fixture_from_response(
@@ -218,21 +218,20 @@ def fixture_from_response(
     *,
     scrub: Scrub | None = None,
     max_bytes: int | None = None,
-    array_key: str | None = None,
     keep: Literal["first", "last"] = "first",
     rewrite: Rewrite | None = None,
 ) -> Fixture:
     """Build a scrubbed ``Fixture`` in memory from a fully read ``httpx.Response``.
 
     An answer of a 1xx or a 3xx status is no final answer of its operation and is refused
-    first, whatever sent it (ADR-0048, decision 4). Credentials are always scrubbed
+    first, whatever sent it (ADR-0066, decision 4). Credentials are always scrubbed
     (``scrub_url``, ``scrub_headers``), and the headers that only identify a request are
     dropped (``REQUEST_ID_HEADERS``). ``scrub`` adds the secret values, those it names and
     those its ``response_secrets`` reads from ``response``, and decides about a binary
     body; ``None`` is ``Scrub()``: nothing else replaced, a binary body refused. With
     secret values, the result is verified before it is returned: a secret value still
-    present as given in the URL, a header value or a text body refuses the exchange
-    (conventions §10).
+    present in the URL, a header value or a text body, as given, percent-encoded or behind
+    a JSON escape, refuses the exchange (conventions §10; ADR-0066, decision 11).
 
     ``rewrite`` is the source's own step, for what it replaces beyond the secret values, a
     tenant's host or a field by key: it runs on the scrubbed ``Fixture`` and returns it
@@ -240,13 +239,13 @@ def fixture_from_response(
     returned. The URL, every header value kept, both bodies and, for a body that is JSON,
     every key and string decoded from it are searched for each value it returned, as
     given, ``REDACTED`` masked first, and for the secret values again; a hit refuses the
-    exchange, the message naming where, never the value (ADR-0048, decision 2). The order
+    exchange, the message naming where, never the value (ADR-0066, decision 2). The order
     is fixed: the scrub, the step, the check, and the write that ``record`` or the caller
     makes, so a source that writes several files checks each exchange before it writes
     any.
 
     ``max_bytes`` cuts a response body larger than it before the scrub, which then runs
-    on what is kept, as the verify does (ADR-0040, decision 5; conventions §10):
+    on what is kept, as the verify does (ADR-0066, decision 12; conventions §10):
 
     - a JSON array (a ``Content-Type`` of ``application/json`` or ``...+json``, or a
       body that parses as JSON, a byte order mark allowed) is cut at an element
@@ -255,16 +254,9 @@ def fixture_from_response(
       ``]``, or with ``keep="last"`` the last ones after the opening ``[``, and
       ``original_count`` is the array's length; an array whose first (or last) element
       alone does not fit is refused;
-    - a JSON object is cut the same way at the array of its top-level key
-      ``array_key``, the rest of the object kept as upstream wrote it and counted in
-      ``max_bytes``; an object with no ``array_key`` is refused, and so is a key it
-      lacks or whose value is no array;
-    - any other text is cut at ``max_bytes`` bytes, back to the last whole UTF-8
-      character and back to the start of a secret value (``scrub``) that the cut would
-      split, so no part of one is kept; a cut that keeps nothing is refused, and so are
-      ``array_key`` and ``keep="last"``, which cut JSON alone;
-    - another JSON value, and a body declared JSON that does not parse, are refused:
-      record a small real answer instead (a short date range, one commodity);
+    - a JSON object or another JSON value, a text that is not JSON, and a body declared
+      JSON that does not parse are refused: record a small real answer instead (a short
+      date range, one commodity);
     - XML (``text/xml``, ``application/xml``, ``...+xml``, or a body starting with
       ``<?xml``), ZIP, XLSX, gzip and XLS bodies, and a body that is not UTF-8 text, are
       refused: record a small real sample (a short query, one member of the archive, a
@@ -279,12 +271,10 @@ def fixture_from_response(
         response: The response, with the request that produced it.
         scrub: What else to remove before anything is kept, e.g.
             ``Scrub(secrets=[tenant])``.
-        max_bytes: The most bytes of the response body to keep, e.g. ``80_000``. It
-            bounds the body, not the fixture file, which writes the body as a JSON
-            string: escaping makes text outside ASCII up to three times as long, so
+        max_bytes: The most bytes of a response body that is a JSON array to keep, e.g.
+            ``80_000``. It bounds the body, not the fixture file, which writes the body as
+            a JSON string: escaping makes text outside ASCII up to three times as long, so
             ``80_000`` keeps a file under the 256 KiB cap. ``None`` keeps it whole.
-        array_key: The top-level key of a JSON object whose array a cut takes, e.g.
-            ``"data"`` for ``{"data": [...]}``. ``None`` cuts a body that is an array.
         keep: ``"first"`` keeps an array's first whole elements, ``"last"`` its last,
             for a list ordered oldest first.
         rewrite: The source's step, e.g. ``lambda fixture: (rewritten, [value, ...])``,
@@ -293,7 +283,7 @@ def fixture_from_response(
 
     Raises:
         ValueError: ``max_bytes`` below 1, ``keep`` neither ``"first"`` nor ``"last"``,
-            or ``array_key`` or ``keep="last"`` without ``max_bytes``; an answer of a 1xx
+            or ``keep="last"`` without ``max_bytes``; an answer of a 1xx
             or a 3xx status (the message names the method, the path and the status, and
             what to record instead); the request or response body is not UTF-8 text and
             ``scrub`` does not set ``allow_binary``; ``scrub.response_secrets`` returned
@@ -306,7 +296,7 @@ def fixture_from_response(
             string; ``rewrite`` is no function, or it returned no pair of a ``Fixture``
             and its values, one string for its values, or a value that is no string.
     """
-    _check_cut(max_bytes, array_key, keep)
+    _check_cut(max_bytes, keep)
     _check_rewrite(rewrite)
     _refuse_interim(response)
     request = response.request
@@ -316,7 +306,7 @@ def fixture_from_response(
     if request.content:
         request_body, request_base64 = scrubber.body(request.content)
     content_type = request.headers.get("content-type")
-    content, cut = _cut(response, max_bytes, scrubber, array_key, keep)
+    content, cut = _cut(response, max_bytes, keep)
     body, is_base64 = scrubber.body(content)
     fixture = Fixture(
         recorded_at=utcnow(),
@@ -345,7 +335,11 @@ def fixture_from_response(
 
 
 def _verify(scrubber: _Scrubber, fixture: Fixture) -> None:
-    """The scrub's verify on ``fixture``: no secret value left in it as given."""
+    """The scrub's verify on ``fixture``: no secret value left in it in any of its forms.
+
+    As given, percent-encoded or behind a JSON escape, the forms the scrub replaces
+    (ADR-0066, decision 11).
+    """
     __tracebackhide__ = True  # pytest would print the arguments: the refused text
     kept = fixture.request.content_type
     scrubber.verify(
@@ -425,7 +419,7 @@ def _check_survivors(fixture: Fixture, values: Sequence[str]) -> None:
     The request URL, the request's content type, every response header value, both bodies
     as text and every key and string decoded from a body that is JSON are searched, a
     plain substring in the letter case given, ``REDACTED`` masked first; a body stored
-    base64 is not searched, since nothing in it was scrubbed (ADR-0048, decision 2).
+    base64 is not searched, since nothing in it was scrubbed (ADR-0066, decision 2).
 
     Raises:
         ValueError: A value survives; the message names the place, never the value.
@@ -457,18 +451,18 @@ def _check_survivors(fixture: Fixture, values: Sequence[str]) -> None:
 
 _FINAL = (
     "no final answer of its operation: the recorder keeps a final answer only, a 2xx, a 4xx "
-    "or a 5xx, and writes nothing (ADR-0048)"
+    "or a 5xx, and writes nothing (ADR-0066)"
 )
 _SAFE = frozenset({"GET", "HEAD", "OPTIONS"})
 _WRITE_SENT = "; the request was sent, so a write may have been applied"
-"""The close of the refusal of a 1xx or a 3xx answer to a write, which ``record_task`` words."""
+"""The close of the refusal of a 1xx or a 3xx answer to a write."""
 
 
 def _refuse_interim(response: httpx.Response) -> None:
     """Refuse an answer of a 1xx or a 3xx status, which is no final answer of its operation.
 
     The recorder's one rule for every path, ``send_once``, ``record`` and
-    ``fixture_from_response`` (ADR-0048, decision 4). The message names the method, the path
+    ``fixture_from_response`` (ADR-0066, decision 4). The message names the method, the path
     and the status, never a header's value, and says what to record instead.
 
     Raises:
@@ -503,6 +497,7 @@ _SAMPLE = (
     "record a small real sample instead (a short query, one member of the archive, a few rows)"
 )
 _SMALL_ANSWER = "record a small real answer instead (a short date range, one commodity)"
+_ARRAY_ALONE = "since a cut keeps whole elements of a JSON array alone (ADR-0066, decision 12)"
 _CUT_FILE = "since a cut-off binary or compressed file cannot be parsed"
 _MAGIC = (
     (b"\x1f\x8b", "a gzip body"),
@@ -513,24 +508,18 @@ _MARKS = ("truncated", "sample")
 _WHOLE_BODY = ("original_bytes", "original_count", "sha256")
 
 
-def _check_cut(max_bytes: int | None, array_key: str | None, keep: str) -> None:
+def _check_cut(max_bytes: int | None, keep: str) -> None:
     """Refuse arguments of a cut that cannot work together, before anything is sent."""
     if max_bytes is not None and max_bytes < 1:
         raise ValueError("max_bytes must be at least 1")
     if keep not in ("first", "last"):
         raise ValueError(f"keep must be 'first' or 'last', not {keep!r}")
-    if max_bytes is None and (array_key is not None or keep == "last"):
-        raise ValueError(
-            "array_key and keep='last' choose what max_bytes cuts, and max_bytes is None"
-        )
+    if max_bytes is None and keep == "last":
+        raise ValueError("keep='last' chooses what max_bytes cuts, and max_bytes is None")
 
 
 def _cut(
-    response: httpx.Response,
-    max_bytes: int | None,
-    scrubber: _Scrubber,
-    array_key: str | None,
-    keep: str,
+    response: httpx.Response, max_bytes: int | None, keep: str
 ) -> tuple[bytes, dict[str, Any]]:
     """The body to keep and the ``FixtureResponse`` fields that mark a cut; see above."""
     content = response.content
@@ -549,82 +538,37 @@ def _cut(
         raise ValueError(
             f"max_bytes: a body that is not UTF-8 text cannot be cut, {_CUT_FILE}; {_SAMPLE}"
         ) from None
-    unmarked = text.removeprefix("﻿")  # a byte order mark, which httpx's json() skips
+    unmarked = text.removeprefix("\ufeff")  # a byte order mark, which httpx's json() skips
     xml = media in ("text/xml", "application/xml") or media.endswith("+xml")
     if xml or unmarked.lstrip().startswith("<?xml"):
         raise ValueError(
             "max_bytes: an XML body cannot be cut, since a cut-off XML document is not "
             f"well-formed; {_SAMPLE}"
         )
-    marks: dict[str, Any] = {
-        "truncated": True,
-        "original_bytes": len(content),
-        "sha256": hashlib.sha256(content).hexdigest(),
-    }
-    declared_json = media == "application/json" or media.endswith("+json")
     try:
         payload = json.loads(unmarked)
     except ValueError:
-        if declared_json:
+        if media == "application/json" or media.endswith("+json"):
             raise ValueError(
                 f"max_bytes: the body is declared {media} but is not JSON; {_SMALL_ANSWER}"
             ) from None
-        if array_key is not None:
-            raise ValueError(
-                "max_bytes: array_key names a top-level key of a JSON object, and the body "
-                "is not JSON; leave array_key out to cut the text"
-            ) from None
-        if keep == "last":
-            raise ValueError(
-                "max_bytes: keep='last' keeps the last elements of a JSON array, and the "
-                "body is not JSON; a text keeps its first bytes"
-            ) from None
-    else:
-        start, count = _array_of(text, payload, array_key)
-        kept = _array_cut(text, start, count, max_bytes, keep, keyed=array_key is not None)
-        return kept.encode(), marks | {"original_count": count}
-    end = max_bytes
-    while end > 0 and content[end] & 0xC0 == 0x80:  # a UTF-8 continuation byte
-        end -= 1
-    kept = text[: scrubber.spared_end(text, len(content[:end].decode("utf-8")))]
-    if not kept:
         raise ValueError(
-            f"max_bytes: a cut at {max_bytes} bytes keeps nothing of the body, not one whole "
-            "character, or splits a secret value at its start; raise max_bytes or record a "
-            "smaller answer"
+            f"max_bytes: a text that is not JSON cannot be cut, {_ARRAY_ALONE}; {_SMALL_ANSWER}"
+        ) from None
+    if not isinstance(payload, list):
+        raise ValueError(
+            "max_bytes: a JSON body that is not an array cannot be cut, "
+            f"{_ARRAY_ALONE}; {_SMALL_ANSWER}"
         )
+    count = len(payload)
+    kept = _array_cut(text, text.index("["), count, max_bytes, keep)
+    marks = {
+        "truncated": True,
+        "original_bytes": len(content),
+        "sha256": hashlib.sha256(content).hexdigest(),
+        "original_count": count,
+    }
     return kept.encode(), marks
-
-
-def _array_of(text: str, payload: object, array_key: str | None) -> tuple[int, int]:
-    """The offset in ``text`` of the ``[`` of the array a cut takes, and the array's length.
-
-    ``payload`` is ``text`` decoded: an array, or the object whose top-level
-    ``array_key`` holds it.
-    """
-    if array_key is None:
-        if isinstance(payload, list):
-            return text.index("["), len(payload)
-        if isinstance(payload, dict):
-            raise ValueError(
-                "max_bytes: a JSON object is cut by the array that a top-level key names, "
-                f"and array_key names none; name it, or {_SMALL_ANSWER}"
-            )
-        raise ValueError(
-            "max_bytes: a JSON body that is not an array or an object cannot be cut by "
-            f"elements; {_SMALL_ANSWER}"
-        )
-    if not isinstance(payload, dict):
-        raise ValueError(
-            "max_bytes: array_key names a top-level key of a JSON object, and the body is "
-            "no JSON object; leave array_key out to cut an array"
-        )
-    if array_key not in payload:
-        raise ValueError(f"max_bytes: the JSON object has no top-level key {array_key!r}")
-    array = payload[array_key]
-    if not isinstance(array, list):
-        raise ValueError(f"max_bytes: the top-level key {array_key!r} holds no JSON array")
-    return _member_start(text, array_key), len(array)
 
 
 _SPACE = re.compile(r"[ \t\n\r]*")
@@ -634,26 +578,6 @@ def _after_space(text: str, position: int) -> int:
     """The offset of the first character at or after ``position`` that is not JSON space."""
     match = _SPACE.match(text, position)
     return position if match is None else match.end()
-
-
-def _member_start(text: str, key: str) -> int:
-    """The offset in ``text``, a JSON object, of the value of its top-level ``key``.
-
-    Where the key repeats, the last one's, the value ``json.loads`` keeps.
-    """
-    decoder = json.JSONDecoder()
-    position = _after_space(text, text.index("{") + 1)
-    found = -1
-    while text[position] != "}":
-        name, position = decoder.raw_decode(text, position)
-        position = _after_space(text, _after_space(text, position) + 1)  # past the ":"
-        if name == key:
-            found = position
-        _, position = decoder.raw_decode(text, position)
-        position = _after_space(text, position)
-        if text[position] == ",":
-            position = _after_space(text, position + 1)
-    return found
 
 
 class _Offsets:
@@ -671,7 +595,7 @@ class _Offsets:
         return self._bytes
 
 
-def _array_cut(text: str, start: int, count: int, max_bytes: int, keep: str, *, keyed: bool) -> str:
+def _array_cut(text: str, start: int, count: int, max_bytes: int, keep: str) -> str:
     """``text`` with its array of ``count`` elements at ``start`` cut to the elements that fit.
 
     The original text is kept as it is, numbers and spacing included, before and after
@@ -717,9 +641,8 @@ def _array_cut(text: str, start: int, count: int, max_bytes: int, keep: str, *, 
             f"max_bytes: the JSON array is empty, so no cut of it brings the body within "
             f"{max_bytes} bytes; raise max_bytes or record a smaller answer"
         )
-    rest = " with the rest of the object" if keyed else ""
     raise ValueError(
-        f"max_bytes: the JSON array's {keep} element alone is over {max_bytes} bytes{rest}; "
+        f"max_bytes: the JSON array's {keep} element alone is over {max_bytes} bytes; "
         "raise max_bytes or record a smaller answer"
     )
 
@@ -734,7 +657,7 @@ def fixture_text(fixture: Fixture) -> str:
 
     Args:
         fixture: The exchange, e.g. from ``fixture_from_response``, rewritten by its
-            ``rewrite=`` step (ADR-0048, decision 1) or with ``model_copy``.
+            ``rewrite=`` step (ADR-0066, decision 1) or with ``model_copy``.
 
     Raises:
         ValueError: ``load_fixture`` would not read the text back, as when a
@@ -768,7 +691,7 @@ def write_fixture(fixture: Fixture, path: Path) -> Fixture:
     The text is ``fixture_text(fixture)``, written once; a refusal writes nothing. A source
     that writes a fixture itself writes it with it: the ``Fixture`` that
     ``fixture_from_response`` returns, its ``rewrite=`` step run and checked, for an answer
-    sent with ``send_once`` (ADR-0048, decisions 1 and 3), or one whose download body the
+    sent with ``send_once`` (ADR-0066, decisions 1 and 3), or one whose download body the
     source replaced with its sample, e.g.
     ``write_fixture(fixture.model_copy(update={"response": sampled}), path)``.
 

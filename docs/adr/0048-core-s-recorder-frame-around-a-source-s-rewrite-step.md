@@ -1,6 +1,6 @@
 # ADR-0048: Core's recorder frame around a source's rewrite step
 
-Status: Accepted · Date: 2026-11-21 · Decided by https://github.com/xippios/sdk-core/issues/364 · Amended 2026-11-22 by https://github.com/xippios/sdk-core/issues/439
+Status: Superseded by ADR-0066 · Date: 2026-11-21 · Decided by https://github.com/xippios/sdk-core/issues/364 · Amended 2026-11-22 by https://github.com/xippios/sdk-core/issues/439
 
 ## Context
 

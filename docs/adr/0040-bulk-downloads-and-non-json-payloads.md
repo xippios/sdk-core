@@ -1,6 +1,6 @@
 # ADR-0040: Bulk downloads and non-JSON payloads in core
 
-Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0019 · Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/479
+Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0019 · Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/479 · Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/483
 
 ## Context
 
@@ -175,3 +175,15 @@ whose key class names another slug than the package's own, a `KeyAuth` of its `_
 is given, so that no envelope keeps a key as sent
 (https://github.com/xippios/sdk-core/issues/526), while decisions 2, 4 and 5, the rest of
 decisions 1, 3 and 6 and the consequences stand as written.
+
+Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/483: in decision 5 `max_bytes=`
+on `record` and `fixture_from_response` cuts a body that is a JSON array alone, its first or with
+`keep="last"` its last whole elements, while `array_key=` and the cut of a text leave by parts 4
+and 7 of the answer on https://github.com/xippios/sdk-core/issues/475, since every fixture of the
+family over the cap holds an array at its top and no script passes either, so that a JSON object
+and a text that is not JSON are refused over `max_bytes` and recorded as a small real answer or
+sample, and `max_read_bytes` is an argument of `record` and `send_once`, the sync functions that
+take the place of `record_sync` and `send_once_sync` (ADR-0066, decisions 8 and 12), and in
+decision 6 `replay`, into which `mount_fixture` folds, reads the one rule (ADR-0066, decision 10),
+while the rest of decisions 5 and 6, the other decisions, the consequences and the amendment above
+stand as written.

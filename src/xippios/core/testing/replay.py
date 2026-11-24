@@ -18,10 +18,10 @@ from xippios.core.redaction import (
 )
 from xippios.core.testing.fixtures import Fixture, _query_of, load_fixture
 
-__all__ = ["ReplayFixture", "mount_fixture", "replay", "sent_bodies", "sent_query", "sent_urls"]
+__all__ = ["ReplayFixture", "replay", "sent_bodies", "sent_query", "sent_urls"]
 
 _mounted: list[tuple[Fixture, respx.Route, int]] | None = None
-"""What ``mount_fixture`` mounted in the running test, each with its route's count of calls at
+"""What ``replay`` mounted in the running test, each with its route's count of calls at
 the mount, kept while the census of ``xippios.core.testing.built_answers`` listens, and
 ``None`` otherwise (ADR-0064)."""
 
@@ -31,7 +31,7 @@ class ReplayFixture(Protocol):
 
     ``replay_fixture("api_get", "corn_2024")`` mounts
     ``tests/fixtures/api_get/corn_2024.json`` on the ``respx_mock`` router and returns
-    the route; ``match_params`` and ``url`` are passed on to ``mount_fixture``. The
+    the route; ``match_params`` and ``url`` are passed on to ``replay``. The
     directory is the wrapper function's, here sdk-usda-nass's ``api_get``, or the task's
     for an exchange recorded through a task (conventions §10).
     """
@@ -51,14 +51,17 @@ class ReplayFixture(Protocol):
         ...
 
 
-def mount_fixture(
+def replay(
     router: respx.Router,
-    fixture: Fixture,
+    path: Path,
     *,
     match_params: Iterable[str] | None = None,
     url: str | None = None,
 ) -> respx.Route:
-    """Register a route answering the fixture's method, host and path with its response.
+    """Load the fixture at ``path`` and mount a route answering its method, host and path.
+
+    The one way to mount a recording, behind the plugin's ``replay_fixture``; the fixture
+    is read from its file, as the recorder wrote it (ADR-0066, decision 10).
 
     Query parameters are not matched unless named in ``match_params``, because recorded
     ones may be scrubbed; the request body is never matched. A test asserts what was
@@ -74,7 +77,7 @@ def mount_fixture(
 
     Args:
         router: The ``respx`` router, usually the ``respx_mock`` fixture.
-        fixture: The recorded exchange.
+        path: The fixture's file, e.g. ``tests/fixtures/api_get/corn_2024.json``.
         match_params: Names of recorded query parameters whose recorded values a request
             must carry too, e.g. ``["countOnly"]`` where two calls share one path.
             ``None`` matches method, host and path only.
@@ -97,6 +100,7 @@ def mount_fixture(
             before its declaration); the message names the parameter.
         TypeError: ``match_params`` is one string instead of a collection of names.
     """
+    fixture = load_fixture(path)
     served = httpx.URL(fixture.request.url if url is None else url)
     pattern: dict[str, Any] = {
         "method": fixture.request.method,
@@ -138,17 +142,6 @@ def mount_fixture(
         # are this recording's.
         _mounted.append((fixture, route, route.call_count))
     return route
-
-
-def replay(
-    router: respx.Router,
-    path: Path,
-    *,
-    match_params: Iterable[str] | None = None,
-    url: str | None = None,
-) -> respx.Route:
-    """Load the fixture at ``path`` and mount it on ``router``; see ``mount_fixture``."""
-    return mount_fixture(router, load_fixture(path), match_params=match_params, url=url)
 
 
 def sent_urls(route: respx.Route) -> list[str]:

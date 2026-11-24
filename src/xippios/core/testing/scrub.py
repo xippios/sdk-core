@@ -8,10 +8,11 @@ registered, such as USDA NASS's ``key``), the userinfo and the credential header
 say, is written as sent, and replay can match it.
 ``scrub_params``, ``scrub_url`` and ``scrub_headers`` are that module's, importable from
 here as well. A ``Scrub`` adds what only the source knows: the secret values themselves,
-named before the request or read from its answer, such as a login's tokens. What a
-source rewrites beyond them, a tenant's host or a field by key, it rewrites in its own
-step on the ``Fixture``, which the recorder runs after the scrub and checks before the
-write (``rewrite=``; ADR-0048, decisions 1 and 2).
+named before the request or read from its answer, such as a login's tokens, each replaced
+and verified as given, percent-encoded and behind a JSON escape (ADR-0066, decision 11).
+What a source rewrites beyond them, a tenant's host or a field by key, it rewrites in its
+own step on the ``Fixture``, which the recorder runs after the scrub and checks before
+the write (``rewrite=``; ADR-0066, decisions 1 and 2).
 """
 
 import base64
@@ -34,7 +35,7 @@ _BINARY_BODY = (
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Scrub:
-    """What a recording must not keep besides credentials, removed before anything is written.
+    r"""What a recording must not keep besides credentials, removed before anything is written.
 
     ``fixture_from_response`` and ``record`` apply it in memory to the whole fixture
     (request URL, request body, response headers, response body), and the file is written
@@ -46,18 +47,20 @@ class Scrub:
 
     Attributes:
         secrets: Values that must never be written, e.g. a key or a tenant name. Each
-            becomes ``REDACTED`` wherever it appears as given, in the URL, the headers
-            and the bodies, the longest value first, in the letter case given; an
-            encoded form (percent-encoded, behind a JSON escape) is not looked for. An
-            empty value is refused with ``ValueError``. Left out of the ``repr``.
+            becomes ``REDACTED`` wherever it appears in the URL, the headers and the
+            bodies, the longest value first, in the letter case given, and in its every
+            form: each character as given, percent-encoded in either hex case (a space
+            also as ``+``), or behind a JSON escape (``\u00e9``, ``\/``), in any mix
+            (ADR-0066, decision 11). An empty value is refused with ``ValueError``. Left
+            out of the ``repr``.
         response_secrets: A function that reads the values that must never be written
             from the answer, for a value known only once upstream sends it, such as a
             login's or a refresh's tokens, which name no credential (``AccessToken``),
             e.g. ``lambda response: [response.json()["AccessToken"]]``. It is called
             once per recording with the whole response, an error answer included, before
             any cut, and each value it returns is scrubbed and verified as ``secrets``
-            are (ADR-0042, decision 3). An answer that carries none gives
-            ``[]``. ``None`` reads nothing.
+            are, in its every form (ADR-0042, decision 3; ADR-0066, decision 11). An
+            answer that carries none gives ``[]``. ``None`` reads nothing.
         allow_binary: Store a body that is not UTF-8 text base64 and flagged instead of
             raising ``ValueError``. Nothing in it is scrubbed.
 
@@ -107,41 +110,63 @@ def _read_secrets(scrub: Scrub, response: httpx.Response) -> tuple[str, ...]:
     return named + values
 
 
+def _hex(digits: str) -> str:
+    """A pattern for hex ``digits`` in either letter case."""
+    return "".join(f"[{d.upper()}{d.lower()}]" if d.isalpha() else d for d in digits)
+
+
+_JSON_SHORT = {
+    '"': '\\"',
+    "\\": "\\\\",
+    "/": "\\/",
+    "\b": "\\b",
+    "\f": "\\f",
+    "\n": "\\n",
+    "\r": "\\r",
+    "\t": "\\t",
+}
+"""The short JSON escapes of a character, ``\\/`` among them, which some encoders write."""
+
+
+def _forms(value: str) -> str:
+    r"""A pattern for ``value`` in its every form, character by character (ADR-0066, decision 11).
+
+    Each character as given; percent-encoded, its UTF-8 bytes in either hex case, and a
+    space also as ``+``, as a query or a form writes it; or behind a JSON escape,
+    ``\uXXXX`` in either hex case, a surrogate pair beyond the Basic Multilingual Plane,
+    or its short escape. Any mix of the three matches, in the letter case of ``value``.
+    """
+    parts = []
+    for char in value:
+        units = char.encode("utf-16-be")
+        options = [
+            re.escape(char),
+            "".join(f"%{_hex(f'{byte:02X}')}" for byte in char.encode("utf-8")),
+            "".join(rf"\\u{_hex(units[i : i + 2].hex())}" for i in range(0, len(units), 2)),
+        ]
+        if char == " ":
+            options.append(r"\+")
+        if char in _JSON_SHORT:
+            options.append(re.escape(_JSON_SHORT[char]))
+        parts.append(f"(?:{'|'.join(options)})")
+    return "".join(parts)
+
+
 class _Scrubber:
     """A ``Scrub`` applied to one exchange: the secret values as patterns, longest first.
 
     The values are the ``Scrub``'s own and those its ``response_secrets`` reads from
-    ``response``.
+    ``response``, each a pattern of its every form (``_forms``).
     """
 
     def __init__(self, scrub: Scrub, response: httpx.Response) -> None:
         self._scrub = scrub
         secrets = _read_secrets(scrub, response)
         longest_first = sorted(secrets, key=len, reverse=True)
-        self._secrets = [re.compile(re.escape(value)) for value in longest_first]
-        self._reach = max((len(value) for value in secrets), default=0)
-
-    def spared_end(self, text: str, end: int) -> int:
-        """``end`` moved back to the start of a secret value it would split.
-
-        A cut keeping ``text[:end]`` would otherwise keep the first part of one, which
-        neither the scrub nor the verify recognises (``max_bytes=``).
-        """
-        split = True
-        while split and end > 0:
-            split = False
-            window = max(0, end - self._reach), end + self._reach
-            for pattern in self._secrets:
-                for match in pattern.finditer(text, *window):
-                    if match.start() < end < match.end():
-                        end, split = match.start(), True
-                        break
-                if split:
-                    break
-        return end
+        self._secrets = [re.compile(_forms(value)) for value in longest_first]
 
     def text(self, text: str) -> str:
-        """``text`` with every secret value, as given, made ``REDACTED``, the longest first."""
+        """``text`` with every secret value, in any of its forms, made ``REDACTED``."""
         for pattern in self._secrets:
             text = pattern.sub(lambda _: REDACTED, text)
         return text
@@ -166,10 +191,10 @@ class _Scrubber:
 
         Runs on what the scrub produced, before anything is kept or written, when the
         ``Scrub`` names secrets: the URL, every header value and both bodies are
-        searched for each value as given, a plain substring in the letter case given;
-        ``REDACTED`` is masked first and never counts. A backstop (ADR-0030): an encoded
-        form is not looked for, and a body stored base64 (``allow_binary``) is not
-        searched, since it is kept unscrubbed by design.
+        searched for each value in its every form, as the scrub replaces it, in the
+        letter case given; ``REDACTED`` is masked first and never counts. A backstop
+        (ADR-0030): a body stored base64 (``allow_binary``) is not searched, since it is
+        kept unscrubbed by design.
 
         Args:
             url: The scrubbed request URL.
