@@ -1,7 +1,6 @@
 # ADR-0028: Upstream fidelity — no cross-source normalization in SDK packages
 
-Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under
-https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0003
+Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0003 · Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/474
 
 ## Context
 
@@ -146,3 +145,12 @@ which source showed it, stays in ADR-0003.
 Conventions §2, §3, §4, §10 and §15, the review checklist's items 2, 4 and 16, the
 definition of done's Tests block, the README and the docstrings of `decode_csv` and
 `mount_fixture` state its decisions from 1.28 on.
+
+## Amendment 2026-11-24
+
+Amended by ADR-0060 (https://github.com/xippios/sdk-core/issues/474), which states the boundary
+of a source package in six sentences beside this record: its decisions 1 and 3 extend decision 1
+here, so that a package returns each value of upstream's data as upstream states it, derives and
+converts none and names a code only from upstream's own list of the same source, and its
+decision 1 adds to decision 2 that upstream's own name is the name in its API document, spelled
+as the language allows, while decisions 3 to 8 stand as written.

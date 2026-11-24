@@ -24,7 +24,7 @@ description.
 | PyPI distribution | `xippios-<source>` | `xippios-usda-nass` |
 | Import path | `xippios.<source>`; a provider with several APIs nests: `xippios.<provider>.<api>` | `xippios.comtrade`, `xippios.usda.nass` |
 | MCP entry point | `xippios-<source>-mcp`; a source with a write server: `xippios-<source>-mcp-read` and `xippios-<source>-mcp-write` (§8, ADR-0026) | `xippios-usda-nass-mcp`, `xippios-google-mail-mcp-read` |
-| MCP tool | `<source>_<verb>_<noun>` | `usda_nass_get_series` |
+| MCP tool | `<source>_<verb>_<noun>`, the task's name after the source's | `usda_nass_get_series` |
 | Env var for a key | `<SOURCE>_API_KEY`, or the issuer's variable when one key serves several sources (ADR-0032); per tenant of a multi-tenant source in the source's own scheme, sdk-cashctrl's `CASHCTRL_<NAME>_API_KEY` (§7, ADR-0042) and sdk-google-mail's `GOOGLE_<NAME>_REFRESH_TOKEN`, under the `GOOGLE_` prefix every Google source shares (ADR-0025) | `COMTRADE_API_KEY`, `DATA_GOV_API_KEY`, `CASHCTRL_ACME_API_KEY`, `GOOGLE_WORK_REFRESH_TOKEN` |
 
 `<source>` names the data provider and, where one provider has several APIs, the API:
@@ -50,6 +50,17 @@ hyphen into a dot, and a single-API provider whose name carries a hyphen overrid
 `src/xippios/` is a PEP 420 namespace package, and so is every provider level such as
 `src/xippios/usda/`: **no** `__init__.py` at those levels in any repo. Only the package
 itself (`src/xippios/usda/nass/`) has one.
+
+A task's name starts with one of six verbs, each with one meaning in the family: `list_` a list
+of upstream's records of one kind, `get_` one record or the answer of one data operation,
+`search_` and `count_` upstream's own search and count operations, `download_` a file written to
+a path, and a write's `create_`, `update_`, `delete_` or upstream's own verb, so that a read
+task's name starts with `list_`, `get_`, `search_`, `count_` or `download_`, as the invented
+source `example` names `list_regions` and `get_series` (ADR-0061, decision 3).
+An argument that upstream does not take is one of five words, `search` on a list task, `since`
+alone for a vintage taken back, `since` and `until` for the inclusive bounds of dates or periods,
+`start_<period>` and `end_<period>` for a series that the package assembles and `dest` for a
+download's path, and a tenant comes first and `confirm` last (ADR-0061, decision 4).
 
 ## 2. Layering (ADR-0001)
 
@@ -97,8 +108,15 @@ Every source package has three layers, top to bottom, and nothing skips a layer.
    that adoption as 1.22 lands, right after its next adoption PR, or in the first PR of
    its next version when no adoption is pending; an adoption PR is judged against the
    rest of 1.22 until the rename PR merges.
-2. **Task-shaped functions** — `xippios/<pkg>/tasks.py`. The functions a person
-   or an agent actually wants: `get_balance_sheet(commodity, marketing_year)`. They
+2. **Task-shaped functions** — `xippios/<pkg>/tasks.py`. A task is an upstream operation, a
+   list that orients a caller, or a series over periods: it returns what its operation returns
+   for the arguments given, and a caller can set what upstream documents, as the invented
+   source `example`'s `get_series(region_code, year, *, unit=None)` returns its operation's
+   series for the region and the year that the caller names (ADR-0060, decision 4; ADR-0001,
+   amendment 2026-11-24). A package adds
+   no task that fixes filters, sorts, ranks or cuts for the caller, so a slice of one operation
+   with filters that the caller cannot change and a ranking are tasks of what is built on the
+   packages (ADR-0060, decisions 4 and 8). Tasks
    compose endpoint wrappers, handle pagination and reference lookups, and return
    `Result[T]`. This is the public API and the only layer adapters may call. A task may
    compose another task of its own `tasks.py`, so that the request, its refusals before
@@ -113,6 +131,21 @@ Every source package has three layers, top to bottom, and nothing skips a layer.
 
 Supporting modules: `models.py` (pydantic models), `reference/` (packaged data files
 plus a loader), `_client.py` (the configured `xippios.core.client` instance).
+
+A caller can set what upstream documents as a parameter, and a package's default for it is
+upstream's own (ADR-0060, decision 8).
+Several values of one upstream filter are one argument that takes a list, which the package
+joins as upstream wants them, and a comma-separated text is no argument form (ADR-0061,
+decision 1).
+A package filters after the fetch only where upstream offers no filter of its own: the filter is
+named after upstream's field that it reads, compares by equality or by prefix, and its task's
+docstring says that the package filters after the fetch (ADR-0061, decision 2).
+Within a source one concept stands at one position in every task: a tenant comes first and
+positional, since it names the upstream account that the path is under, the arguments that
+identify a record are positional, in the order of upstream's path, and every optional filter and
+every other argument of the package's own is keyword-only, as the invented source `example` takes
+`get_series(region_code, year, *, unit=None)` and, for its tenant `acme`, `get_balance(tenant,
+account_id, *, as_of=None)` (ADR-0061, decisions 4 and 5; https://github.com/xippios/sdk-usda-esr/issues/60, part 1).
 
 Task code may send, beside its base URL, to a second base URL on the host of the first,
 from which upstream serves part of its data, and to an origin or mirror that the publisher
@@ -262,6 +295,23 @@ skip it (§8, §9; ADR-0040).
   base URL's origin alone (ADR-0046, decision 5; ADR-0037, decision 4).
   `FETCHED.md` names the variables a source's login reads, never their values (ADR-0046,
   decision 5).
+- A package returns each value of upstream's data as upstream states it, under upstream's own
+  name, code and unit, derives no value of the data and converts none, and where it reads a
+  printed text as a number or a time and the reading can lose something, the text stands beside
+  it (ADR-0060, decision 1).
+  A value that upstream prints as text and that can carry a mark reaches a caller twice, the text
+  as printed and beside it the parsed number or nothing, as the invented source `example`'s
+  `value` holds `"1,204 (P)"` beside its `value_number` of `1204` (ADR-0060, decision 8).
+  A time that upstream prints is read into the type that keeps everything upstream sends, naive
+  where upstream states no zone, and no text stands beside it, since a text stands beside a
+  reading only where no type keeps what upstream sends, as the invented source `example`'s
+  `released` reads `2026-10-06T08:00:00.250` into a `datetime` with no zone and no second field
+  (ADR-0060, decision 8; https://github.com/xippios/sdk-usda-esr/issues/60, part 3).
+  Upstream's own name is the name in its API document, spelled as the language allows: a field
+  takes it in snake case, and where upstream spells it otherwise the model accepts upstream's
+  spelling with `Field(validation_alias=...)`, never `Field(alias=...)`, since the adapters
+  serialise by alias and every answer that an agent reads stays in snake case (ADR-0028,
+  decision 2, amendment 2026-11-24; https://github.com/xippios/sdk-template/issues/300).
 - Within-source hygiene is required: dates → `datetime.date`/`datetime`, numbers →
   `int`/`Decimal`/`float` as appropriate, upstream enums → `StrEnum`, pagination
   resolved, errors typed. An upstream enum of integer ids becomes an `IntEnum` instead,
@@ -281,6 +331,14 @@ skip it (§8, §9; ADR-0040).
   renamed, converted or joined across files. `docs/upstream/` snapshots the file-format
   documentation (layout notes, a dataset's README) the way it snapshots API
   documentation.
+- A record that a package shapes itself, from a file or a printed table, follows four rules: one
+  value per record; a field under upstream's name holds upstream's text; a reading of that text
+  stands beside it under a fixed suffix, `<stem>_number` for a number and `<stem>_label` for a
+  label; and a code and its label stand side by side (ADR-0060, decision 7; ADR-0020, amendment
+  2026-11-24).
+  Where the file names no value that such a record needs, the commodity of a table say, the
+  record reads it from the table's title or from another file of the same release and says which
+  (ADR-0060, decision 7; ADR-0020, amendment 2026-11-24).
 - Documented personal identifiers stay out of the projections tasks return (ADR-0017):
   `ssn`, `iban` and what the source judges equivalent (a national identification number,
   a bank account number, a tax number), unless a task fetches them deliberately and says
@@ -294,6 +352,10 @@ skip it (§8, §9; ADR-0040).
   (ADR-0017, ADR-0048).
 - **No cross-source normalization.** A USDA `marketing_year` stays a USDA concept.
   Mapping between sources is business logic and lives outside this family.
+- A label names a code in upstream's own words, from upstream's own list of the same source, and
+  a package builds no list, name, grouping or rule of its own (ADR-0060, decision 3).
+  A ranking leaves the source packages with the groupings and the joins that serve it, since a
+  rank is a value that the package derives (ADR-0060, decision 8).
 - Reference data (commodity codes, country codes, report calendars) ships inside the
   package under `reference/` as CSV or JSON, loaded via `xippios.core.reference`, and is
   versioned with the package. A list fetched from one upstream operation is a packaged
@@ -369,6 +431,10 @@ happened (ADR-0041, decision 2). A load time is never a vintage: a
 source whose only time is the time upstream loaded the data (sdk-usda-nass's
 `load_time`) leaves `vintage` and `published_at` empty, and a newest load time computed
 across datasets is no release time either (ADR-0041, decision 1).
+`vintage` is set only from a release identifier that upstream states for the data answered, the
+newest where an answer holds several, so that a date computed from the rows and another flow's
+release list leave it empty and the task's docstring says why (ADR-0060, decisions 2 and 8;
+ADR-0041, amendment 2026-11-24).
 
 A parameter that takes the `meta.vintage` of an earlier call to return only what changed
 since (sdk-usda-esr's and sdk-usda-psd's `since`) takes the text as `vintage` wrote it
@@ -418,7 +484,9 @@ to the README status value and the docstring only; the feed's list of release da
 A task that assembles a period series from one upstream call per period (a month, a
 marketing year) states its ceiling, the most periods one call fetches (the MCP tool's,
 where it is smaller: sdk-usda-gats fetches at most 60 months, 24 on the MCP server), and
-sets `vintage` to the newest release among the periods returned. Its docstring says what
+sets `vintage` to the newest release among the periods returned.
+A series compares no values across the releases of its periods and reconciles none (ADR-0060,
+decision 2; ADR-0041, amendment 2026-11-24). Its docstring says what
 a period inside the range that upstream has not released answers: the period is skipped
 where upstream's empty answer can be told from data (sdk-usda-psd's empty 404), and the
 whole range is refused, naming the latest released period, where it cannot (an
@@ -463,10 +531,11 @@ a pass that counts as for one that fetches (ADR-0054, decision 6, amendment 2026
 
 A task that reads a file (§2) sets `endpoint` to the file's name as upstream names it,
 which may change with each release and carry a revision's suffix (`wasde1026.xml` and
-`wasde0626v2.xml` as ESMIS catalogs them), `vintage` to the release identifier (an ESMIS
-release id, a report date as printed), `published_at` to the catalog's release time, and
-`request` to the file's URL or release id plus the filters applied in Python (ADR-0020;
-amendment 2026-11-18, point c; https://github.com/xippios/sdk-core/issues/244). A
+`wasde0626v2.xml` as ESMIS catalogs them), `vintage` to the catalog's release identifier,
+its one reading of the release (an ESMIS release id), `published_at` to the catalog's release
+time, and `request` to the file's URL or release id plus the filters applied in Python
+(ADR-0020; amendment 2026-11-18, point c, and amendment 2026-11-24;
+https://github.com/xippios/sdk-core/issues/244; ADR-0060, decision 8). A
 narrative read from a PDF that prints a date but no month label keeps the ESMIS release
 id as `vintage`. A file it downloads from another origin than the base URL's, a link a
 catalog names, goes without the client's credentials (§6): `endpoint` is named as above
@@ -541,7 +610,10 @@ its page parameter collects every page; called with one, it returns that page. F
 offset paging, `limit` given means one page starting at `start` (default 0); `limit`
 omitted means every page from `start` onward. Either way `total` is upstream's count for
 the whole request, so the caller can page deliberately. It is provenance like the rest
-of `meta`: set only from what upstream reports, never computed from `len(data)`. When
+of `meta`: set only from what upstream reports, never computed from `len(data)`.
+A task that assembles its answer from several requests, as a split by year does, sums no counts
+into `total`, which stays `None` unless upstream counts the whole request (ADR-0060, decision 8;
+ADR-0034, amendment 2026-11-24). When
 every page is collected, the count kept is the one upstream reported on the last page
 fetched, and a mismatch with `len(data)` is upstream's and is not corrected; a task that
 returns one page, or caps what it collects, can have `total > len(data)` by design.
@@ -563,7 +635,8 @@ XippiosError
 ├── AuthError            401/403
 ├── RateLimitError       429, or a source's documented answer to a spent limit
 │                        (ADR-0033); carries retry_after
-├── NotFoundError        404 or empty where upstream signals absence
+├── NotFoundError        404 or empty where upstream signals absence, for a task that
+│                        returns one record (ADR-0061, decision 6)
 ├── ValidationError      we could not parse what upstream returned (carries raw body)
 ├── UpstreamError        other 4xx/5xx (carries status, body)
 ├── TransportError       network, timeout
@@ -575,6 +648,10 @@ XippiosError
     └── QueryTooLarge    a query over upstream's per-call record limit, refused
                          before its data request or by upstream (ADR-0053)
 ```
+
+No data has one answer per kind of task: a task that returns a list answers it with the empty
+list, and a task that returns one record raises `NotFoundError`, as a period that upstream has
+not released does where the package knows the latest release (§4; ADR-0061, decision 6).
 
 Source packages subclass only when upstream has a distinct, documented failure mode;
 a refusal the package makes itself, such as an unknown filter name, subclasses
@@ -597,7 +674,10 @@ packaged list is out of date if upstream added the code since, naming no command
 package's maintainers (ADR-0041, decision 8). A source checks an argument against a packaged
 list with core's one check, `check(param, value)` of the list's declaration
 `PackagedList.codes(code, name, fold_case=...)`, which returns the value as the caller gave it
-or raises `UnknownCode` (ADR-0045). A refusal of a value of the check's hint table, which is no
+or raises `UnknownCode` (ADR-0045).
+A refusal of the call as given names the first problem that it finds, in core's words, and a
+package gathers no list of every problem into one refusal (ADR-0061, decision 7).
+A refusal of a value of the check's hint table, which is no
 code, names the table's text and the reason and leaves out that the packaged list is out of date
 (ADR-0041, decision 8, amendment 2026-11-22). Upstream's own refusal of
 the query as given is mapped to `InvalidRequestError`, or a subclass, in `classify` (§6):
@@ -657,8 +737,12 @@ without case).
   async variants are optional and suffixed `_async`.
 - Retries with exponential backoff and jitter: a 429 for every method; a 5xx and a
   transport failure for idempotent methods only (GET, HEAD, OPTIONS), unless the source
-  sets `RetryPolicy.retry_non_idempotent` because upstream makes a repeated write safe,
-  or because the source only reads through POST (ADR-0011); never another 4xx.
+  sets `RetryPolicy.retry_non_idempotent` because it only reads through POST (ADR-0011);
+  never another 4xx.
+  A request that upstream bills and a request that writes are sent once, so that a client
+  whose reads upstream bills takes `RetryPolicy(max_attempts=1)`, and the error of a write
+  that failed says that its outcome is unknown (ADR-0061, decision 10; ADR-0011, amendment
+  2026-11-24).
 - A source maps its error shapes once, in `ClientConfig.classify`, which sees every
   response before the default status mapping (ADR-0031): the shapes upstream documents
   and, where upstream documents none for an answer, the shapes the source recorded, each
@@ -716,6 +800,9 @@ without case).
   Before a 429 or 5xx is retried, the client asks `classify`: a `RateLimitError` sets the
   wait from its `retry_after`; an `UpstreamError` for a 5xx changes nothing; any other
   error ends the retries.
+- A read-only source of public data gives its client core's response cache, and a client that
+  takes none says why in one sentence of the source's `CLAUDE.md`, private data or a billed
+  page whose age matters (ADR-0061, decision 11).
 - Optional response cache (in-memory by default, pluggable) keyed on method+URL+params.
   A body larger than `ClientConfig.cache_max_bytes` (default 8 MiB) passes through and
   is not stored; `cache_filter` stays for finer rules. A source that wants a larger
@@ -875,9 +962,14 @@ with sdk-template 0.4.0, which renders it (ADR-0026, amendment 2026-11-18, point
   the rule (`accounting-read`, `accounting-write`) and never mixes read and write tools;
   the host refuses one that does at startup. The rule binds sdk-cashctrl at its own
   0.4.0, a breaking change of an entry point (§12), and sdk-google-mail from its 0.1.0.
+- A task that spends more than one request states in its docstring and in its tool's note the
+  most requests that one call can spend, retries counted, and one tool call over MCP spends at
+  most about two dozen requests (ADR-0061, decision 8).
 - Result cap: default 200 rows or 64 KB, whichever first, bytes counted in the UTF-8
   encoding of the compact JSON text. Over the cap, return the first page plus a note on
-  how to narrow the query. Never truncate silently. A result whose `data` is a model that
+  how to narrow the query. Never truncate silently.
+  The cut of an answer over MCP is the one choice made for the caller: its note says so, and it
+  changes no value (ADR-0060, decision 4). A result whose `data` is a model that
   holds one list of rows, and no other field a list, returns whole within the byte bound
   and past it is cut by those rows, its other fields whole; any other result past the
   byte bound is the note and a preview of its first bytes (ADR-0038, decision 4). A
@@ -888,12 +980,12 @@ with sdk-template 0.4.0, which renders it (ADR-0026, amendment 2026-11-18, point
   return whole, a cursor-paged page with the `next_token` the caller needs for the next
   page or a bounded lookup, which a cut at the default would turn into a preview or cut
   by its rows, its cursor then past the rows the cut left out: a byte bound of its own,
-  the row bound unchanged (sdk-x's post tools and `lookup_users`; ADR-0038,
+  the row bound unchanged (sdk-x's post tools; ADR-0038,
   decision 4). So does a tool whose result is one upstream document or table that an
   agent reads whole, a report or a statement (sdk-cashctrl's `get_report_data`, 131,072
-  bytes) or a table's page or a matrix (sdk-usda-wasde's `get_table`, 400 rows, and
-  `get_balance_sheet`, 300 rows, each 131,072 bytes): the rows and bytes the source judges
-  it needs, and a note that says how to read a part of it (ADR-0038, decision 4). A
+  bytes) or a table's page (sdk-usda-wasde's `get_table`, 400 rows and 131,072 bytes): the
+  rows and bytes the source judges it needs, and a note that says how to read a part of it
+  (ADR-0038, decision 4). A
   byte bound above the default is a deliberate choice for that
   tool, and every other tool keeps the default (ADR-0038).
   The note never promises a filter the tool lacks: the default says "narrow the query to
@@ -908,9 +1000,11 @@ with sdk-template 0.4.0, which renders it (ADR-0026, amendment 2026-11-18, point
   `; continue with offset=<offset + shown>` (ADR-0047, decisions 1 and 3). The adapter's
   `offset` reaches neither the task nor `meta.request`, and every page of a paged tool
   carries its note, the last page too, so an answer without a note is whole (ADR-0047,
-  decision 4). A source pages a tool where a second run of its task costs little, a
-  packaged table or an answer the response cache holds, and leaves a tool unpaged where a
-  second run is dear, many upstream requests or a billed page (ADR-0047, decision 2). A
+  decision 4).
+  A source pages a tool only where a second run of its task costs upstream nothing, an answer
+  of a packaged table or one that the response cache holds, and leaves a tool unpaged where a
+  second run sends upstream any request (ADR-0061, decision 9; ADR-0047, decision 2, amendment
+  2026-11-24). A
   task that records its own `start` stays unpaged and keeps its note, and a task that takes
   a parameter named `offset` is refused a paged cap at registration (ADR-0047, decision 2).
   A write task is never paged: a continuation runs the task again and would repeat a
@@ -1275,6 +1369,17 @@ standalone from the package. A task named in `BULK_TASKS` gets no route:
   one `tasks.py` (ADR-0035, decision 8). A source's write server is its own to
   test (ADR-0042).
 - Every task function has at least one fixture-backed test and one live smoke test.
+- Two tests of the family check hold names that §1 and §3 give, with no opt-in.
+  The family check fails a read task, one of `tasks.__all__`, bulk or not, whose name starts with
+  none of the five read verbs of §1, `list_`, `get_`, `search_`, `count_` or `download_`
+  (ADR-0061, decision 3).
+  The family check fails a model that a task's `Result[T]` reaches where a field or computed
+  field `<stem>_number` or `<stem>_label` stands beside a field `<stem>` of the same model that
+  holds no text, and it passes a name whose part before the suffix names no field of its model,
+  which is upstream's own name and no reading (ADR-0060, decision 9).
+- A value set that a package writes by hand from upstream's document, an enumeration or a table
+  of allowed values, is held by an offline test that reads it against the document under
+  `docs/upstream/` (ADR-0061, decision 12).
 - Coverage is reported, not gated; mypy strict and ruff are gated.
 
 ## 11. Tooling
@@ -1377,10 +1482,36 @@ which §12 bounds to one minor.
   `@main` by design, since they read their own `main`: the one reference to another
   repository that is not pinned.
 
-## 14. What this family is not
+## 14. The boundary of a source package
 
-Not a place for normalization across sources, scheduling, storage, or any product
-logic. Those live in product repositories that depend on these packages.
+A source package returns and leaves what six sentences say, word for word as ADR-0060,
+decisions 1 to 6, states them, and each section above holds the rule of its subject once
+(ADR-0060).
+
+1. **Values.** A package returns each value of upstream's data as upstream states it, under
+   upstream's own name, code and unit. It derives no value of the data and converts none. Where it
+   reads a printed text as a number or a time and the reading can lose something, the text stands
+   beside it. Upstream's own name is the name in its API document, spelled as the language allows.
+2. **Releases.** A package reports a release identifier as upstream states it for the data
+   answered, and may filter its own items by it. Where an answer holds several releases it reports
+   the newest. It compares no values across releases and reconciles none.
+3. **Labels and lists.** A label names a code in upstream's own words, from upstream's own list of
+   the same source. A shared rule of the workspace names a domain concept only to find where such
+   a label is owed. A package builds no list, name, grouping or rule of its own.
+4. **What an answer holds.** A task is an upstream operation, a list that orients a caller, or a
+   series over periods. It returns what its operation returns for the arguments given, and a caller
+   can set what upstream documents. A package adds no task that fixes filters, sorts, ranks or cuts
+   for the caller. The cut of an answer over MCP is the one choice made for the caller: its note
+   says so, and it changes no value.
+5. **Usability.** Usability inside the scope is: typed answers, errors that say what upstream
+   refused and what to send, paging and a series over periods, lists that orient a caller, checks
+   of what upstream returned, and the record of upstream's observed behavior.
+6. **The family's own.** What is about the call and not about upstream's data is the family's own:
+   the envelope, a write's preview and acknowledgement, a download's record, an error's wait, a
+   tenant's name. What a package withholds by the identifier rule, it withholds on purpose.
+
+Normalization across sources, scheduling, storage and any product logic live in product
+repositories that depend on these packages (ADR-0028, decision 1).
 
 ## 15. Adopting a core or template release
 

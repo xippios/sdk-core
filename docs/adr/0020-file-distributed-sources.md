@@ -1,7 +1,6 @@
 # ADR-0020: File-distributed sources
 
-Status: Accepted · Date: 2026-10-26 · Decided by Johannes on 2026-10-26 (architect
-interview) · Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240
+Status: Accepted · Date: 2026-10-26 · Decided by Johannes on 2026-10-26 (architect interview) · Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240 · Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/474
 
 ## Context
 
@@ -153,3 +152,13 @@ column that says what the sample keeps, which each source names its own way,
 sdk-usda-wasde's `Kept` and sdk-faostat's `What`. Neither source changes. Conventions §10,
 the review checklist's item 4 and the definition of done's Tests block state it from 1.28
 on.
+
+## Amendment 2026-11-24
+
+Amended by ADR-0060, decisions 7 and 8 (https://github.com/xippios/sdk-core/issues/474):
+decision 2 takes the four rules of a record that a package shapes itself, one value per record,
+upstream's text under upstream's name, a reading of it beside it as `<stem>_number` or
+`<stem>_label` and a code beside its label, with their one exception that a record whose file
+names no commodity, as sdk-usda-wasde's XML names none on some pages, reads it from the table's
+title or the same release's XLS and says which, and decision 5's `meta.vintage` has one reading,
+the catalog's release identifier, where it named a report date as printed beside it.

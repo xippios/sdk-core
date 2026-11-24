@@ -8,7 +8,7 @@ import time
 import urllib.request
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import Annotated, Any
 
 import pytest
 
@@ -40,8 +40,8 @@ async def get_series_async(series_id: str, year: int = 2024) -> Result[list[int]
     return Result[list[int]](data=[year], meta=META)
 
 
-async def find_series_async(filters: dict[str, str]) -> Result[list[int]]:
-    """Find series by upstream filters.
+async def search_series_async(filters: dict[str, str]) -> Result[list[int]]:
+    """Search series by upstream filters.
 
     Args:
         filters: Upstream filters, e.g. ``{"state": "IA"}``.
@@ -55,10 +55,10 @@ async def list_regions_async() -> Result[list[str]]:
 
 
 get_series = sync(get_series_async)
-find_series = sync(find_series_async)
+search_series = sync(search_series_async)
 list_regions = sync(list_regions_async)
 
-__all__ = ["find_series", "get_series", "list_regions"]
+__all__ = ["search_series", "get_series", "list_regions"]
 '''
 
 SERVED = "[getattr(tasks, n) for n in tasks.__all__ if n not in getattr(tasks, 'BULK_TASKS', ())]"
@@ -76,7 +76,7 @@ README = """# xippios-example
 | Upstream operation | Task function | MCP tool | Status |
 | --- | --- | --- | --- |
 | `series` | `get_series(series_id, year=2024)` | `example_get_series` | alpha |
-| `series`, filtered | `tasks.find_series(filters)`; a `POST` route | `example_find_series` | |
+| `series`, filtered | `tasks.search_series(filters)`; a `POST` route | `example_search_series` | |
 | `regions` | `list_regions()`, packaged as `reference/regions.json`, checks `region` | | |
 
 The tasks above; nothing else in this section is a table.
@@ -129,7 +129,7 @@ SOURCE: dict[str, str] = {
     "tests/test_family.py": "from xippios.core.testing.family import *  # noqa: F403\n",
 }
 
-FAMILY_TESTS = 17
+FAMILY_TESTS = 19
 
 
 def run_family(
@@ -212,7 +212,7 @@ def test_the_package_is_named_by_the_ini_option_when_src_holds_two(
 
 def test_an_adapter_that_drops_a_task_fails_naming_it(pytester: pytest.Pytester) -> None:
     dropped = SOURCE["src/xippios/example/mcp.py"].replace(
-        SERVED, "[tasks.get_series, tasks.find_series]"
+        SERVED, "[tasks.get_series, tasks.search_series]"
     )
     extra = SOURCE["src/xippios/example/http.py"].replace(
         SERVED, f"{SERVED} + [tasks.get_series_async]"
@@ -273,14 +273,14 @@ def test_a_stale_status_table_fails_naming_both_sides(pytester: pytest.Pytester)
 
 def test_bulk_tasks_stay_off_the_adapters_and_in_the_table(pytester: pytest.Pytester) -> None:
     bulk = TASKS.replace(
-        '__all__ = ["find_series", "get_series", "list_regions"]',
+        '__all__ = ["search_series", "get_series", "list_regions"]',
         "async def download_series_async(series_id: str) -> Result[list[int]]:\n"
         '    """Download every year of one series.\n\n    Args:\n'
         '        series_id: Upstream identifier, e.g. ``"CORN"``.\n    """\n'
         "    return Result[list[int]](data=[], meta=META)\n\n\n"
         "download_series = sync(download_series_async)\n"
         'BULK_TASKS = frozenset({"download_series"})\n'
-        '__all__ = ["download_series", "find_series", "get_series", "list_regions"]',
+        '__all__ = ["download_series", "search_series", "get_series", "list_regions"]',
     )
     table = README.replace(
         "| `regions` |",
@@ -310,7 +310,7 @@ def test_a_task_without_the_envelope_or_the_docstring_fails(pytester: pytest.Pyt
             "    return {}",
         )
         .replace("list_regions = sync(list_regions_async)\n", "")
-        .replace("find_series = sync(find_series_async)", "find_series = find_series_async")
+        .replace("search_series = sync(search_series_async)", "search_series = search_series_async")
     )
     result = run_family(pytester, {"src/xippios/example/tasks.py": bad})
     result.stdout.fnmatch_lines(
@@ -323,7 +323,7 @@ def test_a_task_without_the_envelope_or_the_docstring_fails(pytester: pytest.Pyt
     result.stdout.fnmatch_lines(
         [
             "*every task returns Result[[]T[]]:*",
-            "*- tasks.find_series is async; list the sync function sync() derives from it*",
+            "*- tasks.search_series is async; list the sync function sync() derives from it*",
             "*- tasks.list_regions returns dict[[]str, int[]], not Result[[]T[]]*",
         ]
     )
@@ -343,6 +343,117 @@ def test_the_answers_tag_and_the_core_bound(pytester: pytest.Pytester) -> None:
             "*- core and its extras name different bounds: [[]'0.2.0', '0.2.1'[]]*",
         ]
     )
+
+
+def test_a_read_task_without_a_read_verb_fails_naming_it(pytester: pytest.Pytester) -> None:
+    # ADR-0061, decision 3: a read task is list_, get_, search_, count_ or download_.
+    found = TASKS.replace("search_series", "find_series")
+    table = README.replace("search_series", "find_series")
+    result = run_family(pytester, {"src/xippios/example/tasks.py": found, "README.md": table})
+    result.assert_outcomes(passed=FAMILY_TESTS - 1, failed=1)
+    result.stdout.fnmatch_lines(
+        [
+            "*every read task's name starts with list_, get_, search_, count_ or download_ "
+            "(conventions §1, ADR-0061, decision 3):*",
+            "*- tasks.find_series starts with none of them*",
+        ]
+    )
+    # A verb alone is no name, and a verb that runs into its noun is no verb.
+    bare = TASKS.replace("search_series", "get_").replace("list_regions", "listregions")
+    rows = README.replace("search_series", "get_").replace("list_regions", "listregions")
+    result = run_family(pytester, {"src/xippios/example/tasks.py": bare, "README.md": rows})
+    result.assert_outcomes(passed=FAMILY_TESTS - 1, failed=1)
+    result.stdout.fnmatch_lines(
+        [
+            "*- tasks.get_ starts with none of them*",
+            "*- tasks.listregions starts with none of them*",
+        ]
+    )
+
+
+READINGS = '''
+from decimal import Decimal
+from typing import Annotated
+
+from pydantic import BaseModel, Field, computed_field
+
+
+class Region(BaseModel):
+    """The region of an observation: its code with its label, and its printed level."""
+
+    code: int
+    code_label: str
+    level: float
+    level_number: Decimal | None = None
+
+
+class Observation(BaseModel):
+    """One observation: upstream's printed value, and the number read from it beside it."""
+
+    value: Annotated[str, Field(validation_alias="Value")]
+    value_number: Decimal | None = None
+    street_number: str | None = None
+    region: Region
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def period_number(self) -> int:
+        """Upstream's own name: the model holds no field period."""
+        return 2024
+'''
+
+WITH_READINGS = READINGS + TASKS.replace(
+    "async def get_series_async(series_id: str, year: int = 2024) -> Result[list[int]]:",
+    "async def get_series_async(series_id: str, year: int = 2024) -> Result[list[Observation]]:",
+)
+
+
+def test_a_reading_beside_a_stem_that_holds_no_text_fails_naming_it(
+    pytester: pytest.Pytester,
+) -> None:
+    # ADR-0060, decision 9: the check reaches Region through Observation's field, fails both
+    # suffixes beside a stem that holds no text (https://github.com/xippios/sdk-core/issues/474,
+    # part 10), and passes street_number and period_number, whose part before the suffix names
+    # no field.
+    result = run_family(pytester, {"src/xippios/example/tasks.py": WITH_READINGS})
+    result.assert_outcomes(passed=FAMILY_TESTS - 1, failed=1)
+    result.stdout.fnmatch_lines(
+        [
+            "*a reading <stem>_number or <stem>_label stands beside a text field <stem> of its "
+            "model; a name whose part before the suffix names no field is upstream's own and "
+            "passes (conventions §3, ADR-0060, decisions 7 and 9):*",
+            "*- Region.code_label stands beside code, which holds int*",
+            "*- Region.level_number stands beside level, which holds float*",
+        ]
+    )
+    text = WITH_READINGS.replace("    code: int\n", "    code: str | None\n").replace(
+        "    level: float\n", "    level: str | None\n"
+    )
+    result = run_family(pytester, {"src/xippios/example/tasks.py": text})
+    result.assert_outcomes(passed=FAMILY_TESTS)
+
+
+class Kind(str):
+    """A text of its own kind, as a value set's members are texts."""
+
+
+@pytest.mark.parametrize(
+    ("annotation", "text"),
+    [
+        (str, True),
+        (str | None, True),
+        (Annotated[str | None, "a note"], True),
+        (Kind, True),
+        (Kind | None, True),
+        (int, False),
+        (float | None, False),
+        (str | int, False),
+        (list[str], False),
+        (None, False),
+    ],
+)
+def test_text_is_a_str_or_a_subclass_none_allowed_beside_it(annotation: Any, text: bool) -> None:
+    assert family._holds_text(annotation) is text
 
 
 def _family_at(package_dir: Path) -> FamilySource:
@@ -442,7 +553,7 @@ def test_a_task_function_cell_yields_the_names_it_starts_with(cell: str, names: 
 
 
 def test_the_status_tables_are_read_under_the_status_heading_only() -> None:
-    assert _status_table_tasks(README) == ["get_series", "find_series", "list_regions"]
+    assert _status_table_tasks(README) == ["get_series", "search_series", "list_regions"]
     template = (
         "## Status\n\n| Upstream operation | Task function | MCP tool | Status |\n"
         "| --- | --- | --- | --- |\n| (none yet) | | | |\n"

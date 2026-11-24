@@ -32,6 +32,18 @@ than one fails every test here, naming the option. The repository's files (``REA
   (conventions §2, §6) whose docstring is a one-sentence first line and, when it takes
   parameters, an ``Args:`` block (conventions §8); no ``async_fn`` is required, since
   conventions §6 makes the async variant optional;
+- every read task, of ``tasks.__all__``, bulk or not, is named with one of the five read
+  verbs, ``list_``, ``get_``, ``search_``, ``count_`` or ``download_``, and a noun after it
+  (conventions §1, ADR-0061, decision 3); a write task of ``tasks_write`` takes a write's
+  verb, ``create_``, ``update_``, ``delete_`` or upstream's own, and is not read here;
+- in every pydantic model that a task's ``Result[T]`` reaches, read or write, through its
+  fields, a field or computed field ``<stem>_number`` or ``<stem>_label`` whose stem names a
+  field of the same model stands beside text: that field holds ``str`` or a subclass, ``None``
+  allowed beside it (conventions §3 and §10, ADR-0060, decisions 7 and 9). A name whose part
+  before the suffix names no field of its model is upstream's own and no reading, an address's
+  ``street_number`` say, and passes; so does a reading that keeps no text beside it, since
+  whether a reading can lose something is the review's. A time has no suffix, since the type
+  that keeps all that upstream sends reads it;
 - ``README.md``'s status table lists exactly ``tasks.__all__`` plus
   ``tasks_write.__all__``, a source's write tasks included (conventions §13), in the format
   of sdk-template's ``README.md.jinja``: the tables under the ``## Status`` heading whose
@@ -156,6 +168,8 @@ __all__ = [
     "test_family_observed_notes_end_with_their_probe_and_date",
     "test_family_package_has_a_version",
     "test_family_package_ships_py_typed",
+    "test_family_read_tasks_start_with_a_read_verb",
+    "test_family_readings_stand_beside_their_text",
     "test_family_readme_status_table_lists_the_tasks",
     "test_family_tasks_carry_agent_docstrings",
     "test_family_tasks_return_results",
@@ -436,6 +450,145 @@ def test_family_tasks_carry_agent_docstrings(family_source: FamilySource) -> Non
         if inspect.signature(fn).parameters and "Args:" not in doc:
             problems.append(f"{name}: explain every parameter under Args: with valid values")
     _fail(problems, "task docstrings are written for agents:")
+
+
+_READ_VERBS = ("list", "get", "search", "count", "download")
+"""The five verbs a read task's name starts with, each followed by ``_`` (ADR-0061, decision 3).
+
+Conventions §1 name them in this order, which ``tests/test_conventions.py`` holds.
+"""
+_VERBS_INTRO = (
+    "every read task's name starts with "
+    + ", ".join(f"{verb}_" for verb in _READ_VERBS[:-1])
+    + f" or {_READ_VERBS[-1]}_ (conventions §1, ADR-0061, decision 3):"
+)
+
+
+def _starts_with_a_read_verb(name: str) -> bool:
+    """Whether ``name`` is a read verb, its ``_`` and a noun after it."""
+    return any(name.startswith(f"{verb}_") and len(name) > len(verb) + 1 for verb in _READ_VERBS)
+
+
+def test_family_read_tasks_start_with_a_read_verb(family_source: FamilySource) -> None:
+    """Every read task's name starts with one of the five read verbs (conventions §1).
+
+    A task of ``tasks.__all__``, bulk or not, is ``list_``, ``get_``, ``search_``, ``count_``
+    or ``download_`` and what it lists, gets, searches, counts or downloads, as the invented
+    source ``example`` names ``list_regions`` and ``get_series``. Each verb has one meaning in
+    the family, so an agent that knows one source reads the next one's tools by their names. A
+    write task of ``tasks_write`` takes a write's verb, ``create_``, ``update_``, ``delete_`` or
+    upstream's own, and is not read here (ADR-0061, decision 3).
+    """
+    problems = [
+        f"tasks.{name} starts with none of them"
+        for name in family_source.read_tasks()
+        if not _starts_with_a_read_verb(name)
+    ]
+    _fail(problems, _VERBS_INTRO)
+
+
+_SUFFIXES = ("_number", "_label")
+"""The suffixes of a reading, which stands beside the text field of its stem (ADR-0060).
+
+A time has none: it is read into the type that keeps all that upstream sends, with no text
+beside it (ADR-0060, decision 8).
+"""
+_UNION = type(int | str)
+"""The type of ``X | Y``, which ``typing.get_origin`` gives beside ``typing.Union``."""
+_READINGS_INTRO = (
+    "a reading <stem>_number or <stem>_label stands beside a text field <stem> of its model; a "
+    "name whose part before the suffix names no field is upstream's own and passes "
+    "(conventions §3, ADR-0060, decisions 7 and 9):"
+)
+
+
+def _bare(annotation: Any) -> Any:
+    """The annotation without the ``Annotated`` around it."""
+    while typing.get_origin(annotation) is typing.Annotated:
+        annotation = typing.get_args(annotation)[0]
+    return annotation
+
+
+def _model_fields(model: type[pydantic.BaseModel]) -> dict[str, Any]:
+    """The model's fields and computed fields by name, each with its annotation."""
+    fields: dict[str, Any] = {name: info.annotation for name, info in model.model_fields.items()}
+    for name, computed in model.model_computed_fields.items():
+        fields[name] = computed.return_type
+    return fields
+
+
+def _models(
+    annotation: Any, seen: set[type[pydantic.BaseModel]]
+) -> Iterator[type[pydantic.BaseModel]]:
+    """Each model that ``annotation`` reaches and ``seen`` lacks, added to ``seen`` as it is.
+
+    A model is reached through a union, a container's arguments and the fields of a model that
+    is reached itself.
+    """
+    annotation = _bare(annotation)
+    if isinstance(annotation, type) and issubclass(annotation, pydantic.BaseModel):
+        if annotation not in seen:
+            seen.add(annotation)
+            yield annotation
+            for field in _model_fields(annotation).values():
+                yield from _models(field, seen)
+        return
+    for argument in typing.get_args(annotation):
+        yield from _models(argument, seen)
+
+
+def _holds_text(annotation: Any) -> bool:
+    """Whether a field holds text: ``str`` or a subclass of it, ``None`` allowed beside it."""
+    annotation = _bare(annotation)
+    if typing.get_origin(annotation) in (typing.Union, _UNION):
+        kinds = [_bare(kind) for kind in typing.get_args(annotation) if kind is not type(None)]
+    else:
+        kinds = [annotation]
+    return bool(kinds) and all(isinstance(kind, type) and issubclass(kind, str) for kind in kinds)
+
+
+def _stem(name: str) -> str | None:
+    """The part of ``name`` before a reading's suffix, or ``None`` for a name without one."""
+    for suffix in _SUFFIXES:
+        if name.endswith(suffix) and len(name) > len(suffix):
+            return name[: -len(suffix)]
+    return None
+
+
+def test_family_readings_stand_beside_their_text(family_source: FamilySource) -> None:
+    """A reading ``<stem>_number`` or ``<stem>_label`` stands beside its text (conventions §3).
+
+    A package that reads a printed text as a number or a label keeps the text under upstream's
+    name and the reading beside it under a fixed suffix (ADR-0060, decision 7), as the invented
+    source ``example`` keeps ``value``, ``"1,204 (P)"``, beside ``value_number``, ``1204``. The
+    check reads every pydantic model that a task's ``Result[T]`` reaches, read and write tasks
+    alike, through its fields and computed fields, and fails a field or computed field with
+    either suffix whose stem names a field of the same model that holds no text. The stem is
+    the name before the suffix where the model holds a field of that name: a name whose part
+    before the suffix names no field is upstream's own and no reading, an address's
+    ``street_number`` say, and passes. A time has no suffix: the type that keeps all that
+    upstream sends reads it, with no text beside it. The check holds a reading's form, not that
+    a reading which can lose something has one, which is the review's (ADR-0060, decision 9).
+    """
+    problems: list[str] = []
+    seen: set[type[pydantic.BaseModel]] = set()
+    for fn in _every_task(family_source).values():
+        try:
+            returned = typing.get_type_hints(fn, include_extras=True).get("return")
+        except Exception:  # an annotation that does not resolve: the test of results names it
+            continue
+        for model in _models(returned, seen):
+            fields = _model_fields(model)
+            for name in fields:
+                stem = _stem(name)
+                if stem is None or stem not in fields or _holds_text(fields[stem]):
+                    continue
+                held = _bare(fields[stem])
+                shown = held.__name__ if isinstance(held, type) else repr(held)
+                problems.append(
+                    f"{model.__name__}.{name} stands beside {stem}, which holds {shown}"
+                )
+    _fail(problems, _READINGS_INTRO)
 
 
 def _one_tenant_problem(fn: Callable[..., Any], param: str) -> str | None:

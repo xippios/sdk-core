@@ -1,6 +1,6 @@
 # ADR-0011: Retries — a 429 for every method, a 5xx and a transport failure for idempotent ones
 
-Status: Accepted · Date: 2026-10-23
+Status: Accepted · Date: 2026-10-23 · Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/474
 
 ## Context
 
@@ -64,3 +64,12 @@ This ADR changes them.
 Followed up by ADR-0015 (2026-10-24): `send_with_retries` gains the keyword `classify=`,
 default `None`, so a call written to decision 4 is unchanged; the method rule of
 decision 2 still decides first.
+
+## Amendment 2026-11-24
+
+Amended by ADR-0061, decision 10 (https://github.com/xippios/sdk-core/issues/474): a request
+that upstream bills and a request that writes are sent once, so that a source sets decision 3's
+`retry_non_idempotent` for no write, where upstream made a repeat safe as well, and sets
+`RetryPolicy(max_attempts=1)` on a client whose reads upstream bills, and the error of a write
+that failed says that its outcome is unknown, while core's own retry of a write follows
+https://github.com/xippios/sdk-core/issues/480.

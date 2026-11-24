@@ -1,6 +1,6 @@
 # ADR-0001: Three-layer architecture for source packages
 
-Status: Accepted · Date: 2026-10-20 · Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240
+Status: Accepted · Date: 2026-10-20 · Amended 2026-11-18 by https://github.com/xippios/sdk-core/issues/240 · Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/474
 
 ## Context
 
@@ -48,3 +48,11 @@ the composed answer's `meta.request` builds a new `ResultMeta` through the const
 from that answer's meta, never with `model_copy`, which runs no validator: the drop of a
 top-level `None` (ADR-0022) and the redaction of credentials (ADR-0005) then reach what
 it adds. Conventions §2 and §4 state it from 1.28 on.
+
+## Amendment 2026-11-24
+
+Amended by ADR-0060, decision 4 (https://github.com/xippios/sdk-core/issues/474): a task-shaped
+function of layer 2 is an upstream operation, a list that orients a caller or a series over
+periods, it returns what its operation returns for the arguments given, a caller can set what
+upstream documents, and no task fixes filters, sorts, ranks or cuts for the caller, while the
+three layers and amendment (a) stand as written.

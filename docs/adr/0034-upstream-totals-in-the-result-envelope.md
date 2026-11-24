@@ -1,7 +1,6 @@
 # ADR-0034: Upstream totals in the result envelope
 
-Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under
-https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0012
+Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0012 · Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/474
 
 ## Context
 
@@ -54,3 +53,10 @@ changes no decision; their history stays in ADR-0012.
 
 Conventions §4, the README and the docstrings of `ResultMeta` state its decisions from 1.28
 on.
+
+## Amendment 2026-11-24
+
+Amended by ADR-0060, decision 8 (https://github.com/xippios/sdk-core/issues/474): decision 4's
+`total`, never computed, is not summed either, so a task that assembles its answer from several
+requests, as a split by year does, leaves `total` `None` unless upstream counts the whole
+request, while decisions 1 to 3 stand as written.
