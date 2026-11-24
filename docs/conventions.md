@@ -896,12 +896,11 @@ names a tenant once, on its registry, `Tenants(..., param="org")`, required: the
 check, the serve command's option and every `TenantLock`, which takes the registry, read it
 there, so none names another. Core checks the rule where it can break unseen.
 `bind_tasks` refuses, naming the task and the parameter, a task that lacks the lock's
-parameter, unless it is the tenant list or its module declares it by name as touching no
-tenant, in `NO_TENANT_TASKS`, a frozenset beside `BULK_TASKS` in `tasks.py` or
-`tasks_write.py`; a bound server serves a task so declared as it is. The family check holds
-every task of a source with a `Tenants` registry to the rule, with no opt-in: the
-registry's `param` once, required with no default, of a type that names one tenant, a `str`, the
-tenant list and the declared tasks excepted (ADR-0036, decision 13). Both read signatures:
+parameter, unless it is the tenant list, so a bound server serves the tenant's tasks and the
+tenant list. The family check holds every task of a source with a `Tenants` registry to the
+rule, with no opt-in: the registry's `param` once, required with no default, of a type that
+names one tenant, a `str`, the tenant list excepted (ADR-0036, decision 13, and its
+amendment of 2026-11-24). Both read signatures:
 a task that takes one tenant and opens another's client is the review's to find
 (https://github.com/xippios/sdk-core/issues/302). The rule binds a source from its adoption
 of core 0.4.0.

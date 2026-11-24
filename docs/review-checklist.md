@@ -133,8 +133,8 @@ the repository it reviews.
 17. **One tenant per call** (`sdk-core`, and a multi-tenant source): no task, tool or helper
     in core works across tenants; each task of the source takes exactly one tenant,
     required, the tenant list returns names only, and nothing is shared between tenants, no
-    client, rate limiter or cache; a task named in `NO_TENANT_TASKS` touches no tenant
-    (conventions §7; ADR-0036, decisions 3, 11 and 13). `bind_tasks` and the family check
+    client, rate limiter or cache (conventions §7; ADR-0036, decisions 3, 11 and 13).
+    `bind_tasks` and the family check
     read signatures, so the review judges what a task reaches inside, a task that takes one
     tenant and opens another's client say (https://github.com/xippios/sdk-core/issues/302).
 18. **Write tools** (a source with a write server, from its patch on core 0.4.1): each write

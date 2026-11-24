@@ -22,7 +22,7 @@ records in `docs/adr/`. A record changes, and this file follows when the script 
 - <a id="0033"></a>[ADR-0033](adr/0033-rate-limit-policy.md): Rate-limit policy — a fast pace, quotas spent, the 429 interpreted · Accepted · 2026-11-18
 - <a id="0034"></a>[ADR-0034](adr/0034-upstream-totals-in-the-result-envelope.md): Upstream totals in the result envelope · Accepted · 2026-11-18 · amended 2026-11-24
 - <a id="0035"></a>[ADR-0035](adr/0035-offline-tests-guaranteed-by-the-plugin.md): Offline tests guaranteed by the plugin · Accepted · 2026-11-18
-- <a id="0036"></a>[ADR-0036](adr/0036-multi-tenant-sources.md): Multi-tenant sources · Accepted · 2026-11-18
+- <a id="0036"></a>[ADR-0036](adr/0036-multi-tenant-sources.md): Multi-tenant sources · Accepted · 2026-11-18 · amended 2026-11-24
 - <a id="0037"></a>[ADR-0037](adr/0037-client-request-hooks-and-quota-policy.md): Client request hooks and a quota policy · Accepted · 2026-11-18 · amended 2026-11-21
 - <a id="0038"></a>[ADR-0038](adr/0038-per-tool-result-caps.md): Per-tool result caps · Accepted · 2026-11-18
 - <a id="0039"></a>[ADR-0039](adr/0039-core-versioning-and-source-adoption.md): Core versioning and source adoption · Accepted · 2026-11-18
