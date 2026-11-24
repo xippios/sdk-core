@@ -97,3 +97,8 @@ decision 10), and decision 2's raw response, which a caller asked for with
 since nothing is retried or raised, as the switch left the client by ADR-0037's amendment of the
 same day (https://github.com/xippios/sdk-core/issues/479), while the rest of decisions 1 and 2,
 decisions 3 to 6 and the consequences stand as written.
+
+Decisions 4 to 6 place the renderer where it stood when they were decided: `render_enums`,
+`enum_member_name` and `id_name_pairs` stand in `xippios.core.refresh.reference`, the frame
+of the reference refresh script, which alone calls the renderer and formats `enums.py` with
+ruff in place of the template's script (ADR-0062, decisions 13 and 14).

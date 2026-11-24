@@ -46,3 +46,7 @@ left core. A recording names the values in `Scrub(secrets=...)`; a source that r
 them by key does so in its own recorder step, on the `Fixture` that `fixture_from_response`
 returns, before it writes the file, as sdk-cashctrl's recorder does. Conventions §3 says so
 from 1.21 on.
+
+The step that rewrites a value by key stays the source's, and core's recorder runs it:
+`record` and `fixture_from_response` take the source's `rewrite=` and run it after the
+scrub and before the write (ADR-0066, decision 1, carried from ADR-0048, decision 1).
