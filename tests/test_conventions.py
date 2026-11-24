@@ -1616,6 +1616,43 @@ def test_adr_0063_and_tool_set_s_docstring_say_what_each_refusal_of_a_tool_set_n
             assert words in text, f"{name} does not say {words!r}"
 
 
+def test_core_s_text_says_what_a_host_meets_of_a_tool_set_s_options() -> None:
+    # The host's adoption on the candidate met three things that core's text left unsaid, none a
+    # fault of the code (https://github.com/xippios/sdk-core/issues/571): what a hook sets is
+    # the process's, a ceiling's value among it, so every endpoint of a host holds one value; a
+    # `XippiosError` that a hook raises reaches a host, which stops as `main` does; and
+    # `option_defaults()` holds no tenant's option, which `main` alone adds (`_add_tenant`).
+    from xippios.core import Ceiling
+    from xippios.core.mcp import ToolSet
+
+    process = "every endpoint that a host serves from one process"
+    error = ("`XippiosError`", "exit status 2", "a host")
+    tenant = ("`--<param>`", "no such attribute under a host")
+    readme = flat((ROOT / "README.md").read_text(encoding="utf-8"))
+    host = readme.split("A host builds one server from the tool sets of several packages", 1)[1]
+    host = host.split("## HTTP routes", 1)[0]
+    args = flat(ToolSet.__doc__ or "").replace("``", "`")
+    hook = args.split("apply_options: ", 1)[1].split(" read_only: ", 1)[0]
+    texts = {
+        "Ceiling's docstring": (flat(Ceiling.__doc__ or "").replace("``", "`"), (process,)),
+        "the README's ceiling": (
+            sentence(readme, "The entry point, and a host that applies"),
+            (process,),
+        ),
+        "ToolSet's apply_options": (hook, error),
+        "option_defaults' docstring": (
+            flat(ToolSet.option_defaults.__doc__ or "").replace("``", "`"),
+            tenant,
+        ),
+        "the README's host paragraph": (host, (process, *error, *tenant)),
+        "ADR-0063, decision 4": (decisions("ADR-0063")[4], (process, *error, *tenant)),
+    }
+    for name, (text, phrases) in texts.items():
+        for words in phrases:
+            assert words in text, f"{name} does not say {words!r}"
+    assert "one MCP server per process" not in texts["Ceiling's docstring"][0]
+
+
 def test_no_sentence_of_section_8_makes_the_whole_docstring_the_description() -> None:
     assert "The function docstring is the tool description" not in section(8)
 

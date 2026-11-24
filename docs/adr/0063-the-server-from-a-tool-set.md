@@ -89,11 +89,17 @@ change of the family check.
    - a tool set's hooks are applied without a server and without a command line, by
      `option_defaults()` and the hook of decision 7, so a host holds a package's options at the
      values its entry point holds without options; an option that an empty command line leaves
-     without a value raises `ValueError` naming the source, where argparse would end the process;
+     without a value raises `ValueError` naming the source, where argparse would end the process,
+     and a `XippiosError` that the hook raises reaches the host, which catches it itself and
+     stops as `main` does, with the message and exit status 2; a hook takes no server, so what it
+     sets is the process's, as a `Ceiling`'s value is (ADR-0054, decision 2), and every
+     endpoint that a host serves from one process holds a package's options at the same values;
    - `mcp_call` and `mcp_call_text` of `xippios.core.testing` stay the helpers of a host's tests.
 
    A host binds no tenant in 0.5.0: a tenant source's own entry does, and through a host its tools
-   take the tenant as an argument.
+   take the tenant as an argument. So `option_defaults()` holds no tenant's `--<param>`, which
+   `main` adds where it is given `tenants`, and a hook that read it would find no such attribute
+   under a host.
 5. **The write rule and the hold to loopback are the tool set's.** `is_write_server` and
    `is_loopback_only` leave with their two registries, since a tool set's `read_only` and
    `loopback_only` say the same (https://github.com/xippios/sdk-core/issues/485, part 1, the third

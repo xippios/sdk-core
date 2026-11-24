@@ -1401,8 +1401,9 @@ mcp_apply_options = SERIES.apply_options
 ```
 
 The entry point, and a host that applies the tool set's `option_defaults()`, set the ceiling
-in force, `SERIES.value`, to 24 for the whole process, its Python and HTTP calls included, and
-`--series-months 36` sets 36; a value outside 1 to 60 stops the entry point with exit status 2.
+in force, `SERIES.value`, to 24 for the whole process, its Python and HTTP calls and every
+endpoint that a host serves from one process included, and `--series-months 36` sets 36; a
+value outside 1 to 60 stops the entry point with exit status 2.
 Below 60 the refusal says so: `2024-08 to 2026-08 is 25 months; one call fetches at most 24
 months, the ceiling set for this process (the MCP server starts with 24 by default;
 --series-months raises it, up to 60). Nothing was sent. Ask for fewer months.` The option's
@@ -1493,7 +1494,14 @@ for tools in (example_mcp.build(), other_mcp.build()):
 ```
 
 `option_defaults()` raises `ValueError`, naming the source, for an option of `add_options`
-that has no default, where argparse would print its usage and end the host.
+that has no default, where argparse would print its usage and end the host. It holds core's
+options and the package's own, and not the tenant's `--<param>` that `main` adds where it is
+given `tenants`, since a host binds no tenant: a hook that read it would find no such
+attribute under a host. A `XippiosError` that `apply_options` raises, a missing variable say,
+reaches the host, which catches it itself and stops as `main` does, with the message and exit
+status 2. A hook takes no server, so what it sets is the process's, as a `Ceiling`'s value is,
+and every endpoint that a host serves from one process holds a package's options at the same
+values.
 
 ## HTTP routes in two lines
 
