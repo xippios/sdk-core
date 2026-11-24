@@ -183,7 +183,10 @@ skip it (§8, §9; ADR-0040).
   `Snapshot` of `xippios.core.refresh` with its pages, its attribution and its hooks, and
   calls `run(snapshot)` (ADR-0046, decision 2). The fetch, the attribution check,
   `FETCHED.md`, the write and `--check` are the frame's, and no hook of a source replaces
-  them (ADR-0046, decision 2). A converter that a source's hooks use is the source's own
+  them (ADR-0046, decision 2). The frame sends every request through core's client, one that
+  it builds from the slug or the source's own that the snapshot hands it, and names itself as
+  the client does, `xippios-example/<version>` for the invented source `example`
+  (ADR-0062, decision 4). A converter that a source's hooks use is the source's own
   dependency, never core's (ADR-0046, decision 1). Every file the snapshot holds but
   `FETCHED.md` is written as the source's hooks make it (ADR-0046, decision 3).
   The script names its `Snapshot` `SNAPSHOT` at its top level, which imports and declares
@@ -276,13 +279,13 @@ skip it (§8, §9; ADR-0040).
   needs the source's credentials is requested with them; only the samples' requests send
   a credential, and neither a credential nor a token is written (ADR-0028,
   decision 7).
-  Such a sample is marked `keyed`, and only a keyed sample sends what the snapshot's
-  `Credentials` give, follows no redirect and is never retried (ADR-0046, decision 5).
-  A keyed sample has the origin of the credentials' base, its scheme, host and port as
-  parsed, and a path under the base's by its segments, as the client's credentials go to its
-  base URL's origin alone (ADR-0046, decision 5; ADR-0037, decision 4).
-  `FETCHED.md` names the variables a source's login reads, never their values (ADR-0046,
-  decision 5).
+  Such a sample is marked `keyed`, and only a keyed sample is sent with the credentials of
+  the client that the snapshot hands the frame, follows no redirect and is never retried
+  (ADR-0062, decision 4).
+  A keyed sample has the origin of the client's base URL, its scheme, host and port, where
+  alone the client sends its credentials (ADR-0062, decision 4; ADR-0037, decision 4).
+  `FETCHED.md` names the variables that the client's credentials are read from, never their
+  values (ADR-0062, decision 4).
 - A package returns each value of upstream's data as upstream states it, under upstream's own
   name, code and unit, derives no value of the data and converts none, and where it reads a
   printed text as a number or a time and the reading can lose something, the text stands beside

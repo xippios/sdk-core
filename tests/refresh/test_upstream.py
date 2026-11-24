@@ -1,16 +1,16 @@
-"""The snapshot frame, ``xippios.core.refresh`` (ADR-0046): a source's declaration run
+"""The snapshot frame, ``xippios.core.refresh`` (ADR-0062): a source's declaration run
 against answers served in memory.
 
 The tests of sdk-template's skeleton, ``tests/test_capture.py`` there (#123, #188), moved
 here with the frame, a ``Snapshot`` in place of the script's constants; the frame's own
-rules and its hooks follow them. ``Site`` answers every request from its routes through a
-urllib handler, so no socket is opened and nothing leaves the process.
+rules and its hooks follow them. The frame sends through core's client, and ``Site`` answers
+every request from its routes through respx, so no socket is opened and nothing leaves the
+process.
 """
 
 import ast
 import hashlib
-import http.client
-import io
+import inspect
 import json
 import mimetypes
 import os
@@ -19,20 +19,20 @@ import shutil
 import subprocess
 import sys
 import time
-import urllib.error
-import urllib.request
-import urllib.response
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Generator, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from email.message import Message
+from importlib import metadata
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
+import respx
 
 from xippios.core import refresh
+from xippios.core.client import AsyncClient, ClientConfig, RetryPolicy
+from xippios.core.errors import ConfigError, RateLimitError, XippiosError
 from xippios.core.refresh import (
-    Credentials,
     NotFetched,
     Page,
     Response,
@@ -49,10 +49,14 @@ API = "https://api.example.org/v1"
 ALLOWLIST = "<!-- pragma: allowlist secret (an ETag, not a key) -->"
 TABLE_HEADER = "| File | URL | Fetched | HTTP | Bytes | sha256 | ETag | Last-Modified | Note |"
 NOT_FETCHED_HEADER = "| URL | HTTP | Redirects to | Reason |"
-USER_AGENT = "xippios-example refresh_upstream (+https://github.com/xippios)"
+VERSION = "1.0.0"
+"""The version of the installed distribution ``xippios-example``, as the site fixture has it."""
+USER_AGENT = f"xippios-example/{VERSION} (+https://github.com/xippios)"
+WRITTEN_AGENT = "xippios-example/<version> (+https://github.com/xippios)"
+"""The User-Agent as FETCHED.md names it, with no version that a release would move."""
 HAND = "written by hand: what upstream does but never documents; not fetched or checked"
 SPLIT = "one of the files split from one page; Bytes and sha256 are the page's"
-MARK = "<!-- form 1 of the FETCHED.md that xippios.core.refresh writes -->"
+MARK = "<!-- form 2 of the FETCHED.md that xippios.core.refresh writes -->"
 ROOT = Path(__file__).resolve().parents[2]
 
 Answer = tuple[int, dict[str, str], bytes]
@@ -67,7 +71,7 @@ class Site:
 
     routes: dict[str, Answer] = field(default_factory=dict)
     later: dict[str, list[Answer]] = field(default_factory=dict)
-    requests: list[urllib.request.Request] = field(default_factory=list)
+    requests: list[httpx.Request] = field(default_factory=list)
     sleeps: list[float] = field(default_factory=list)
 
     def page(self, name: str, text: str | bytes, headers: Mapping[str, str] | None = None) -> str:
@@ -79,62 +83,39 @@ class Site:
         self.routes[url] = (200, {**typed, **(headers or {})}, body)
         return url
 
-    def asked(self, url: str) -> list[urllib.request.Request]:
+    def asked(self, url: str) -> list[httpx.Request]:
         """The requests sent to ``url``."""
-        return [request for request in self.requests if request.full_url == url]
+        return [request for request in self.requests if str(request.url) == url]
 
-    def answer(self, request: urllib.request.Request) -> urllib.response.addinfourl:
+    def answer(self, request: httpx.Request) -> httpx.Response:
         """The answer to ``request``; a URL that is not served is a network error."""
         self.requests.append(request)
-        url = request.full_url
+        url = str(request.url)
         waiting = self.later.get(url)
         if waiting:
             status, headers, body = waiting.pop(0)
         elif url in self.routes:
             status, headers, body = self.routes[url]
         else:
-            raise urllib.error.URLError(f"{url} is not served")
-        message = http.client.HTTPMessage()
-        for name, value in headers.items():
-            message[name] = value
-        message["Content-Length"] = str(len(body))
-        answer = urllib.response.addinfourl(io.BytesIO(body), message, url, status)
-        answer.msg = http.client.responses.get(status, "")  # type: ignore[attr-defined]
-        return answer
-
-
-class Served(urllib.request.HTTPSHandler, urllib.request.HTTPHandler):
-    """Answer every http and https request from the site.
-
-    ``build_opener`` then adds neither of urllib's own handlers, so no socket is opened, and
-    the handler's order puts it before the proxy handler.
-    """
-
-    handler_order = 50
-
-    def __init__(self, site: Site) -> None:
-        super().__init__()
-        self.site = site
-
-    def http_open(self, req: urllib.request.Request) -> Any:
-        return self.site.answer(req)
-
-    def https_open(self, req: urllib.request.Request) -> Any:
-        return self.site.answer(req)
+            raise httpx.ConnectError(f"{url} is not served", request=request)
+        return httpx.Response(status, headers=headers, content=body)
 
 
 @pytest.fixture
-def site(monkeypatch: pytest.MonkeyPatch) -> Site:
-    """Every opener the frame builds answers from the site, and no pause waits."""
+def site(monkeypatch: pytest.MonkeyPatch) -> Iterator[Site]:
+    """Every request of core's client answers from the site, the distribution
+    ``xippios-example`` stands installed at ``VERSION``, and no pause waits."""
     served = Site()
-    build = urllib.request.build_opener
+    installed = metadata.version
 
-    def build_opener(*handlers: urllib.request.BaseHandler) -> urllib.request.OpenerDirector:
-        return build(Served(served), *handlers)
+    def version(distribution: str) -> str:
+        return VERSION if distribution == "xippios-example" else installed(distribution)
 
-    monkeypatch.setattr(urllib.request, "build_opener", build_opener)
+    monkeypatch.setattr(metadata, "version", version)
     monkeypatch.setattr(time, "sleep", served.sleeps.append)
-    return served
+    with respx.mock(assert_all_called=False) as router:
+        router.route().mock(side_effect=served.answer)
+        yield served
 
 
 @pytest.fixture
@@ -911,31 +892,136 @@ def test_every_etag_stands_in_a_code_span_with_the_mark(site: Site, out: Path) -
     assert go(snapshot, "--check") == 0
 
 
-def test_the_user_agent_and_the_pause_are_the_snapshots(site: Site, out: Path) -> None:
-    """The frame identifies itself by the source's slug and pauses before every request as
-    long as the snapshot says (sdk-eurostat's five seconds), stated in FETCHED.md."""
+def test_the_frame_names_itself_as_the_client_does_and_pauses_as_the_snapshot_says(
+    site: Site, out: Path
+) -> None:
+    """ADR-0062, decision 4: the client that the frame builds from the slug sends the User-Agent
+    of every client of the source, its version that of the installed distribution, and FETCHED.md
+    names it without the version, which a release would move; the frame pauses before every
+    request as long as the snapshot says."""
     page = Page(site.page("guide.html", "<p>Guide</p>"), "pages/guide.html")
     assert go(declare(out, page, pause=5.0)) == 0
     (request,) = site.requests
-    assert request.get_header("User-agent") == USER_AGENT
+    assert request.headers["User-Agent"] == USER_AGENT
+    config = ClientConfig(source="example", version=VERSION, base_url=BASE)
+    assert request.headers["User-Agent"] == config.user_agent, "the client's one form"
+    assert "Authorization" not in request.headers
     assert site.sleeps == [5.0]
-    assert f"5 s apart, each retried at most once, identified as `{USER_AGENT}`" in flat(
-        fetched(out)
+    text = flat(fetched(out))
+    assert "5 s apart, through core's client, each retried at most once" in text
+    assert f"identified as `{WRITTEN_AGENT}`, the source package's version in place of" in text
+    assert VERSION not in text
+
+
+def test_the_client_built_from_the_slug_needs_the_installed_distribution(
+    site: Site, out: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The frame names itself by the version of ``xippios-<slug>``, so a script run where the
+    source's distribution is not installed stops before any request, naming the distribution and
+    the two ways on; a snapshot that hands the frame its client needs none."""
+    page = Page(site.page("guide.html", "<p>Guide</p>"), "pages/guide.html")
+    with pytest.raises(SystemExit, match="xippios-other is not installed") as stop:
+        go(replace(declare(out, page), slug="other"))
+    assert "Snapshot.client" in str(stop.value)
+    assert not site.requests
+    assert not out.exists()
+    handed = AsyncClient(ClientConfig(source="other", version="2.0.0", base_url=BASE))
+    assert go(replace(declare(out, page), slug="other", client=handed)) == 0
+    (request,) = site.requests
+    assert request.headers["User-Agent"] == "xippios-other/2.0.0 (+https://github.com/xippios)"
+
+
+def test_the_frame_sends_through_the_client_the_snapshot_hands_it(site: Site, out: Path) -> None:
+    """ADR-0062, decision 4: a source that hands the frame its client, one for its website's
+    pace and wait say, has every request sent through it, its headers and its hooks included,
+    and without its credentials on a page that is no keyed sample."""
+    seen: list[str] = []
+    config = ClientConfig(
+        source="example",
+        version=VERSION,
+        base_url=BASE,
+        headers={"From": "maintainer@example.org"},
+        observe=lambda response: seen.append(str(response.request.url)),
     )
+    client = AsyncClient(config, auth=Session())
+    url = site.page("guide.html", "<p>Guide</p>")
+    assert go(declare(out, Page(url, "pages/guide.html"), client=client)) == 0
+    (request,) = site.requests
+    assert request.headers["From"] == "maintainer@example.org"
+    assert request.headers["User-Agent"] == USER_AGENT
+    assert "X-Session" not in request.headers, "a page that is no keyed sample sends none"
+    assert seen == [url], "the client's observe saw the answer"
 
 
 def test_a_5xx_is_retried_once(site: Site, out: Path, capsys: pytest.CaptureFixture[str]) -> None:
     """The skeleton's fetch: a 5xx or a network error is retried once after RETRY_PAUSE, and a
-    second one stops the run."""
+    second one stops the run; every request is counted, the retry's too."""
     url = site.page("guide.html", "<p>Guide</p>")
     site.later[url] = [(503, {}, b"")]
     assert go(declare(out, Page(url, "pages/guide.html"))) == 0
     assert site.sleeps == [0.0, 10.0], "the pause, then RETRY_PAUSE"
     assert len(site.asked(url)) == 2
-    assert "retrying once in 10 s" in capsys.readouterr().out
+    printed = capsys.readouterr().out
+    assert "retrying once in 10 s" in printed
+    assert "2 requests sent, each redirect and retry counted" in printed
     site.later[url] = [(503, {}, b""), (502, {}, b"")]
     with pytest.raises(SystemExit, match=r"\(after one retry\)"):
         go(declare(out, Page(url, "pages/guide.html")))
+    missing = f"{BASE}/missing.html"
+    with pytest.raises(SystemExit, match=r"is not served.*\(after one retry\)"):
+        go(declare(out, Page(missing, "pages/missing.html")))
+    assert len(site.asked(missing)) == 2, "a network error is retried once"
+
+
+def test_a_redirect_on_the_page_s_host_is_followed_and_counted(
+    site: Site, out: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The client follows no redirect, so the frame keeps its own record of them: it follows a
+    redirect on the page's host, a relative target made absolute against the URL that answered,
+    notes each hop in the row, counts each request, and stops on a page that redirects on its
+    host more than ten times."""
+    site.routes[f"{BASE}/old.html"] = (301, {"Location": "/moved/guide.html"}, b"")
+    site.routes[f"{BASE}/moved/guide.html"] = (307, {"Location": "../guide.html"}, b"")
+    site.page("guide.html", "<p>Guide</p>")
+    snapshot = declare(out, Page(f"{BASE}/old.html", "pages/guide.html"))
+    capsys.readouterr()
+    assert go(snapshot) == 0
+    assert "3 requests sent, each redirect and retry counted" in capsys.readouterr().out
+    row = cells(file_row(fetched(out), "pages/guide.html"))
+    assert row[1] == f"{BASE}/old.html"
+    hops = f"redirected (301) to {BASE}/moved/guide.html; redirected (307) to {BASE}/guide.html"
+    assert row[8] == hops
+    assert (out / "pages/guide.html").read_bytes() == b"<p>Guide</p>"
+    site.routes[f"{BASE}/loop.html"] = (302, {"Location": f"{BASE}/loop.html"}, b"")
+    with pytest.raises(SystemExit, match="more than 10 redirects on its host"):
+        go(declare(out, Page(f"{BASE}/loop.html", "pages/loop.html")))
+    assert len(site.asked(f"{BASE}/loop.html")) == 11
+
+
+def test_a_3xx_without_a_redirect_location_is_the_page_s_own_answer(site: Site, out: Path) -> None:
+    """Finding 1 of the review of https://github.com/xippios/sdk-core/pull/536: only a 301,
+    302, 303, 307 or 308 with a ``Location`` is a redirect that the frame notes and may follow.
+    A 3xx without ``Location``, and a 300 or a 304 with one, is the page's final answer: it
+    stops the run as any other status that the page does not expect, or stands in ``Not
+    fetched`` where the page is recorded by it, and its ``Location`` is never asked."""
+    site.routes[f"{BASE}/bare"] = (302, {}, b"")
+    site.routes[f"{BASE}/choices"] = (300, {"Location": f"{BASE}/guide.html"}, b"")
+    site.routes[f"{BASE}/unchanged"] = (304, {"Location": f"{BASE}/guide.html"}, b"")
+    site.page("guide.html", "<p>Guide</p>")
+    for name, status in [("bare", 302), ("choices", 300), ("unchanged", 304)]:
+        stop = re.escape(f"GET {BASE}/{name}: HTTP {status} ")
+        with pytest.raises(SystemExit, match=stop):
+            go(declare(out, Page(f"{BASE}/{name}", "pages/page.html")))
+    snapshot = declare(
+        out,
+        Page(f"{BASE}/bare", status=302, note="a 302 without Location"),
+        Page(f"{BASE}/unchanged", status=304, note="a 304 that names a Location"),
+    )
+    assert go(snapshot) == 0
+    text = fetched(out)
+    assert f"| {BASE}/bare | 302 | - | a 302 without Location |" in text
+    assert f"| {BASE}/unchanged | 304 | - | a 304 that names a Location |" in text
+    assert not site.asked(f"{BASE}/guide.html"), "no Location of these is followed"
 
 
 def test_two_pages_never_write_one_file(site: Site, out: Path) -> None:
@@ -948,17 +1034,24 @@ def test_two_pages_never_write_one_file(site: Site, out: Path) -> None:
     assert not out.exists()
 
 
-def test_the_frame_imports_the_standard_library_alone() -> None:
-    """https://github.com/xippios/sdk-core/issues/363, part 1: the frame needs no extra and
-    pins no converter, which stays the source's own dependency."""
+def test_the_frame_imports_core_s_client_and_no_extra() -> None:
+    """ADR-0062, decision 1, and https://github.com/xippios/sdk-core/issues/363, part 1: the
+    frame imports the standard library, httpx and core's own modules, the client among them,
+    which core's base dependencies hold, so it needs no extra and pins no converter, which
+    stays the source's own dependency; ``urllib`` serves it nothing but the parsing of a URL."""
     tree = ast.parse(Path(upstream.__file__).read_text())
     imported: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
-            imported |= {alias.name.split(".")[0] for alias in node.names}
+            imported |= {alias.name for alias in node.names}
         elif isinstance(node, ast.ImportFrom) and node.module:
-            imported.add(node.module.split(".")[0])
-    assert imported <= set(sys.stdlib_module_names), imported - set(sys.stdlib_module_names)
+            imported.add(node.module)
+    tops = {name.split(".")[0] for name in imported}
+    allowed = set(sys.stdlib_module_names) | {"httpx", "xippios"}
+    assert tops <= allowed, tops - allowed
+    assert "xippios.core.client" in imported
+    assert {name for name in imported if name.startswith("urllib")} == {"urllib.parse"}
+    assert not any(name.startswith(("xippios.core.mcp", "xippios.core.http")) for name in tops)
 
 
 def test_fetched_md_cites_the_standing_record_of_upstream_fidelity(site: Site, out: Path) -> None:
@@ -1042,17 +1135,31 @@ def test_every_declared_page_is_checked_before_the_first_request(site: Site, out
 # --- the hooks ---------------------------------------------------------------------------
 
 
-def login_counter(site: Site, calls: list[int]) -> Credentials:
-    """Credentials whose login records how many requests went before it."""
-
-    def login() -> Mapping[str, str]:
-        calls.append(len(site.requests))
-        return {"X-Session": "session-of-the-login"}
-
-    return Credentials(("EXAMPLE_ACCOUNT", "EXAMPLE_LOGIN"), f"{API}/", login)
+VARIABLES = ("EXAMPLE_ACCOUNT", "EXAMPLE_LOGIN")
+SESSION = "session-of-the-login"
 
 
-def keyed_snapshot(site: Site, out: Path, calls: list[int]) -> Snapshot:
+class Session(httpx.Auth):
+    """A source's own auth, as a login's is: it reads ``EXAMPLE_LOGIN`` at each request, which
+    the plugin's placeholder does not pin, sends it as the header ``X-Session``, and refuses an
+    unset variable with the client's ``ConfigError``, naming it."""
+
+    def auth_flow(self, request: httpx.Request) -> Generator[httpx.Request, httpx.Response]:
+        value = os.environ.get("EXAMPLE_LOGIN")
+        if not value:
+            raise ConfigError("EXAMPLE_LOGIN is not set; export it", source="example")
+        request.headers["X-Session"] = value
+        yield request
+
+
+def keyed_client(base: str = f"{API}/") -> AsyncClient:
+    """The source's own client, which sends its credential, read from ``EXAMPLE_LOGIN``, as the
+    header ``X-Session`` to its base URL's origin alone (ADR-0037, decision 4)."""
+    config = ClientConfig(source="example", version=VERSION, base_url=base)
+    return AsyncClient(config, auth=Session())
+
+
+def keyed_snapshot(site: Site, out: Path) -> Snapshot:
     guide = site.page("guide.html", "<p>Guide</p>")
     site.routes[f"{API}/items"] = (200, {"Content-Type": "application/json"}, b'{"items": []}')
     site.routes[f"{API}/codes"] = (200, {"Content-Type": "application/json"}, b'{"codes": []}')
@@ -1061,32 +1168,35 @@ def keyed_snapshot(site: Site, out: Path, calls: list[int]) -> Snapshot:
         Page(guide, "pages/guide.html"),
         Page(f"{API}/items", "samples/items.json", sample=True, keyed=True),
         Page(f"{API}/codes", "samples/codes.json", sample=True, keyed=True),
-        credentials=login_counter(site, calls),
+        client=keyed_client(),
+        variables=VARIABLES,
     )
 
 
-def test_a_keyed_sample_alone_sends_the_credentials(
+def test_a_keyed_sample_alone_sends_the_client_s_credentials(
     site: Site, out: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Conventions §3 and ADR-0028, decision 7 (sdk-faostat's samples): the frame logs in
-    once, right before the first keyed sample, sends what the login gives on the keyed
-    samples alone, and prints none of it; FETCHED.md names the variables, never a value."""
+    """Conventions §3, ADR-0028, decision 7, and ADR-0062, decision 4: the credentials are
+    the client's that the snapshot hands the frame, sent on the keyed
+    samples alone and printed nowhere; FETCHED.md names the variables, never a value."""
     monkeypatch.setenv("EXAMPLE_ACCOUNT", "someone")
-    monkeypatch.setenv("EXAMPLE_LOGIN", "placeholder")
-    calls: list[int] = []
-    snapshot = keyed_snapshot(site, out, calls)
+    monkeypatch.setenv("EXAMPLE_LOGIN", SESSION)
+    snapshot = keyed_snapshot(site, out)
     assert go(snapshot) == 0
-    assert calls == [1], "one login, after the keyless page"
     guide, items, codes = site.requests
-    assert guide.get_header("X-session") is None
-    assert items.get_header("X-session") == codes.get_header("X-session") == "session-of-the-login"
+    assert "X-Session" not in guide.headers, "the guide is no keyed sample"
+    assert items.headers["X-Session"] == codes.headers["X-Session"] == SESSION
+    assert items.headers["User-Agent"] == USER_AGENT
     output = capsys.readouterr().out
-    assert "session-of-the-login" not in output
+    assert SESSION not in output
     text = fetched(out)
-    assert "session-of-the-login" not in text
+    assert SESSION not in text
     assert "someone" not in text
     assert "Regenerate, with `EXAMPLE_ACCOUNT` and `EXAMPLE_LOGIN` set: `uv run" in text
-    assert "Only the keyed samples send a credential" in flat(text)
+    assert (
+        "Only the keyed samples send a credential, the one the source's client reads from "
+        "`EXAMPLE_ACCOUNT` and `EXAMPLE_LOGIN`, to its base URL's origin alone"
+    ) in flat(text)
     assert (out / "samples/items.json").read_bytes() == b'{"items": []}'
 
 
@@ -1094,54 +1204,76 @@ def test_a_keyed_sample_follows_no_redirect_and_is_never_retried(
     site: Site, out: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """sdk-faostat's rule: a request with the credentials reaches the base alone, so a
-    redirect stops the run unfollowed, and a 5xx costs one keyed call and stops it."""
+    redirect stops the run unfollowed, and a 5xx, a 429 or a network error costs one keyed
+    call and stops it."""
     monkeypatch.setenv("EXAMPLE_ACCOUNT", "someone")
-    monkeypatch.setenv("EXAMPLE_LOGIN", "placeholder")
-    calls: list[int] = []
-    snapshot = keyed_snapshot(site, out, calls)
+    monkeypatch.setenv("EXAMPLE_LOGIN", SESSION)
+    snapshot = keyed_snapshot(site, out)
     site.routes[f"{API}/items"] = (302, {"Location": f"{API}/items/"}, b"")
     with pytest.raises(SystemExit, match="a keyed request follows no redirect"):
         go(snapshot)
     assert not site.asked(f"{API}/items/")
-    snapshot = keyed_snapshot(site, out, calls)
-    site.later[f"{API}/items"] = [(503, {}, b"")]
+    for refusal, stop in [
+        ((503, {}, b""), "a keyed request is not retried"),
+        ((429, {"Retry-After": "1"}, b""), "HTTP 429"),
+    ]:
+        snapshot = keyed_snapshot(site, out)
+        site.later[f"{API}/items"] = [refusal]
+        site.requests.clear()
+        with pytest.raises(SystemExit, match=stop):
+            go(snapshot)
+        assert len(site.asked(f"{API}/items")) == 1
+    snapshot = keyed_snapshot(site, out)
+    del site.routes[f"{API}/items"]
     site.requests.clear()
-    with pytest.raises(SystemExit, match="a keyed request is not retried"):
+    with pytest.raises(SystemExit, match="is not served; a keyed request is not retried"):
         go(snapshot)
     assert len(site.asked(f"{API}/items")) == 1
     assert not out.exists(), "nothing written"
 
 
-def test_the_credentials_are_checked_by_name_before_anything_is_fetched(
+def test_the_variables_are_checked_by_name_before_anything_is_fetched(
     site: Site, out: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """sdk-faostat's rule: an unset variable stops the run, named, before the first request."""
+    """A variable that the snapshot names and the environment does not set stops the run,
+    named, before the first request, with the way to run without it."""
     monkeypatch.setenv("EXAMPLE_ACCOUNT", "someone")
     monkeypatch.delenv("EXAMPLE_LOGIN", raising=False)
-    calls: list[int] = []
     with pytest.raises(SystemExit, match="EXAMPLE_LOGIN is not set") as stop:
-        go(keyed_snapshot(site, out, calls))
+        go(keyed_snapshot(site, out))
     assert "--keyless" in str(stop.value)
     assert not site.requests
-    assert not calls
+
+
+def test_a_credential_the_client_cannot_read_stops_the_run_before_writing(
+    site: Site, out: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The client reads its credential itself: one that it cannot read, here a variable that
+    the snapshot does not name, stops the run at its keyed sample with the client's message,
+    which names the variable and no value, and nothing is written."""
+    monkeypatch.setenv("EXAMPLE_ACCOUNT", "someone")
+    monkeypatch.delenv("EXAMPLE_LOGIN", raising=False)
+    snapshot = replace(keyed_snapshot(site, out), variables=("EXAMPLE_ACCOUNT",))
+    with pytest.raises(SystemExit, match=r"EXAMPLE_LOGIN is not set.*Nothing was written"):
+        go(snapshot)
+    assert [str(request.url) for request in site.requests] == [f"{BASE}/guide.html"]
+    assert not out.exists()
 
 
 def test_keyless_compares_the_pages_that_send_no_credential(
     site: Site, out: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """sdk-faostat's ``--keyless``, a free trial before a run that spends keyed calls: it
-    fetches and compares the pages that send no credential, logs in nowhere and writes
-    nothing; a snapshot without credentials has no such option."""
+    """``--keyless``, a free trial before a run that spends keyed calls: it
+    fetches and compares the pages that send no credential, needs no variable and writes
+    nothing; a snapshot that names no variables has no such option."""
     monkeypatch.setenv("EXAMPLE_ACCOUNT", "someone")
-    monkeypatch.setenv("EXAMPLE_LOGIN", "placeholder")
-    calls: list[int] = []
-    snapshot = keyed_snapshot(site, out, calls)
+    monkeypatch.setenv("EXAMPLE_LOGIN", SESSION)
+    snapshot = keyed_snapshot(site, out)
     assert go(snapshot) == 0
     monkeypatch.delenv("EXAMPLE_LOGIN")
     site.requests.clear()
     assert go(snapshot, "--keyless") == 0
-    assert calls == [1], "no second login"
-    assert [request.full_url for request in site.requests] == [f"{BASE}/guide.html"]
+    assert [str(request.url) for request in site.requests] == [f"{BASE}/guide.html"]
     site.page("guide.html", "<p>Guide, revised</p>")
     before = fetched(out)
     assert go(snapshot, "--keyless") == 1
@@ -1151,75 +1283,61 @@ def test_keyless_compares_the_pages_that_send_no_credential(
         go(declare(out, Page(f"{BASE}/guide.html", "pages/guide.html")), "--keyless")
 
 
-def test_a_keyed_page_is_a_sample_under_the_credentials_base(site: Site, out: Path) -> None:
-    """Conventions §3: only a sample's request sends a credential, and only to the base the
-    credentials name; a keyed page without credentials is refused before any request."""
-    calls: list[int] = []
-    credentials = login_counter(site, calls)
-    pages = [
-        (Page(f"{API}/items", "pages/items.json", keyed=True), credentials),
-        (Page(f"{BASE}/items", "samples/items.json", sample=True, keyed=True), credentials),
-        (Page(f"{API}/items", "samples/items.json", sample=True, keyed=True), None),
+def test_a_keyed_page_is_a_sample_of_the_client_s_origin(site: Site, out: Path) -> None:
+    """Conventions §3 and ADR-0062, decision 4: only a sample's request sends a credential, the
+    client's that the snapshot hands the frame, whose variables it names; a keyed page that is
+    no sample, lies on another origin, or has no client or no variables to send it with is
+    refused before any request."""
+    items = Page(f"{API}/items", "samples/items.json", sample=True, keyed=True)
+    unsampled = replace(items, file="pages/items.json", sample=False)
+    refused = [
+        declare(out, unsampled, client=keyed_client(), variables=("A",)),
+        declare(out, replace(items, url=f"{BASE}/items"), client=keyed_client(), variables=("A",)),
+        declare(out, items, variables=("A",)),
+        declare(out, items, client=keyed_client()),
     ]
-    for page, given in pages:
-        with pytest.raises(SystemExit, match="keyed"):
-            go(declare(out, page, credentials=given), "--keyless" if given else "--check")
+    for snapshot in refused:
+        with pytest.raises(SystemExit, match="a keyed page is a sample on the origin"):
+            go(snapshot, "--check")
     assert not site.requests
 
 
-def test_the_credentials_go_to_the_origin_of_their_base_alone(
+def test_the_credentials_go_to_the_origin_of_the_client_s_base_alone(
     site: Site, out: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Finding 4 of the review of #386, the client's rule for its own credentials (ADR-0037,
-    decision 4): a keyed sample has the base's scheme, host and port as parsed, a default
-    port written or not, and a path under the base's by its segments, with or without the
-    base's slash. A look-alike host that shares the base's text, another port, another
-    scheme, a user before the host, a path that only shares the base's text and a dot
-    segment are refused before any request, and so is a base that cannot be compared so."""
+    """Finding 4 of the review of #386, now the client's own rule (ADR-0037, decision 4;
+    ADR-0062, decision 4): a keyed sample has the origin of the client's base URL, its scheme,
+    host and port as httpx parses them, a default port written or not and the host in any
+    case, and any path there. A look-alike host that shares the base's text, another port,
+    another scheme and a user before another host are refused before any request."""
     monkeypatch.setenv("EXAMPLE_ACCOUNT", "someone")
-    monkeypatch.setenv("EXAMPLE_LOGIN", "placeholder")
-    calls: list[int] = []
+    monkeypatch.setenv("EXAMPLE_LOGIN", SESSION)
 
     def keyed(base: str, url: str) -> Snapshot:
         page = Page(url, "samples/items.json", sample=True, keyed=True)
-        return declare(out, page, credentials=replace(login_counter(site, calls), base=base))
+        return declare(out, page, client=keyed_client(base), variables=VARIABLES)
 
     refused = [
         ("https://api.example.org", "https://api.example.org.elsewhere.net/v1/items"),
-        ("https://api.example.org/v1", "https://api.example.org/v10/items"),
         ("https://api.example.org/v1/", "https://api.example.org:8443/v1/items"),
         ("https://api.example.org/v1/", "http://api.example.org/v1/items"),
         ("https://api.example.org/v1/", "https://api.example.org@elsewhere.net/v1/items"),
-        ("https://api.example.org/v1/", "https://api.example.org/v1/../admin"),
+        ("https://api.example.org/v1/", "https://[api.example.org/v1/items"),
     ]
     for base, url in refused:
-        with pytest.raises(SystemExit, match="a keyed page is a sample under the base"):
+        with pytest.raises(SystemExit, match="a keyed page is a sample on the origin"):
             go(keyed(base, url))
-    uncomparable = [
-        "api.example.org/v1",
-        "https:///v1",
-        "ftp://api.example.org/v1",
-        "https://api.example.org/v1?scope=all",
-        "https://api.example.org/v1/#items",
-        "https://api.example.org:99999/v1",
-        "https://api.example.org/v1/..",
-    ]
-    for base in uncomparable:
-        with pytest.raises(SystemExit, match="cannot be compared"):
-            go(keyed(base, f"{API}/items"))
     assert not site.requests
-    assert not calls
     accepted = [
         ("https://api.example.org/v1", f"{API}/items"),
         ("https://API.example.org:443/v1/", f"{API}/items"),
-        (f"{API}/", "https://api.example.org:443/v1/items"),
+        (f"{API}/", "https://api.example.org/v10/items"),
+        ("https://api.example.org/", f"{API}/items"),
     ]
     for base, url in accepted:
         site.routes[url] = (200, {"Content-Type": "application/json"}, b'{"items": []}')
         assert go(keyed(base, url)) == 0
-    assert [request.get_header("X-session") for request in site.requests] == [
-        "session-of-the-login"
-    ] * 3
+    assert [request.headers.get("X-Session") for request in site.requests] == [SESSION] * 4
 
 
 @pytest.mark.parametrize("name", ["../a.md", "/a.md", "pages/../../a.md", "FETCHED.md"])
@@ -1284,33 +1402,39 @@ def test_last_modified_stands_in_utc_or_as_sent(site: Site, out: Path) -> None:
     assert go(snapshot, "--check") == 0
 
 
-def test_a_file_kept_as_recorded_where_only_noise_moved(
-    site: Site, out: Path, capsys: pytest.CaptureFixture[str]
+def test_a_reduce_hook_keeps_a_file_as_recorded_where_only_noise_moved(
+    site: Site, out: Path
 ) -> None:
-    """sdk-eurostat's WADL: a page marked ``keep_recorded`` whose content is the recorded
-    file's after ``canonical`` leaves the file as it is in a writing run, so a refresh shows
-    real changes only; a real change is written, and an unmarked page is written as
-    fetched."""
+    """A document served in a new order on each request, which ADR-0062, decision 5, gives the
+    source's ``reduce`` hook: a hook that returns the recorded file's content where it is this
+    answer's after ``canonical`` leaves the file as it is in a writing run, so a refresh shows
+    real changes only, and a real change is written; the frame writes what the hook returns,
+    and its row says nothing of it."""
     url = site.page("api.wadl", "<a/>\n<b/>\n")
 
     def canonical(page: Page, content: bytes) -> bytes:
         return b"\n".join(sorted(content.split(b"\n")))
 
-    kept = declare(out, Page(url, "wadl/api.wadl", keep_recorded=True), canonical=canonical)
-    assert go(kept) == 0
+    def reduce(page: Page, response: Response) -> bytes:
+        recorded = out / str(page.file)
+        if recorded.is_file():
+            kept = recorded.read_bytes()
+            if canonical(page, kept) == canonical(page, response.body):
+                return kept
+        return response.body
+
+    snapshot = declare(out, Page(url, "wadl/api.wadl"), canonical=canonical, reduce=reduce)
+    assert go(snapshot) == 0
     site.page("api.wadl", "<b/>\n<a/>\n")
-    capsys.readouterr()
-    assert go(kept) == 0
+    assert go(snapshot) == 0
     assert (out / "wadl/api.wadl").read_bytes() == b"<a/>\n<b/>\n"
-    assert "wadl/api.wadl: the same after canonical, kept as recorded" in capsys.readouterr().out
-    assert "kept as recorded while" in file_row(fetched(out), "wadl/api.wadl")
-    assert go(kept, "--check") == 0
+    assert cells(file_row(fetched(out), "wadl/api.wadl"))[8] == "-"
+    assert go(snapshot, "--check") == 0
     site.page("api.wadl", "<b/>\n<c/>\n")
-    assert go(kept) == 0
+    assert go(snapshot) == 0
     assert (out / "wadl/api.wadl").read_bytes() == b"<b/>\n<c/>\n"
-    site.page("api.wadl", "<c/>\n<b/>\n")
-    assert go(declare(out, Page(url, "wadl/api.wadl"), canonical=canonical)) == 0
-    assert (out / "wadl/api.wadl").read_bytes() == b"<c/>\n<b/>\n", "unmarked: as fetched"
+    with pytest.raises(TypeError, match="keep_recorded"):
+        Page(url, "wadl/api.wadl", keep_recorded=True)  # type: ignore[call-arg]
 
 
 def test_one_page_gives_several_files(site: Site, out: Path) -> None:
@@ -1349,64 +1473,146 @@ def test_one_page_gives_several_files(site: Site, out: Path) -> None:
         go(declare(out, Page(url, split=True)))
 
 
-def test_a_page_refused_with_403_is_kept_from_the_second_origin(site: Site, out: Path) -> None:
-    """sdk-usda-wasde's CDN origin (conventions §2): where the page's URL answers 403, that
-    answer is a row of ``Not fetched`` and the file is kept from the publisher's second
-    origin, whose answer ``reduce`` reads; where it answers 200, the page is kept from there
-    and the origin is never asked."""
+def test_a_page_refused_with_403_and_its_second_origin_are_two_pages(site: Site, out: Path) -> None:
+    """A page that the publisher's edge refuses and serves from a second origin of its own
+    (conventions §2), which ADR-0062, decision 5, gives two declared pages: the page that
+    answers 403, recorded by that status in ``Not fetched``, and its copy from the second
+    origin, kept as a file; a run stops once the refused page answers otherwise, so the
+    declaration moves with the edge."""
     canonical = f"{BASE}/faq"
     origin = "https://origin.example.net/faq"
     site.routes[canonical] = (403, {"Content-Type": "text/html"}, b"<p>Access Denied</p>")
     site.routes[origin] = (200, {"Content-Type": "text/html"}, b"<p>FAQ</p>")
-    seen: list[tuple[str, str]] = []
-
-    def reduce(page: Page, response: Response) -> bytes:
-        seen.append((page.url, response.url))
-        return response.body
-
     snapshot = declare(
-        out, Page(canonical, "pages/faq.html", origin=origin, note="the FAQ"), reduce=reduce
+        out,
+        Page(canonical, status=403, note=f"answers 403 to this script; kept from {origin}"),
+        Page(origin, "pages/faq.html", note=f"the copy of {canonical} on the second origin"),
     )
     assert go(snapshot) == 0
     assert (out / "pages/faq.html").read_bytes() == b"<p>FAQ</p>"
-    assert seen == [(canonical, origin)]
     text = fetched(out)
     row = cells(file_row(text, "pages/faq.html"))
     assert row[1] == origin
-    copy = f"the copy of {canonical}, which answers 403, from the publisher's second origin"
-    assert row[8] == f"{copy}; the FAQ"
+    assert row[8] == f"the copy of {canonical} on the second origin"
     refused = f"answers 403 to this script; kept from {origin}"
     assert f"| {canonical} | 403 | - | {refused} |" in text
     site.routes[canonical] = (200, {"Content-Type": "text/html"}, b"<p>FAQ</p>")
-    site.requests.clear()
-    assert go(snapshot) == 0
-    assert cells(file_row(fetched(out), "pages/faq.html"))[1] == canonical
-    assert not site.asked(origin)
-    with pytest.raises(SystemExit, match="second origin"):
-        go(declare(out, Page(canonical, origin=origin)))
+    with pytest.raises(SystemExit, match="expected HTTP 403, got 200"):
+        go(snapshot)
+    with pytest.raises(TypeError, match="origin"):
+        Page(canonical, "pages/faq.html", origin=origin)  # type: ignore[call-arg]
 
 
-def test_a_429_waits_as_the_snapshot_says_then_retries_once(site: Site, out: Path) -> None:
-    """sdk-eurostat's quota: with ``quota_wait`` a 429 is retried once, after the wait the
-    hook reads from its headers, and FETCHED.md says so; without it a 429 stops the run, and
-    a second 429 stops it after the one retry."""
+def test_a_429_waits_as_the_client_says_then_retries_once(site: Site, out: Path) -> None:
+    """ADR-0062, decision 4: the wait after a 429 is the client's, its retry policy's for the
+    first attempt with the ``Retry-After`` that the answer sends or that its ``classify`` reads
+    from a header of upstream's own, and FETCHED.md says so; a 429 that the
+    policy retries no more, by its one attempt or a wait past its bound, stops the run, and a
+    second 429 stops it after the one retry."""
     url = site.page("data.html", "<p>Data</p>")
-
-    def quota_wait(headers: Message) -> float:
-        return float(str(headers.get("Retry-After", "60")))
-
-    snapshot = declare(out, Page(url, "pages/data.html"), quota_wait=quota_wait)
+    page = Page(url, "pages/data.html")
     site.later[url] = [(429, {"Retry-After": "30"}, b"")]
-    assert go(snapshot) == 0
-    assert 30.0 in site.sleeps
+    assert go(declare(out, page)) == 0
+    assert site.sleeps == [0.0, 30.0], "the built client's policy honours Retry-After"
     assert len(site.asked(url)) == 2
-    assert "each retried at most once, a 429 after the wait it names" in flat(fetched(out))
-    site.later[url] = [(429, {}, b"")]
-    with pytest.raises(SystemExit, match="HTTP 429"):
-        go(declare(out, Page(url, "pages/data.html")))
+    assert (
+        "each retried at most once and no sooner than 10 s, a 429 after the wait the client "
+        "gives it where that is longer"
+    ) in flat(fetched(out))
+
+    def own_header(response: httpx.Response) -> XippiosError | None:
+        if response.status_code == 429:
+            wait = float(response.headers["X-Rate-Limit-Retry-After-Seconds"])
+            return RateLimitError("the quota is spent", retry_after=wait, source="example")
+        return None
+
+    def client(retry: RetryPolicy) -> AsyncClient:
+        config = ClientConfig(
+            source="example", version=VERSION, base_url=BASE, retry=retry, classify=own_header
+        )
+        return AsyncClient(config)
+
+    waiting = client(RetryPolicy(max_attempts=2, backoff_base=10.0, backoff_max=900.0))
+    site.sleeps.clear()
+    site.later[url] = [(429, {"X-Rate-Limit-Retry-After-Seconds": "600"}, b"")]
+    assert go(declare(out, page, client=waiting)) == 0
+    assert site.sleeps == [0.0, 600.0], "classify names the wait, the policy bounds it"
+    for policy, wait in [(RetryPolicy(max_attempts=1), "60"), (RetryPolicy(), "60")]:
+        site.later[url] = [(429, {"X-Rate-Limit-Retry-After-Seconds": wait}, b"")]
+        site.requests.clear()
+        with pytest.raises(SystemExit, match="HTTP 429"):
+            go(declare(out, page, client=client(policy)))
+        assert len(site.asked(url)) == 1, "no retry the policy refuses"
     site.later[url] = [(429, {}, b""), (429, {}, b"")]
     with pytest.raises(SystemExit, match=r"429 .*\(after one retry\)"):
+        go(declare(out, page))
+
+
+def test_a_retry_waits_no_less_than_the_retry_pause_or_the_snapshot_s_pause(
+    site: Site, out: Path
+) -> None:
+    """Finding 2 of the review of https://github.com/xippios/sdk-core/pull/536: the one retry
+    waits ``RETRY_PAUSE`` or the snapshot's pause, whichever is longer, so a 429 without
+    ``Retry-After``, whose wait the client built from the slug puts below a second, is retried
+    no sooner than a 5xx, and no retry comes sooner than the pause before every request; a
+    longer wait that the client gives a 429 stands, and FETCHED.md states the floor."""
+    url = site.page("data.html", "<p>Data</p>")
+    page = Page(url, "pages/data.html")
+    for refusal, pause, waits in [
+        ((429, {}, b""), 0.0, [0.0, 10.0]),
+        ((429, {"Retry-After": "12"}, b""), 0.0, [0.0, 12.0]),
+        ((429, {}, b""), 15.0, [15.0, 15.0]),
+        ((503, {}, b""), 15.0, [15.0, 15.0]),
+    ]:
+        site.sleeps.clear()
+        site.requests.clear()
+        site.later[url] = [refusal]
+        assert go(declare(out, page, pause=pause)) == 0
+        assert site.sleeps == waits, (refusal, pause)
+        assert len(site.asked(url)) == 2
+    assert "each retried at most once and no sooner than 15 s" in flat(fetched(out))
+
+
+def test_read_json_reads_a_document_that_dump_json_writes_again(site: Site, out: Path) -> None:
+    """ADR-0062, decision 4: the frame's reader of a JSON answer takes a name of its own beside
+    the root's ``load_json``, and neither it nor ``dump_json`` takes an indent. A document that
+    ``dump_json`` writes again as fetched is read and its part written; one served with another
+    indent, or with a key twice, stops the run before anything is written."""
+    url = site.page("openapi.json", '{\n  "openapi": "3.1.0",\n  "título": "é"\n}\n')
+
+    def reduce(page: Page, response: Response) -> bytes:
+        document = refresh.read_json(response)
+        return refresh.dump_json({"openapi": document["openapi"], "título": document["título"]})
+
+    snapshot = declare(out, Page(url, "openapi/part.json", excerpt=True), reduce=reduce)
+    assert go(snapshot) == 0
+    written = '{\n  "openapi": "3.1.0",\n  "título": "é"\n}\n'
+    assert (out / "openapi/part.json").read_text(encoding="utf-8") == written
+    before = fetched(out)
+    site.page("openapi.json", '{\n    "openapi": "3.1.0"\n}\n')
+    with pytest.raises(SystemExit, match=r"json\.dumps\(indent=2, ensure_ascii=False\)"):
         go(snapshot)
+    site.page("openapi.json", '{\n  "openapi": "3.1.0",\n  "openapi": "3.1.1"\n}\n')
+    with pytest.raises(SystemExit, match="duplicate keys"):
+        go(snapshot)
+    assert fetched(out) == before, "nothing written"
+    for function in (refresh.read_json, refresh.dump_json):
+        assert "indent" not in inspect.signature(function).parameters
+    assert not hasattr(refresh, "load_json")
+
+
+def test_the_command_line_takes_no_out(
+    site: Site, out: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """ADR-0062, decision 3: the declaration's ``out`` names where the snapshot stands, so the
+    command line takes ``--check``, and ``--keyless`` where the snapshot names its variables,
+    and refuses ``--out`` before any request."""
+    snapshot = declare(out, Page(site.page("guide.html", "<p>Guide</p>"), "pages/guide.html"))
+    with pytest.raises(SystemExit) as stop:
+        go(snapshot, "--out", str(out.parent / "elsewhere"))
+    assert stop.value.code == 2
+    assert "unrecognized arguments: --out" in capsys.readouterr().err
+    assert not site.requests
 
 
 def test_a_section_of_the_sources_own_stands_before_the_files(
@@ -1550,7 +1756,7 @@ def test_check_reads_a_checkout_that_ends_its_lines_in_crlf(
 def test_fetched_md_ends_with_the_mark_of_its_form(site: Site, out: Path) -> None:
     """The frame's last line of FETCHED.md names the file's form, so a file that the frame wrote
     tells itself from a copy's and from an older frame's (ADR-0062, decision 8)."""
-    assert upstream.FORM == 1
+    assert upstream.FORM == 2, "the fetch through core's client raised it (ADR-0062, decision 6)"
     assert go(declare(out, Page(site.page("guide.html", "<p>Guide</p>"), "pages/guide.html"))) == 0
     assert fetched(out).endswith(f"`\n\n{MARK}\n")
 
@@ -1584,17 +1790,17 @@ def every_sentence_rendered() -> str:
     guide = Page(GUIDE, "pages/guide.md", note="converted")
     part = Page(f"{BASE}/fas.json", "openapi/part.json", excerpt=True)
     sample = Page(f"{API}/items", "samples/items.json", sample=True, keyed=True)
-    wadl = Page(f"{BASE}/api.wadl", "wadl/api.wadl", keep_recorded=True)
+    wadl = Page(f"{BASE}/api.wadl", "wadl/api.wadl")
     toc = Page(f"{BASE}/toc.html", split=True, note="one file per heading")
-    faq = Page(f"{BASE}/faq", "pages/faq.html", origin="https://origin.example.net/faq")
+    faq = Page("https://origin.example.net/faq", "pages/faq.html")
     status = Page(f"{BASE}/status", stable=False, note="a nonce,\nnew in every body")
     admin = Page(f"{BASE}/admin", status=302, note="a login\r\non another host")
     pdf = Page(f"{BASE}/layout.pdf", "files/layout.pdf")
-    refused = replace(faq, file=None, status=403, origin=None, stable=False, note="kept elsewhere")
+    refused = Page(f"{BASE}/faq", status=403, stable=False, note="kept elsewhere")
     full = Snapshot(
         name="Full",
         slug="full",
-        pages=(guide, part, sample, wadl, toc, faq, status, admin, pdf),
+        pages=(guide, part, sample, wadl, toc, refused, faq, status, admin, pdf),
         attribution=(
             Statement("\N{COPYRIGHT SIGN} 2026 Example Ltd.", GUIDE, "the footer"),
             Statement("Terms of Service", GUIDE, "the footer", "https://example.org/tos"),
@@ -1606,8 +1812,8 @@ def every_sentence_rendered() -> str:
         capture="The first paragraph.\n\nThe second paragraph.",
         pause=5.0,
         sections=lambda rows: [Section("Products found", "| Product |\n| --- |\n| one |")],
-        quota_wait=lambda headers: 30.0,
-        credentials=Credentials(("EXAMPLE_ACCOUNT",), f"{API}/", lambda: dict[str, str]()),
+        client=AsyncClient(ClientConfig(source="full", version=VERSION, base_url=f"{API}/")),
+        variables=("EXAMPLE_ACCOUNT",),
     )
     modified = "Mon, 16 Nov 2026 10:00:00 GMT"
     rows = [
@@ -1627,8 +1833,8 @@ def every_sentence_rendered() -> str:
         Row(wadl, response(wadl.url, b"<a/>", kind="application/xml", modified="0"), b"<a/>"),
         Row(replace(toc, file="entries/a.md"), response(toc.url), b"a", toc.note),
         Row(replace(toc, file="entries/b.md"), response(toc.url), b"b", toc.note),
-        Row(refused, response(faq.url, b"", status=403), None, refused.note),
-        Row(faq, response("https://origin.example.net/faq"), b"x"),
+        Row(refused, response(refused.url, b"", status=403), None, refused.note),
+        Row(faq, response(faq.url), b"x"),
         Row(status, response(status.url, etag='"nonce"', modified=modified), None, status.note),
         Row(
             admin,
@@ -1644,13 +1850,20 @@ def every_sentence_rendered() -> str:
 FORMS = {
     # pragma: allowlist nextline secret (a digest of the render, not a key)
     1: "4a19cba319af24e05fc71ebd50586fe9b9d891cf6beb661b0cee492bcf997cf7",
+    # pragma: allowlist nextline secret (a digest of the render, not a key)
+    2: "ab0879899f581ebd2e96a6afbb9681d471ef3a31698e3f366edc4611e3cc047f",
 }
 """The digest of ``every_sentence_rendered`` for each form of FETCHED.md, by its number.
 
 An entry stands as it is once a release of core writes its form; form 1 took its digest again
 while unreleased, when the render gained its escaped pipe and its padded code span, and again
 when a line feed in a cell came to be written as a space
-(https://github.com/xippios/sdk-core/issues/434)."""
+(https://github.com/xippios/sdk-core/issues/434). Core 0.4.1 wrote form 1; form 2 is the
+fetch through core's client, which names the client's User-Agent and leaves the clauses of a
+file kept as recorded and of a second origin (ADR-0062, decisions 4 to 6), so the render of
+form 1 no longer stands and its digest is the record of what 0.4.1 wrote. Form 2 took its
+digest again while unreleased, when it came to state the floor of the one retry (finding 2 of
+the review of https://github.com/xippios/sdk-core/pull/536)."""
 
 
 def test_a_change_of_what_the_frame_writes_raises_the_form() -> None:
