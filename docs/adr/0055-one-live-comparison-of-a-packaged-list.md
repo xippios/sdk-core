@@ -1,6 +1,6 @@
 # ADR-0055: One live comparison of a packaged list
 
-Status: Accepted · Date: 2026-11-21 · Decided by https://github.com/xippios/sdk-core/issues/374
+Status: Accepted · Date: 2026-11-21 · Decided by https://github.com/xippios/sdk-core/issues/374 · Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/479
 
 ## Context
 
@@ -88,3 +88,24 @@ list needs a clause of its own.
   test of the task holds.
 - The family check runs `tests/test_live.py` once more, offline, as pytest's collection does: a
   module that sends a request when it is imported fails both.
+
+## Amendment 2026-11-24
+
+Amended by https://github.com/xippios/sdk-core/issues/479, whose answer makes `get_answer` the one
+reader of JSON, so that every `api/` wrapper answers an `Answer`, the payload with the time it was
+retrieved. The proof of core 0.5.0 found each source wrapping its fetches in a function of its own
+that only takes the payload (https://github.com/xippios/sdk-core/issues/577), and decisions 4
+and 6 change:
+
+- **Decision 4.** The function may return the list as the `payload` of a wrapper's `Answer`, or
+  an awaitable of one, and the test reads the payload as the list, records or bare codes, its
+  `retrieved_at` unread. A wrapper that takes no argument is a fetch as it stands, and
+  `assert_list_current` takes such an `Answer` as `current`.
+- **Decision 6.** Each side is read as a list and nothing else. A mapping, a text or bytes,
+  handed as `current` or as `packaged=`, and an `Answer` whose payload is one of them or no list,
+  fail the test naming the type and never a value, and say to hand the records: a mapping's keys
+  and a text's characters would read as bare codes, and a mapping of the packaged records by
+  their code passed beside a changed record. The `Answer` is read on the current side alone,
+  since `packaged=` gives the records as the source views them.
+
+The other decisions and the consequences stand as written.

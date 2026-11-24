@@ -201,9 +201,9 @@ had judged no source.
     (https://github.com/xippios/sdk-core/issues/479), a fetch may answer the wrapper's `Answer`
     whose `payload` is those records, which the frame reads as the records, so a wrapper is a
     fetch as it stands and a source needs no function of its own that only takes the payload;
-    an `Answer` of anything else, the body that holds the records say, stops the run and says to
-    hand the records (https://github.com/xippios/sdk-core/issues/577). The fetch
-    that answers plain values leaves, with `Enumeration.values` and `Enumeration.key`
+    an `Answer` of anything else, the body that holds the records say, stops the run and says
+    to hand the records (https://github.com/xippios/sdk-core/issues/577). The fetch that answers
+    plain values leaves, with `Enumeration.values` and `Enumeration.key`
     (https://github.com/xippios/sdk-core/issues/475, part 7), which reverses that part of
     ADR-0051, decision 2. `Lists.package` is the source's import path, as `PackagedList.load`
     takes it: the frame writes into its directory as imported, and refuses one outside the
@@ -213,8 +213,9 @@ had judged no source.
     source and reads no `params` of its own.
 12. **When a list was fetched.** Carried from ADR-0051, decision 3, without the values that
     leave. The fetch carries the moment: records are stamped when their fetch returned, an
-    `Answer`'s too, and a finished list keeps its own `fetched`, the wrapper's `retrieved_at`, the time of its first
-    request or the time its file was complete, so no source's `fetched` changes its meaning.
+    `Answer`'s too, and a finished list keeps its own `fetched`, the wrapper's `retrieved_at`,
+    the time of its first request or the time its file was complete, so no source's `fetched`
+    changes its meaning.
 13. **The packaged files, `enums.py` and one table header.** Carried from ADR-0051, decision 4,
     but for its second header. The packaged files are `PackagedList.write`'s. `enums.py` is one
     render in the order the lists are declared, each `Enumeration` naming the field its values
