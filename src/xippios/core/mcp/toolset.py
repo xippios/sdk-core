@@ -106,7 +106,9 @@ class ToolSet:
             task of a write tool set, which a continuation would run again, to a task
             that takes ``offset``, which the adapter's argument would shadow, or to a
             task that takes ``start``, which pages upstream itself (ADR-0047, ADR-0061,
-            decision 9). Each message names the tool and says why.
+            decision 9). Each message says why: the refusal of a key of ``caps`` names
+            the key, each such key sorted, and the refusals of the other two checks
+            name the tool.
         TypeError: An entry of ``tasks`` is no function; the message names its position.
     """
 

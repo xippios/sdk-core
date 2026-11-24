@@ -68,8 +68,9 @@ change of the family check.
    tool set that writes, since a continuation would repeat a confirmed write, for a task that takes
    `offset`, which the adapter's argument would shadow, and for a task that takes `start`, which
    pages upstream itself, so that its cut answer resumes with `start` and a continuation would send
-   upstream a request (ADR-0061, decision 9). Each refusal is a `ValueError` that names the tool
-   and says why. A tool set holds tools alone: a task that its module names in `BULK_TASKS` is left
+   upstream a request (ADR-0061, decision 9). Each refusal is a `ValueError` that says why: the
+   refusal of a key of `caps` names the key, and the refusals of the other two checks name the
+   tool. A tool set holds tools alone: a task that its module names in `BULK_TASKS` is left
    out, a wrapper whose `__wrapped__` leads to one included, so a cap keyed to it is refused as
    naming no task. `dataclasses.replace` gives a narrowed copy and checks it as a new tool set.
 4. **What a host reads.** The host is a consumer that reads a source's tool set, and no public name
