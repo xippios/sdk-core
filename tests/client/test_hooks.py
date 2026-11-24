@@ -6,8 +6,8 @@ and before the rate limiter; the observer on every response from the wire, befor
 along the client's one request path and meet both alike.
 """
 
-from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime
+from collections.abc import AsyncIterator, Awaitable, Callable
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx
@@ -358,3 +358,27 @@ async def test_a_recording_past_its_bound_is_observed_by_its_status_and_headers(
     with pytest.raises(ValueError, match=r"^GET /v1/x answered a body over 10 bytes"):
         await send_once.async_fn(client, "/v1/x", max_read_bytes=10)
     assert seen == ["observe 200 11"]
+
+
+@pytest.mark.anyio
+async def test_a_recording_past_its_bound_is_closed_before_observe_sees_it(
+    respx_mock: respx.MockRouter,
+) -> None:
+    # Reading stops at the chunk that passes max_read_bytes, with chunks left on the wire: the
+    # recorder closes the answer first, so a hook finds it closed and its elapsed time set, and
+    # the recorder's refusal is what the call raises.
+    seen: list[str] = []
+
+    async def chunks() -> AsyncIterator[bytes]:
+        for _ in range(3):
+            yield b"x" * 6
+
+    def observe(response: httpx.Response) -> None:
+        seen.append(f"observe {response.status_code} closed {response.is_closed}")
+        assert response.elapsed >= timedelta(0)
+
+    respx_mock.get(f"{BASE}/v1/x").mock(return_value=httpx.Response(200, content=chunks()))
+    client = AsyncClient(make(observe=observe))
+    with pytest.raises(ValueError, match=r"^GET /v1/x answered a body over 10 bytes"):
+        await send_once.async_fn(client, "/v1/x", max_read_bytes=10)
+    assert seen == ["observe 200 closed True"]
