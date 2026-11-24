@@ -1,6 +1,6 @@
 # ADR-0047: The adapter's offset for the rest of a cut answer
 
-Status: Accepted · Date: 2026-11-21 · Decided by https://github.com/xippios/sdk-core/issues/362
+Status: Accepted · Date: 2026-11-21 · Decided by https://github.com/xippios/sdk-core/issues/362 · Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/474
 
 ## Context
 
@@ -97,3 +97,11 @@ one request per market year.
 
 Conventions §8, the README and the docstrings of `ResultCap`, `cap_result` and
 `xippios.core.mcp.server` state its decisions from 1.29 on.
+
+## Amendment 2026-11-24
+
+Amended by ADR-0061, decision 9 (https://github.com/xippios/sdk-core/issues/474): decision 2's
+tool whose second run costs little becomes one whose second run costs upstream nothing, an
+answer of a packaged table or one that the response cache holds, so that a tool whose
+continuation sends upstream any request stays unpaged, while the other decisions stand as
+written.

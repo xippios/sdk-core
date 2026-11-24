@@ -1,6 +1,6 @@
 # ADR-0041: Packaged answers and release times in `ResultMeta`
 
-Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0022 · Amended 2026-11-22 by https://github.com/xippios/sdk-core/issues/440
+Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0022 · Amended 2026-11-22 by https://github.com/xippios/sdk-core/issues/440 · Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/474
 
 ## Context
 
@@ -168,3 +168,12 @@ refresh of the list makes a code. Every other refusal keeps the tail, a source's
 `UnknownCode(hint=...)` and the check's refusal with `otherwise` among them, so a source on core
 0.4.0 keeps its message. Decision 8 stands otherwise as written, and conventions §5 states the
 hinted refusal in a sentence of its own.
+
+## Amendment 2026-11-24
+
+Amended by ADR-0060, decisions 2 and 8 (https://github.com/xippios/sdk-core/issues/474), this
+record's second amendment and its last: `vintage` holds only a release identifier that upstream
+states for the data answered, the newest where an answer holds several, so that a date computed
+from the rows and another flow's release list leave it empty and the task's docstring says why
+(decision 1), and a period series compares no values across the releases of its periods
+(decision 6), while the other decisions and the amendment of 2026-11-22 stand as written.

@@ -1312,11 +1312,12 @@ MCP_CAPS: Mapping[str, ResultCap] = {
 }
 ```
 
-A continuation runs the task again, so a source pages a read tool where that second run
-costs little: a packaged table (sdk-usda-esmis's `list_publications`), an answer the
-response cache holds (sdk-faostat and sdk-eurostat, for 300 seconds) or one request
-(sdk-usda-esr's `get_exports` for every country). It leaves a tool unpaged where a second
-run is dear: sdk-usda-nass's `get_data` split by year spends up to 41 keyed calls,
+A continuation runs the task again, so a source pages a read tool only where that second
+run costs upstream nothing (ADR-0061, decision 9): a packaged table (sdk-usda-esmis's
+`list_publications`) or an answer the response cache holds (sdk-faostat and sdk-eurostat, for
+300 seconds). It leaves a tool unpaged where a second run sends upstream a request, one
+request as sdk-usda-esr's `get_exports` for every country sends without a cache, or many:
+sdk-usda-nass's `get_data` split by year spends up to 41 keyed calls,
 sdk-usda-esr's `get_weekly_series` one request per market year, up to 11, of the 1,000 an
 hour its key shares, and each page of sdk-x's post tools is billed per post. Such a series
 can still keep its newest rows unpaged. The second run draws on the same quota as the
@@ -1559,6 +1560,17 @@ async def test_the_write_server(
         sent=respx_mock,
     )
 ```
+
+Two tests hold the names that the boundary and the ways give (ADR-0060, ADR-0061). Every read
+task, of `tasks.__all__`, bulk or not, is named with one of the five read verbs, `list_`, `get_`,
+`search_`, `count_` or `download_`, so `find_series` fails where `search_series` passes; a write
+task of `tasks_write` takes a write's verb and is not read. In every model that a task's
+`Result[T]` reaches, through its fields, a reading `<stem>_number` or `<stem>_label` stands
+beside the text field of its stem: `value: str`, `"1,204 (P)"`, beside `value_number: Decimal |
+None`, `1204`, passes, and `code: int` beside `code_label: str` fails. A name whose part before
+the suffix names no field of its model, an address's `street_number`, is upstream's own and
+passes, so the check holds a reading's form, and the review whether a reading that can lose
+something keeps its text.
 
 Every task, read and write, bulk or not, with a parameter whose name holds `country`,
 `countries`, `area`, `reporter` or `partner`, in any case, names its codes with `names_codes`

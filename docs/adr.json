@@ -12,6 +12,10 @@
         {
           "date": "2026-11-18",
           "by": "https://github.com/xippios/sdk-core/issues/240"
+        },
+        {
+          "date": "2026-11-24",
+          "by": "https://github.com/xippios/sdk-core/issues/474"
         }
       ],
       "amends": [],
@@ -183,7 +187,12 @@
       "status": "Accepted",
       "date": "2026-10-23",
       "decided_by": "",
-      "amended": [],
+      "amended": [
+        {
+          "date": "2026-11-24",
+          "by": "https://github.com/xippios/sdk-core/issues/474"
+        }
+      ],
       "amends": [],
       "supersedes": [],
       "other": [],
@@ -350,6 +359,10 @@
         {
           "date": "2026-11-18",
           "by": "https://github.com/xippios/sdk-core/issues/240"
+        },
+        {
+          "date": "2026-11-24",
+          "by": "https://github.com/xippios/sdk-core/issues/474"
         }
       ],
       "amends": [],
@@ -490,7 +503,12 @@
       "status": "Accepted",
       "date": "2026-11-18",
       "decided_by": "the record it supersedes, restated under https://github.com/xippios/coordinate-core/issues/757",
-      "amended": [],
+      "amended": [
+        {
+          "date": "2026-11-24",
+          "by": "https://github.com/xippios/sdk-core/issues/474"
+        }
+      ],
       "amends": [],
       "supersedes": [
         "ADR-0003"
@@ -586,7 +604,12 @@
       "status": "Accepted",
       "date": "2026-11-18",
       "decided_by": "the record it supersedes, restated under https://github.com/xippios/coordinate-core/issues/757",
-      "amended": [],
+      "amended": [
+        {
+          "date": "2026-11-24",
+          "by": "https://github.com/xippios/sdk-core/issues/474"
+        }
+      ],
       "amends": [],
       "supersedes": [
         "ADR-0012"
@@ -707,6 +730,10 @@
         {
           "date": "2026-11-22",
           "by": "https://github.com/xippios/sdk-core/issues/440"
+        },
+        {
+          "date": "2026-11-24",
+          "by": "https://github.com/xippios/sdk-core/issues/474"
         }
       ],
       "amends": [],
@@ -820,7 +847,12 @@
       "status": "Accepted",
       "date": "2026-11-21",
       "decided_by": "https://github.com/xippios/sdk-core/issues/362",
-      "amended": [],
+      "amended": [
+        {
+          "date": "2026-11-24",
+          "by": "https://github.com/xippios/sdk-core/issues/474"
+        }
+      ],
       "amends": [],
       "supersedes": [],
       "other": [],
@@ -1036,6 +1068,34 @@
       "supersedes": [
         "ADR-0023"
       ],
+      "other": [],
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-0060",
+      "number": 60,
+      "title": "The boundary of a source package and the four rules of a record that a package shapes itself",
+      "path": "docs/adr/0060-the-boundary-of-a-source-package-and-the-four-rules-of-a.md",
+      "status": "Accepted",
+      "date": "2026-11-24",
+      "decided_by": "https://github.com/xippios/sdk-core/issues/474",
+      "amended": [],
+      "amends": [],
+      "supersedes": [],
+      "other": [],
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-0061",
+      "number": 61,
+      "title": "The one way of each feature",
+      "path": "docs/adr/0061-the-one-way-of-each-feature.md",
+      "status": "Accepted",
+      "date": "2026-11-24",
+      "decided_by": "https://github.com/xippios/sdk-core/issues/474",
+      "amended": [],
+      "amends": [],
+      "supersedes": [],
       "other": [],
       "superseded_by": null
     }

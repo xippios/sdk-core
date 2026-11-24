@@ -25,14 +25,20 @@ the repository it reviews.
 
 1. **Layering** (ADR-0001; not the host's): the adapters register `tasks.__all__`, minus
    `BULK_TASKS` (ADR-0040), and hold no logic.
-2. **Fidelity** (ADR-0028; not the host's): upstream names and semantics, no cross-source
-   normalisation; every parameter and default traceable to `docs/upstream/`, its
+2. **Fidelity** (ADR-0028, ADR-0060, ADR-0061; not the host's): upstream names and semantics,
+   no cross-source normalisation; every parameter and default traceable to `docs/upstream/`, its
    hand-written `OBSERVED.md` included (conventions §3), or listed as an assumption in the
    description. A source's `scripts/refresh_upstream.py` on core's frame names its `Snapshot`
    `SNAPSHOT` at its top level, which loads with no request and no write, its run under
    `if __name__ == "__main__":`, since the family check holds the committed `FETCHED.md`
    through that name alone and passes a script that names its declaration otherwise
-   (conventions §3; ADR-0046, decision 6).
+   (conventions §3; ADR-0046, decision 6). A change stays inside the boundary of conventions
+   §14, each of its six sentences as the section of its subject applies it, and a record that a
+   package shapes itself follows §3's four rules, of which the family check holds the form of a
+   reading alone, so the review judges whether a reading that can lose something keeps its text
+   beside it (ADR-0060). Each way of ADR-0061 holds as its section states it, the order of a
+   source's arguments and the bound of its requests among the ways that no test holds
+   (ADR-0061).
 3. **Errors** (not the host's): mapped through the taxonomy (conventions §5) and the
    `classify` hook (§6); each shape `classify` maps is documented in `docs/upstream/` or
    recorded in a fixture that a test passes to it (ADR-0031, decision 2); a message names
