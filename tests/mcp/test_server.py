@@ -587,6 +587,37 @@ async def test_an_annotated_parameter_keeps_its_metadata_in_the_tool() -> None:
     assert served == {"top": 10, "name": "WHEAT"}, "the validator ran"
 
 
+async def get_coded_async(
+    code: Annotated[str, Field(description="A code of upstream's list.")] | None = None,
+    year: Annotated[int, Field(ge=2000)] | None = None,
+) -> dict[str, Any]:
+    """Fetch the rows of one code.
+
+    Args:
+        code: The docstring's text for code, which the parameter's own replaces.
+        year: A year from 2000, e.g. ``2024``.
+    """
+    return {"code": code, "year": year}
+
+
+get_coded = sync(get_coded_async)
+
+
+@pytest.mark.anyio
+async def test_a_description_a_parameter_declares_inside_a_union_wins() -> None:
+    # https://github.com/xippios/sdk-core/pull/533, finding 1: the parameter's own description
+    # keeps its place in the union's member, and the docstring's text is not set beside it; a
+    # union whose member declares none takes the argument's text (ADR-0063, decision 9).
+    server = build_server(ToolSet("example", [get_coded]))
+    tool = {t.name: t for t in await server.list_tools()}["example_get_coded"]
+    code = tool.input_schema["properties"]["code"]
+    assert "description" not in code
+    assert {"type": "string", "description": "A code of upstream's list."} in code["anyOf"]
+    assert "The docstring's text for code" not in str(tool.input_schema)
+    year = tool.input_schema["properties"]["year"]
+    assert year["description"] == "A year from 2000, e.g. ``2024``."
+
+
 class Query(BaseModel):
     name: str
 
