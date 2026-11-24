@@ -2,10 +2,13 @@
 
 The placement is ADR-0037's: the pre-request hook once per call, after the cache lookup
 and before the rate limiter; the observer on every response from the wire, before
-``classify`` and the retry decision.
+``classify`` and the retry decision. A read, the recorder's request and a download go
+along the client's one request path and meet both alike.
 """
 
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
+from pathlib import Path
 
 import httpx
 import pytest
@@ -238,3 +241,120 @@ async def test_an_error_from_observe_propagates(respx_mock: respx.MockRouter) ->
     with pytest.raises(LookupError, match="observer bug"):
         await client.get("/v1/x")
     assert route.call_count == 1  # raised before the retry decision
+
+
+# The three calls that go along the client's one request path: a read through request, the
+# recorder's request and a download. Each sends a GET of /v1/x.
+Call = Callable[[AsyncClient, Path], Awaitable[object]]
+
+
+async def _request(client: AsyncClient, tmp_path: Path) -> object:
+    return await client.get("/v1/x")
+
+
+async def _send_once(client: AsyncClient, tmp_path: Path) -> object:
+    return await send_once.async_fn(client, "/v1/x")
+
+
+async def _download(client: AsyncClient, tmp_path: Path) -> object:
+    return await client.download("/v1/x", tmp_path / "x.json")
+
+
+ONE_PATH = [
+    pytest.param(_request, id="request"),
+    pytest.param(_send_once, id="send_once"),
+    pytest.param(_download, id="download"),
+]
+
+
+@pytest.mark.anyio
+@pytest.mark.rate_limited
+@pytest.mark.parametrize("call", ONE_PATH)
+async def test_each_call_meets_a_refusal_before_the_limiter_and_sends_nothing(
+    call: Call, respx_mock: respx.MockRouter, tmp_path: Path
+) -> None:
+    # The refused call takes no token: with a burst of one, the call after it would wait a
+    # second if it had.
+    events = Events()
+    refusals = [RateLimitError("nothing was sent", retry_after=600.0, source="example")]
+
+    def refuse_first(request: httpx.Request) -> None:
+        events.seen.append(f"before {request.method} {request.url.path}")
+        if refusals:
+            raise refusals.pop()
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        events.seen.append("sent")
+        return httpx.Response(200, json={})
+
+    route = respx_mock.get(f"{BASE}/v1/x").mock(side_effect=answer)
+    config = make(before_request=refuse_first, rate_limit=RateLimit(per_minute=60, burst=1))
+    client = AsyncClient(config, sleep=events.sleep)
+    with pytest.raises(RateLimitError, match="nothing was sent"):
+        await call(client, tmp_path)
+    assert not route.called
+    assert list(tmp_path.iterdir()) == []  # a download leaves no partial file
+    await call(client, tmp_path)
+    assert events.seen == ["before GET /v1/x", "before GET /v1/x", "sent"]
+
+
+@pytest.mark.anyio
+@pytest.mark.rate_limited
+@pytest.mark.parametrize("call", ONE_PATH)
+async def test_each_call_runs_the_hooks_and_the_limiter_in_one_order(
+    call: Call, respx_mock: respx.MockRouter, tmp_path: Path
+) -> None:
+    events = Events()
+
+    def before(request: httpx.Request) -> None:
+        marks = f"{request.extensions['xippios_auth']} {request.extensions['xippios_origin']}"
+        events.seen.append(f"before {marks}")
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        events.seen.append("sent")
+        return httpx.Response(200, json={})
+
+    def observe(response: httpx.Response) -> None:
+        marks = (
+            f"{response.request.extensions['xippios_auth']} "
+            f"{response.request.extensions['xippios_origin']}"
+        )
+        events.seen.append(f"observe {response.status_code} {marks}")
+
+    respx_mock.get(f"{BASE}/v1/x").mock(side_effect=answer)
+    config = make(
+        before_request=before,
+        observe=observe,
+        rate_limit=RateLimit(per_minute=60, burst=1),
+    )
+    client = AsyncClient(config, sleep=events.sleep)
+    await call(client, tmp_path)
+    await call(client, tmp_path)
+    assert events.seen == [
+        "before client base",
+        "sent",
+        "observe 200 client base",
+        "before client base",
+        "sleep 1",
+        "sent",
+        "observe 200 client base",
+    ]
+
+
+@pytest.mark.anyio
+async def test_a_recording_past_its_bound_is_observed_by_its_status_and_headers(
+    respx_mock: respx.MockRouter,
+) -> None:
+    # Reading stops at max_read_bytes, so the body is left unread: a hook that reads it meets
+    # nothing, as on a download's success, and the recorder's refusal follows.
+    seen: list[str] = []
+
+    def observe(response: httpx.Response) -> None:
+        seen.append(f"observe {response.status_code} {response.headers['content-length']}")
+        response.json()  # the body is unread: nothing observed, and nothing raised
+
+    respx_mock.get(f"{BASE}/v1/x").respond(200, content=b"x" * 11)
+    client = AsyncClient(make(observe=observe))
+    with pytest.raises(ValueError, match=r"^GET /v1/x answered a body over 10 bytes"):
+        await send_once.async_fn(client, "/v1/x", max_read_bytes=10)
+    assert seen == ["observe 200 11"]
