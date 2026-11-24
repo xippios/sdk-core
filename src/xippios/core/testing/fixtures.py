@@ -335,7 +335,11 @@ def fixture_from_response(
 
 
 def _verify(scrubber: _Scrubber, fixture: Fixture) -> None:
-    """The scrub's verify on ``fixture``: no secret value left in it as given."""
+    """The scrub's verify on ``fixture``: no secret value left in it in any of its forms.
+
+    As given, percent-encoded or behind a JSON escape, the forms the scrub replaces
+    (ADR-0066, decision 11).
+    """
     __tracebackhide__ = True  # pytest would print the arguments: the refused text
     kept = fixture.request.content_type
     scrubber.verify(

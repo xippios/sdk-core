@@ -140,8 +140,11 @@ carry a sentence each that points here.
     tells apart share one route, the later answer replacing the earlier, and no replay in order
     enters core. `mount_fixture` folds into `replay(router, path, *, match_params=None,
     url=None)`, which loads the file and mounts it, since no source mounts a `Fixture` it holds
-    in memory (https://github.com/xippios/sdk-core/issues/475, part 7), and ADR-0064, decisions 4
-    and 5, read `replay` where they name `mount_fixture`.
+    in memory (https://github.com/xippios/sdk-core/issues/475, part 7). Records that name the
+    names that leave read the names that stand, and none is amended for it: ADR-0028, decision 8
+    and its closing paragraph, and ADR-0064, decisions 4 and 5, read `replay` where they name
+    `mount_fixture`, and ADR-0037, decisions 4 and 6, read `record` and `send_once` where they
+    name `record_sync`, the sync functions of decision 8.
 11. **`Scrub` takes a secret's encoded forms.** Each value that `Scrub(secrets=...)` names or
     `Scrub(response_secrets=...)` reads is replaced and verified in its every form, not as given
     alone (https://github.com/xippios/sdk-core/issues/483, part 4): each character as given,
@@ -186,8 +189,10 @@ carry a sentence each that points here.
 - A recording whose secret stands only percent-encoded or behind a JSON escape, which core
   wrote before, is now redacted, so a fixture recorded again can differ from the one before in
   that place alone.
-- ADR-0064, decisions 4 and 5, name `mount_fixture`, which no source imports: the check reads a
-  call of `replay_fixture` or `replay` with `url=`, and the census keeps what `replay` mounts.
+- ADR-0028, decision 8, and ADR-0064, decisions 4 and 5, name `mount_fixture`, which no source
+  imports: the check reads a call of `replay_fixture` or `replay` with `url=`, the census keeps
+  what `replay` mounts, and a recording is served at another URL by `replay(url=)`. ADR-0037,
+  decisions 4 and 6, name `record_sync`, which the sync `record` replaces (decision 10).
 
 Conventions §3 and §10, the README and the docstrings of `record`, `send_once`,
 `fixture_from_response`, `write_fixture`, `fixture_text`, `replay`, `Scrub` and
