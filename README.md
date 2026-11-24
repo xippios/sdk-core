@@ -1915,8 +1915,11 @@ forms, or in any text that one of them decodes to, JSON-unescaped and percent-de
 either order until it no longer changes, nothing is written and the error says where, never
 what. So any nesting of the two encodings that the scrub does not replace refuses the
 recording too, a percent-encoding encoded again or a JSON text stringified twice say, and so
-does a text that still decodes after eight rounds. A body that is not UTF-8 text cannot be
-scrubbed and is refused unless `Scrub(allow_binary=True)` stores it base64, flagged.
+does a text that still decodes after eight rounds: nine nested encodings, or a run of 128 or
+more backslashes in a JSON string (257 in a text body), since each round halves such a run.
+That refusal is a false one, which sends the answer to review and writes no secret. A body
+that is not UTF-8 text cannot be scrubbed and is refused unless `Scrub(allow_binary=True)`
+stores it base64, flagged.
 
 What a source replaces beyond those values, a field by key or a tenant's host, its own
 rewrite step replaces, and the recorder runs it: a function of the scrubbed `Fixture` that

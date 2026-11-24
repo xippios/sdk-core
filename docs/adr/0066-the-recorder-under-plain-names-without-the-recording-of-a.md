@@ -161,12 +161,16 @@ carry a sentence each that points here.
     behind a JSON escape, a percent-encoding encoded again or a JSON text stringified twice,
     refuses the recording as a value left does (https://github.com/xippios/sdk-core/pull/587). The
     decoding takes eight rounds at most, and a text that still changes after them is refused rather
-    than passed. `REDACTED` is masked first, and a body stored base64 is searched for none. Core
-    held the percent-encoded matching until 0.3.0 (ADR-0042, decision 1), and three sources carry
-    it today: sdk-cashctrl's patterns of its key and its basic-auth token, sdk-google-mail's
-    `forms_of`, and sdk-faostat's instructions, which name the encoded forms of a login at each
-    recording. Their lines for a secret's forms leave at their adoption, while sdk-cashctrl's
-    patterns of a tenant's host stay its own (decision 5). This amends ADR-0042, decisions 1 and 3.
+    than passed: nine nested encodings, or a run of 128 or more backslashes in a JSON string (257
+    in a text body), since each round halves such a run, a false refusal that sends the answer to
+    review and writes no secret
+    (https://github.com/xippios/sdk-core/pull/587#pullrequestreview-6049058589). `REDACTED` is
+    masked first, and a body stored base64 is searched for none. Core held the percent-encoded
+    matching until 0.3.0 (ADR-0042, decision 1), and three sources carry it today: sdk-cashctrl's
+    patterns of its key and its basic-auth token, sdk-google-mail's `forms_of`, and sdk-faostat's
+    instructions, which name the encoded forms of a login at each recording. Their lines for a
+    secret's forms leave at their adoption, while sdk-cashctrl's patterns of a tenant's host stay
+    its own (decision 5). This amends ADR-0042, decisions 1 and 3.
 12. **The cut keeps a JSON array alone.** `max_bytes=` cuts a body that is a JSON array, by whole
     elements in upstream's own text, the first ones or with `keep="last"` the last; `array_key=`
     and the cut of a text leave, since every fixture of the family over the 256 KiB cap holds a

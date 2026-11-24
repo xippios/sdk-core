@@ -54,7 +54,10 @@ class Scrub:
     changes, refuses it with ``ValueError``, which names the place, never the value. So any
     nesting of a percent-encoding and a JSON escape that the scrub does not replace is
     refused, a percent-encoding encoded again or a JSON text stringified twice say, and so
-    is a text that still decodes after eight rounds (ADR-0066, decision 11).
+    is a text that still decodes after eight rounds: nine nested encodings, or a run of 128
+    or more backslashes in a JSON string (257 in a text body), since each round halves such
+    a run. That refusal is a false one, which sends the answer to review and writes no
+    secret (ADR-0066, decision 11).
 
     Attributes:
         secrets: Values that must never be written, e.g. a key or a tenant name. Each
@@ -256,7 +259,8 @@ class _Scrubber:
         JSON-unescaped and percent-decoded in either order until it no longer changes,
         so any nesting of the two encodings that the scrub does not replace is refused,
         a repeated JSON key's every value read (``_decodings``; ADR-0066, decision 11).
-        A text that still changes after ``_ROUNDS`` rounds is refused, never passed.
+        A text that still changes after ``_ROUNDS`` rounds is refused, never passed, a run
+        of 128 backslashes in a JSON string among them, which each round halves.
         ``REDACTED`` is masked first and never counts. A backstop (ADR-0030): a body
         stored base64 (``allow_binary``) is not searched, since it is kept unscrubbed by
         design.
