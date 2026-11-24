@@ -841,7 +841,7 @@ def test_adr_0034_names_the_one_walk_in_one_sentence_after_the_ways() -> None:
         "at or past upstream's count",
         "returns nothing",
         "stop rule",
-        "has one consumer, sdk-usda-esmis",
+        "has one consumer",
         "key",
         "no consumer",
         "ADR-0061, decision 8",
@@ -887,6 +887,15 @@ def test_adr_0059_admits_a_decided_piece_with_fewer_than_two_consumers_in_one_se
         "the rest of decisions 4, 5 and 8",
     ):
         assert name in amendment, f"ADR-0059's amendment does not name {name!r}"
+    # The words of decision 4 that the amendment changes, and how far (the review of
+    # https://github.com/xippios/sdk-core/pull/558, finding 2).
+    for words in (
+        '"alone", in "one consumer is enough for the family\'s contract alone"',
+        "\"the maintainer's decision on a step's design question stops being a reason of its own\"",
+        "give way for a piece that a maintainer's answer to a question names as added",
+        "stand for every other piece",
+    ):
+        assert words in amendment, f"ADR-0059's amendment does not name {words!r}"
     records = json.loads(INDEX.read_text(encoding="utf-8"))["records"]
     found = next(r for r in records if r["id"] == "ADR-0059")
     assert found["amended"] == [{"date": "2026-11-24", "by": DECIDED_QUESTION}]
@@ -1412,9 +1421,11 @@ SCOPE_QUESTION = "https://github.com/xippios/sdk-core/issues/473"
 
 def test_a_core_pr_s_consumers_are_judged_by_the_record_of_core_s_scope() -> None:
     # The definition of done's line on consumers and the review checklist's item 11 judge a core
-    # PR by ADR-0059: who a consumer is, what the rule binds and the family's contract, the one
-    # reason for one consumer, and its amendment's piece that a maintainer's answer decided with
-    # fewer than two. Neither names a reason that the record ended.
+    # PR by ADR-0059: who a consumer is, what the rule binds, and the family's contract, the one
+    # reason for one consumer of a piece that no maintainer's answer names as added. By the
+    # amendment, a piece that such an answer names as added may have fewer than two. Neither
+    # names ADR-0023's reasons or a maintainer's decision on a step's design question, which the
+    # record ended for every other piece.
     done = DONE.read_text(encoding="utf-8").splitlines()
     lines = [flat(line) for line in done if "the two consumers of each piece it adds" in line]
     assert len(lines) == 1, "the definition of done has one line on a core PR's consumers"
