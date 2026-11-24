@@ -1656,9 +1656,10 @@ def test_adr_0069_adds_one_constraint_on_a_release_pr_s_merge_to_adr_0039_decisi
 
 def test_the_record_of_a_failed_release_run_stands_beside_the_release_train() -> None:
     # It states rules that no record held and supersedes nothing. ADR-0039 held two amendments
-    # already, so the constraint on its decision 3 is a record of its own, and ADR-0039 points
-    # to it in one paragraph of its section of the day, as ADR-0023 points to ADR-0058 (the
-    # finding of the review of https://github.com/xippios/sdk-core/pull/562).
+    # already, so the constraint on its decision 3 is a record of its own: ADR-0039 keeps its two
+    # amendments, names ADR-0069 in a status field that the index keeps under `other`, as
+    # ADR-0024 names ADR-0025, and points to it in one paragraph of its section of the day (the
+    # findings of the reviews of https://github.com/xippios/sdk-core/pull/562).
     records = {r["id"]: r for r in json.loads(INDEX.read_text(encoding="utf-8"))["records"]}
     found = records[FAILED_RUN]
     assert found["decided_by"] == DOCUMENTS_QUESTION
@@ -1666,8 +1667,8 @@ def test_the_record_of_a_failed_release_run_stands_beside_the_release_train() ->
     assert len(decisions(FAILED_RUN)) == 4, "one decision per rule of §12"
     train = records[RELEASE_TRAIN]
     assert train["superseded_by"] is None
-    assert len(train["amended"]) == 3, "the release train's status names the pointer"
-    assert train["amended"][-1] == {"date": "2026-11-24", "by": DOCUMENTS_QUESTION}
+    assert len(train["amended"]) == 2, "the release train keeps its two amendments"
+    assert train["other"] == [f"Decision 3 constrained by {FAILED_RUN} (2026-11-24)"]
     paragraphs = amendments(RELEASE_TRAIN, "2026-11-24")
     pointer = next((p for p in paragraphs if p.startswith(FAILED_RUN)), paragraphs[-1])
     assert pointer.startswith(f"{FAILED_RUN} ({DOCUMENTS_QUESTION}), decision 3,"), pointer[:60]
