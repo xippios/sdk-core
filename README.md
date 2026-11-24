@@ -1557,10 +1557,9 @@ exactly one tenant, the parameter its registry declares, `Tenants(..., param="or
 required, a `str`, the tenant list excepted, with no opt-in. The check reads signatures
 only, so a task that takes one tenant and opens another's client is the review's to find.
 A write
-server is its source's to test, with `await assert_write_tools(write_server, write_tasks,
-source="example", read_server=read_server, router=router)`: a write server, its tools exactly the write
-tasks, each taking `confirm: bool = False` last, and none of them on the read server or
-the router. A source whose adapters drop a task, or whose README table is stale, fails CI
+server is its source's to test, with `await assert_write_tools(mcp_write.build(), write_tasks,
+read_server=read_server, router=router)`: a write tool set, its tools exactly the write tasks,
+each taking `confirm: bool = False` last, and none of them on the read server or the router. A source whose adapters drop a task, or whose README table is stale, fails CI
 before a reviewer looks. The package under test is the one `tasks.py` under
 `src/xippios/`.
 
@@ -1588,9 +1587,8 @@ async def test_the_write_server(
 ) -> None:
     replay_fixture("thing_read", "ok")  # what update_thing's preview reads
     await assert_write_tools(
-        write_server,
+        mcp_write.build(),
         write_tasks,
-        source="example",
         read_server=read_server,
         router=router,
         dry_run={
@@ -1738,9 +1736,8 @@ The census, the second test, runs after every other test of the run. The plugin 
 request that a replay answered with the recorded one, through the recording's redaction, so
 a key the recording holds `REDACTED` matches the placeholder sent, and the census fails each
 test whose replay answered another host, path, query or body without `kind 3` beside `§10`.
-A partial run judges only the tests that ran, and under pytest-xdist the census skips, since
-each worker keeps its own. A source meets the check once it adds the line, and the module's
-docstring lists what it cannot see.
+A partial run judges only the tests that ran. A source meets the check once it adds the line,
+and the module's docstring lists what it cannot see.
 
 ```python
 # src/xippios/example/_client.py: each secret variable holds the placeholder key offline
