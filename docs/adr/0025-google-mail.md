@@ -286,5 +286,8 @@ has what the Google sources share move to core as `xippios.core.google` once sdk
 its second consumer, and the account registry that point (b) of the amendment of 2026-11-18
 names for that module, are taken back, since core holds no code that knows one publisher, so
 that what two Google sources come to share stands in a shared package of their publisher, which
-a closed question makes, while the rest of the record and of its first amendment stands as
-written.
+a closed question makes, and point (c)'s exchange and resend on a status of `renew_on` holds for
+a read alone, since ADR-0011's amendment of 2026-11-24
+(https://github.com/xippios/sdk-core/issues/480) sends a write refused with that status no second
+time and has the next request exchange first, while the rest of the record and of its first
+amendment stands as written.

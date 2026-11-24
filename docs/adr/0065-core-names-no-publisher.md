@@ -64,7 +64,10 @@ this record to say how the gateway leaves.
    every other in what binds, and it reads no record and no changelog. A step of the
    organization's conventions check takes each source's names from its template answers and
    finds them in what binds of core; it is the organization repository's to build
-   (https://github.com/xippios/.github/issues/169).
+   (https://github.com/xippios/.github/issues/169), with the organization's package after the
+   sources' first wave, where the maintainer's answer on
+   https://github.com/xippios/.github/issues/170 places it. Until that step stands, core's own
+   test is the one check, and the tag of 0.5.0 waits for no step of the organization's.
 
 ## Consequences
 
