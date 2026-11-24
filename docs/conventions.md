@@ -1435,7 +1435,9 @@ which §12 bounds to one minor.
   `trade-data`, `accounting`, `email` (ADR-0025), `social-media` (ADR-0027)) as
   appropriate.
 - Workflows are hardened (ADR-0039, decision 7). Every action is pinned to a
-  commit SHA with its version in a comment, and bumped deliberately. Every checkout sets
+  commit SHA with its version in a comment, and bumped deliberately. A workflow carries no
+  comment but the version after a pinned action
+  (https://github.com/xippios/.github/issues/111). Every checkout sets
   `persist-credentials: false`, except in a job that pushes with the token, the release
   train's `tag` job, which the README's paragraph on `publish.yml` names as the exception
   (ADR-0039, decision 7, amendment 2026-11-24). Every workflow declares
