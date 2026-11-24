@@ -72,8 +72,10 @@ class ToolSet:
     checked when it is built, before any server is: a write tool set's every task takes
     ``confirm: bool = False``, every key of ``caps`` names one of its tasks, and a paged
     cap fits its task (ADR-0063, decision 3). ``dataclasses.replace`` gives a narrowed
-    copy, a host's list of tools say, and checks it as a new tool set, so a copy that
-    drops a task drops its cap too.
+    copy, a host's list of tools say, and checks it as a new tool set, so the caller drops
+    the cap of each task it drops, with ``caps=`` beside ``tasks=`` in the same
+    ``replace``, else the check of a key of ``caps`` refuses the copy with a
+    ``ValueError`` naming the key (ADR-0063, decision 4).
 
     Args:
         source: Source slug, e.g. ``"example"``; prefixes every tool name.
@@ -104,7 +106,9 @@ class ToolSet:
             task of a write tool set, which a continuation would run again, to a task
             that takes ``offset``, which the adapter's argument would shadow, or to a
             task that takes ``start``, which pages upstream itself (ADR-0047, ADR-0061,
-            decision 9). Each message names the tool and says why.
+            decision 9). Each message says why: the refusal of a key of ``caps`` names
+            the key, each such key sorted, and the refusals of the other two checks
+            name the tool.
         TypeError: An entry of ``tasks`` is no function; the message names its position.
     """
 
