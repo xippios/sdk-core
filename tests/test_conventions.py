@@ -435,6 +435,23 @@ def test_section_1_reserves_the_invented_source_and_lists_no_source() -> None:
     assert f"{DOCUMENTS}, decision 2" in listed, f"§1: {listed!r} does not cite its record"
 
 
+def test_section_1_keeps_the_one_departure_from_upstream_s_name() -> None:
+    # A source carries upstream's own name but for the one departure that ADR-0025 records, which
+    # no record withdraws (finding 1 of the review of https://github.com/xippios/sdk-core/pull/553).
+    rule = sentence(section(1), "`<source>` names the data provider")
+    for name in ("in upstream's own name", "the one departure", "ADR-0025"):
+        assert name in rule, f"§1: {rule!r} does not name {name!r}"
+
+
+def test_the_header_names_no_source_but_example_outside_a_record_s_citation() -> None:
+    # The conventions cite records that name a source, so the sentence says where a name stands
+    # (ADR-0068's consequences; finding 2 of the review of
+    # https://github.com/xippios/sdk-core/pull/553).
+    text = flat(CONVENTIONS.read_text(encoding="utf-8").split("\n## 1.", 1)[0])
+    rule = sentence(text, "names no source but `example`")
+    assert "outside the citation of a record" in rule, f"the header: {rule!r}"
+
+
 def test_the_conventions_word_the_organization_s_check_as_planned() -> None:
     # ADR-0065, decision 6: the organization's step is planned, and no release of core waits.
     text = flat(CONVENTIONS.read_text(encoding="utf-8").split("\n## 1.", 1)[0])
