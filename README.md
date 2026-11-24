@@ -1903,13 +1903,18 @@ record(
 
 Each value is replaced in its every form, not as given alone: each character as given,
 percent-encoded in either hex case, a space also as `+`, or behind a JSON escape,
-`\u00e9` or `\/`, in any mix and in the letter case given. A tenant named `acme corp/eu`
-reads `REDACTED` in a query that sent `acme+corp%2Feu` and in a JSON body that echoes
-`acme corp\/eu`, so a recording names the value once (ADR-0066, decision 11).
+`\u00e9` or `\/`, in any mix and in the letter case given. The sign of a percent-encoding,
+`%` or a space's `+`, may stand behind a JSON escape too, `\u0025` or `\u002B`, as a JSON
+body writes a query it echoes. A tenant named `acme corp/eu` reads `REDACTED` in a query
+that sent `acme+corp%2Feu` and in a JSON body that echoes `acme corp\/eu` or
+`acme\u002Bcorp\u00252Feu`, so a recording names the value once (ADR-0066, decision 11).
 
 The fixture is scrubbed in memory, verified and written once: if a named value or one
 `response_secrets` read is still in the URL, a header value or a text body, in any of its
-forms, nothing is written and the error says where, never what. A body that is not UTF-8
+forms, or in a key or a string of a body that is JSON, decoded and then percent-decoded,
+nothing is written and the error says where, never what. So a nesting of the two encodings
+that the scrub does not replace, a percent-encoding encoded again say, refuses the recording
+too. A body that is not UTF-8
 text cannot be scrubbed and is refused unless `Scrub(allow_binary=True)` stores it base64,
 flagged.
 
