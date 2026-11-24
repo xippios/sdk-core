@@ -1,7 +1,8 @@
 # ADR-0035: Offline tests guaranteed by the plugin
 
 Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under
-https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0013
+https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0013 ·
+Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/475
 
 ## Context
 
@@ -154,3 +155,19 @@ The plugin owns the offline guarantees.
 Conventions §10 and §15, the definition of done's Adoption PR block, the README and the
 docstrings of `xippios.core.testing`, the testing plugin, `MemoryCache`, `QuotaPolicy` and
 `RenewingBearerAuth` state its decisions from 1.28 on.
+
+Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/475: in decision 3 the
+variables that hold the placeholder are each secret variable of the source's `_client.ENV_VARS`,
+a pattern such as `EXAMPLE_<NAME>_API_KEY` once for each reserved tenant of the `Tenants` that
+`_client.py` holds, `EXAMPLE_DEMO_API_KEY` for `demo`, a pattern with its two consumers,
+sdk-cashctrl and sdk-google-mail, the source being the one package with a `tasks.py` under
+`src/xippios/`, so that a repository with none or several names no variable, and a source's own
+fixture that sets one of them, a reserved tenant's recorded host say, runs after the plugin's
+and keeps its value, while the ini option `xippios_placeholder_key_envs` leaves, since a source
+declares its variables once and in the seven sources with a credential and no tenants the two
+lists were equal, by part 6 of the answer; in decision 8 the ini option `xippios_package`
+leaves, which no source set, so that the package under test is that one package and none or
+several fail every test of the family check, by part 7 of the answer; and in the first
+consequence a source declares its key variables secret in `_client.ENV_VARS` in place of its
+pytest configuration, where pytest warns on an option that leaves, while decisions 1, 2, 4 to 7
+and 9, the rest of decisions 3 and 8 and the other consequences stand as written.
