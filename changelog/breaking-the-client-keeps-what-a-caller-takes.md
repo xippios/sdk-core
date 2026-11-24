@@ -37,6 +37,3 @@
     release with the family check's contract tests
     (https://github.com/xippios/sdk-core/issues/477), so no source edits it first — until
     it leaves, mypy fails at `timeouts`.
-    `tests/test_client.py` (sdk-faostat `:191`, `:205`) and `tests/test_auth.py`
-    (sdk-google-mail `:113`) — nothing: they read `auth.margin`, which stays at
-    `RENEWAL_MARGIN` — only the constructor's `margin=` leaves, which neither passes.
