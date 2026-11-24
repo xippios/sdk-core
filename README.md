@@ -1692,71 +1692,28 @@ the assertion underneath in its own test, `assert_list_current(codes, current)` 
 the release they came from, and gives that test as the list's reason in `NO_LIVE_LIST`.
 
 The check of a built answer's mark is collected by a line of its own, in a file that holds
-the source's declarations for it (conventions §10, ADR-0049):
+nothing else (conventions §10, ADR-0064):
 
 ```python
 # tests/test_built_answers.py
 from xippios.core.testing.built_answers import *  # noqa: F403
-
-READERS = frozenset({"merge_fields"})  # the source's own functions that take a written body
-ALLOWED = {  # helpers whose places are neither a kind of §10 nor an input, with the reason
-    ("tests/test_tasks.py", "serve_pages"): "each page served where and as it was recorded",
-}
 ```
 
 It reads every module under `tests/`, `tests/fixtures/` left out, and fails, naming the file
-and the line, on each place that no mark covers: an `httpx.Response` that a test builds, a
-route's `.respond(...)`, a body written in the test and handed to `classify`, to a model's
-`model_validate` or `model_validate_json`, to a scrub or to a function of `READERS`, and a
-recording replayed with `url=`. A mark names `§10` and its kind, `kind 1` to `kind 5`, in one
-docstring or block of comments, `NOT RECORDED: an empty page (conventions §10, kind 2)`, and
-covers the places of the function or class whose docstring holds it, of the statement it
-stands on or above, and of every call of a helper whose docstring holds it; a module's
-docstring covers nothing. A value handed to the code that no route serves may say instead
-that it `is an input of the test, not an answer from <upstream>.` An entry of `ALLOWED` covers
-the places inside its definition and the calls of it, and one that covers no place fails.
+and the line, on each place that no mark covers: a `Response` that a test builds, a route's
+`.respond(...)`, a body written in the test and handed to `classify`, to a model's
+`model_validate` or `model_validate_json` or to a scrub, and a recording replayed with `url=`.
+A mark names `§10` and its kind, `kind 1` to `kind 5`, in one docstring or block of comments,
+`NOT RECORDED: an empty page (conventions §10, kind 2)`, or says that the value `is an input
+of the test, not an answer from <upstream>.`, and covers the places of the function or class
+whose docstring holds it, of the statement it stands on or above, and of every call of a
+helper whose docstring holds it; a module's docstring covers nothing. Either mark covers any
+place: the check follows no body to where it is served, so that a served answer takes a kind
+is the review's (ADR-0064, decision 9). A helper that serves each recording where and as it
+was recorded builds its answer with `response_from_fixture(load_fixture(path))`, which is no
+place.
 
-An exchange given to a recorder's step is such a value where it reaches
-`fixture_from_response` alone: built in the test or returned by a function of the module, each
-call of which is judged on its own, and handed on directly, by a local name or through a
-function of the module that gives it to `fixture_from_response` alone. The sentence in the
-helper's docstring then covers each call that hands its exchange on, and a call whose exchange
-a route serves takes a kind:
-
-```python
-import httpx
-from xippios.core.testing import Scrub, fixture_from_response
-
-
-def message_exchange(body):
-    """The exchange is an input of the test, not an answer from Example."""
-    return httpx.Response(200, json=body, request=httpx.Request("GET", MESSAGE_URL))
-
-
-def scrubbed(response):
-    return fixture_from_response(response, scrub=Scrub(secrets=SECRETS))
-
-
-def test_a_message_is_scrubbed():
-    fixture = scrubbed(message_exchange({"id": "1"}))  # handed to the recorder alone
-```
-
-An exchange that travels further, by a keyword, a container, a second function, a conditional
-expression or a module of its own such as `conftest.py`, is built in the test or takes a kind,
-and so is one that a route could reach unseen: through a function that a decorator receives,
-whose name something else binds at the module's top or in the calling function, or that the
-module passes as a value, a name of a `global` or `nonlocal` statement, or a module with a star
-import. For a helper's exchange, `fixture_from_response` is core's recorder only where every
-binding of the name in the module is an import from `xippios.core.testing`, as in the example
-above. The
-frame's `Response`, which a test of a snapshot hook imports from `xippios.core.refresh`, is
-served by no route and takes the sentence by its bare name as by `refresh.Response(...)`. A
-bare `Response` is the frame's only where every binding of the name in the module is that
-import, and httpx's otherwise, a re-export or an assignment of that name among them. The check
-reads a module's text: a name bound again at run time, through `globals()` or
-`monkeypatch.setattr`, it reads as the text binds it (ADR-0049, decision 10).
-
-The census, the third test, runs after every other test of the run. The plugin compares each
+The census, the second test, runs after every other test of the run. The plugin compares each
 request that a replay answered with the recorded one, through the recording's redaction, so
 a key the recording holds `REDACTED` matches the placeholder sent, and the census fails each
 test whose replay answered another host, path, query or body without `kind 3` beside `§10`.

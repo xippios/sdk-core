@@ -23,7 +23,7 @@ __all__ = ["ReplayFixture", "mount_fixture", "replay", "sent_bodies", "sent_quer
 _mounted: list[tuple[Fixture, respx.Route, int]] | None = None
 """What ``mount_fixture`` mounted in the running test, each with its route's count of calls at
 the mount, kept while the census of ``xippios.core.testing.built_answers`` listens, and
-``None`` otherwise (ADR-0049)."""
+``None`` otherwise (ADR-0064)."""
 
 
 class ReplayFixture(Protocol):

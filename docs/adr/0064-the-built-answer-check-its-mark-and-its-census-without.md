@@ -20,13 +20,14 @@ it gone no test of a source fails: the check no longer tells a served answer tha
 an input, which it told in 39 places of five of the six sources ported onto core's `main`. The
 two declarations cost about 60 lines, 84 lines of tests and 8 of the 9 lines that sdk-template
 renders into every source, and one source fills them, sdk-cashctrl, with one reader and one
-entry; the other eleven render them empty. By ADR-0059, decisions 2 and 6, a piece with one
+entry, where the template renders them empty for every other. By ADR-0059, decisions 2 and 6, a piece with one
 consumer leaves where that consumer can do the same through what stays, by a closed question
 that names it, and this record is the record of its mechanism.
 
 ADR-0049's decisions 7, 8 and 10 are reversed, so this record supersedes it whole. It keeps
-ADR-0049's numbering for the decisions that it carries, restates each of them, and names what
-it reverses.
+ADR-0049's numbers for decisions 1 to 6, restates each decision that it carries, and names
+what it reverses: its decision 7 takes the place of ADR-0049's decisions 7 and 8, its decision
+8 carries ADR-0049's decision 9, and its decision 9 that of ADR-0049's decision 10.
 
 ## Decision
 
@@ -100,7 +101,7 @@ it reverses.
 
 - `src/xippios/core/testing/built_answers.py` loses the following, the two declarations, their
   reader and the stale-entry test, 398 lines of its 980, and its tests lose 410 lines of
-  1,346, where https://github.com/xippios/sdk-core/issues/483 estimated about 355 and about
+  1,347, where https://github.com/xippios/sdk-core/issues/483 estimated about 355 and about
   490: the module's docstring shrank with its rules, and the tests gained those of any mark at
   any place and of a collecting module whose declarations nothing reads. The census and its
   comparison are unchanged.
