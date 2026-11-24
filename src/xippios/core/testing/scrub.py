@@ -9,17 +9,20 @@ registered, such as a source's ``key``), the userinfo and the credential headers
 ``scrub_params``, ``scrub_url`` and ``scrub_headers`` are that module's, importable from
 here as well. A ``Scrub`` adds what only the source knows: the secret values themselves,
 named before the request or read from its answer, such as a login's tokens, each replaced
-and verified as given, percent-encoded and behind a JSON escape (ADR-0066, decision 11).
+and verified as given, percent-encoded, behind a JSON escape or both, and searched for in a
+JSON body's strings decoded (ADR-0066, decision 11).
 What a source rewrites beyond them, a tenant's host or a field by key, it rewrites in its
 own step on the ``Fixture``, which the recorder runs after the scrub and checks before
 the write (``rewrite=``; ADR-0066, decisions 1 and 2).
 """
 
 import base64
+import json
 import re
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import unquote
 
 import httpx
 
@@ -45,12 +48,20 @@ class Scrub:
     that is not UTF-8 text is refused with ``ValueError`` unless ``allow_binary`` is
     set, and is then stored base64, unscrubbed, flagged with ``body_base64``.
 
+    Before anything is kept, the scrubbed exchange is verified: a secret value still in
+    the URL, a header value or a text body in any of its forms, or in a key or a string of
+    a body that is JSON, decoded and then percent-decoded, refuses it with ``ValueError``,
+    which names the place, never the value. So a nesting of a percent-encoding and a JSON
+    escape that the scrub does not replace, such as a percent-encoding encoded again, is
+    refused (ADR-0066, decision 11).
+
     Attributes:
         secrets: Values that must never be written, e.g. a key or a tenant name. Each
             becomes ``REDACTED`` wherever it appears in the URL, the headers and the
             bodies, the longest value first, in the letter case given, and in its every
             form: each character as given, percent-encoded in either hex case (a space
-            also as ``+``), or behind a JSON escape (``\u00e9``, ``\/``), in any mix
+            also as ``+``), the sign of either also behind a JSON escape (``\u0025``,
+            ``\u002B``), or behind a JSON escape (``\u00e9``, ``\/``), in any mix
             (ADR-0066, decision 11). An empty value is refused with ``ValueError``. Left
             out of the ``repr``.
         response_secrets: A function that reads the values that must never be written
@@ -127,29 +138,77 @@ _JSON_SHORT = {
 }
 """The short JSON escapes of a character, ``\\/`` among them, which some encoders write."""
 
+_PERCENT = r"(?:%|\\u0025)"
+r"""A percent-encoding's sign, ``%``, as given or behind a JSON escape, ``\u0025``."""
+
+_PLUS = r"(?:\+|\\u002[Bb])"
+r"""A space's ``+`` in a query or a form, as given or behind a JSON escape, ``\u002B``."""
+
 
 def _forms(value: str) -> str:
     r"""A pattern for ``value`` in its every form, character by character (ADR-0066, decision 11).
 
     Each character as given; percent-encoded, its UTF-8 bytes in either hex case, and a
-    space also as ``+``, as a query or a form writes it; or behind a JSON escape,
-    ``\uXXXX`` in either hex case, a surrogate pair beyond the Basic Multilingual Plane,
-    or its short escape. Any mix of the three matches, in the letter case of ``value``.
+    space also as ``+``, as a query or a form writes it, the sign of either also behind a
+    JSON escape (``\u0025``, ``\u002B``), as a JSON body writes a query it echoes; or behind
+    a JSON escape, ``\uXXXX`` in either hex case, a surrogate pair beyond the Basic
+    Multilingual Plane, or its short escape. Any mix of the three matches, in the letter
+    case of ``value``. A deeper nesting is no form here: the verify decodes a JSON body to
+    find it (``_decoded``).
     """
     parts = []
     for char in value:
         units = char.encode("utf-16-be")
         options = [
             re.escape(char),
-            "".join(f"%{_hex(f'{byte:02X}')}" for byte in char.encode("utf-8")),
+            "".join(f"{_PERCENT}{_hex(f'{byte:02X}')}" for byte in char.encode("utf-8")),
             "".join(rf"\\u{_hex(units[i : i + 2].hex())}" for i in range(0, len(units), 2)),
         ]
         if char == " ":
-            options.append(r"\+")
+            options.append(_PLUS)
         if char in _JSON_SHORT:
             options.append(re.escape(_JSON_SHORT[char]))
         parts.append(f"(?:{'|'.join(options)})")
     return "".join(parts)
+
+
+def _strings(node: object) -> Iterator[str]:
+    """Every key and string of a decoded JSON value, outermost first."""
+    if isinstance(node, str):
+        yield node
+    elif isinstance(node, dict):
+        for key, value in node.items():
+            yield str(key)
+            yield from _strings(value)
+    elif isinstance(node, list):
+        for item in node:
+            yield from _strings(item)
+
+
+def _decoded_strings(body: str) -> list[str]:
+    """Every key and string of ``body`` decoded as JSON, a byte order mark allowed.
+
+    ``[]`` for a body that is not JSON. The verify and the recorder's check of a rewrite
+    step's values both read a JSON body so.
+    """
+    try:
+        decoded = json.loads(body.removeprefix("﻿"))
+    except ValueError:
+        return []
+    return list(_strings(decoded))
+
+
+def _decoded(body: str) -> Iterator[str]:
+    """Each key and string of a JSON ``body``, as decoded and then percent-decoded once more.
+
+    Nothing for a body that is not JSON. The verify searches each for a secret's forms, so
+    a nesting of a percent-encoding and a JSON escape that the scrub does not replace, a hex
+    digit behind a JSON escape, a percent-encoding encoded again or a JSON escape
+    percent-encoded, is found in what it decodes to (ADR-0066, decision 11).
+    """
+    for text in _decoded_strings(body):
+        yield text
+        yield unquote(text)
 
 
 class _Scrubber:
@@ -192,9 +251,12 @@ class _Scrubber:
         Runs on what the scrub produced, before anything is kept or written, when the
         ``Scrub`` names secrets: the URL, every header value and both bodies are
         searched for each value in its every form, as the scrub replaces it, in the
-        letter case given; ``REDACTED`` is masked first and never counts. A backstop
-        (ADR-0030): a body stored base64 (``allow_binary``) is not searched, since it is
-        kept unscrubbed by design.
+        letter case given, and a body that is JSON in each of its keys and strings too,
+        as decoded and then percent-decoded, so a nesting of the two encodings that the
+        scrub does not replace is refused (``_decoded``; ADR-0066, decision 11). A body
+        that is not JSON is searched as text alone. ``REDACTED`` is masked first and
+        never counts. A backstop (ADR-0030): a body stored base64 (``allow_binary``) is
+        not searched, since it is kept unscrubbed by design.
 
         Args:
             url: The scrubbed request URL.
@@ -205,8 +267,8 @@ class _Scrubber:
 
         Raises:
             ValueError: A secret value is still present; the message names the location
-                (``request URL``, a header by name, ``request body``, ``response body``),
-                never the value.
+                (``request URL``, a header by name, ``request body``, ``response body``,
+                ``response body, a decoded JSON string``), never the value.
         """
         __tracebackhide__ = True  # pytest would print the arguments: the refused text
         if not self._secrets:
@@ -217,6 +279,7 @@ class _Scrubber:
         for location, body in (("request body", request_body), ("response body", response_body)):
             if body is not None:
                 places.append((location, body))
+                places += [(f"{location}, a decoded JSON string", text) for text in _decoded(body)]
         for location, text in places:
             masked = text.replace(REDACTED, "\0")
             if any(pattern.search(masked) for pattern in self._secrets):
