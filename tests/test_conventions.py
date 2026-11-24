@@ -1,12 +1,13 @@
 """The sentences of `docs/conventions.md` that the cases of ADR-0043 stand on, and ADR-0055's,
 the preview rule of ADR-0050, the recording of a task's exchanges of ADR-0057, the names of a
-request's country codes of ADR-0056, the check of the committed FETCHED.md of ADR-0046,
-decision 6, the attribution check of its decision 7, the refusal of a hinted value of ADR-0041's
-amendment of 2026-11-22, the two sentences of a period series that ADR-0054's amendment of
-2026-11-22 words, a recorder's field of a request of ADR-0048, decision 7, the review
-checklist's sentence that holds an adoption against the two lists of the handover's section for
-the release, ADR-0058's decision 2, what a core patch keeps compatible, and ADR-0059's rule for
-code with one consumer, as the definition of done, the review checklist and §15 name it.
+request's country codes of ADR-0056, the snapshot script's form, the mark of FETCHED.md's form
+and the one comparison of a snapshot of ADR-0062, the attribution check of ADR-0046, decision 7,
+the refusal of a hinted value of ADR-0041's amendment of 2026-11-22, the two sentences of a
+period series that ADR-0054's amendment of 2026-11-22 words, a recorder's field of a request of
+ADR-0048, decision 7, the review checklist's sentence that holds an adoption against the two
+lists of the handover's section for the release, ADR-0058's decision 2, what a core patch keeps
+compatible, and ADR-0059's rule for code with one consumer, as the definition of done, the
+review checklist and §15 name it.
 
 The organization's release check quotes the conventions from sdk-core's `main`, and a finding
 blocks only where it quotes the sentence that a change breaks
@@ -795,47 +796,50 @@ def test_a_recorder_redacts_a_field_of_a_request_and_drops_none_by_adr_0048() ->
     assert "ADR-0048, decision 7" in rule, f"§10: {rule!r} does not cite its record"
 
 
-# §3, the snapshot: the check of the committed FETCHED.md without a request (sdk-core#426,
-# decided by the human in https://github.com/xippios/sdk-core/issues/428).
-
-SNAPSHOT_DECISION = "ADR-0046, decision 6"
+# §3, the snapshot: the script's form, the mark of FETCHED.md's form, and no check of a committed
+# FETCHED.md without a request, which the maintainer's answer on
+# https://github.com/xippios/sdk-core/issues/483, part 3, took back (ADR-0062).
 
 SNAPSHOT_RULES = [
     pytest.param(
         "names its `Snapshot` `SNAPSHOT` at its top level",
-        ("sends no request and writes no file", 'if __name__ == "__main__":', "the family check"),
+        (
+            "sends no request and writes no file",
+            'if __name__ == "__main__":',
+            "sdk-template renders",
+            "ADR-0062, decision 3",
+        ),
         id="s3-the-name-of-the-declaration",
     ),
     pytest.param(
         "ends `FETCHED.md` with one line that names the file's form",
-        ("rewords what the frame writes into the file raises the form",),
+        ("rewords what the frame writes into the file raises the form", "ADR-0062, decision 8"),
         id="s3-the-mark-of-the-form",
     ),
     pytest.param(
-        "The family check fails a source whose committed `FETCHED.md`",
-        ("differs from its `SNAPSHOT`", "the form of an ETag's cell", "a file without a row"),
-        id="s3-what-the-check-holds",
-    ),
-    pytest.param(
-        "What only a response knows is read back from the file and not judged",
-        ("sizes and hashes", "`linked`", "`split`", "`sections`", "second origin"),
-        id="s3-what-the-check-reads-back",
-    ),
-    pytest.param(
-        "A source passes the check while its script declares no `SNAPSHOT`",
-        ("no mark of the form its core writes", "held from its first refresh on"),
-        id="s3-what-the-check-passes",
+        "No check compares a committed `FETCHED.md` with its script's declaration",
+        ("without a request", "`--check`", "the one comparison", "whole", "ADR-0062, decision 9"),
+        id="s3-no-check-without-a-request",
     ),
 ]
 
 
 @pytest.mark.parametrize(("phrase", "names"), SNAPSHOT_RULES)
-def test_each_rule_of_the_check_of_fetched_md_is_one_sentence_that_cites_adr_0046(
+def test_each_rule_of_the_snapshot_s_form_is_one_sentence_that_cites_adr_0062(
     phrase: str, names: tuple[str, ...]
 ) -> None:
     rule = sentence(section(3), phrase)
-    for name in (SNAPSHOT_DECISION, *names):
+    for name in names:
         assert name in rule, f"§3: {rule!r} does not name {name!r}"
+    assert "the family check" not in rule, f"§3: {rule!r} names a family check that left"
+    assert "ADR-0046, decision 6" not in rule, f"§3: {rule!r} cites the check that left"
+
+
+def test_no_sentence_of_section_3_holds_the_check_without_a_request() -> None:
+    # The family check's test of FETCHED.md left with compare_fetched (ADR-0062, decision 9).
+    text = section(3)
+    for gone in ("compare_fetched", "read back from the file", "differs from its `SNAPSHOT`"):
+        assert gone not in text, f"§3 still holds {gone!r}"
 
 
 # §3, the snapshot: what the frame's attribution check reads and accepts, by the maintainer's
@@ -886,12 +890,13 @@ def test_each_rule_of_the_attribution_check_is_one_sentence_that_cites_adr_0046(
     assert not any(other in rule for other in others), f"§3: {rule!r} cites another part"
 
 
-def test_the_review_checklist_holds_the_name_the_family_check_reads() -> None:
-    # The family check passes a script that names its declaration otherwise, so the review
-    # holds the name (ADR-0046, decision 6).
+def test_the_review_checklist_holds_the_script_s_form() -> None:
+    # No check of core reads the script any more, so the review alone holds its form
+    # (ADR-0062, decision 3).
     item = checklist_item(2)
-    for name in ("`SNAPSHOT`", "`scripts/refresh_upstream.py`", SNAPSHOT_DECISION):
+    for name in ("`SNAPSHOT`", "`scripts/refresh_upstream.py`", "ADR-0062, decision 3"):
         assert name in item, f"item 2 does not name {name!r}"
+    assert "the family check holds" not in item, "item 2 names a family check that left"
 
 
 # §12 and the code a core PR adds: the maintainer's answer on
