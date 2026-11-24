@@ -180,7 +180,7 @@ its own. §9 and §11 are unchanged.
   `ENV_VARS` and the checks that keep what a source uses (ADR-0035), and the recorder (ADR-0066).
 - **§12, versioning and releases**: a dependency on a publisher's shared package and the sections
   that bind one (ADR-0021, amendment 2026-11-24; ADR-0065, decision 3), and how a release run that
-  fails is finished (ADR-0039, decision 6).
+  fails is finished (ADR-0069).
 - **§13, repository hygiene**: a workflow carries no comment but the version after a pinned action
   (ADR-0039, decision 7, amendment 2026-11-24; https://github.com/xippios/.github/issues/111).
 - **§14, the boundary of a source package**: the six sentences, word for word (ADR-0060).

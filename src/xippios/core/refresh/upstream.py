@@ -26,7 +26,7 @@ it writes to; nothing else under ``docs/upstream/`` is touched. Every run stops,
 writing, when a page states a copyright, a licence or terms of use that the attribution
 does not record, or no longer prints one that it records: a page's visible text is read, an
 image's alternative text included, and a statement recorded with a link is read past only as
-the text of a link to its target (ADR-0046, decision 7).
+the text of a link to its target (ADR-0062, decision 10).
 
 ``--check`` compares content: it exits 1 when a file differs from what upstream serves now,
 compared after the snapshot's ``canonical``, or when ``FETCHED.md`` would change in more than
@@ -776,7 +776,7 @@ class _Reader(HTMLParser):
     An image's alternative text is text of the page where the image stands, set apart from the
     words around it as the image is, and the text of a link it stands in; ``alts`` holds the
     parts that one gives. Nothing else of an attribute is read, a title or an aria-label among
-    them (ADR-0046, decision 7).
+    them (ADR-0062, decision 10).
     """
 
     def __init__(self) -> None:
@@ -1005,7 +1005,7 @@ def check_attribution(snapshot: Snapshot, page: Page, response: Response) -> Non
     text twice, with it and without it, each read past where the text with it stands, the text
     without it flattened again, so words that an alternative text stands between are searched
     as before it was read. A statement whose text is empty or white space, and such a word of
-    the vocabulary, are read past nowhere (ADR-0046, decision 7).
+    the vocabulary, are read past nowhere (ADR-0062, decision 10).
     """
     reading = _reading(page, response)
     if reading is None:

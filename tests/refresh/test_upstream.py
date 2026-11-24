@@ -403,7 +403,7 @@ def test_an_api_documents_info_states_only_what_the_attribution_records(
 
 # --- a statement recorded with a link, and an image's alternative text --------------------
 #
-# https://github.com/xippios/sdk-core/issues/437 (ADR-0046, decision 7): a statement recorded
+# https://github.com/xippios/sdk-core/issues/437 (ADR-0062, decision 10): a statement recorded
 # with a link passes the search only as the text of a link to its target, on any page, while a
 # statement without a link and the vocabulary pass anywhere, and an image's alternative text is
 # text of the page where the image stands. The trial of the release met both.
@@ -1069,7 +1069,7 @@ def test_fetched_md_cites_the_standing_record_of_upstream_fidelity(site: Site, o
 def test_fetched_md_says_that_nothing_but_observed_md_is_edited_by_hand(
     site: Site, out: Path
 ) -> None:
-    """The frame's one form (ADR-0046, decision 3), where each source's copy wrote its own
+    """The frame's one form (ADR-0062, decision 6), where each source's copy wrote its own
     (https://github.com/xippios/sdk-core/issues/425): FETCHED.md says that nothing under
     ``docs/upstream/`` is edited by hand but OBSERVED.md, where it exists, with the file and
     without it."""
@@ -1089,7 +1089,7 @@ def test_fetched_md_says_that_nothing_but_observed_md_is_edited_by_hand(
 def test_a_file_no_longer_produced_goes_from_the_subdirectories_the_run_writes_to(
     site: Site, out: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """ADR-0046, Consequences, and a source's test of a stale file
+    """ADR-0062, decision 7, and a source's test of a stale file
     (https://github.com/xippios/sdk-core/issues/425): a file the run no longer produces, under
     a subdirectory it writes to, is named by ``--check`` as no longer produced and removed by
     the write; a file at the top of ``docs/upstream/`` and one under a subdirectory the run no
