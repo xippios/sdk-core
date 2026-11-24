@@ -752,7 +752,12 @@
       "status": "Accepted",
       "date": "2026-11-18",
       "decided_by": "the record it supersedes, restated under https://github.com/xippios/coordinate-core/issues/757",
-      "amended": [],
+      "amended": [
+        {
+          "date": "2026-11-24",
+          "by": "https://github.com/xippios/sdk-core/issues/484"
+        }
+      ],
       "amends": [],
       "supersedes": [
         "ADR-0018"
@@ -1288,6 +1293,20 @@
       "supersedes": [
         "ADR-0056"
       ],
+      "other": [],
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-0068",
+      "number": 68,
+      "title": "Which document holds what, the handover's one part and the surface in two counts",
+      "path": "docs/adr/0068-which-document-holds-what-the-handover-s-one-part-and-the.md",
+      "status": "Accepted",
+      "date": "2026-11-24",
+      "decided_by": "https://github.com/xippios/sdk-core/issues/484",
+      "amended": [],
+      "amends": [],
+      "supersedes": [],
       "other": [],
       "superseded_by": null
     }

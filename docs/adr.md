@@ -25,7 +25,7 @@ records in `docs/adr/`. A record changes, and this file follows when the script 
 - <a id="0036"></a>[ADR-0036](adr/0036-multi-tenant-sources.md): Multi-tenant sources · Accepted · 2026-11-18 · amended 2026-11-24
 - <a id="0037"></a>[ADR-0037](adr/0037-client-request-hooks-and-quota-policy.md): Client request hooks and a quota policy · Accepted · 2026-11-18 · amended 2026-11-24
 - <a id="0038"></a>[ADR-0038](adr/0038-per-tool-result-caps.md): Per-tool result caps · Accepted · 2026-11-18 · amended 2026-11-24
-- <a id="0039"></a>[ADR-0039](adr/0039-core-versioning-and-source-adoption.md): Core versioning and source adoption · Accepted · 2026-11-18
+- <a id="0039"></a>[ADR-0039](adr/0039-core-versioning-and-source-adoption.md): Core versioning and source adoption · Accepted · 2026-11-18 · amended 2026-11-24
 - <a id="0040"></a>[ADR-0040](adr/0040-bulk-downloads-and-non-json-payloads.md): Bulk downloads and non-JSON payloads in core · Accepted · 2026-11-18 · amended 2026-11-24
 - <a id="0041"></a>[ADR-0041](adr/0041-packaged-answers-and-release-times.md): Packaged answers and release times in `ResultMeta` · Accepted · 2026-11-18 · amended 2026-11-24
 - <a id="0042"></a>[ADR-0042](adr/0042-the-recorder-extras-stay-the-sources.md): The recorder extras stay the source's, and the multi-tenant kit returns to core · Accepted · 2026-11-18 · amended 2026-11-24
@@ -48,6 +48,7 @@ records in `docs/adr/`. A record changes, and this file follows when the script 
 - <a id="0065"></a>[ADR-0065](adr/0065-core-names-no-publisher.md): Core names no publisher · Accepted · 2026-11-24
 - <a id="0066"></a>[ADR-0066](adr/0066-the-recorder-under-plain-names-without-the-recording-of-a.md): The recorder under plain names, without the recording of a task · Accepted · 2026-11-24
 - <a id="0067"></a>[ADR-0067](adr/0067-what-the-envelope-carries-notes-the-names-of-codes-and.md): What the envelope carries: notes, the names of codes and integers · Accepted · 2026-11-24
+- <a id="0068"></a>[ADR-0068](adr/0068-which-document-holds-what-the-handover-s-one-part-and-the.md): Which document holds what, the handover's one part and the surface in two counts · Accepted · 2026-11-24
 
 The superseded records follow, kept as written: the record that each status names holds its decision now.
 

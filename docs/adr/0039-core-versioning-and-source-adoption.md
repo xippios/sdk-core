@@ -1,7 +1,8 @@
 # ADR-0039: Core versioning and source adoption
 
 Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under
-https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0018
+https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0018 · Amended 2026-11-24
+by https://github.com/xippios/sdk-core/issues/484
 
 ## Context
 
@@ -124,3 +125,11 @@ their history stays in ADR-0018.
 The conventions' header, §10, §12, §13 and §15, the review checklist's items 4, 12 and 13,
 the definition of done's Tests and Adoption PR blocks, the README, the family check's
 docstrings, core's pull request template and `publish.yml` state its decisions from 1.28 on.
+
+## Amendment 2026-11-24
+
+Amended by ADR-0068 (https://github.com/xippios/sdk-core/issues/484): decision 2's third route,
+a source frozen on a template tag, leaves conventions §15, since no source stands on a frozen
+tag and the conventions keep no history, and the adoption's items stand once, in §15, where the
+definition of done's Adoption PR block and the review checklist point without mirroring the
+list, while the rest of decision 2 stands as written.
