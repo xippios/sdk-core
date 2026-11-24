@@ -4,69 +4,8 @@ Shared foundation of the [xippios](https://github.com/xippios) Python SDK family
 `xippios-<source>` package depends on it; nothing in it knows about any particular
 upstream API.
 
-It gives a source package the things that should be identical across the family:
-
-- **HTTP client** on `httpx` with retries, a per-source rate limiter, an optional
-  response cache (off by default; the in-memory one keeps each path prefix for its own
-  lifetime and bounds its entries and its bytes),
-  one read timeout, 60 s unless a source raises it, and one `User-Agent`. Async at the core; `sync` derives the sync
-  task functions from the async ones.
-  A 429, a 5xx or a transport failure is retried for GET, HEAD and OPTIONS alone: a
-  write is sent once, and its error says that it was sent once and that its outcome is
-  unknown, or that nothing was sent where the connection failed.
-  A body goes as JSON (`json=`) or form-encoded (`data=`), and `post_json` decodes a
-  write's answer as `get_answer` decodes a read's, `None` for one with no body. Two hooks,
-  `before_request` and `observe`, see each call and each response; `QuotaPolicy` uses
-  them to wait out or refuse a request into a spent quota.
-  `auth=None` sends one call without the client's key. `get_answer` returns the payload,
-  parsed into the type it names, with its `retrieved_at`, a cache hit's stored time, and
-  it alone stores an answer in the cache, once the answer decoded. A file is streamed
-  to disk with `download`, never held in memory; `decode_csv` reads a CSV file or text
-  stream row by row; the cache stores no body over `cache_max_bytes` (8 MiB).
-- **Auth helpers** that read the key from the environment on the first request:
-  `KeyAuth`, the one key class, sends it as a query parameter, a header, a bearer token
-  or the basic user name; and `RenewingBearerAuth`, the base
-  for an upstream that exchanges a login or a refresh token for a short-lived bearer. A
-  source's documented error shapes go into `ClientConfig.classify`, consulted on every
-  response.
-- **Tenants** (`xippios.core.tenants`) for a source whose upstream serves each tenant from
-  a host or under a key of its own: `Tenants` declares them in the environment, one
-  client each, `list_task` gives the tool that names them, and `TenantLock` binds a
-  server to one of them, which `xippios.core.mcp.main` starts from `--org`.
-- **The package contract** by which a host serves a source (ADR-0026, decision 8): `EnvVar`,
-  a variable the package needs, and `xippios.core.mcp.ToolSet`, what its `build(**options)`
-  returns, from which `build_server` builds its server and a host one server from several.
-- **Error taxonomy**: `ConfigError`, `AuthError`, `RateLimitError`, `NotFoundError`,
-  `ValidationError`, `UpstreamError`, `TransportError` and `InvalidRequestError` (the
-  request as given cannot be served: a bad argument, or a refusal the source documents,
-  detected before the call, mapped from upstream's own refusal or made from an answer the
-  task cannot serve as asked), all under
-  `XippiosError`; `UnknownCode`, an `InvalidRequestError`, refuses a code a packaged
-  list lacks and names the closest known ones, and `QueryTooLarge`, another, refuses a
-  query over upstream's per-call record limit, which `fetch_counted` raises from
-  upstream's count before the data request.
-- **Result envelope**: every task function returns `Result[T]` with `ResultMeta`
-  (source, endpoint, retrieved_at, published_at with published_at_naive for a time
-  upstream printed without a zone, vintage, request without the parameters left `None`,
-  total: upstream's count of the matching records when the source reports one,
-  tenant: the tenant the data came from, by name, for a multi-tenant source, names:
-  the name of each code of the request, which `names_codes` writes, and of the records,
-  which their model's `NamedBy` declares, and notes: what the task says about its answer);
-  a field it does not define is refused. `Decimal` fields of upstream models arrive as JSON
-  numbers in both adapters, an integer where upstream sent no fractional digit;
-  `UpstreamModel.project` builds a projection of a record under
-  upstream names, `dump_upstream` gives a record back under upstream's field names,
-  `parse_decimal` reads a published figure.
-- **Reference data**: loaders for code lists shipped inside a package, `PackagedList`
-  for a list fetched from one upstream operation (its file, the meta of an answer from
-  it, its writer), and `matches`, `closest` and `nearest` for the list tasks and their
-  refusals.
-- **Adapters** that turn task functions into MCP tools (`xippios.core.mcp`) and FastAPI
-  routes (`xippios.core.http`) without any logic of their own.
-- **Test support**: a live-test gate, offline guarantees for every other test (no
-  network, no rate-limit wait, a placeholder key), fixture recording with secrets
-  scrubbed, replay through `respx`, and the family conformance check every source runs
-  (`xippios.core.testing`).
+The sections below show each part of it as a source package uses it, and the conventions,
+under Documents, hold the rules that a source is held to.
 
 ## Install
 
@@ -78,8 +17,11 @@ uv add "xippios-core[testing]~=0.4.1"   # + pytest plugin, respx replay, fixture
 ```
 
 Python 3.12 or later. A source package depends on one core minor, `~=0.4.1` from the patch
-that ships what it uses, and each extra likewise (conventions §12); see the Alpha note under
-Status.
+that ships what it uses, and each extra likewise (conventions §12).
+[CHANGELOG.md](https://github.com/xippios/sdk-core/blob/main/CHANGELOG.md) lists what
+changed in each release, and a change's entry waits under
+[changelog/](https://github.com/xippios/sdk-core/blob/main/changelog/README.md) as a
+fragment until the release assembles it.
 
 ## 30-second example
 
@@ -167,7 +109,7 @@ Only a name with the whole word `token` and no other credential word can be decl
 never `token` alone nor `access_token`, `refresh_token` or `id_token`, and a name a
 query `KeyAuth` registers stays a credential.
 
-A release time upstream prints without a zone (FAS: `2026-10-06T08:00:00`) goes into
+A release time upstream prints without a zone (`2026-10-06T08:00:00`) goes into
 `published_at` as printed, with `published_at_naive=True`, and `vintage` keeps the
 release identifier as upstream names it; `ResultMeta` refuses a naive time without the
 flag, the flag without a naive time, and any field it does not define.
@@ -351,8 +293,8 @@ counted, is the source's own refusal, which says that nothing was sent (ADR-0053
 2026-11-24). That `classify` passes `request=request_description(response)`, since a
 message about an answer names its request, and the message names it in place of the query:
 `upstream refused GET /v1/data as too large; ...`. A refusal before the data request names
-none. A source subclasses it only for an attribute of its own, worded in `narrow`, as
-sdk-usda-nass keeps the `year` that alone is over the limit.
+none. A source subclasses it only for an attribute of its own, worded in `narrow`, such
+as the `year` that alone is over the limit.
 
 A task that collects every page of an offset-paged list walks them with `fetch_pages`, under
 the bound of pages that its docstring states as the most requests one call spends (ADR-0061,
@@ -402,8 +344,8 @@ own loop (ADR-0034, decision 2).
 
 ## Quotas, hooks and keyless calls
 
-An upstream that reports a longer-window quota in its headers (api.data.gov:
-`x-ratelimit-limit`, `x-ratelimit-remaining`) gets a `QuotaPolicy`, installed on the
+An upstream that reports a longer-window quota in its headers (`x-ratelimit-limit` and
+`x-ratelimit-remaining`, say) gets a `QuotaPolicy`, installed on the
 client's configuration:
 
 ```python
@@ -612,7 +554,7 @@ the exchange, a GET say. It reads the token answer
 and no other, so a `download` streams to its file, and the client sends its auth to the
 base URL's origin only. httpx keeps the token answer in the final response's `history`
 while that response lives; `get_answer`, `post_json` and the cache keep no response.
-sdk-faostat's login and sdk-google-mail's refresh are its two token requests (ADR-0025).
+A login and the exchange of a refresh token are the two token requests it serves (ADR-0025).
 
 ## Files: download and decode
 
@@ -696,9 +638,9 @@ returned and not cached.
 
 ## Multi-tenant sources
 
-An upstream that serves each tenant from a host or under a key of its own (CashCtrl's
-organisations, Gmail's mailboxes) is served by a source that declares its tenants in the
-environment with `Tenants`, one client each, and names them with `list_task`
+An upstream that serves each tenant from a host or under a key of its own (an accounting
+service's organisations, a mail service's mailboxes) is served by a source that declares its
+tenants in the environment with `Tenants`, one client each, and names them with `list_task`
 (`xippios.core.tenants`; ADR-0036, ADR-0042):
 
 ```python
@@ -732,8 +674,8 @@ is the operator's `ConfigError`, which names the variable. `field` returns a val
 stripped, and a source that knows its shape checks it in `build` and raises a
 `ConfigError` that names the variable, `TENANTS.var(name, "SUBDOMAIN")`, and never the
 value. A source whose variables carry a prefix other than its slug names it:
-`Tenants("google-mail", var_prefix="GOOGLE", param="account", ...)` reads
-`GOOGLE_WORK_REFRESH_TOKEN`, and its errors name `google-mail`. The list task takes no
+`Tenants("example", var_prefix="EXAMPLE_MAIL", param="account", ...)` reads
+`EXAMPLE_MAIL_ACME_REFRESH_TOKEN`, and its errors name `example`. The list task takes no
 argument and returns names only, `meta.source` the registry's and `meta.tenant` `None`, on
 the read server.
 
@@ -1106,18 +1048,18 @@ sends no request and writes no file, its run under `if __name__ == "__main__":`,
 sdk-template renders (conventions §3).
 
 Beside `reduce`, `canonical` and `linked`, a snapshot declares the hooks for what some
-sources do beyond that, and every hook stops the run with `changed(url, what)` on a page
-it does not recognise:
+sources do beyond that, each source named in ADR-0062, decision 5, and every hook stops the
+run with `changed(url, what)` on a page it does not recognise:
 
-| The source does | The declaration takes | As in |
-| --- | --- | --- |
-| sends credentials on a sample whose operation needs them | `client=` its own client with its auth, `variables=(name, ...)` and `Page(..., sample=True, keyed=True)`; `--keyless` fetches the rest | sdk-faostat |
-| keeps a file as recorded where only its order moved | `reduce` returns the recorded file's content where `canonical` finds it the answer's | sdk-eurostat's WADL |
-| makes several files from one page | `Page(url, split=True)` and `split=lambda page, response: {name: content}` | sdk-cashctrl |
-| keeps a page from the publisher's second origin after a 403 | two pages, `Page(url, status=403, note=...)` and `Page(second_url, file)` | sdk-usda-wasde |
-| waits out a 429 as upstream names the wait | `client=` its own client, whose `RetryPolicy` bounds the wait and whose `classify` may read it | sdk-eurostat |
-| writes a section of its own in `FETCHED.md` | `sections=lambda rows: [Section(heading, text)]` | sdk-comtrade |
-| makes a row's note from its answer | `note=lambda row: f"{row.note}; {count} operations"` | sdk-faostat, the FAS sources |
+| The source does | The declaration takes |
+| --- | --- |
+| sends credentials on a sample whose operation needs them | `client=` its own client with its auth, `variables=(name, ...)` and `Page(..., sample=True, keyed=True)`; `--keyless` fetches the rest |
+| keeps a file as recorded where only its order moved | `reduce` returns the recorded file's content where `canonical` finds it the answer's |
+| makes several files from one page | `Page(url, split=True)` and `split=lambda page, response: {name: content}` |
+| keeps a page from the publisher's second origin after a 403 | two pages, `Page(url, status=403, note=...)` and `Page(second_url, file)` |
+| waits out a 429 as upstream names the wait | `client=` its own client, whose `RetryPolicy` bounds the wait and whose `classify` may read it |
+| writes a section of its own in `FETCHED.md` | `sections=lambda rows: [Section(heading, text)]` |
+| makes a row's note from its answer | `note=lambda row: f"{row.note}; {count} operations"` |
 
 A keyed sample alone is sent with the credentials of the snapshot's `client`, which reads
 them itself, a login's included; it follows no redirect, is never retried, and the frame
@@ -1377,14 +1319,12 @@ MCP_CAPS: Mapping[str, ResultCap] = {
 ```
 
 A continuation runs the task again, so a source pages a read tool only where that second
-run costs upstream nothing (ADR-0061, decision 9): a packaged table (sdk-usda-esmis's
-`list_publications`) or an answer the response cache holds (sdk-faostat and sdk-eurostat, for
-300 seconds). It leaves a tool unpaged where a second run sends upstream a request, one
-request as sdk-usda-esr's `get_exports` for every country sends without a cache, or many:
-sdk-usda-nass's `get_data` split by year spends up to 41 keyed calls,
-sdk-usda-esr's `get_weekly_series` one request per market year, up to 11, of the 1,000 an
-hour its key shares, and each page of sdk-x's post tools is billed per post. Such a series
-can still keep its newest rows unpaged. The second run draws on the same quota as the
+run costs upstream nothing (ADR-0061, decision 9): a packaged table, as `list_regions` reads
+it, or an answer the response cache holds, for 300 seconds say. It leaves a tool unpaged where
+a second run sends upstream a request, one request or many: a `get_series` split by year
+spends a keyed call for each year of the quota its key shares, and an upstream that bills
+each record it returns bills each page again. Such a series can still keep its newest rows
+unpaged. The second run draws on the same quota as the
 first: on a multi-tenant source the tenant's own, on a key that several packages share the
 key's, and on a metered upstream the bill, so a source counts a continuation there as one
 more call at that price. Rows can change between two runs, so a continuation of a live list
@@ -1824,7 +1764,7 @@ TENANTS = Tenants(
   `ENV_VARS` declares each variable a token request reads secret. The `httpx`,
   `httpcore`, `httpx2` and `httpcore2` logger levels come back after every test.
   After a live run the summary prints each quota policy's last reading, `quota after the
-  live run: usda-psd: 986 of 1000 requests left as of ...`. ADR-0035 states the edges of
+  live run: example: 986 of 1000 requests left as of ...`. ADR-0035 states the edges of
   these guarantees.
 - After a live run the summary prints, above the quota lines, the requests that its live
   tests sent, by host, `requests sent by the live run: 15 (api.example.org: 12,
@@ -1963,7 +1903,7 @@ record(
     client,
     "/users/by",
     fixture_path(FIXTURES, "get_users_by_usernames", "two"),
-    params={"usernames": "USDA,FAO"},
+    params={"usernames": "acme,example"},
     scrub=Scrub(secrets=[key]),
     rewrite=rewrite,
 )
@@ -2031,36 +1971,6 @@ write_fixture(recorded.model_copy(update={"response": body}), fixture_path(FIXTU
 
 `model_copy` checks nothing; `write_fixture` refuses a fixture that `load_fixture` would
 not read back, such as a sample without its size and sha256, and writes nothing.
-
-## Status
-
-Release 0.4.1, alpha.
-[CHANGELOG.md](https://github.com/xippios/sdk-core/blob/main/CHANGELOG.md) lists what
-changed in each release, and a change's entry waits under
-[changelog/](https://github.com/xippios/sdk-core/blob/main/changelog/README.md) as a
-fragment until the release assembles it.
-
-| Module | What | Status |
-| --- | --- | --- |
-| `xippios.core.client` | httpx client, retries, rate limit, cache with a byte bound, quota policy, request hooks, the one key class, the renewing bearer, `get_answer`, `download`, `check_dest`, the check of a download's `dest` before a task's first request, `decode_csv` | alpha |
-| `xippios.core.errors` | taxonomy, `UnknownCode`, `QueryTooLarge`, the refusal of a query over upstream's limit, response classification, `request_description` | alpha |
-| `xippios.core.redaction` | the one credential rule of the envelope, the recorder and replay, `REDACTED`, which a source's package imports from `xippios.core`, `register_data_name`, signed links | alpha |
-| `xippios.core.models` | `UpstreamModel` with `dump_upstream`, `Result`, `ResultMeta` with `published_at_naive`, `names`, the name of each code of a request and of the records, and `notes`, `NamedBy`, the mark of a record's code field, `ResultCap` with `paged` and `keep`, `parse`, `newer_than`, the filter of a vintage taken back | alpha |
-| `xippios.core.reference` | the packaged JSON loader, `PackagedList`, its `codes` and their `check` of an argument (`PackagedCodes`), `names_codes`, `matches`, `closest`, `nearest` | alpha |
-| `xippios.core.pagination` | `fetch_pages`, the one walk of pages, which refuses at its bound and returns nothing (a page-numbered endpoint maps the offset to its page), `fetch_counted`, the count before a query over upstream's limit | alpha |
-| `xippios.core.series` | `Ceiling`, the ceiling of a series over periods with its option on the MCP server, and `fetch_periods`, its requests in order | alpha |
-| `xippios.core.tenants` | `Tenants`, a multi-tenant source's tenants declared in the environment with one client each, `list_task`, the tool that names them, and `TenantLock` with `bind_tasks` and `tenant_instructions`, a server bound to one of them | alpha |
-| `xippios.core.contract` | `EnvVar`, a variable of the package contract | alpha |
-| `xippios.core.mcp` | tool registration with the argument check and the write server's `confirm` rule, `tool_functions`, result caps with the `offset` of a paged cap, error text, the one entry `main(build)` with option hooks, a tenant's option and the loopback rule for write and `loopback_only` servers, quiet request log, `ToolSet`, the package contract's tool set, built from a tasks module by `ToolSet.from_tasks`, built by `build_server` and registered by `register_tasks` | alpha |
-| `xippios.core.http` | router factory, problem details | alpha |
-| `xippios.core.refresh` | the frames of a source's scripts, each declared in one object under the one `run(declaration)`: the snapshot script's (`Snapshot`) and the reference refresh script's (`Lists` of `Listed`, with `Enumeration`), whose frame holds the renderer of `enums.py` | alpha |
-| `xippios.core.testing` | live gate with the count of the requests that a live run sent, offline run, record (sync, sent once, read up to `max_read_bytes`, with the cut of a JSON array by `max_bytes=` and `keep=` and a source's `rewrite=` step, typed `Rewrite`), `send_once`, the fixture writer and the `sample` mark, replay with `sent_urls`, `sent_query` and `sent_bodies`, scrub of named secrets and of values read from the answer in their every encoded form, with its verify, `mcp_call`, `assert_write_tools` with what a preview reads, `keep_reserved_tenants`, `built_answers`, the check of a built answer's mark, `live` with `assert_list_current`, the nightly comparison of a packaged list, family check | alpha |
-
-Alpha: while core is 0.x, a new minor version may change the public surface, with no
-backward compatibility across minors. A patch release keeps a source's package and its
-callers compatible, while a check of `xippios.core.testing` that a record makes stricter
-may fail a source's own test (conventions §12; ADR-0058, decision 2). A source depends on
-one minor (`xippios-core~=0.4.1`) and adopts the next through conventions §15 (ADR-0039).
 
 ## Counting the surface and its consumers
 
@@ -2161,7 +2071,6 @@ reopens. It hands over nothing, and the called workflow reads its switch itself:
 - sdk-core: [docs/definition-of-done.md](https://github.com/xippios/sdk-core/blob/main/docs/definition-of-done.md) — what a change satisfies before its pull request is opened.
 - sdk-core: [docs/review-checklist.md](https://github.com/xippios/sdk-core/blob/main/docs/review-checklist.md) — the checklist every `sdk-*` pull request is reviewed against.
 - sdk-core: [docs/handover.md](https://github.com/xippios/sdk-core/blob/main/docs/handover.md) — the record of each core release and how a source adopts it.
-- sdk-core: [docs/roadmap.md](https://github.com/xippios/sdk-core/blob/main/docs/roadmap.md) — the order of the next core, template and source releases.
 - sdk-core: [docs/adr.md](https://github.com/xippios/sdk-core/blob/main/docs/adr.md) — the index of the architecture decision records under `docs/adr/`, the decisions behind the rules.
 
 ## Licence
