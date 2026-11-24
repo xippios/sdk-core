@@ -752,7 +752,9 @@
       "supersedes": [
         "ADR-0018"
       ],
-      "other": [],
+      "other": [
+        "Decision 3 constrained by ADR-0069 (2026-11-24)"
+      ],
       "superseded_by": null
     },
     {
@@ -1296,6 +1298,20 @@
       "number": 68,
       "title": "Which document holds what, the handover's one part and the surface in two counts",
       "path": "docs/adr/0068-which-document-holds-what-the-handover-s-one-part-and-the.md",
+      "status": "Accepted",
+      "date": "2026-11-24",
+      "decided_by": "https://github.com/xippios/sdk-core/issues/484",
+      "amended": [],
+      "amends": [],
+      "supersedes": [],
+      "other": [],
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-0069",
+      "number": 69,
+      "title": "How a release run that fails is finished",
+      "path": "docs/adr/0069-how-a-release-run-that-fails-is-finished.md",
       "status": "Accepted",
       "date": "2026-11-24",
       "decided_by": "https://github.com/xippios/sdk-core/issues/484",

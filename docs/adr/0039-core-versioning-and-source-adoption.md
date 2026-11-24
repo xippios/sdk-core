@@ -3,7 +3,8 @@
 Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under
 https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0018 ·
 Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/484 ·
-Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/494
+Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/494 ·
+Decision 3 constrained by ADR-0069 (2026-11-24)
 
 ## Context
 
@@ -141,3 +142,8 @@ the token, carries no comment that says so, since a workflow carries no comment 
 version after a pinned action (https://github.com/xippios/.github/issues/111), and the
 README's paragraph on `publish.yml` names the exception in its place, while the rest of
 decision 7, the other decisions and the amendment above stand as written.
+
+ADR-0069 (https://github.com/xippios/sdk-core/issues/484), decision 3, adds to decision 3 the one
+constraint that the missing `concurrency` group of `publish.yml` imposes on when a release PR
+merges: a release PR is not merged while another release run waits at `pypi`. The rest of
+decision 3, the other decisions and the amendments above stand as written.

@@ -1406,17 +1406,17 @@ which §12 bounds to one minor.
 - A release run that fails is finished by its own jobs, never by a push: once the tag stands,
   only "Re-run failed jobs" finishes it, since a dispatch or "Re-run all jobs" stops at
   `release-check`, which finds the tag, and a build that fails for good after the tag leaves a
-  tag without a release, which a patch release mends (ADR-0039, decision 6). A `ci` that fails
+  tag without a release, which a patch release mends (ADR-0069, decision 1). A `ci` that fails
   before the tag is re-run the same way, and so is a run that the deployment-branch policy of
-  `pypi` refused, once a maintainer has set the policy to `main` (ADR-0039, decision 6).
+  `pypi` refused, once a maintainer has set the policy to `main` (ADR-0069, decision 2).
   `publish.yml` keeps no `concurrency` group, since GitHub keeps one pending run of a group and
   cancels it for the next, so two pushes to `main` close together can both find the version
   untagged, and a release PR is not merged while another release run waits at `pypi`
-  (ADR-0039, decision 6). Where two runs found the version untagged, the second run's push of
+  (ADR-0069, decision 3). Where two runs found the version untagged, the second run's push of
   the tag fails or, where the first run's `ci` failed, the second tags a later commit: the
   failed jobs of the run whose commit is the release are re-run, and where the other run tagged
   a later commit, a maintainer rejects its deployment at `pypi` and the release is made again
-  as a patch (ADR-0039, decision 6).
+  as a patch (ADR-0069, decision 4).
 - A source may depend on another source package, consuming its task layer only: it
   imports `xippios.<dep>.tasks` and its models, never `api/` or `_client`, and declares
   `xippios-<dep>~=X.Y.0`, one minor, like core (ADR-0021). Both share one core minor:
