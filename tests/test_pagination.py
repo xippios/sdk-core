@@ -171,6 +171,29 @@ async def test_without_a_count_the_walk_refuses_at_its_bound() -> None:
     assert upstream.sent == [0, 10]
 
 
+@pytest.mark.parametrize(
+    ("count", "where"),
+    [
+        (50, "upstream counts 50 records on 2 pages of 25, and the walk reached page 1 of 2"),
+        (
+            None,
+            "upstream sends no count of its records, so its total of pages is unknown, and the "
+            "walk reached page 1",
+        ),
+    ],
+    ids=["counted", "uncounted"],
+)
+async def test_a_bound_of_one_page_is_named_in_the_singular(count: int | None, where: str) -> None:
+    upstream = Pages(range(50), size=25, counts=[count])
+    with pytest.raises(InvalidRequestError) as info:
+        await fetch_pages(upstream.fetch, page_size=25, most=1, paging="page")
+    assert str(info.value) == (
+        f"the walk needs more than the 1 page that one call fetches: {where} after 1 request. "
+        "It returns nothing; pass page to fetch one page at a time."
+    )
+    assert upstream.sent == [0]
+
+
 async def test_a_key_drops_an_item_that_a_later_page_repeats() -> None:
     """A record added at the top between two requests shifts the list: page 2 repeats 3."""
     answers = {0: [1, 2, 3], 3: [3, 4, 5], 6: [6]}
