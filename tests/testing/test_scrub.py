@@ -192,3 +192,25 @@ def test_the_verify_refuses_a_nesting_that_the_scrub_leaves(
     with pytest.raises(ValueError, match=refusal) as refused:
         fixture_from_response(response, scrub=Scrub(secrets=[INVENTED]))
     assert "INVENTED" not in str(refused.value), "the message names the place, never the value"
+
+
+@pytest.mark.parametrize(
+    "form",
+    [
+        INVENTED,
+        _percent(INVENTED),
+        _percent(INVENTED).lower(),
+        "\\u006b3y\\u002dINVENTED-0001",
+        "k3y%2DINVENTED\\u002d0001",
+    ],
+    ids=["as-given", "percent-encoded-upper", "percent-encoded-lower", "json-escaped", "a-mix"],
+)
+@pytest.mark.parametrize("is_json", [True, False], ids=["a-json-body", "a-text-body"])
+def test_the_forms_that_stood_are_replaced_and_pass_the_decoded_search(
+    form: str, is_json: bool
+) -> None:
+    # The decoded search refuses nothing that the scrub replaced: REDACTED in a decoded string,
+    # or in it percent-decoded, is masked as in the raw text, and a text body is not decoded.
+    body = '{"link": "?k=' + form + '&n=1"}' if is_json else f"k={form}&n=1"
+    fixture = fixture_from_response(_answer(body), scrub=Scrub(secrets=[INVENTED]))
+    assert fixture.response.body == body.replace(form, REDACTED)
