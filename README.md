@@ -1911,12 +1911,12 @@ that sent `acme+corp%2Feu` and in a JSON body that echoes `acme corp\/eu` or
 
 The fixture is scrubbed in memory, verified and written once: if a named value or one
 `response_secrets` read is still in the URL, a header value or a text body, in any of its
-forms, or in a key or a string of a body that is JSON, decoded and then percent-decoded,
-nothing is written and the error says where, never what. So a nesting of the two encodings
-that the scrub does not replace, a percent-encoding encoded again say, refuses the recording
-too. A body that is not UTF-8
-text cannot be scrubbed and is refused unless `Scrub(allow_binary=True)` stores it base64,
-flagged.
+forms, or in any text that one of them decodes to, JSON-unescaped and percent-decoded in
+either order until it no longer changes, nothing is written and the error says where, never
+what. So any nesting of the two encodings that the scrub does not replace refuses the
+recording too, a percent-encoding encoded again or a JSON text stringified twice say, and so
+does a text that still decodes after eight rounds. A body that is not UTF-8 text cannot be
+scrubbed and is refused unless `Scrub(allow_binary=True)` stores it base64, flagged.
 
 What a source replaces beyond those values, a field by key or a tenant's host, its own
 rewrite step replaces, and the recorder runs it: a function of the scrubbed `Fixture` that
