@@ -337,3 +337,23 @@ def test_a_text_that_still_decodes_after_eight_rounds_is_refused() -> None:
     )
     with pytest.raises(ValueError, match=refusal):
         fixture_from_response(response, scrub=Scrub(secrets=[INVENTED]))
+
+
+def test_an_exchange_without_the_secret_passes_the_decoding() -> None:
+    # Encodings, nested and odd, of nothing secret: the exchange is kept as sent.
+    body = json.dumps(
+        {
+            "near": _q("k3y-INVENTED-0002", 3),
+            "signs": "100%25 sure, 50%, %%%, %ZZ, %5Cu0041",
+            "inner": json.dumps({"k": "k3y-INVENTED-000", "e": "ä \U0001f511"}),
+            "redacted": "%52EDACTED \\u0025REDACTED",
+        }
+    )
+    response = _sent(
+        url="https://api.example.test/v1/x?a=%2525&b=" + _q("k3y-INVENTED-0002", 2),
+        response_body=body,
+        link='<https://api.example.test/?n=%252F>; rel="next"',
+    )
+    fixture = fixture_from_response(response, scrub=Scrub(secrets=[INVENTED]))
+    assert fixture.response.body == body
+    assert fixture.request.url == str(response.request.url)
