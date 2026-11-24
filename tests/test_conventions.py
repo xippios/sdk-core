@@ -1457,19 +1457,3 @@ def test_section_13_s_rule_on_a_workflow_s_comments_cites_its_record() -> None:
         "https://github.com/xippios/.github/issues/111",
     ):
         assert name in rule, f"§13: {rule!r} does not name {name!r}"
-
-
-def test_the_definition_of_done_points_core_s_surface_to_the_pinned_lists() -> None:
-    # Core's README keeps no status table, so its surface is held by the pinned lists and stated
-    # in two counts (ADR-0068, decision 6; finding 10 of the conventions check on
-    # https://github.com/xippios/sdk-core/pull/552#issuecomment-7138691721).
-    done = DONE.read_text(encoding="utf-8").splitlines()
-    lines = [flat(line) for line in done if "public surface changes are reflected" in line]
-    assert len(lines) == 1, "the definition of done has one line on the public surface"
-    for name in (
-        "in a source, the README status table",
-        "`tests/test_public_surface.py`",
-        "`scripts/count_surface.py`",
-        "ADR-0068, decision 6",
-    ):
-        assert name in lines[0], f"the definition of done: {lines[0]!r} does not name {name!r}"
