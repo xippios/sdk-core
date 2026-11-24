@@ -200,10 +200,10 @@ def fixture_path(root: Path, endpoint: str, case: str) -> Path:
 
     Args:
         root: The fixtures directory, e.g. ``Path("tests/fixtures")``.
-        endpoint: The fixture directory: the wrapper function's name, e.g. ``"api_get"``
-            for a wrapper of ``GET /v1/data``, or the task's for an exchange recorded
+        endpoint: The fixture directory: the wrapper function's name, e.g. ``"fetch_series"``
+            for a wrapper of ``GET /v1/series``, or the task's for an exchange recorded
             through a task.
-        case: The case, e.g. ``"corn_2024"``.
+        case: The case, e.g. ``"region_2024"``.
     """
     return root / endpoint / f"{case}.json"
 

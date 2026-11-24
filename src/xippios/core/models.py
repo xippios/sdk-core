@@ -513,7 +513,7 @@ class ResultMeta(BaseModel):
 
     Attributes:
         source: Source slug, e.g. ``"example"``.
-        endpoint: Upstream operation name, e.g. ``"api_GET"``; for a packaged answer the
+        endpoint: Upstream operation name, e.g. ``"getSeries"``; for a packaged answer the
             operation the list came from (ADR-0041), as ``PackagedList.meta`` sets it.
         retrieved_at: When we fetched the data; timezone-aware UTC, defaults to now. A
             cache hit's is the time its entry was stored (``AsyncClient.get_answer``), a

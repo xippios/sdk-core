@@ -226,7 +226,7 @@ class AsyncClient:
 
         Args:
             method: HTTP method.
-            path: Path joined onto the base URL, e.g. ``"/api/api_GET"``.
+            path: Path joined onto the base URL, e.g. ``"/series"``.
             params: Query parameters.
             json: JSON body for write methods, e.g. ``{"name": "Corn"}``.
             data: Form body for write methods, sent form-encoded
@@ -455,7 +455,7 @@ class AsyncClient:
 
         Args:
             method: HTTP method.
-            path: Path joined onto the base URL, e.g. ``"/api/api_GET"``.
+            path: Path joined onto the base URL, e.g. ``"/series"``.
             params: Query parameters.
             json: JSON body.
             data: Form body.

@@ -128,7 +128,7 @@ class Listed:
 
     Attributes:
         name: The list's name, its file under ``reference/`` without ``.json`` and the name
-            ``--only`` takes, e.g. ``"commodities"`` or ``"element_QCL"``.
+            ``--only`` takes, e.g. ``"regions"`` or ``"regions_v2"``.
         fetch: Gets the list through the source's ``api/`` wrappers, never through a task
             that answers from the package: records, a model's by ``dump_upstream`` and a
             mapping as it is, a list of values as records of one field named by ``param``

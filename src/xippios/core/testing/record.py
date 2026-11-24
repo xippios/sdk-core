@@ -76,7 +76,7 @@ async def send_once(
 
     Args:
         client: The source's configured client.
-        path: Request path, e.g. ``"/api/api_GET"``, or an absolute URL on another host.
+        path: Request path, e.g. ``"/series"``, or an absolute URL on another host.
         method: HTTP method.
         params: Query parameters.
         json: JSON body for write methods.
@@ -155,7 +155,7 @@ async def record(
 
     Args:
         client: The source's configured client.
-        path: Request path, e.g. ``"/api/api_GET"``.
+        path: Request path, e.g. ``"/series"``.
         fixture: Destination file, usually from ``fixture_path``.
         method: HTTP method.
         params: Query parameters.

@@ -191,8 +191,8 @@ class UnknownCode(InvalidRequestError):
     finds them with ``xippios.core.closest``, with ``xippios.core.nearest`` for integer
     codes, or with a strategy of its own (ISO codes first) and passes the result. The
     message names the value, the parameter and the list with its fetch date, says that
-    nothing was sent, then names the closest codes (``Did you mean 0410000 (Wheat),
-    0440000 (Corn)?``, and a code whose name is its own text named once, ``Did you mean
+    nothing was sent, then names the closest codes (``Did you mean R01 (North),
+    R02 (South)?``, and a code whose name is its own text named once, ``Did you mean
     VA?``) unless ``hint`` is given, the ``reason`` when given, and, while ``outdated`` is
     true, that the packaged list is out of date if upstream added the value since::
 
@@ -206,14 +206,14 @@ class UnknownCode(InvalidRequestError):
     reads the message over MCP, so it names no command of the package's maintainers.
 
     Args:
-        param: The parameter, as the package names it, e.g. ``"commodity_code"``.
-        value: The value given, e.g. ``"0410001"``, or ``999``.
+        param: The parameter, as the package names it, e.g. ``"region_code"``.
+        value: The value given, e.g. ``"R10"``, or ``999``.
         list_name: The packaged list checked, as upstream names it, e.g.
-            ``"commodities"``.
+            ``"regions"``.
         fetched: When the list was fetched, ``PackagedList.fetched``; the message names
             its day, e.g. ``2026-10-23``.
         closest: Known codes close to ``value`` with their upstream names, best match
-            first, e.g. ``[("0410000", "Wheat")]``, or ``[("VA", "VA")]`` for a list of
+            first, e.g. ``[("R01", "North")]``, or ``[("VA", "VA")]`` for a list of
             bare values; empty when none is close.
         hint: A sentence that explains the value instead of the closest codes, e.g.
             ``"Omit country_code for every country."``; when given, ``closest`` is not

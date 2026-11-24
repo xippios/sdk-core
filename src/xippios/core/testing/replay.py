@@ -29,10 +29,10 @@ the mount, kept while the census of ``xippios.core.testing.built_answers`` liste
 class ReplayFixture(Protocol):
     """The type of the plugin's ``replay_fixture`` fixture, for a test's annotation.
 
-    ``replay_fixture("api_get", "corn_2024")`` mounts
-    ``tests/fixtures/api_get/corn_2024.json`` on the ``respx_mock`` router and returns
+    ``replay_fixture("fetch_series", "region_2024")`` mounts
+    ``tests/fixtures/fetch_series/region_2024.json`` on the ``respx_mock`` router and returns
     the route; ``match_params`` and ``url`` are passed on to ``replay``. The
-    directory is the wrapper function's, here ``api_get``, or the task's
+    directory is the wrapper function's, here ``fetch_series``, or the task's
     for an exchange recorded through a task (conventions §10).
     """
 
@@ -77,7 +77,7 @@ def replay(
 
     Args:
         router: The ``respx`` router, usually the ``respx_mock`` fixture.
-        path: The fixture's file, e.g. ``tests/fixtures/api_get/corn_2024.json``.
+        path: The fixture's file, e.g. ``tests/fixtures/fetch_series/region_2024.json``.
         match_params: Names of recorded query parameters whose recorded values a request
             must carry too, e.g. ``["countOnly"]`` where two calls share one path.
             ``None`` matches method, host and path only.

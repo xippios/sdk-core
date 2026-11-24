@@ -105,8 +105,8 @@ class PackagedList(BaseModel):
             list is derived from or how a list was reconciled with upstream's
             documentation; ``None`` when there is none. Core reads nothing from it.
         records: Upstream's records verbatim, under upstream's field names, in
-            upstream order, e.g. ``{"commodityCode": "0410000", "commodityName":
-            "Wheat"}``.
+            upstream order, e.g. ``{"regionCode": "R01", "regionName":
+            "North"}``.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -228,12 +228,12 @@ class PackagedList(BaseModel):
         of the codes is built here, once, and kept with the declaration.
 
         Args:
-            code: The field that holds the code, e.g. ``"commodityCode"``.
-            name: The field that holds the code's name, e.g. ``"commodityName"``;
+            code: The field that holds the code, e.g. ``"regionCode"``.
+            name: The field that holds the code's name, e.g. ``"regionName"``;
                 ``None`` for a list of values, each its own name.
             fold_case: ``True`` to compare without case, for a list of text codes that
                 upstream compares so; ``False`` compares exactly.
-            list_name: The list as a refusal names it, e.g. ``"element_QCL"`` where the
+            list_name: The list as a refusal names it, e.g. ``"regions_v2"`` where the
                 file's name says more than its ``param``; ``param`` by default.
             source: Source slug every refusal carries, e.g. ``"example"``.
 
@@ -811,7 +811,7 @@ def _hint(plain: object, hints: Mapping[str, str] | None) -> str | None:
 
 
 def _named(pairs: Iterable[tuple[Any, str]]) -> str:
-    """Codes as ``UnknownCode`` names them: ``0410000 (Wheat)``, a code named by itself once."""
+    """Codes as ``UnknownCode`` names them: ``R01 (North)``, a code named by itself once."""
     return ", ".join(str(code) if name == str(code) else f"{code} ({name})" for code, name in pairs)
 
 
