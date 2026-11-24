@@ -17,7 +17,7 @@
     `src/xippios/google/mail/models.py` (sdk-google-mail) — `ComposePreview` (line 395) and
     `ActionPreview` (line 426) declare `reads: list[str]` — until they do,
     `test_the_write_server_serves_the_write_tasks_only` of `tests/test_tasks_write.py` (line
-    161) fails, naming each write tool's preview.
+    163) fails, naming each write tool's preview.
     `src/xippios/google/mail/tasks_write.py` (sdk-google-mail) — the four previews it builds
     (lines 188, 275, 398 and 436) set `reads`, a reply's `["gmail.users.messages.get"]` and
     every other `[]` — a field declared without a default fails every preview at its
