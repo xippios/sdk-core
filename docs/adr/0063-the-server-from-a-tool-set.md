@@ -1,6 +1,6 @@
 # ADR-0063: The server from a tool set
 
-Status: Accepted · Date: 2026-11-24 · Decided by https://github.com/xippios/sdk-core/issues/476
+Status: Accepted · Date: 2026-11-24 · Decided by https://github.com/xippios/sdk-core/issues/476 · Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/476
 
 ## Context
 
@@ -171,3 +171,11 @@ change of the family check.
 - Conventions §7 and §8, the README and the docstrings of `xippios.core.mcp`, `ToolSet`,
   `build_server`, `register_tasks`, `tool_name` and `assert_write_tools` state decisions 1 to 6,
   and the changes that build decisions 7 to 9 state theirs.
+
+Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/476: in decision 7 core reads
+from a tasks module, with `ToolSet.from_tasks` and each where the module declares it, beside its
+tools, `MCP_CAPS`, the two option hooks and `MCP_INSTRUCTIONS`, also `MCP_LOOPBACK_ONLY = True`,
+the declaration of a read tool set's hold to loopback, which sdk-google-mail makes, and
+`MCP_BOUND_INSTRUCTIONS`, the text of a server bound to one tenant that `tenant_instructions`
+takes as `bound`, which sdk-cashctrl and sdk-google-mail give, while the other decisions and the
+rest of decision 7 stand as written.

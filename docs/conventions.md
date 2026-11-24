@@ -948,7 +948,7 @@ with sdk-template 0.4.0, which renders it (ADR-0063, decision 2).
   authentication, sdk-google-mail's mailboxes, declares `MCP_LOOPBACK_ONLY = True` in its
   `tasks.py`, which its tool set reads as `loopback_only`, and is held the same way, and the
   entry and a host read either kind from the tool set's `read_only` and `loopback_only`
-  (ADR-0025, D-a; ADR-0063, decisions 5 and 7). A write
+  (ADR-0025, D-a; ADR-0063, decision 5, and decision 7, amendment 2026-11-24). A write
   server exposes write tools only; reference tools stay on the read server. A source tests
   its write server with `xippios.core.testing.assert_write_tools(mcp_write.build(),
   write_tasks, ...)`: a write tool set, its tools exactly the write tasks, each taking
@@ -1056,7 +1056,8 @@ with sdk-template 0.4.0, which renders it (ADR-0063, decision 2).
   `ToolSet.from_tasks(SOURCE, tasks, version=..., lock=lock)`, which passes the tasks through
   `bind_tasks(tasks, lock)` and the instructions through
   `tenant_instructions(MCP_INSTRUCTIONS, lock, bound=MCP_BOUND_INSTRUCTIONS)`, both read from
-  the tasks module; `main` builds the bound server from that tool set (ADR-0063, decision 7).
+  the tasks module; `main` builds the bound server from that tool set (ADR-0063, decision 7,
+  amendment 2026-11-24).
   No tool of a bound
   server takes the tenant's argument, so a call that names it is refused as an argument
   the tool does not declare; the tenant list lists the bound tenant alone; and the
@@ -1103,7 +1104,7 @@ with sdk-template 0.4.0, which renders it (ADR-0063, decision 2).
   two hooks, `MCP_LOOPBACK_ONLY` and `MCP_BOUND_INSTRUCTIONS`, each where the module declares
   it, so `mcp.py` holds no line that a source edits, and the entry point is `main(build)`,
   which reads the hooks from the tool set and builds the server that it runs (ADR-0063,
-  decision 7). The rule binds a source from its adoption of core 0.5.0.
+  decision 7, amendment 2026-11-24). The rule binds a source from its adoption of core 0.5.0.
   `build_server(tool_set, *, name=None)` and `register_tasks(server, tool_set)`
   take a tool set alone, and a tool set is checked when it is built, so a source's own tests
   fail on a declaration that no server could serve (ADR-0063, decisions 1 and 3). A host
