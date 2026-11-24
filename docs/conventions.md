@@ -1350,16 +1350,18 @@ standalone from the package. A task named in `BULK_TASKS` gets no route:
     and the source only, for the release PR's report of the quota left (ADR-0035,
     decision 7).
   - Placeholder key, in every test not marked `live`: every `EnvKeyAuth` sends
-    `PLACEHOLDER_KEY`, pinned on the class, and the variables named in the ini option
-    `xippios_placeholder_key_envs` hold it; the fixture `placeholder_api_key` returns
-    it, `None` in a live test. A source names there every variable that holds a
-    credential of its own, its key's or several (sdk-google-mail's refresh token, client
-    id and secret, sdk-faostat's user name and password; ADR-0035, decision 3), and
-    carries no placeholder fixture of its own. Every credential that a
-    `RenewingBearerAuth` reads through `credential` is the placeholder too, one given to
-    the constructor included, and a variable unset or empty is still its `ConfigError`,
-    so a source names each variable of its token request there (ADR-0035,
-    decision 3).
+    `PLACEHOLDER_KEY`, pinned on the class, and each secret variable of the source's
+    `_client.ENV_VARS` holds it, a pattern such as `EXAMPLE_<NAME>_API_KEY` once for each
+    reserved tenant of the `Tenants` that `_client.py` holds, `EXAMPLE_DEMO_API_KEY` for
+    `demo`; the fixture `placeholder_api_key` returns it, `None` in a live test. A source
+    declares there, `secret=True`, every variable that holds a credential of its own, its
+    key's or several, a refresh token with a client id and secret say (ADR-0035, decision
+    3, and its amendment of 2026-11-24), and carries no placeholder fixture of its own. A
+    fixture of its own that sets one of those variables, a reserved tenant's recorded host
+    say, runs after the plugin's. Every credential that a `RenewingBearerAuth` reads
+    through `credential` is the placeholder too, one given to the constructor included,
+    and a variable unset or empty is still its `ConfigError`, so a source declares each
+    variable of its token request secret (ADR-0035, decision 3).
   - Logger levels: the `httpx`, `httpcore`, `httpx2` and `httpcore2` logger levels are
     restored after every test, live ones included (ADR-0035, decision 5). They are saved per test, after fixtures of wider scope
     are set up, so one of those that changes a level leaves it behind.
@@ -1371,10 +1373,9 @@ standalone from the package. A task named in `BULK_TASKS` gets no route:
   `.copier-answers.yml`; the core bound of §12. The template renders
   `tests/test_family.py`, which collects it with one line
   (`from xippios.core.testing.family import *  # noqa: F403`), so it runs in every
-  source's CI, and a source keeps no copy of its checks. The plugin's ini option
-  `xippios_package` names the package under test where `src/xippios/` holds more than
-  one `tasks.py` (ADR-0035, decision 8). A source's write server is its own to
-  test (ADR-0042).
+  source's CI, and a source keeps no copy of its checks. The package under test is the
+  one package with a `tasks.py` under `src/xippios/` (ADR-0035, decision 8, and its
+  amendment of 2026-11-24). A source's write server is its own to test (ADR-0042).
 - Every task function has at least one fixture-backed test and one live smoke test.
 - Two tests of the family check hold names that §1 and §3 give, with no opt-in.
   The family check fails a read task, one of `tasks.__all__`, bulk or not, whose name starts with

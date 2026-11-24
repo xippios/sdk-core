@@ -1562,7 +1562,7 @@ source="example", read_server=read_server, router=router)`: a write server, its 
 tasks, each taking `confirm: bool = False` last, and none of them on the read server or
 the router. A source whose adapters drop a task, or whose README table is stale, fails CI
 before a reviewer looks. The package under test is the one `tasks.py` under
-`src/xippios/`, or the ini option `xippios_package`.
+`src/xippios/`.
 
 `assert_write_tools` holds the preview of each write task too, in two parts, each off by
 default (ADR-0050):
@@ -1744,10 +1744,15 @@ A partial run judges only the tests that ran, and under pytest-xdist the census 
 each worker keeps its own. A source meets the check once it adds the line, and the module's
 docstring lists what it cannot see.
 
-```toml
-# pyproject.toml: the variables that hold the placeholder key in offline tests
-[tool.pytest.ini_options]
-xippios_placeholder_key_envs = ["EXAMPLE_API_KEY"]
+```python
+# src/xippios/example/_client.py: each secret variable holds the placeholder key offline
+ENV_VARS = (
+    EnvVar("EXAMPLE_TENANTS", secret=False, required=False),
+    EnvVar("EXAMPLE_<NAME>_API_KEY", secret=True, required=True),  # EXAMPLE_DEMO_API_KEY
+)
+TENANTS = Tenants(
+    "example", list_var="EXAMPLE_TENANTS", param="org", fields=("API_KEY",), reserved=("demo",)
+)
 ```
 
 - `@pytest.mark.live` tests are skipped unless `XIPPIOS_LIVE_TESTS=1`, and `anyio`
@@ -1761,12 +1766,14 @@ xippios_placeholder_key_envs = ["EXAMPLE_API_KEY"]
   it), no `QuotaPolicy` pauses, refuses or stays spent from one test to the next
   (`rate_limited` keeps the pause too), every `MemoryCache` starts and ends empty (a
   cache backend of the source's own is the source's to clear), and every `EnvKeyAuth`
-  sends `PLACEHOLDER_KEY` while the variables named in `xippios_placeholder_key_envs`
-  hold it (fixture `placeholder_api_key`), whatever the shell or an earlier live test
-  left behind. Every credential that a `RenewingBearerAuth` reads is the placeholder too,
-  and a variable unset or empty is still its `ConfigError`, so the ini option names each
-  variable a token request reads. The `httpx`, `httpcore`, `httpx2` and `httpcore2` logger levels come back
-  after every test.
+  sends `PLACEHOLDER_KEY` while each secret variable of `_client.ENV_VARS` holds it, a
+  pattern once for each reserved tenant of the `Tenants` that `_client.py` holds (fixture
+  `placeholder_api_key`), whatever the shell or an earlier live test left behind. A
+  fixture of the source's own that sets one of them, a reserved tenant's recorded host
+  say, runs after it. Every credential that a `RenewingBearerAuth` reads is the
+  placeholder too, and a variable unset or empty is still its `ConfigError`, so
+  `ENV_VARS` declares each variable a token request reads secret. The `httpx`,
+  `httpcore`, `httpx2` and `httpcore2` logger levels come back after every test.
   After a live run the summary prints each quota policy's last reading, `quota after the
   live run: usda-psd: 986 of 1000 requests left as of ...`. ADR-0035 states the edges of
   these guarantees.
