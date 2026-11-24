@@ -865,6 +865,13 @@ def test_fetch_pages_s_docstring_cites_the_decided_addition_for_stop_and_key() -
     doc = flat(fetch_pages.__doc__ or "")
     assert DECIDED in doc, f"fetch_pages's docstring does not cite {DECIDED!r}"
     assert LEAVING not in doc, f"fetch_pages's docstring still cites {LEAVING!r}"
+    # The README's paragraph on the walk says the same (the review of
+    # https://github.com/xippios/sdk-core/pull/558, the panel's carry of step 25's text).
+    readme = flat((ROOT / "README.md").read_text(encoding="utf-8"))
+    words = readme.split("no source uses it yet. ", 1)[1].split(". ", 1)[0]
+    for name in ("fewer than two consumers", "a maintainer's answer decided them", DECIDED):
+        assert name in words, f"the README's walk: {words!r} does not name {name!r}"
+    assert LEAVING not in words, f"the README's walk still cites {LEAVING!r}"
 
 
 def test_adr_0059_admits_a_decided_piece_with_fewer_than_two_consumers_in_one_sentence() -> None:
