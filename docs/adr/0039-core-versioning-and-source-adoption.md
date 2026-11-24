@@ -4,7 +4,7 @@ Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, res
 https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0018 ·
 Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/484 ·
 Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/494 ·
-Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/484
+Decision 3 constrained by ADR-0069 (2026-11-24)
 
 ## Context
 
