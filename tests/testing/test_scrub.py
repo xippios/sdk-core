@@ -114,3 +114,81 @@ def test_the_verify_refuses_an_encoded_form_that_the_scrub_left(
     with pytest.raises(ValueError, match=refusal) as refused:
         fixture_from_response(response, scrub=Scrub(secrets=[ENCODED]))
     assert "nit" not in str(refused.value), "the message names the place, never the value"
+
+
+# A percent-encoding behind a JSON escape (ADR-0066, decision 11;
+# https://github.com/xippios/sdk-core/issues/581): the scrub replaces the sign of a
+# percent-encoding written as a JSON escape, and the verify searches a JSON body's keys and
+# strings decoded, and percent-decoded, so a nesting that the scrub leaves is refused. The
+# key is invented.
+
+INVENTED = "k3y-INVENTED-0001"
+"""An invented key, its letters in both cases, a digit and a hyphen."""
+
+
+def _percent(value: str) -> str:
+    """``value`` percent-encoded whole, each UTF-8 byte as ``%XX`` in upper hex."""
+    return "".join(f"%{byte:02X}" for byte in value.encode())
+
+
+def _answer(response_body: str, request_body: str = "") -> httpx.Response:
+    """A JSON answer to a POST whose URL names no secret, its JSON body ``request_body``."""
+    request = httpx.Request(
+        "POST",
+        "https://api.example.test/v1/x",
+        content=request_body.encode(),
+        headers={"content-type": "application/json"},
+    )
+    return httpx.Response(200, content=response_body.encode(), request=request)
+
+
+@pytest.mark.parametrize(
+    ("secret", "encoded"),
+    [
+        (INVENTED, _percent(INVENTED).replace("%", "\\u0025")),
+        (INVENTED, _percent(INVENTED).lower().replace("%", "\\u0025", 1)),
+        ("k3y INVENTED 0002", "k3y\\u002BINVENTED\\u002b0002"),
+    ],
+    ids=["every-sign-escaped-upper-hex", "one-sign-escaped-lower-hex", "a-space-s-plus-escaped"],
+)
+def test_a_percent_encoding_behind_a_json_escape_is_replaced(secret: str, encoded: str) -> None:
+    # A JSON body that echoes the query it was sent, its "%" or "+" written as % or +.
+    body = '{"link": "https://files.example.test/?k=' + encoded + '&n=1"}'
+    fixture = fixture_from_response(_answer(body), scrub=Scrub(secrets=[secret]))
+    assert json.loads(fixture.response.body) == {
+        "link": f"https://files.example.test/?k={REDACTED}&n=1"
+    }
+
+
+@pytest.mark.parametrize(
+    "nested",
+    [
+        _percent(INVENTED).replace("%6B", "%\\u0036B", 1),
+        _percent(INVENTED).replace("%", "%25"),
+        "%5Cu006B" + INVENTED[1:],
+    ],
+    ids=[
+        "a-hex-digit-behind-a-json-escape",
+        "percent-encoded-twice",
+        "a-json-escape-percent-encoded",
+    ],
+)
+@pytest.mark.parametrize(
+    ("side", "template"),
+    [("response body", '{{"link": "{}"}}'), ("request body", '{{"{}": 1}}')],
+    ids=["a-string-of-the-response-body", "a-key-of-the-request-body"],
+)
+def test_the_verify_refuses_a_nesting_that_the_scrub_leaves(
+    nested: str, side: str, template: str
+) -> None:
+    # The scrub replaces none of these in the raw text; decoded, and percent-decoded, each is
+    # a form of the key, and the verify refuses it before anything is written.
+    text = template.format(nested)
+    response = _answer(text, "") if side == "response body" else _answer("{}", text)
+    refusal = (
+        rf"^the scrubbed fixture still holds a secret value in the {side}, a decoded JSON "
+        r"string; it is refused before anything is written$"
+    )
+    with pytest.raises(ValueError, match=refusal) as refused:
+        fixture_from_response(response, scrub=Scrub(secrets=[INVENTED]))
+    assert "INVENTED" not in str(refused.value), "the message names the place, never the value"
