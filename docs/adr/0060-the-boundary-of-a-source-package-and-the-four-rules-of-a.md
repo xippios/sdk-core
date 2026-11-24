@@ -24,8 +24,8 @@ subject.
 
 The maintainer's answer on https://github.com/xippios/sdk-usda-esr/issues/60, part 3, the interview of
 sdk-usda-esr's adoption, read decision 1 for the family on the same day: a time that upstream
-prints is read into the type that keeps all of it, and no text stands beside it. Decisions 7 to
-9 state that reading.
+prints is read into the type that keeps all of it, and no text stands beside it. Decisions 7 and
+8 state that reading.
 
 ## Decision
 
@@ -52,11 +52,10 @@ prints is read into the type that keeps all of it, and no text stands beside it.
    tenant's name. What a package withholds by the identifier rule, it withholds on purpose.
 7. **A record that a package shapes itself** follows four rules, as sdk-usda-wasde's record of a
    release's tables will: one value per record; a field under upstream's name holds upstream's
-   text; a reading of that text stands beside it under the one suffix of a reading,
-   `<stem>_number`; and a code and its label stand side by side, the label as `<stem>_label`
-   beside the code `<stem>`. A text stands beside a reading only where no type keeps what upstream
-   sends, so the family has no suffix for a time, `<stem>_number` is the one twin of a reading and
-   `<stem>_label` stays the name of a code's label (https://github.com/xippios/sdk-usda-esr/issues/60, part 3). The one exception
+   text; a reading of that text stands beside it under a fixed suffix, `<stem>_number` for a number
+   and `<stem>_label` for a label; and a code and its label stand side by side (https://github.com/xippios/sdk-core/issues/474,
+   part 6). A text stands beside a reading only where no type keeps what upstream sends, so the
+   family has no suffix for a time (https://github.com/xippios/sdk-usda-esr/issues/60, part 3). The one exception
    is ADR-0020's, decision 2, as amended on this date: where the file names no value that the
    record needs, as sdk-usda-wasde's XML names no commodity on some pages, the record reads it from
    the table's title or from the same release's XLS and says which.
@@ -88,13 +87,12 @@ prints is read into the type that keeps all of it, and no text stands beside it.
      request (decision 1; ADR-0034, decision 4, as amended on this date).
 9. **The family check holds the form of a reading.** `test_family_readings_stand_beside_their_text`
    reads every model that a task's `Result[T]` reaches, read and write tasks alike, through its
-   fields and computed fields, and fails a field `<stem>_number` whose stem is a field of the same
-   model that holds no text, `str` or a subclass, optional or not. The stem is the name before the
-   suffix where the model holds a field of that name. A name whose part before the suffix names no
-   field of its model is upstream's own name and no reading, as sdk-cashctrl's `street_number` is,
-   and the check passes it. A field `<stem>_label` is the label of a code, no reading, beside a code
-   that may be an integer (ADR-0056), so the check does not read it, and sdk-cashctrl's
-   `row_label` and `field_label` are upstream's own names as well (https://github.com/xippios/sdk-usda-esr/issues/60, part 3). The check therefore
+   fields and computed fields, and fails a field `<stem>_number` or `<stem>_label` whose stem is a
+   field of the same model that holds no text, `str` or a subclass, optional or not (https://github.com/xippios/sdk-core/issues/474,
+   part 10). The stem is the name before the suffix where the model holds a field of that name. A
+   name whose part before the suffix names no field of its model is upstream's own name and no
+   reading, as sdk-cashctrl's `street_number`, `row_label` and `field_label` are, and the check
+   passes it. A time has no suffix, so the check reads none (https://github.com/xippios/sdk-usda-esr/issues/60, part 3). The check therefore
    holds a reading's form and not that a reading which can lose something has one: that is the
    review's, by decision 1. One pair stands in the family today, sdk-usda-nass's `value` and its
    computed `value_number`, and no model of the twelve sources holds a suffixed field beside a stem

@@ -5,7 +5,7 @@
   family check gains two tests that hold a source from its adoption of 0.5.0,
   `test_family_read_tasks_start_with_a_read_verb`, a read task named `list_`, `get_`, `search_`,
   `count_` or `download_`, and `test_family_readings_stand_beside_their_text`, a reading
-  `<stem>_number` beside the text field of its stem. ADR-0028, ADR-0001,
+  `<stem>_number` or `<stem>_label` beside the text field of its stem. ADR-0028, ADR-0001,
   ADR-0020, ADR-0034, ADR-0041, ADR-0047 and ADR-0011 each take one sentence that points to them.
   (ADR-0060, ADR-0061, §1, §2, §3, §4, §5, §6, §8, §10, §14,
   https://github.com/xippios/sdk-core/issues/474)

@@ -37,13 +37,13 @@ than one fails every test here, naming the option. The repository's files (``REA
   (conventions §1, ADR-0061, decision 3); a write task of ``tasks_write`` takes a write's
   verb, ``create_``, ``update_``, ``delete_`` or upstream's own, and is not read here;
 - in every pydantic model that a task's ``Result[T]`` reaches, read or write, through its
-  fields, a field or computed field ``<stem>_number``, the one twin of a reading, whose stem
-  names a field of the same model stands beside text: that field holds ``str`` or a subclass,
-  ``None`` allowed beside it (conventions §3 and §10, ADR-0060, decisions 7 and 9). A name whose
-  part before the suffix names no field of its model is upstream's own and no reading, an
-  address's ``street_number`` say, and passes; so does a reading that keeps no text beside it,
-  since whether a reading can lose something is the review's. A code's label ``<stem>_label``
-  is no reading and is not read;
+  fields, a field or computed field ``<stem>_number`` or ``<stem>_label`` whose stem names a
+  field of the same model stands beside text: that field holds ``str`` or a subclass, ``None``
+  allowed beside it (conventions §3 and §10, ADR-0060, decisions 7 and 9). A name whose part
+  before the suffix names no field of its model is upstream's own and no reading, an address's
+  ``street_number`` say, and passes; so does a reading that keeps no text beside it, since
+  whether a reading can lose something is the review's. A time has no suffix, since the type
+  that keeps all that upstream sends reads it;
 - ``README.md``'s status table lists exactly ``tasks.__all__`` plus
   ``tasks_write.__all__``, a source's write tasks included (conventions §13), in the format
   of sdk-template's ``README.md.jinja``: the tables under the ``## Status`` heading whose
@@ -487,18 +487,18 @@ def test_family_read_tasks_start_with_a_read_verb(family_source: FamilySource) -
     _fail(problems, _VERBS_INTRO)
 
 
-_READING = "_number"
-"""The one suffix of a reading, which stands beside the text field of its stem (ADR-0060).
+_SUFFIXES = ("_number", "_label")
+"""The suffixes of a reading, which stands beside the text field of its stem (ADR-0060).
 
-A time is read into the type that keeps all of it and has no suffix, and ``<stem>_label`` is the
-label of a code, which may be an integer, and no reading (ADR-0060, decisions 7 and 9).
+A time has none: it is read into the type that keeps all that upstream sends, with no text
+beside it (ADR-0060, decision 8).
 """
 _UNION = type(int | str)
 """The type of ``X | Y``, which ``typing.get_origin`` gives beside ``typing.Union``."""
 _READINGS_INTRO = (
-    "a reading <stem>_number stands beside a text field <stem> of its model; a name whose part "
-    "before the suffix names no field is upstream's own and passes (conventions §3, ADR-0060, "
-    "decisions 7 and 9):"
+    "a reading <stem>_number or <stem>_label stands beside a text field <stem> of its model; a "
+    "name whose part before the suffix names no field is upstream's own and passes "
+    "(conventions §3, ADR-0060, decisions 7 and 9):"
 )
 
 
@@ -549,26 +549,26 @@ def _holds_text(annotation: Any) -> bool:
 
 def _stem(name: str) -> str | None:
     """The part of ``name`` before a reading's suffix, or ``None`` for a name without one."""
-    if name.endswith(_READING) and len(name) > len(_READING):
-        return name[: -len(_READING)]
+    for suffix in _SUFFIXES:
+        if name.endswith(suffix) and len(name) > len(suffix):
+            return name[: -len(suffix)]
     return None
 
 
 def test_family_readings_stand_beside_their_text(family_source: FamilySource) -> None:
-    """A reading ``<stem>_number`` stands beside its text (conventions §3).
+    """A reading ``<stem>_number`` or ``<stem>_label`` stands beside its text (conventions §3).
 
-    A package that reads a printed text as a number that no type keeps whole keeps the text
-    under upstream's name and the reading beside it under the one suffix of a reading (ADR-0060,
-    decision 7), as the invented source ``example`` keeps ``value``, ``"1,204 (P)"``, beside
-    ``value_number``, ``1204``. The check reads every pydantic model that a task's ``Result[T]``
-    reaches, read and write tasks alike, through its fields and computed fields, and fails a
-    field or computed field ``<stem>_number`` whose stem names a field of the same model that
-    holds no text. The stem is the name before the suffix where the model holds a field of that
-    name: a name whose part before the suffix names no field is upstream's own and no reading,
-    an address's ``street_number`` say, and passes. A time has no suffix, since its type keeps
-    it whole, and a code's label ``<stem>_label`` is no reading, so neither is read. The check
-    holds a reading's form, not that a reading which can lose something has one, which is the
-    review's (ADR-0060, decision 9).
+    A package that reads a printed text as a number or a label keeps the text under upstream's
+    name and the reading beside it under a fixed suffix (ADR-0060, decision 7), as the invented
+    source ``example`` keeps ``value``, ``"1,204 (P)"``, beside ``value_number``, ``1204``. The
+    check reads every pydantic model that a task's ``Result[T]`` reaches, read and write tasks
+    alike, through its fields and computed fields, and fails a field or computed field with
+    either suffix whose stem names a field of the same model that holds no text. The stem is
+    the name before the suffix where the model holds a field of that name: a name whose part
+    before the suffix names no field is upstream's own and no reading, an address's
+    ``street_number`` say, and passes. A time has no suffix: the type that keeps all that
+    upstream sends reads it, with no text beside it. The check holds a reading's form, not that
+    a reading which can lose something has one, which is the review's (ADR-0060, decision 9).
     """
     problems: list[str] = []
     seen: set[type[pydantic.BaseModel]] = set()

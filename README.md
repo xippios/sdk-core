@@ -1565,13 +1565,13 @@ Two tests hold the names that the boundary and the ways give (ADR-0060, ADR-0061
 task, of `tasks.__all__`, bulk or not, is named with one of the five read verbs, `list_`, `get_`,
 `search_`, `count_` or `download_`, so `find_series` fails where `search_series` passes; a write
 task of `tasks_write` takes a write's verb and is not read. In every model that a task's
-`Result[T]` reaches, through its fields, a reading `<stem>_number`, the one twin of a reading,
-stands beside the text field of its stem: `value: str`, `"1,204 (P)"`, beside `value_number:
-Decimal | None`, `1204`, passes, and `level: float` beside `level_number` fails. A name whose
-part before the suffix names no field of its model, an address's `street_number`, is upstream's
-own and passes, so the check holds a reading's form, and the review whether a reading that can
-lose something keeps its text. A time is read into the type that keeps all of it, with no text
-and no suffix, and a code's label `<stem>_label` is no reading, so the check reads neither.
+`Result[T]` reaches, through its fields, a reading `<stem>_number` or `<stem>_label` stands
+beside the text field of its stem: `value: str`, `"1,204 (P)"`, beside `value_number: Decimal |
+None`, `1204`, passes, and `level: float` beside `level_number` or `code: int` beside
+`code_label` fails. A name whose part before the suffix names no field of its model, an
+address's `street_number`, is upstream's own and passes, so the check holds a reading's form,
+and the review whether a reading that can lose something keeps its text. A time is read into the
+type that keeps all of it, with no text and no suffix, so the check reads no time.
 
 Every task, read and write, bulk or not, with a parameter whose name holds `country`,
 `countries`, `area`, `reporter` or `partner`, in any case, names its codes with `names_codes`

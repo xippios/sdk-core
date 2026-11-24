@@ -331,9 +331,9 @@ skip it (§8, §9; ADR-0040).
   documentation.
 - A record that a package shapes itself, from a file or a printed table, follows four rules: one
   value per record; a field under upstream's name holds upstream's text; a reading of that text
-  stands beside it under the one suffix of a reading, `<stem>_number`; and a code and its label
-  stand side by side, the label as `<stem>_label` beside the code `<stem>` (ADR-0060, decision 7;
-  ADR-0020, amendment 2026-11-24; https://github.com/xippios/sdk-usda-esr/issues/60, part 3).
+  stands beside it under a fixed suffix, `<stem>_number` for a number and `<stem>_label` for a
+  label; and a code and its label stand side by side (ADR-0060, decision 7; ADR-0020, amendment
+  2026-11-24).
   Where the file names no value that such a record needs, the commodity of a table say, the
   record reads it from the table's title or from another file of the same release and says which
   (ADR-0060, decision 7; ADR-0020, amendment 2026-11-24).
@@ -1372,10 +1372,9 @@ standalone from the package. A task named in `BULK_TASKS` gets no route:
   none of the five read verbs of §1, `list_`, `get_`, `search_`, `count_` or `download_`
   (ADR-0061, decision 3).
   The family check fails a model that a task's `Result[T]` reaches where a field or computed
-  field `<stem>_number` stands beside a field `<stem>` of the same model that holds no text, and
-  it passes a name whose part before the suffix names no field of its model, which is upstream's
-  own name and no reading, and a code's label `<stem>_label`, which is no reading
-  (ADR-0060, decision 9).
+  field `<stem>_number` or `<stem>_label` stands beside a field `<stem>` of the same model that
+  holds no text, and it passes a name whose part before the suffix names no field of its model,
+  which is upstream's own name and no reading (ADR-0060, decision 9).
 - A value set that a package writes by hand from upstream's document, an enumeration or a table
   of allowed values, is held by an offline test that reads it against the document under
   `docs/upstream/` (ADR-0061, decision 12).
