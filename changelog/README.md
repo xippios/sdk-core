@@ -34,7 +34,7 @@ assembles the fragments into its section of `CHANGELOG.md` and deletes them. Thi
 ```markdown
 - `response_from_fixture(load_fixture(path))` gives a recorded answer as an `httpx.Response`,
   its request attached, for calling a source's `classify` directly.
-  (ADR-0023, https://github.com/xippios/sdk-core/issues/<n>)
+  (ADR-0059, https://github.com/xippios/sdk-core/issues/<n>)
   - Hand-apply: `tests/test_client.py` (sdk-example) — the helper `recorded()` →
     `response_from_fixture` — a shared test helper.
 ```
