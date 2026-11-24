@@ -854,6 +854,17 @@ def test_the_review_checklist_judges_a_write_task_s_preview_by_its_record() -> N
         assert name in item, f"item 18 does not name {name!r}"
 
 
+def test_the_readme_calls_assert_write_tools_with_the_write_tool_set() -> None:
+    # The check takes the write tool set first and no source= (ADR-0063, decision 5).
+    text = (ROOT / "README.md").read_text(encoding="utf-8")
+    calls = [text[m.end() : m.end() + 80] for m in re.finditer(r"assert_write_tools\(", text)]
+    assert len(calls) == 2, f"the README calls assert_write_tools {len(calls)} times, not 2"
+    for call in calls:
+        start = " ".join(call.split())
+        assert start.startswith("mcp_write.build(), write_tasks,"), f"the README calls {start!r}"
+        assert "source=" not in call, f"the README passes source= in {start!r}"
+
+
 def test_the_preview_record_keeps_its_question() -> None:
     # Amended once, when preview_reads left (https://github.com/xippios/sdk-core/issues/475).
     records = json.loads(INDEX.read_text(encoding="utf-8"))["records"]

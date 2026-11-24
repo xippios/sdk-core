@@ -904,13 +904,15 @@ def test_the_census_needs_the_plugin(pytester: pytest.Pytester) -> None:
     assert outcome(result, STATIC) == "passed", "the reader needs no plugin"
 
 
-def test_the_census_skips_in_a_worker_of_pytest_xdist(pytester: pytest.Pytester) -> None:
-    # At the tree's root: under --import-mode=importlib, the outer run's tests/conftest.py
-    # stands for the tree's own, which has its module name.
+def test_the_census_judges_a_worker_of_pytest_xdist_as_any_run(pytester: pytest.Pytester) -> None:
+    # The skip in a worker left in 0.5.0: no source runs its tests under pytest-xdist
+    # (https://github.com/xippios/sdk-core/issues/475, parts 5 and 7). At the tree's root:
+    # under --import-mode=importlib, the outer run's tests/conftest.py stands for the tree's
+    # own, which has its module name.
     worker = "def pytest_configure(config):\n    config.workerinput = {}  # as pytest-xdist's\n"
     result = run_tree(pytester, {"conftest.py": worker, "tests/test_tasks.py": TASKS_REPLAYING})
-    assert outcome(result, CENSUS) == "skipped"
-    assert "pytest-xdist" in message(result, CENSUS)
+    assert outcome(result, CENSUS) == "failed"
+    assert "test_corn_2023: a replay answered another query" in message(result, CENSUS)
 
 
 def test_the_census_keeps_nothing_in_a_run_that_does_not_collect_it(
