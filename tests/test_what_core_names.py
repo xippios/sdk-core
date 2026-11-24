@@ -46,7 +46,11 @@ CITATION = re.compile(
 """A citation of a public record: an issue, a pull request, a record or a dated report."""
 
 HOST_ENDINGS = "com|org|net|gov|edu|int|io|eu|dev|ai|us|uk|ch|de|fr"
-"""The endings of a host that a publisher's documents and APIs stand under, matched in lower case,
+"""The endings of a host that a publisher's documents and APIs stand under: the six generic ones,
+a government's `gov` and an intergovernmental body's `int` among them, the three that services
+host their APIs and documents under, the European Union's, and five countries' that publishers
+of the family's kind use. A country's ending that reads as a word or a file's ending, as `it`,
+`in`, `is`, `to` and `py` do, would flag prose and code, and is left out. Matched in lower case,
 since a host is written so and a member's name or an encoded value is not."""
 
 
@@ -89,10 +93,13 @@ SHAPES = (
         re.compile(
             r"(?<![\w<>{}])[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*_(?:KEY|TOKEN|SECRET|PASSWORD)(?![\w<>{}])"
         ),
-        # The invented source's and core's own, and the words that say what a value is and
-        # whose it is not: a field's name, a placeholder, a hidden value, a refreshing or a
-        # page's token, a tenant of a test, and the second package.
-        re.compile(r"(?:EXAMPLE|XIPPIOS|OTHER|API|PLACEHOLDER|HIDDEN|REFRESH|NEXT|TENANT)_\w+"),
+        # The invented source's and core's own by their prefix, and nine names whole that core
+        # and its tests use, none a source's: a field's name, the placeholder, a hidden value, a
+        # refreshing and a page's token, the second package's, and two tenants of a test.
+        re.compile(
+            r"(?:EXAMPLE|XIPPIOS)_\w+|API_KEY|PLACEHOLDER_KEY|HIDDEN_KEY|REFRESH_TOKEN|NEXT_TOKEN"
+            r"|OTHER_TOKEN|OTHER_ACME_API_KEY|TENANT_A_KEY|TENANT_B_KEY"
+        ),
     ),
     Shape(
         "host",

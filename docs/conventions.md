@@ -10,7 +10,8 @@ sentence that cites its record, with at most one case for each of its parts, the
 source `example`'s, while core's README says how core's names are called and the records tell
 each rule's history (ADR-0068, decisions 1 to 3).
 What binds in core, this file among it, names no source but `example` outside the citation
-of a record or of a public decision, and a step of the organization's conventions check that finds each source's names
+of a public record of the organization, which is an issue, a pull request, a record or a
+report, and a step of the organization's conventions check that finds each source's names
 from its template answers is planned with the organization's package after the sources' first
 wave, so no release of core waits for it (ADR-0065, decisions 5 and 6;
 https://github.com/xippios/.github/issues/169).

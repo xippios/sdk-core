@@ -70,8 +70,9 @@ source stands on a frozen template tag or before a release from which a rule bin
 
 ## Consequences
 
-- The conventions name no source but `example`, outside the citation of a record, and a reader
-  finds a real upstream's case in the record that a rule cites. They lose 145 lines of 1,695, and
+- The conventions name no source but `example`, outside the citation of a public record of the
+  organization, which is an issue, a pull request, a record or a report, and a reader finds a
+  real upstream's case in the record that a rule cites. They lose 145 lines of 1,695, and
   the README holds what they gave up of the client's hooks and its download.
 - An adoption's review reads one list, §15's, and the definition of done and the review
   checklist no longer lag it.
