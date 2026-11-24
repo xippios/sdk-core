@@ -125,6 +125,20 @@ def test_the_tool_functions_and_their_names_are_one_by_both_paths() -> None:
     assert core.tool_name is mcp.tool_name is tool_name
 
 
+def test_a_tool_name_needs_no_mcp_extra() -> None:
+    # https://github.com/xippios/sdk-core/issues/336: a source's refusal names a tool from the
+    # base package, which imports nothing of the mcp SDK or of core's MCP adapter.
+    code = (
+        "import sys; from xippios.core import tool_functions, tool_name; "
+        "print(tool_name('example', 'get_series')); "
+        "print([m for m in sys.modules if m.split('.')[0] == 'mcp' or m == 'xippios.core.mcp'])"
+    )
+    out = subprocess.run(
+        [sys.executable, "-c", code], check=True, capture_output=True, text=True
+    ).stdout
+    assert out.splitlines() == ["example_get_series", "[]"]
+
+
 def test_optional_adapters_are_not_imported_eagerly() -> None:
     code = (
         "import sys; from xippios.core import ResultCap; "
