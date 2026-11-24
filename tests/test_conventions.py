@@ -844,7 +844,17 @@ def test_each_rule_of_a_publisher_s_shared_package_is_one_sentence_of_section_12
 AMENDED_BY_PUBLISHER = {
     "ADR-0032": ("decision 5 leaves core", "`xippios.usda.fas`", "one key variable"),
     "ADR-0021": ("its publisher's shared package", "the task layer", "decision 2 binds nothing"),
-    "ADR-0025": ("`xippios.core.google`", "taken back", "a shared package of their publisher"),
+    "ADR-0025": (
+        "`xippios.core.google`",
+        "taken back",
+        "a shared package of their publisher",
+        # https://github.com/xippios/sdk-core/issues/524: the record's last amendment carries
+        # what ADR-0011's amendment changed of point (c), the resend after a status of renew_on.
+        "point (c)",
+        "holds for a read alone",
+        "a write refused with that status no second time",
+        "ADR-0011's amendment of 2026-11-24 (https://github.com/xippios/sdk-core/issues/480)",
+    ),
 }
 
 
@@ -867,6 +877,19 @@ def test_the_record_that_core_names_no_publisher_keeps_its_question() -> None:
     records = {r["id"]: r for r in json.loads(INDEX.read_text(encoding="utf-8"))["records"]}
     found = records[PUBLISHER_RECORD]
     assert (found["title"], found["decided_by"]) == ("Core names no publisher", PUBLISHER_QUESTION)
+
+
+def test_the_record_holds_the_organization_s_check_to_no_date_of_core_s_tag() -> None:
+    # The maintainer placed the organization's check after the sources' first wave
+    # (https://github.com/xippios/.github/issues/170), so core's own test holds the line alone.
+    checks = decisions(PUBLISHER_RECORD)[6]
+    for name in (
+        "https://github.com/xippios/.github/issues/169",
+        "https://github.com/xippios/.github/issues/170",
+        "after the sources' first wave",
+        "core's own test is the one check",
+    ):
+        assert name in checks, f"{PUBLISHER_RECORD}, decision 6, does not name {name!r}"
 
 
 # §8: what a write tool's preview shows, and its check (sdk-core#182, decided by the human in
