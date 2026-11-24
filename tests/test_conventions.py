@@ -684,3 +684,15 @@ def test_adr_0023_is_superseded_by_the_record_of_core_s_scope() -> None:
     scope = records[SCOPE_RECORD]
     assert (scope["decided_by"], scope["supersedes"]) == (SCOPE_QUESTION, ["ADR-0023"])
     assert [entry["by"] for entry in records["ADR-0052"]["amended"]][-1] == SCOPE_QUESTION
+
+
+def test_adr_0052_s_amendment_ends_every_sentence_on_core_s_reader() -> None:
+    # Its decision 1, decision 6's example and its third consequence named core's reader of a
+    # naive time, which left with ADR-0059, so its amendment of 2026-11-24 ends each of them.
+    record = ROOT / "docs" / "adr" / "0052-one-filter-for-a-vintage-taken-back.md"
+    text = flat(record.read_text(encoding="utf-8"))
+    amendment = text.split(f"Amended 2026-11-24 by {SCOPE_QUESTION}:", 1)
+    assert len(amendment) == 2, "ADR-0052 has no amendment of 2026-11-24"
+    for name in ("decision 1", "decision 6", "the third consequence", "no longer"):
+        assert name in amendment[1], f"ADR-0052's amendment does not name {name!r}"
+    assert "the other consequences stand" not in amendment[1], "the third does not stand"
