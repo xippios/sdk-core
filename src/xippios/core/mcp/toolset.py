@@ -93,7 +93,10 @@ class ToolSet:
             ``None`` for none.
         apply_options: Applies the parsed options and returns nothing, ``main``'s hook;
             ``None`` for none. It takes no server, since no hook uses one
-            (https://github.com/xippios/sdk-core/issues/485, part 1).
+            (https://github.com/xippios/sdk-core/issues/485, part 1). A ``XippiosError``
+            that it raises, an option value the source refuses or a missing variable,
+            ``main`` turns into the message on stderr and exit status 2, and a host that
+            applies it without ``main`` catches it itself and stops the same way.
         read_only: ``False`` for a write tool set, whose every task takes
             ``confirm: bool = False`` and whose server is held to loopback.
         loopback_only: ``True`` for a read tool set whose server is held to loopback as
@@ -232,7 +235,10 @@ class ToolSet:
         parses an empty command line; core's alone without ``add_options``. A host that
         serves the tool set without its entry point applies the hooks with them,
         ``tool_set.apply_options(tool_set.option_defaults())``, so its server holds what
-        the entry point holds when it runs without options.
+        the entry point holds when it runs without options. They hold no tenant's option,
+        the ``--<param>`` that ``main`` adds where it is given ``tenants``, since a host
+        binds no tenant (ADR-0063, decision 4): a hook that read it would find no such
+        attribute under a host.
 
         Raises:
             ValueError: An option of ``add_options`` takes no value from an empty command

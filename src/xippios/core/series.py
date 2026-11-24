@@ -52,8 +52,9 @@ class Ceiling:
     source's tool set carries, so a host that applies a tool set's hooks with
     ``option_defaults()`` serves ``mcp`` as the entry point does. The ceiling in force,
     ``value``, is the process's, as a module of the source holds the ceiling:
-    ``apply_options`` sets it for every call in the process, from Python and over HTTP too,
-    one MCP server per process::
+    ``apply_options`` sets it for every call in the process, from Python and over HTTP too.
+    So every endpoint that a host serves from one process holds the same ceiling, and no
+    endpoint sets one of its own::
 
         SERIES = Ceiling(
             60,
