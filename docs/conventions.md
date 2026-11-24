@@ -337,7 +337,7 @@ skip it (§8, §9; ADR-0040).
   endpoint wrappers' read models stay faithful and carry them. Fixtures never carry their
   values: the recording names them in `Scrub(secrets=...)` or rewrites them by key in
   its own rewrite step, which the recorder runs on the `Fixture` before the write
-  (ADR-0017, ADR-0048).
+  (ADR-0017, ADR-0066).
 - **No cross-source normalization.** A USDA `marketing_year` stays a USDA concept.
   Mapping between sources is business logic and lives outside this family.
 - A label names a code in upstream's own words, from upstream's own list of the same source, and
@@ -1134,9 +1134,9 @@ standalone from the package. A task named in `BULK_TASKS` gets no route:
   download's metadata or a helper's answer, lives under the task's name; file samples
   keep `tests/fixtures/files/<file_kind>/` as before (ADR-0020). The exchanges of one
   recording of a task are numbered in the order the task made them, the first as
-  `<case>.json` and the k-th, from the second on, as `<case>_<k>.json`, and a recording
-  that would leave a numbered file of its case beyond its last exchange writes nothing
-  (sdk-google-mail's `search_messages/ok_2.json`; ADR-0057, decision 6). Three further cases
+  `<case>.json` and the k-th, from the second on, as `<case>_<k>.json`, which the source's
+  own capture of a task writes (sdk-google-mail's `search_messages/ok_2.json`; ADR-0066,
+  decision 10). Three further cases
   name their directory as follows (ADR-0028, decision 3). A wrapper
   whose every exchange is recorded through a task has no directory of its own
   (sdk-google-mail's `messages_get`, recorded through `get_message` and
@@ -1225,21 +1225,18 @@ standalone from the package. A task named in `BULK_TASKS` gets no route:
   rule bound moves with its directory (§2) and stays until a PR re-records it. A download
   fixture holds a small real answer (a short date range, one commodity), the sample of
   the file that its parser tests read, marked `sample: true` as the next bullet says, or
-  the first N rows or bytes of the file: the recorder truncates on request
+  the first N elements of a JSON array: the recorder truncates on request
   (`max_bytes=`), marks the fixture `truncated: true` and keeps `original_bytes` and the
-  sha256 of the full file.
+  sha256 of the full answer.
   An XML, ZIP, gzip, XLS or XLSX fixture is a small real sample (a short query, one
-  member of the archive, a few rows), never a byte-truncated file, since a cut-off binary
-  or compressed file cannot be parsed and a cut-off XML document is not well-formed; byte
-  truncation (`max_bytes=`) applies to text bodies, and the recorder refuses it for those
-  formats and for a body that is not UTF-8 text; a JSON array is truncated by elements:
-  the recorder cuts its original text after the first N elements that fit, or keeps the
-  last N on request (`keep="last"`, for a list ordered oldest first), never
-  re-serialising them, marks `truncated: true` and records the full count
-  (`original_count`) and the sha256; a JSON object is cut so at the array that a
-  top-level key names (`array_key=`), the rest of the object kept as upstream wrote it,
-  and an object with no key named is refused, and the source records a small real
-  answer (ADR-0040, decision 5). `max_bytes` bounds the body,
+  member of the archive, a few rows), never a truncated file, since a cut-off binary
+  or compressed file cannot be parsed and a cut-off XML document is not well-formed. The
+  recorder truncates a JSON array alone, by its elements: it cuts its original text after
+  the first N elements that fit, or keeps the last N on request (`keep="last"`, for a list
+  ordered oldest first), never re-serialising them, marks `truncated: true` and records
+  the full count (`original_count`) and the sha256, and it refuses a JSON object, a text
+  that is not JSON and those formats, for which the source records a small real answer or
+  sample (ADR-0066, decision 12). `max_bytes` bounds the body,
   not the fixture file, which escapes the body as a JSON string.
   A test on a sample or a truncated fixture asserts the parser's shape, never a size.
 - A file-distributed source keeps a sample of each file kind under
@@ -1273,38 +1270,41 @@ standalone from the package. A task named in `BULK_TASKS` gets no route:
 - The recorder sends one request through the source's client: never retried, whatever the
   client's `RetryPolicy` says, and never answered from the cache, so a recording spends one
   request and needs no client of its own (ADR-0037, decision 6), and a source that needs the
-  answer itself sends it with `send_once`, which writes nothing (ADR-0048, decision 3). The
+  answer itself sends it with `send_once`, which writes nothing (ADR-0066, decision 3). The
   recorder keeps a final answer whatever its status, a 4xx or a 5xx included, and refuses an
   answer of a 1xx or a 3xx status, which is no final answer of its operation, on every path,
   in `send_once`, `record` and `fixture_from_response`, before anything is written
-  (ADR-0048, decision 4). It reads at most `max_read_bytes` of the body,
+  (ADR-0066, decision 4). It reads at most `max_read_bytes` of the body,
   32 MiB by default: past it the reading stops, and the recording is refused before
-  anything is written (ADR-0040, decision 5). `record_task` records every exchange that a
-  task makes through any client, in order, each sent once, none answered from the cache and
-  each through the frame of the next bullet, and writes all of them or none, but it records
-  no token request inside an auth flow, which keeps a fixture of its own, and refuses a task
-  that downloads, whose body goes to a file unread (ADR-0057). `record_task` reads every
-  answer of a task whole, as the task's client reads it, so `max_read_bytes` bounds none of
-  them (ADR-0057).
+  anything is written (ADR-0040, decision 5). `record` and `send_once` are the sync functions
+  under their plain names, and a script or a test on an event loop awaits `record.async_fn`
+  or `send_once.async_fn` with the same arguments (ADR-0066, decision 8). A task of several
+  requests is recorded by the source's own capture, a client built for one attempt whose
+  `observe` keeps each answer, each exchange built with `fixture_from_response` and all of
+  them written with `write_fixture` once every one passed (ADR-0066, decision 9).
 - The recorder scrubs in memory and writes once, so nothing unscrubbed touches disk, and
   names the values that must never be written (`xippios.core.testing.Scrub(secrets=...)`),
   or reads those known only from the answer, such as a login's or a refresh's tokens
-  (`Scrub(response_secrets=...)`, ADR-0042, decision 3), each replaced as
-  given. The scrubbed exchange is verified before the write: a named or read value still
-  present as given in the URL, a header value or a text body refuses it, the error
-  naming where, never the value. The verify is a backstop, with the fixture grep of
-  the definition of done. What the source replaces beyond those values, a field by key,
-  a form its values take that differs from them (percent-encoded, behind a JSON escape)
-  or a tenant's host, it replaces in its own rewrite step, which the recorder runs:
+  (`Scrub(response_secrets=...)`, ADR-0042, decision 3). The scrub replaces and verifies
+  each such value in its every form, each character as given, percent-encoded in either hex
+  case, a space also as `+`, or behind a JSON escape, `\u00e9` or `\/`, in any mix and
+  in the letter case given, so the source names a value once and none of its encoded forms
+  (ADR-0066, decision 11). The scrubbed exchange is verified before the write: a named or
+  read value still present in any of those forms in the URL, a header value or a text
+  body refuses it, the error naming where, never the value. The verify is a backstop, with
+  the fixture grep of the definition of done. What the source replaces beyond those
+  values, a field by key or a tenant's host, it replaces in its own rewrite step, which
+  the recorder runs:
   passed as `rewrite=` to `record` or `fixture_from_response`, the step takes the
   scrubbed `Fixture`, returns it rewritten with the values it replaced, and raises
   `ValueError` to refuse. The order is the scrub, the step, the check, the write: a value
   the step returned still present as given in the URL, a header value, a body or a
   string decoded from a JSON body, `REDACTED` masked first, refuses the write, the error
-  naming where, never the value; an encoded form is the step's to return or to look for
-  (ADR-0048, decisions 1 and 2). A recorder writes `REDACTED` in place of the value of a field
-  of a request that it must not keep and drops none of them, so that the census of built
-  answers compares a replay with its recording key by key (ADR-0048, decision 7). A source
+  naming where, never the value; an encoded form of a value the step replaced is the step's
+  to return or to look for (ADR-0066, decisions 1 and 2). A recorder writes `REDACTED` in
+  place of the value of a field of a request that it must not keep and drops none of them,
+  so that the census of built answers compares a replay with its recording key by key
+  (ADR-0066, decision 7). A source
   that writes the fixture itself writes it with `write_fixture`, laid out as the recorder
   writes it.
   A body that is not UTF-8 text cannot be scrubbed and is refused unless the recording

@@ -1810,20 +1810,21 @@ TENANTS = Tenants(
   so a 429 or a 5xx is recorded as it came and spends no second request. An answer of a
   1xx or a 3xx status is no final answer of its operation and is refused, nothing written,
   the message naming the status and what to record instead, the URL a redirect's
-  `Location` names (ADR-0048, decision 4). It reads at
+  `Location` names (ADR-0066, decision 4). It reads at
   most `max_read_bytes` of the body (32 MiB by default, `None` for no bound): past it,
   the reading stops and the recording raises, naming the method, the path and the bound,
   and nothing is written. `max_bytes=80_000`
-  cuts a large answer's body: a JSON array after its first whole elements, in upstream's
-  own text, a text after its first bytes, never inside a secret, and the fixture is
-  marked `truncated` with the whole body's size and sha256 (and an array's length).
-  `array_key="data"` cuts the array of that top-level key, `{"data": [...]}`, the rest
-  of the object kept as upstream wrote it, and `keep="last"` keeps an array's last
-  elements, for a list ordered oldest first. A JSON object without `array_key`, XML,
-  ZIP, XLSX, gzip, XLS or a body that is not UTF-8 text is refused: record a small real
-  answer or sample instead. It bounds the body, not the file, which escapes the body as
-  a JSON string, text outside ASCII up to three times as long: 80,000 bytes keep a file
-  under the 256 KiB cap.
+  cuts a large answer that is a JSON array after its first whole elements, in upstream's
+  own text, and the fixture is marked `truncated` with the whole body's size, sha256 and
+  the array's length; `keep="last"` keeps its last elements, for a list ordered oldest
+  first. A JSON object, a text that is not JSON, XML, ZIP, XLSX, gzip, XLS or a body that
+  is not UTF-8 text is refused: record a small real answer or sample instead (ADR-0066,
+  decision 12). It bounds the body, not the file, which escapes the body as a JSON string,
+  text outside ASCII up to three times as long: 80,000 bytes keep a file under the
+  256 KiB cap.
+- `record` and `send_once` are sync functions, as a task's sync form is: a script or a
+  test on an event loop awaits `record.async_fn(...)` or `send_once.async_fn(...)` with the
+  same arguments (ADR-0066, decision 8).
 
 `mcp_call(server, "example_get_series", {...})` calls a tool through an in-process MCP
 client, so the server's middleware, the argument check included, runs as for a real client;
@@ -1834,9 +1835,9 @@ or a task that crashed fails both.
 A recording names the values that must never be written:
 
 ```python
-from xippios.core.testing import Scrub, fixture_path, record_sync
+from xippios.core.testing import Scrub, fixture_path, record
 
-record_sync(
+record(
     client,
     "/account/list.json",
     fixture_path(FIXTURES, "account_list", "one"),
@@ -1853,7 +1854,7 @@ def tokens(response: httpx.Response) -> list[str]:
     return [result[name] for name in ("AccessToken", "IdToken", "RefreshToken") if name in result]
 
 
-record_sync(
+record(
     client,
     "/auth/login",
     fixture_path(FIXTURES, "auth_login", "login"),
@@ -1864,21 +1865,27 @@ record_sync(
 )
 ```
 
-The fixture is scrubbed in memory, verified and written once: if a named value or one
-`response_secrets` read is still in the URL, a header value or a text body, nothing is
-written and the error says where, never what. A body that is not UTF-8 text cannot be
-scrubbed and is refused unless `Scrub(allow_binary=True)` stores it base64, flagged.
+Each value is replaced in its every form, not as given alone: each character as given,
+percent-encoded in either hex case, a space also as `+`, or behind a JSON escape,
+`\u00e9` or `\/`, in any mix and in the letter case given. A tenant named `acme corp/eu`
+reads `REDACTED` in a query that sent `acme+corp%2Feu` and in a JSON body that echoes
+`acme corp\/eu`, so a recording names the value once (ADR-0066, decision 11).
 
-What a source replaces beyond those values, a field by key, a form a value takes that
-differs from it (percent-encoded, behind a JSON escape) or a tenant's host, its own
+The fixture is scrubbed in memory, verified and written once: if a named value or one
+`response_secrets` read is still in the URL, a header value or a text body, in any of its
+forms, nothing is written and the error says where, never what. A body that is not UTF-8
+text cannot be scrubbed and is refused unless `Scrub(allow_binary=True)` stores it base64,
+flagged.
+
+What a source replaces beyond those values, a field by key or a tenant's host, its own
 rewrite step replaces, and the recorder runs it: a function of the scrubbed `Fixture` that
 returns it rewritten with the values it replaced, and raises `ValueError` to refuse
-(ADR-0048):
+(ADR-0066):
 
 ```python
 import json
 
-from xippios.core.testing import Fixture, Scrub, fixture_path, record_sync
+from xippios.core.testing import Fixture, Scrub, fixture_path, record
 
 
 def rewrite(fixture: Fixture) -> tuple[Fixture, list[str]]:
@@ -1893,7 +1900,7 @@ def rewrite(fixture: Fixture) -> tuple[Fixture, list[str]]:
     return fixture.model_copy(update={"response": response}), replaced
 
 
-record_sync(
+record(
     client,
     "/users/by",
     fixture_path(FIXTURES, "get_users_by_usernames", "two"),
@@ -1908,8 +1915,8 @@ URL, every header value, both bodies and every key and string of a body that is 
 each value the step returned, as given, `REDACTED` masked first, and for the scrub's values
 again; a value left anywhere refuses the write, the error naming the place (`response body`,
 `request URL`, `response header 'x-echo'`), never the value. An empty value is passed over.
-An encoded form is the step's to return, or to look for itself: core searches each value as
-given. `fixture_from_response(response, scrub=..., rewrite=...)` runs the same refusal,
+An encoded form of a value the step replaced is the step's to return, or to look for
+itself: core searches each such value as given. `fixture_from_response(response, scrub=..., rewrite=...)` runs the same refusal,
 scrub, step and check on one exchange and writes nothing, so a source that records several
 exchanges checks them all before it writes one with `write_fixture(fixture, path)`, laid out
 as `record` writes it; `fixture_text(fixture)` gives that text.
@@ -1917,64 +1924,29 @@ as `record` writes it; `fixture_text(fixture)` gives that text.
 The step's type is `Rewrite`, which `xippios.core.testing` exports. A field of a request that
 the recorder must not keep, such as a whole message sent in a write's body, the step writes as
 `REDACTED` in place of its value and never drops, so that the census of built answers compares
-a replay with its recording key by key (ADR-0048, decision 7).
+a replay with its recording key by key (ADR-0066, decision 7).
 
 A source that needs the answer itself, the bytes it cuts a sample from or a write's answer
-it reports, sends the recording's one request with `send_once` (or `send_once_sync`): sent
+it reports, sends the recording's one request with `send_once`: sent
 as `record` sends it, once, never from the cache, through the source's own client, and
 returned as it came, a 4xx or a 5xx included, nothing written. A 1xx or a 3xx is refused
-there too. No recorder builds a client for one attempt:
+there too. No recorder of one exchange builds a client for one attempt:
 
 ```python
-from xippios.core.testing import Scrub, fixture_from_response, send_once_sync, write_fixture
+from xippios.core.testing import Scrub, fixture_from_response, send_once, write_fixture
 
-response = send_once_sync(client, "/order/create.json", method="POST", data=form)
+response = send_once(client, "/thing/create.json", method="POST", data=form)
 print(response.json().get("insertId"))  # the record to delete after the recording
 write_fixture(fixture_from_response(response, scrub=Scrub(secrets=[key])), path)
 ```
 
-A task that makes several calls, a search that lists messages and then reads each one, is
-recorded through the task itself with `record_task` (or `record_task_sync`). The task runs
-live as the MCP adapter runs it, a sync facade through its async twin, and every client it
-reaches, from a registry, a module or one it builds, hands over each answer it read, in the
-order the answers arrived, each request sent once and none answered from the cache, so the
-recorder needs no client of its own. Each exchange passes the frame above, the refusal of a
-1xx or a 3xx, the scrub, the step and the check, and only once every one passed are they
-written, under the task's name and numbered from the second (ADR-0057):
-
-```python
-from pathlib import Path
-
-from xippios.core.testing import Scrub, record_task_sync
-from xippios.example import tasks
-
-recorded = record_task_sync(
-    tasks.search_messages,
-    "demo",
-    q="newer_than:1y",
-    max_results=2,
-    fixtures=Path("tests/fixtures"),
-    case="ok",
-    scrub=Scrub(secrets=[key]),
-    rewrite=rewrite,
-)  # search_messages/ok.json, then ok_2.json and ok_3.json, a fixture each, in order
-```
-
-The task's own arguments go beside the helper's, and a task that takes `fixtures`, `case`,
-`scrub` or `rewrite` by keyword is refused before it runs, since those names are the
-helper's. A refusal of any exchange names its number, its file and the place, never the
-value, and writes nothing, nor does a task that raises; every request of the task was sent
-by then, so a write among them may have been applied. A task that raised on a 1xx or a 3xx
-answer, decoding a redirect's empty body say, or after one, is refused for that answer, its
-number and status named, the task's error as the cause. Answers are read whole, as the
-task's client reads them, so `max_read_bytes` bounds none of them. Two kinds of exchange
-are not recorded: a token request inside an auth flow, a login's or a refresh's, which keeps a
-fixture of its own (conventions §10), and a download, refused before it is sent, since its
-body goes to a file unread, so a task that downloads is recorded exchange by exchange with
-`record`. Requests that a task sends at once are numbered in the order their answers
-arrived. Where a numbered file of the case stands beyond the last exchange, as after a
-recording that made more, nothing is written and the error names the file, for the pull
-request to delete. `replay_fixture("search_messages", "ok_2")` replays each on its path.
+A task that makes several calls, a search that lists series and then reads each one, is
+recorded by its source's own capture, which core does not hold (ADR-0066, decision 9): the
+task's client built for one attempt, its `observe` keeping each answer, each exchange
+built with `fixture_from_response`, its scrub and its step, and every one written with
+`write_fixture` once all passed. The fixtures stand under the task's name, numbered from
+the second, `search_series/ok.json`, then `ok_2.json` and `ok_3.json`, and
+`replay_fixture("search_series", "ok_2")` replays each on its path (ADR-0066, decision 10).
 
 A download's replay fixture may carry as its body the sample its parser tests read, so
 the download replays that file. It is marked `sample`, with the whole file's size and
@@ -2023,7 +1995,7 @@ fragment until the release assembles it.
 | `xippios.core.mcp` | tool registration with the argument check and the write server's `confirm` rule, `tool_functions`, result caps with the `offset` of a paged cap, error text, the one entry `main(build)` with option hooks, a tenant's option and the loopback rule for write and `loopback_only` servers, quiet request log, `ToolSet`, the package contract's tool set, built from a tasks module by `ToolSet.from_tasks`, built by `build_server` and registered by `register_tasks` | alpha |
 | `xippios.core.http` | router factory, problem details | alpha |
 | `xippios.core.refresh` | the frames of a source's scripts: the snapshot script's (`Snapshot`, `run`) and the reference refresh script's (`Listed`, `Enumeration`) | alpha |
-| `xippios.core.testing` | live gate with the count of the requests that a live run sent, offline run, record (sent once, read up to `max_read_bytes`, with `max_bytes=`, `array_key=`, `keep=` and a source's `rewrite=` step, typed `Rewrite`), `send_once`, `record_task`, the fixture writer and the `sample` mark, replay with `sent_urls`, `sent_query` and `sent_bodies`, scrub of named secrets and of values read from the answer with a plain verify, `mcp_call`, `assert_write_tools` with what a preview reads, `keep_reserved_tenants`, `built_answers`, the check of a built answer's mark, `live` with `assert_list_current`, the nightly comparison of a packaged list, family check | alpha |
+| `xippios.core.testing` | live gate with the count of the requests that a live run sent, offline run, record (sync, sent once, read up to `max_read_bytes`, with the cut of a JSON array by `max_bytes=` and `keep=` and a source's `rewrite=` step, typed `Rewrite`), `send_once`, the fixture writer and the `sample` mark, replay with `sent_urls`, `sent_query` and `sent_bodies`, scrub of named secrets and of values read from the answer in their every encoded form, with its verify, `mcp_call`, `assert_write_tools` with what a preview reads, `keep_reserved_tenants`, `built_answers`, the check of a built answer's mark, `live` with `assert_list_current`, the nightly comparison of a packaged list, family check | alpha |
 
 Alpha: while core is 0.x, a new minor version may change the public surface, with no
 backward compatibility across minors. A patch release keeps a source's package and its

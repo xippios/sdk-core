@@ -1,7 +1,7 @@
 """The one credential rule: what is redacted wherever a request is kept or shown.
 
 The result envelope (``ResultMeta.request``, ADR-0030), the fixture recorder's scrub and
-the replay helpers (``sent_urls``, ``sent_query``, ``recorded_query``, ``mount_fixture``)
+the replay helpers (``sent_urls``, ``sent_query``, ``recorded_query``, ``replay``)
 all ask this module, so a name is a credential in all of them or in none.
 
 A parameter name is a credential when one of these words stands in it as a whole word,

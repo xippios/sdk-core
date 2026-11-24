@@ -25,7 +25,7 @@ check finds the package, ``tests/fixtures/`` left out, with ``ast`` and its comm
 - a body written in the test (a dict, list or tuple display, a string, an f-string or bytes)
   given as a positional argument to ``classify``, to a model's ``model_validate`` or
   ``model_validate_json``, or to a scrub (``scrub`` or ``scrub_<name>``);
-- a recording served at another URL: ``replay_fixture``, ``replay`` or ``mount_fixture``
+- a recording served at another URL: ``replay_fixture`` or ``replay``
   given ``url=``;
 - a call of a helper, a class or a fixture of the same module that holds a place no mark
   covers, a test that takes such a fixture included, a test class's method as a top-level
@@ -50,7 +50,7 @@ helper. A module's docstring covers nothing, so that a test added to a module st
 kind.
 
 **The census.** In a run that collects the census test, the plugin keeps what
-``mount_fixture`` mounts in each test (behind ``replay_fixture`` and ``replay``), and before
+``replay`` mounts in each test (behind ``replay_fixture`` too), and before
 the test's fixtures are torn down it compares each request that a route answered with the
 recorded one: its host, its path, its query and its body, through the redaction that
 ``recorded_query`` and ``sent_query`` apply, so a credential's value reads ``REDACTED`` on
@@ -78,7 +78,7 @@ the tests that ran: a partial run judges only those.
   ``Model.model_validate(obj={...})``, a body handed to a source's own function, and a
   recording changed by assignment, a loaded recording's header replaced and the response then
   handed on by its name;
-- in the census: an answer that a test serves otherwise than through ``mount_fixture``, a
+- in the census: an answer that a test serves otherwise than through ``replay``, a
   request sent while the test's fixtures are torn down, and a streamed request body, which
   it does not read.
 """
@@ -114,7 +114,7 @@ _SECTION = re.compile(r"§10\b")
 _INPUT = re.compile(r"\binputs?\s+of\s+the\s+test\b", re.IGNORECASE)
 _SCRUB = re.compile(r"^scrub(?:_\w+)?$")
 _READS = ("classify", "model_validate", "model_validate_json")
-_REPLAYS = ("replay_fixture", "replay", "mount_fixture")
+_REPLAYS = ("replay_fixture", "replay")
 _FUNCTIONS = (ast.FunctionDef, ast.AsyncFunctionDef)
 _DEFINITIONS = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
 _SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
@@ -499,7 +499,7 @@ class _Census:
     """The plugin's census of the tests whose replay answered another request (ADR-0064).
 
     It listens only in a run that collects the census test. Each test's mounts are kept from
-    its setup, by ``mount_fixture``, and judged before its fixtures are torn down, while the
+    its setup, by ``replay``, and judged before its fixtures are torn down, while the
     routes still hold their calls. respx gives back the route it holds for an equal pattern,
     so a route may serve several recordings in turn: each call is judged by the recording
     mounted last before it.
