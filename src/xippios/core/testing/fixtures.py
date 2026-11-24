@@ -26,7 +26,7 @@ import base64
 import hashlib
 import json
 import re
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal, Self
@@ -38,7 +38,7 @@ from xippios.core.client.cache import strip_wire_headers
 from xippios.core.errors import request_description
 from xippios.core.models import utcnow
 from xippios.core.redaction import REDACTED, scrub_url
-from xippios.core.testing.scrub import Scrub, _decoded_strings, _Scrubber
+from xippios.core.testing.scrub import Scrub, _Scrubber
 
 __all__ = [
     "REQUEST_ID_HEADERS",
@@ -231,8 +231,9 @@ def fixture_from_response(
     body; ``None`` is ``Scrub()``: nothing else replaced, a binary body refused. With
     secret values, the result is verified before it is returned: a secret value still
     present in the URL, a header value or a text body, as given, percent-encoded, behind a
-    JSON escape or both, or in a key or a string of a body that is JSON, decoded and then
-    percent-decoded, refuses the exchange (conventions §10; ADR-0066, decision 11).
+    JSON escape or both, or in any text that one of them decodes to, JSON-unescaped and
+    percent-decoded until it no longer changes, refuses the exchange, and so does a text
+    that still decodes after eight rounds (conventions §10; ADR-0066, decision 11).
 
     ``rewrite`` is the source's own step, for what it replaces beyond the secret values, a
     tenant's host or a field by key: it runs on the scrubbed ``Fixture`` and returns it
@@ -339,8 +340,7 @@ def _verify(scrubber: _Scrubber, fixture: Fixture) -> None:
     """The scrub's verify on ``fixture``: no secret value left in it in any of its forms.
 
     As given, percent-encoded, behind a JSON escape or both, the forms the scrub replaces,
-    and in a body that is JSON a nesting of the two that its decoded strings show
-    (ADR-0066, decision 11).
+    in every place and in every text that a place decodes to (ADR-0066, decision 11).
     """
     __tracebackhide__ = True  # pytest would print the arguments: the refused text
     kept = fixture.request.content_type
@@ -388,6 +388,36 @@ def _run(rewrite: Rewrite, fixture: Fixture) -> tuple[Fixture, tuple[str, ...]]:
     if any(not isinstance(value, str) for value in values):
         raise TypeError("rewrite returns text values; one it returned is no string")
     return rewritten, tuple(value for value in values if value)
+
+
+class _Object(list[tuple[str, Any]]):
+    """A decoded JSON object as its pairs, each kept where the object repeats a key."""
+
+
+def _strings(node: object) -> Iterator[str]:
+    """Every key and string of a decoded JSON value, outermost first."""
+    if isinstance(node, str):
+        yield node
+    elif isinstance(node, _Object):
+        for key, value in node:
+            yield key
+            yield from _strings(value)
+    elif isinstance(node, list):
+        for item in node:
+            yield from _strings(item)
+
+
+def _decoded_strings(body: str) -> list[str]:
+    """Every key and string of ``body`` decoded as JSON, a byte order mark allowed.
+
+    Each pair of an object is read, the first value of a key that it repeats too, which
+    ``json.loads`` alone would drop. ``[]`` for a body that is not JSON.
+    """
+    try:
+        decoded = json.loads(body.removeprefix("\ufeff"), object_pairs_hook=_Object)
+    except ValueError:
+        return []
+    return list(_strings(decoded))
 
 
 def _check_survivors(fixture: Fixture, values: Sequence[str]) -> None:
