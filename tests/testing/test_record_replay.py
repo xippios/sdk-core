@@ -200,6 +200,29 @@ def test_a_transport_failure_while_recording_is_sent_once_and_writes_nothing(
     assert not (tmp_path / "x.json").exists()
 
 
+@pytest.mark.parametrize(
+    ("failure", "said"),
+    [
+        (httpx.ConnectError("refused"), "ConnectError: refused. Nothing was sent."),
+        (
+            httpx.ReadTimeout("slow"),
+            "ReadTimeout: slow. The request was sent once and its outcome is unknown.",
+        ),
+    ],
+    ids=["connect", "read-timeout"],
+)
+def test_a_recorded_write_that_fails_in_transit_says_what_was_sent(
+    respx_mock: respx.MockRouter, tmp_path: Path, failure: httpx.RequestError, said: str
+) -> None:
+    # The recorder's request is the client's: a write's error says what became of it.
+    route = respx_mock.post(f"{BASE}/v1/x").mock(side_effect=failure)
+    with pytest.raises(TransportError) as info:
+        record_sync(_retrying([]), "/v1/x", tmp_path / "x.json", method="POST", json={"a": 1})
+    assert str(info.value) == said
+    assert route.call_count == 1
+    assert not (tmp_path / "x.json").exists()
+
+
 @pytest.mark.anyio
 async def test_a_recording_neither_reads_nor_stores_the_cache(
     respx_mock: respx.MockRouter, tmp_path: Path
