@@ -5,8 +5,10 @@ ADR-0035 decides each guarantee and lists its edges; ``pytest_plugins =
 """
 
 import asyncio
+import importlib
 import logging
 import os
+import re
 import threading
 from collections import Counter
 from collections.abc import Awaitable, Callable, Generator, Iterable, Iterator
@@ -22,7 +24,8 @@ from xippios.core.client.auth import EnvKeyAuth, RenewingBearerAuth
 from xippios.core.client.cache import _clear_every_cache
 from xippios.core.client.quota import QuotaPolicy, _every_policy, _reset_every_policy
 from xippios.core.client.ratelimit import TokenBucket
-from xippios.core.tenants import _tenants_declared
+from xippios.core.contract import EnvVar
+from xippios.core.tenants import Tenants, _tenants_declared
 from xippios.core.testing.built_answers import _install_census
 from xippios.core.testing.fixtures import fixture_path
 from xippios.core.testing.replay import ReplayFixture, replay
@@ -33,9 +36,8 @@ LIVE_ENV = "XIPPIOS_LIVE_TESTS"
 PLACEHOLDER_KEY = "placeholder-for-fixture-replay"
 """The key every ``EnvKeyAuth`` sends in a test not marked ``live``, and every credential that a
 ``RenewingBearerAuth`` reads."""
-_KEY_ENVS = "xippios_placeholder_key_envs"
-PACKAGE_INI = "xippios_package"
-"""The ini option naming the package the family check tests (``xippios.core.testing.family``)."""
+_TENANT_NAME = re.compile(r"<[A-Z]+>")
+"""The placeholder of a variable per tenant in an ``EnvVar``'s pattern, ``<NAME>``."""
 _REQUEST_LOGGERS = ("httpx", "httpcore", "httpx2", "httpcore2")
 """The loggers ``quiet_request_logging`` sets, the mcp SDK's httpx2 and httpcore2 among them."""
 _MARKERS = (
@@ -139,6 +141,8 @@ class _NetworkGuard:
 _GUARD = pytest.StashKey[_NetworkGuard]()
 _QUOTA_LEFT = pytest.StashKey[dict[int, tuple[str, str]]]()
 """Per live policy, its source and its last quota reading after a ``live`` test."""
+_SECRETS = pytest.StashKey[tuple[str, ...]]()
+"""The variables that hold ``PLACEHOLDER_KEY`` in a test not marked ``live``, read once."""
 
 _PoolSend = Callable[[httpcore.ConnectionPool, httpcore.Request], httpcore.Response]
 _AsyncPoolSend = Callable[
@@ -176,23 +180,50 @@ def _pool_guard_async(guard: _NetworkGuard, original: _AsyncPoolSend) -> _AsyncP
     return handle_async_request
 
 
-def pytest_addoption(parser: pytest.Parser) -> None:
-    """Register the ini options ``xippios_placeholder_key_envs`` and ``xippios_package``."""
-    parser.addini(
-        _KEY_ENVS,
-        "environment variables set to the placeholder key in every test not marked live, "
-        "e.g. COMTRADE_API_KEY",
-        type="args",
-        default=[],
-    )
-    parser.addini(
-        PACKAGE_INI,
-        "import path of the source package the family check tests, e.g. xippios.usda.psd; "
-        "unset, the one package with a tasks.py under src/xippios/ "
-        "(xippios.core.testing.family)",
-        type="string",
-        default="",
-    )
+def _source_packages(root: Path) -> list[Path]:
+    """Each directory under ``<root>/src/xippios/`` that holds a ``tasks.py``, in order.
+
+    The layout every source has, ``src/xippios/example/tasks.py`` for ``xippios.example``;
+    one of them is the source package that the plugin and the family check read.
+
+    Args:
+        root: pytest's rootdir, the repository's root.
+    """
+    return sorted(path.parent for path in (root / "src" / "xippios").rglob("tasks.py"))
+
+
+def _secret_variables(root: Path) -> tuple[str, ...]:
+    """The variables that hold ``PLACEHOLDER_KEY`` in a test not marked ``live`` (ADR-0035).
+
+    Each secret entry of the source's ``_client.ENV_VARS``: a name as it stands, and a
+    pattern such as ``EXAMPLE_<NAME>_API_KEY`` once for each reserved tenant of the
+    ``Tenants`` that ``_client`` holds, ``EXAMPLE_DEMO_API_KEY`` for ``demo``, since a test
+    reaches no other tenant. The source is the one package with a ``tasks.py`` under
+    ``src/xippios/``; a repository with none, core's own say, or with several names none.
+
+    Args:
+        root: pytest's rootdir, the repository's root.
+    """
+    found = _source_packages(root)
+    if len(found) != 1:
+        return ()
+    package = ".".join(found[0].relative_to(root / "src").parts)
+    client = importlib.import_module(f"{package}._client")
+    reserved = [
+        name
+        for value in vars(client).values()
+        if isinstance(value, Tenants)
+        for name in value.reserved
+    ]
+    names: list[str] = []
+    for entry in getattr(client, "ENV_VARS", ()):
+        if not (isinstance(entry, EnvVar) and entry.secret):
+            continue
+        if _TENANT_NAME.search(entry.name_or_pattern) is None:
+            names.append(entry.name_or_pattern)
+        else:
+            names += [_TENANT_NAME.sub(name.upper(), entry.name_or_pattern) for name in reserved]
+    return tuple(dict.fromkeys(names))
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -371,11 +402,12 @@ def placeholder_api_key(
 ) -> str | None:
     """Every test but a live one sends ``PLACEHOLDER_KEY``, whatever the shell holds.
 
-    ADR-0035, decision 3: the variables ``xippios_placeholder_key_envs`` names hold it,
-    ``EnvKeyAuth.key`` returns it, and
-    ``RenewingBearerAuth.credential`` returns it for every credential a token request
-    reads, one given to the constructor included, and still raises ``ConfigError`` for a
-    variable unset or empty. A module overrides this fixture to resolve both itself.
+    ADR-0035, decision 3: the secret variables of the source's ``_client.ENV_VARS`` hold
+    it, a pattern's once for each reserved tenant (``_secret_variables``),
+    ``EnvKeyAuth.key`` returns it, and ``RenewingBearerAuth.credential`` returns it for
+    every credential a token request reads, one given to the constructor included, and
+    still raises ``ConfigError`` for a variable unset or empty. A module overrides this
+    fixture to resolve both itself.
 
     Returns:
         ``PLACEHOLDER_KEY``, or ``None`` in a live test, which uses the key in the
@@ -383,7 +415,10 @@ def placeholder_api_key(
     """
     if _marked(request, "live"):
         return None
-    for name in request.config.getini(_KEY_ENVS):
+    config = request.config
+    if _SECRETS not in config.stash:
+        config.stash[_SECRETS] = _secret_variables(config.rootpath)
+    for name in config.stash[_SECRETS]:
         monkeypatch.setenv(name, PLACEHOLDER_KEY)
     monkeypatch.setattr(EnvKeyAuth, "key", _placeholder_key)
     monkeypatch.setattr(RenewingBearerAuth, "credential", _placeholder_credential)

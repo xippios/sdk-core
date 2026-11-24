@@ -192,18 +192,18 @@ def test_a_task_that_takes_a_country_fails_at_once_until_its_answer_names_it(
     )
 
 
-def test_the_package_is_named_by_the_ini_option_when_src_holds_two(
+def test_two_packages_with_a_tasks_py_fail_every_check_naming_both(
     pytester: pytest.Pytester,
 ) -> None:
+    # The ini option xippios_package, which named one of them, left in 0.5.0: no source set
+    # it (https://github.com/xippios/sdk-core/issues/475, part 7).
     second: dict[str, str | None] = {"src/xippios/other/tasks.py": "__all__: list[str] = []\n"}
     result = run_family(pytester, second)
     result.assert_outcomes(errors=FAMILY_TESTS)
     result.stdout.fnmatch_lines(
         ["*one package with a tasks.py under src/xippios/, found*example/tasks.py*other/tasks.py*"]
     )
-    named = PYPROJECT + 'xippios_package = "xippios.example"\n'
-    result = run_family(pytester, {**second, "pyproject.toml": named})
-    result.assert_outcomes(passed=FAMILY_TESTS)
+    assert "ini option" not in result.stdout.str()
 
 
 def test_an_adapter_that_drops_a_task_fails_naming_it(pytester: pytest.Pytester) -> None:

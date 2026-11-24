@@ -122,11 +122,10 @@ def test_the_readme_shows_the_collecting_line_alone() -> None:
     for name in (
         "from xippios.core.testing.built_answers import *  # noqa: F403",
         "A partial run judges only the tests that ran",
-        "pytest-xdist",
         RECORD,
     ):
         assert name in section, f"the README's testing section does not show {name!r}"
-    for name in ("READERS", "ALLOWED"):
+    for name in ("READERS", "ALLOWED", "pytest-xdist"):
         assert name not in section, f"the README's testing section still shows {name!r}"
 
 

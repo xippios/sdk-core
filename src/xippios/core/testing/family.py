@@ -8,15 +8,14 @@ sdk-template renders::
 The star import puts the ``test_family_*`` functions and their ``family_source`` fixture
 into that module, where pytest collects them; a check added in a later core release
 reaches every source with the core update and no change to the file. The plugin
-(``pytest_plugins = ["xippios.core.testing.plugin"]``) must be enabled, as it is in every
-source, since it registers the ini option below.
+(``pytest_plugins = ["xippios.core.testing.plugin"]``) is enabled, as it is in every
+source, so the checks run offline.
 
-**The package under test** is the ini option ``xippios_package``, its import path
-(``xippios_package = "xippios.usda.psd"`` under ``[tool.pytest.ini_options]``). Unset, it
-is the one package with a ``tasks.py`` under ``<rootdir>/src/xippios/``, the layout every
-source has (``src/xippios/usda/psd/tasks.py`` gives ``xippios.usda.psd``); none or more
-than one fails every test here, naming the option. The repository's files (``README.md``,
-``.copier-answers.yml``, ``pyproject.toml``) are read from pytest's rootdir.
+**The package under test** is the one package with a ``tasks.py`` under
+``<rootdir>/src/xippios/``, the layout every source has (``src/xippios/example/tasks.py``
+gives ``xippios.example``); none or more than one fails every test here, naming what it
+found. The repository's files (``README.md``, ``.copier-answers.yml``, ``pyproject.toml``)
+are read from pytest's rootdir.
 
 **What is checked**, one test each:
 
@@ -134,7 +133,7 @@ from xippios.core.models import Result
 from xippios.core.reference import PackagedCodes, PackagedList, _named_parameters
 from xippios.core.tenants import Tenants, _lists_tenants
 from xippios.core.testing.live import _LIVE, _NO_LIVE, _NO_PAIR, _a, _is_entry
-from xippios.core.testing.plugin import PACKAGE_INI
+from xippios.core.testing.plugin import _source_packages
 
 __all__ = [
     "family_source",
@@ -226,23 +225,15 @@ def _named(module: ModuleType) -> dict[str, Callable[..., Any]]:
 
 
 def _import_path(config: pytest.Config) -> str:
-    try:
-        configured = str(config.getini(PACKAGE_INI) or "").strip()
-    except ValueError:  # the plugin is not enabled, so the option is unknown
-        configured = ""
-    if configured:
-        return configured
-    src = config.rootpath / "src"
-    found = sorted(path.parent for path in (src / "xippios").rglob("tasks.py"))
+    found = _source_packages(config.rootpath)
     if len(found) != 1:
         where = [str((path / "tasks.py").relative_to(config.rootpath)) for path in found]
         pytest.fail(
             f"the family check needs one package with a tasks.py under src/xippios/, found "
-            f"{where or 'none'}; name it with the ini option {PACKAGE_INI} "
-            '(e.g. xippios_package = "xippios.usda.psd")',
+            f"{where or 'none'}",
             pytrace=False,
         )
-    return ".".join(found[0].relative_to(src).parts)
+    return ".".join(found[0].relative_to(config.rootpath / "src").parts)
 
 
 @pytest.fixture(scope="module")

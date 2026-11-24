@@ -20,10 +20,8 @@ away. A test that compares two readings of its own uses it directly, e.g.
 """
 
 
-def assert_time_between(
-    value: datetime, before: datetime, after: datetime, *, slack: timedelta = CLOCK_SLACK
-) -> None:
-    """Fail the test unless ``before - slack <= value <= after + slack``.
+def assert_time_between(value: datetime, before: datetime, after: datetime) -> None:
+    """Fail the test unless ``before - CLOCK_SLACK <= value <= after + CLOCK_SLACK``.
 
     ``before`` and ``after`` are readings taken around the call that produced
     ``value``, e.g.::
@@ -37,14 +35,13 @@ def assert_time_between(
         value: The time under test, e.g. ``result.meta.retrieved_at``.
         before: A reading taken before the call.
         after: A reading taken after the call.
-        slack: How far the clock may have stepped; ``CLOCK_SLACK`` by default.
 
     Raises:
         AssertionError: ``value`` lies outside the bracket; the message names all three
             times.
     """
-    if not before - slack <= value <= after + slack:
+    if not before - CLOCK_SLACK <= value <= after + CLOCK_SLACK:
         raise AssertionError(
             f"{value.isoformat()} is not between {before.isoformat()} and "
-            f"{after.isoformat()} (slack {slack.total_seconds():g} s)"
+            f"{after.isoformat()} (slack {CLOCK_SLACK.total_seconds():g} s)"
         )

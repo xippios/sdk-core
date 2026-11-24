@@ -811,7 +811,7 @@ PREVIEW_RULES = [
     pytest.param(
         "fails a write task unless its `Result`'s data has exactly one member tagged "
         "`performed: Literal[False]`",
-        ("preview_reads=True)`", "declares `reads`", "ADR-0050, decision 4"),
+        ("in every call", "declares `reads`", "ADR-0050, decision 4"),
         id="s8-the-check-of-the-annotations",
     ),
     pytest.param(
@@ -826,9 +826,9 @@ PREVIEW_RULES = [
         id="s8-the-dry-run",
     ),
     pytest.param(
-        "passes `preview_reads=True` from its patch on core 0.4.1",
+        "A source declares `reads` on its preview from its adoption of core 0.5.0",
         ("the dry run at its own choice", "off by default", "ADR-0050, decisions 4 and 5"),
-        id="s8-when-a-source-switches-them-on",
+        id="s8-when-a-source-declares-reads",
     ),
 ]
 
@@ -847,17 +847,30 @@ def test_the_review_checklist_judges_a_write_task_s_preview_by_its_record() -> N
     for name in (
         "**Write tools**",
         "whether its preview reads first and what the read costs",
-        "preview_reads=True)`",
+        "the source's tests hold it with `assert_write_tools`",
         "conventions §8",
         PREVIEW_RECORD,
     ):
         assert name in item, f"item 18 does not name {name!r}"
 
 
+def test_the_readme_calls_assert_write_tools_with_the_write_tool_set() -> None:
+    # The check takes the write tool set first and no source= (ADR-0063, decision 5).
+    text = (ROOT / "README.md").read_text(encoding="utf-8")
+    calls = [text[m.end() : m.end() + 80] for m in re.finditer(r"assert_write_tools\(", text)]
+    assert len(calls) == 2, f"the README calls assert_write_tools {len(calls)} times, not 2"
+    for call in calls:
+        start = " ".join(call.split())
+        assert start.startswith("mcp_write.build(), write_tasks,"), f"the README calls {start!r}"
+        assert "source=" not in call, f"the README passes source= in {start!r}"
+
+
 def test_the_preview_record_keeps_its_question() -> None:
+    # Amended once, when preview_reads left (https://github.com/xippios/sdk-core/issues/475).
     records = json.loads(INDEX.read_text(encoding="utf-8"))["records"]
     found = next(r for r in records if r["id"] == PREVIEW_RECORD)
-    assert (found["decided_by"], found["amended"]) == (PREVIEW_QUESTION, [])
+    amended = [{"date": "2026-11-24", "by": "https://github.com/xippios/sdk-core/issues/475"}]
+    assert (found["decided_by"], found["amended"]) == (PREVIEW_QUESTION, amended)
 
 
 # §10, the layout of fixtures and the recorder: the recording of every exchange of a task

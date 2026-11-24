@@ -59,9 +59,7 @@ value sent. A test whose replay answered another request names ``kind 3`` beside
 its docstring, its class's, a comment inside it, or the docstring of a helper or fixture of
 its module that it calls or takes. The census test runs after every other test of the run,
 moved there once the run's own reordering is done (``--ff``, ``-k`` and the like), and judges
-the tests that ran: a partial run judges only those. pytest-xdist splits a run across
-processes that each keep a census of their own, so in a worker the census test skips and
-says why; the reader reads files and runs under it alike.
+the tests that ran: a partial run judges only those.
 
 **What the check cannot see:**
 
@@ -364,11 +362,6 @@ def test_built_answers_replays_for_another_request_name_the_third_kind(
             '["xippios.core.testing.plugin"] in tests/conftest.py',
             pytrace=False,
         )
-    if hasattr(config, "workerinput"):
-        pytest.skip(
-            "the census of replays judges the tests of one process, and pytest-xdist runs them "
-            "in several: run the tests without -n for it"
-        )
     unmarked = [
         f"- {module}::{'::'.join(test)}: a replay answered another {' and '.join(sorted(what))}"
         for (module, test), what in sorted(census.found.items())
@@ -523,8 +516,8 @@ class _Census:
         """Move the census test after every other, once the run's own reordering is done.
 
         ``pytest_collection_modifyitems`` would run before the wrappers of ``--ff`` and
-        ``--lf`` reorder and deselect; ``tryfirst`` runs this before pytest-xdist reports a
-        worker's collection, so every worker holds the same order.
+        ``--lf`` reorder and deselect; ``tryfirst`` runs this before the hooks of other plugins
+        that read the order, the listing of ``--collect-only`` among them.
         """
         census = test_built_answers_replays_for_another_request_name_the_third_kind
         last = [item for item in session.items if getattr(item, "function", None) is census]

@@ -21,7 +21,7 @@ records in `docs/adr/`. A record changes, and this file follows when the script 
 - <a id="0032"></a>[ADR-0032](adr/0032-one-key-per-issuer-for-shared-gateways.md): One key variable per issuer when one key serves several sources · Accepted · 2026-11-18
 - <a id="0033"></a>[ADR-0033](adr/0033-rate-limit-policy.md): Rate-limit policy — a fast pace, quotas spent, the 429 interpreted · Accepted · 2026-11-18
 - <a id="0034"></a>[ADR-0034](adr/0034-upstream-totals-in-the-result-envelope.md): Upstream totals in the result envelope · Accepted · 2026-11-18 · amended 2026-11-24
-- <a id="0035"></a>[ADR-0035](adr/0035-offline-tests-guaranteed-by-the-plugin.md): Offline tests guaranteed by the plugin · Accepted · 2026-11-18
+- <a id="0035"></a>[ADR-0035](adr/0035-offline-tests-guaranteed-by-the-plugin.md): Offline tests guaranteed by the plugin · Accepted · 2026-11-18 · amended 2026-11-24
 - <a id="0036"></a>[ADR-0036](adr/0036-multi-tenant-sources.md): Multi-tenant sources · Accepted · 2026-11-18 · amended 2026-11-24
 - <a id="0037"></a>[ADR-0037](adr/0037-client-request-hooks-and-quota-policy.md): Client request hooks and a quota policy · Accepted · 2026-11-18 · amended 2026-11-21
 - <a id="0038"></a>[ADR-0038](adr/0038-per-tool-result-caps.md): Per-tool result caps · Accepted · 2026-11-18 · amended 2026-11-24
@@ -34,7 +34,7 @@ records in `docs/adr/`. A record changes, and this file follows when the script 
 - <a id="0045"></a>[ADR-0045](adr/0045-one-check-of-an-argument-against-a-packaged-list.md): One check of an argument against a packaged list · Accepted · 2026-11-21 · amended 2026-11-22
 - <a id="0047"></a>[ADR-0047](adr/0047-the-adapter-s-offset-for-the-rest-of-a-cut-answer.md): The adapter's offset for the rest of a cut answer · Accepted · 2026-11-21 · amended 2026-11-24
 - <a id="0048"></a>[ADR-0048](adr/0048-core-s-recorder-frame-around-a-source-s-rewrite-step.md): Core's recorder frame around a source's rewrite step · Accepted · 2026-11-21 · amended 2026-11-22
-- <a id="0050"></a>[ADR-0050](adr/0050-what-a-write-task-s-preview-shows.md): What a write task's preview shows · Accepted · 2026-11-21
+- <a id="0050"></a>[ADR-0050](adr/0050-what-a-write-task-s-preview-shows.md): What a write task's preview shows · Accepted · 2026-11-21 · amended 2026-11-24
 - <a id="0052"></a>[ADR-0052](adr/0052-one-filter-for-a-vintage-taken-back.md): One filter for a vintage taken back · Accepted · 2026-11-21 · amended 2026-11-24
 - <a id="0053"></a>[ADR-0053](adr/0053-one-count-before-a-query-over-upstream-s-limit.md): One count before a query over upstream's limit · Accepted · 2026-11-22 · amended 2026-11-22
 - <a id="0054"></a>[ADR-0054](adr/0054-one-helper-for-a-series-over-periods.md): One helper for a series over periods · Accepted · 2026-11-22 · amended 2026-11-22
@@ -47,7 +47,7 @@ records in `docs/adr/`. A record changes, and this file follows when the script 
 - <a id="0061"></a>[ADR-0061](adr/0061-the-one-way-of-each-feature.md): The one way of each feature · Accepted · 2026-11-24
 - <a id="0062"></a>[ADR-0062](adr/0062-the-two-refresh-frames-one-declaration-one-table-header-the.md): The two refresh frames: one declaration, one table header, the fetch through the client and no check without a request · Accepted · 2026-11-24
 - <a id="0063"></a>[ADR-0063](adr/0063-the-server-from-a-tool-set.md): The server from a tool set · Accepted · 2026-11-24
-- <a id="0064"></a>[ADR-0064](adr/0064-the-built-answer-check-its-mark-and-its-census-without.md): The built-answer check: its mark and its census, without following a body or the module's declarations · Accepted · 2026-11-24
+- <a id="0064"></a>[ADR-0064](adr/0064-the-built-answer-check-its-mark-and-its-census-without.md): The built-answer check: its mark and its census, without following a body or the module's declarations · Accepted · 2026-11-24 · amended 2026-11-24
 
 The superseded records follow, kept as written: the record that each status names holds its decision now.
 
