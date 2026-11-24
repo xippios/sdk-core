@@ -7,6 +7,7 @@ further.
 """
 
 import email.message
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -15,9 +16,45 @@ from pathlib import Path
 import httpx
 
 from xippios.core.client.cache import strip_wire_headers
-from xippios.core.errors import BODY_LIMIT, XippiosError
+from xippios.core.errors import _UNSENT, BODY_LIMIT, InvalidRequestError, XippiosError
 
-__all__ = ["Downloaded"]
+__all__ = ["Downloaded", "check_dest"]
+
+
+def check_dest(dest: str | os.PathLike[str], *, source: str | None = None) -> Path:
+    """``dest`` as a ``Path``, once it names a file in a directory that exists.
+
+    ``AsyncClient.download`` checks its ``dest`` with it before anything is sent. A task
+    that sends a request of its own before its download, a listing that finds the file
+    say, calls it before that first request, so a bad ``dest`` sends nothing and its
+    refusal's ``Nothing was sent.`` is true (conventions §5; ADR-0045, amendment
+    2026-11-24)::
+
+        target = check_dest(dest, source="example")  # before the listing's request
+        listing = await client.get_answer("/files")
+        got = await client.download(listing.payload["url"], target)
+
+    Args:
+        dest: The file to write, e.g. ``Path("report.pdf")``, in a directory that exists.
+        source: Source slug the refusal carries, e.g. ``"example"``.
+
+    Returns:
+        ``Path(dest)``.
+
+    Raises:
+        InvalidRequestError: ``dest`` is a directory, or its directory does not exist,
+            a bad argument (conventions §5), the refusal saying that nothing was sent.
+    """
+    target = Path(dest)
+    if target.is_dir():
+        raise InvalidRequestError(
+            f"dest is a directory; name the file to write. {_UNSENT}", source=source
+        )
+    if not target.parent.is_dir():
+        raise InvalidRequestError(
+            f"dest's directory does not exist; create it first. {_UNSENT}", source=source
+        )
+    return target
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

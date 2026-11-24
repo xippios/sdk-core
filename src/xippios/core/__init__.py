@@ -22,6 +22,7 @@ from xippios.core.client import (
     RateLimit,
     RenewingBearerAuth,
     RetryPolicy,
+    check_dest,
 )
 from xippios.core.contract import EnvVar
 from xippios.core.errors import (
@@ -101,6 +102,7 @@ __all__ = [
     "XippiosError",
     "__version__",
     "bind_tasks",
+    "check_dest",
     "closest",
     "error_from_response",
     "fetch_counted",
