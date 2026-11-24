@@ -140,10 +140,12 @@ decision 1).
 A package filters after the fetch only where upstream offers no filter of its own: the filter is
 named after upstream's field that it reads, compares by equality or by prefix, and its task's
 docstring says that the package filters after the fetch (ADR-0061, decision 2).
-Within a source one concept stands at one position in every task: the arguments that identify a
-record are positional, in the order of upstream's path, and every optional filter and every
-argument of the package's own is keyword-only, as the invented source `example` takes
-`get_series(region_code, year, *, unit=None)` (ADR-0061, decision 5; https://github.com/xippios/sdk-usda-esr/issues/60, part 1).
+Within a source one concept stands at one position in every task: a tenant comes first and
+positional, since it names the upstream account that the path is under, the arguments that
+identify a record are positional, in the order of upstream's path, and every optional filter and
+every other argument of the package's own is keyword-only, as the invented source `example` takes
+`get_series(region_code, year, *, unit=None)` and, for its tenant `acme`, `get_balance(tenant,
+account_id, *, as_of=None)` (ADR-0061, decisions 4 and 5; https://github.com/xippios/sdk-usda-esr/issues/60, part 1).
 
 Task code may send, beside its base URL, to a second base URL on the host of the first,
 from which upstream serves part of its data, and to an origin or mirror that the publisher

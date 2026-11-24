@@ -129,9 +129,10 @@
     https://github.com/xippios/sdk-usda-esr/issues/60, part 1).
     `src/xippios/<package>/tasks.py` and `tasks_write.py` (every other source) — the arguments
     that identify a record positional, in the order of upstream's path, and every optional
-    filter and every argument of the package's own, `confirm` among them, keyword-only, with one
-    concept at one position in every task, which sdk-usda-psd, sdk-comtrade, sdk-x, sdk-eurostat
-    and sdk-usda-gats do not meet today — a test that passes a filter by position breaks
+    filter and every other argument of the package's own, `confirm` among them, keyword-only,
+    the tenant first and positional as it stands, with one concept at one position in every
+    task, which sdk-usda-psd, sdk-comtrade, sdk-x, sdk-eurostat and sdk-usda-gats do not meet
+    today — a test that passes a filter by position breaks
     (ADR-0061, decision 5, https://github.com/xippios/sdk-usda-esr/issues/60, part 1).
     `src/xippios/<package>/tasks.py` (sdk-usda-nass, sdk-usda-esmis, sdk-usda-esr) — no data is
     the empty list for a task that returns a list and `NotFoundError` for one that returns a

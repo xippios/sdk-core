@@ -48,12 +48,16 @@ sdk-usda-esr's adoption, read decision 5 for the family on the same day.
    (ADR-0028, decision 2).
 5. **One order of arguments within a source.** Within a source one concept stands at one
    position in every task. The arguments that identify a record are positional, in the order of
-   upstream's path, and every optional filter and every argument of the package's own is
+   upstream's path, and every optional filter and every other argument of the package's own is
    keyword-only, as the invented source `example` takes `get_series(region_code, year, *,
    unit=None)` and sdk-usda-esr will take `get_exports(commodity_code, market_year, *,
-   country_code=None)` (https://github.com/xippios/sdk-usda-esr/issues/60, part 1). Over MCP and HTTP nothing changes, since a tool and a route
-   take their arguments by name, and a Python caller by position rewrites its call. No test holds
-   it, since it would fail positional signatures in the sources before each has its order.
+   country_code=None)` (https://github.com/xippios/sdk-usda-esr/issues/60, part 1). A tenant keeps the place
+   that decision 4 gives it, first and positional, since it names the upstream account that the
+   path is under, and the arguments after it follow that order, as `example` takes
+   `get_balance(tenant, account_id, *, as_of=None)` for its tenant `acme`. Over MCP and HTTP
+   nothing changes, since a tool and a route take their arguments by name, and a Python caller by
+   position rewrites its call. No test holds it, since it would fail positional signatures in the
+   sources before each has its order.
 6. **One answer for "no data" per kind of task.** A task that returns a list answers no data
    with the empty list, and a task that returns one record raises `NotFoundError`. A period that
    upstream has not released is `NotFoundError` where the package knows the latest release
