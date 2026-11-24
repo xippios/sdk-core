@@ -111,5 +111,6 @@ consumers and decision 4's part of the family's contract, since every decided ad
 record of its mechanism names the answer and the piece with its one consumer or with none, as the
 release's statement of core's surface names it too (ADR-0068, decision 6), so that decision 8's
 review holds a core pull request to that naming for such a piece, as ADR-0034 and ADR-0040 name
-`fetch_pages(stop=, key=)` and `download(headers=)` in their amendments of 2026-11-24, while the
-rest of decisions 4, 5 and 8, the other decisions and the consequences stand as written.
+`fetch_pages(stop=, key=)`, `download(headers=)` and `MemoryCache(max_bytes=)` in their amendments
+of 2026-11-24, while the rest of decisions 4, 5 and 8, the other decisions and the consequences
+stand as written.
