@@ -308,7 +308,10 @@ skip it (§8, §9; ADR-0040).
   resolved, errors typed. An upstream enum of integer ids becomes an `IntEnum` instead,
   so a member compares equal to the id in upstream's data (ADR-0031). Field names are
   upstream names in snake_case. A `Decimal` field of an `UpstreamModel` serialises as a
-  JSON number in every adapter (ADR-0031); Python keeps the `Decimal`.
+  JSON number in every adapter, one whose exponent is zero or more, without fractional
+  digits, as a JSON integer, `16217` and never `16217.0`, and one with fractional digits with
+  the digits upstream sent, so upstream's `16217.0` stays (ADR-0031; ADR-0067, decision 10);
+  Python keeps the `Decimal`.
 - Task-shaped functions may return a *projection* of an upstream record: a subset of its
   columns under their upstream names, typed, built with `UpstreamModel.project`. Nothing
   is renamed or computed; parsing a value is the only permitted override. A MIME
@@ -385,7 +388,8 @@ class ResultMeta(BaseModel):
     request: dict[str, Any]           # the parameters used, for reproducibility
     total: int | None                 # upstream's record count, if it reports one
     tenant: str | None                # the tenant the data came from, by name (§7)
-    names: dict[str, dict[str, str]]  # each country parameter's codes to their names
+    names: dict[str, dict[str, str]]  # each code's name, of the request and of the records
+    notes: list[str]                  # one sentence per fact the task says about its answer
 
 class Result(BaseModel, Generic[T]):
     data: T
@@ -584,22 +588,36 @@ validator, so the drop of a top-level `None` and the redaction reach what it add
 never a credential, a host or another of the tenant's values; `None` for a
 single-tenant source and for the list of tenants.
 
+`notes` holds one sentence per fact that a task says about its answer and that neither a
+record nor another field of `meta` states, such as the periods that a series passed over, the
+rule that ended a walk of pages or a record's code that its list does not name, empty by
+default and left out of a dumped answer while it is empty, and a cursor is no note, since it
+stays on the data under upstream's name (ADR-0034; ADR-0067, decision 1).
+
 A country argument takes upstream's own code and no second code, and every answer names the
-country it stands for (https://github.com/xippios/sdk-core/issues/310): `meta.names` maps each
-country parameter of the request to its codes and the names that its packaged list holds for
-them, `{"country_code": {"CN": "Comoros"}}`, a `dict[str, dict[str, str]]` in which a code
-stands as the caller gave it, an integer by its digits, empty for a task without such a
-parameter and left out of a dumped answer while it is empty (ADR-0056). A task that takes a
-country, an area, a reporter or a partner fills it with core's decorator `names_codes`, one
-`PackagedCodes` per parameter (§5), `@names_codes(country_code=COUNTRIES)`, which names the
-codes of the call's arguments on every answer that the task returns and withholds an answer for
-a code its list lacks with that list's refusal (ADR-0056). A parameter whose codes no packaged
-list can name, or whose name holds one of the check's words while it takes no code, stands in
-`UNNAMED_CODES` of its tasks module with the reason, `{"get_data": {"area_cs": "The coding
-system of area, no code."}}`, and the family check fails a task whose parameter holds
-`country`, `countries`, `area`, `reporter` or `partner`, in any case, and stands in neither
-(ADR-0056). The name comes
-from the same source's list of the code and maps nothing between sources (ADR-0028, ADR-0056).
+country it stands for (https://github.com/xippios/sdk-core/issues/310). `meta.names` maps each
+code parameter of the request and each code field of the answer's records that its model names
+by a packaged list to its codes and the names that the list holds, `{"country_code": {"CN":
+"Comoros"}}`, a `dict[str, dict[str, str]]` in which a request's code stands as the caller gave
+it and a record's as upstream sent it, an integer by its digits, one entry where a parameter and
+a field share a name, empty for an answer without such a code and left out of a dumped answer
+while it is empty (ADR-0067, decision 2). A task that takes a code that its answer names, a
+country's say, fills it for the request with core's decorator `names_codes`, one
+`PackagedCodes` per parameter (§5), `@names_codes(country_code=COUNTRIES)`, which takes several
+codes as a list, names the codes of the call's arguments on every answer that the task returns
+and withholds an answer for a code its list lacks with that list's refusal (ADR-0067,
+decisions 3 and 4). A record's model names the codes of a code field in the field's annotation,
+`Annotated[str, NamedBy(REGIONS)]` for the packaged list that names them or `Annotated[int,
+NamedBy("item")]` for the field of the same record in which upstream sends the name, so that
+every task that returns the model is named: the `Result` puts each code that the list names in
+`meta.names`, says the codes that the list lacks in one note per field and withholds no answer,
+and a code whose name its record carries takes no entry (ADR-0067, decisions 6 and 7). The
+family check fails a field that `NamedBy` marks twice or that holds no code, and a named field
+that is no other field of the model or holds no text, so that a code and its label stand side
+by side, and it reads the model's declaration and no word of a parameter's name, so that
+whether a code is owed a name is the review's (ADR-0067, decision 8). The name comes from the
+same source's list of the code and maps nothing between sources (ADR-0028; ADR-0067,
+decision 9).
 
 `total` is upstream's count of the records matching the request, or `None` when the
 source reports none or the count is unknown (ADR-0034). A paginated task called without
