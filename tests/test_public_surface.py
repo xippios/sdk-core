@@ -80,12 +80,12 @@ EXPORTS = {
         "ToolSet",
     },
     "xippios.core.http": {"is_scalar", "router_from_tasks", "status_for"},
-    # the snapshot script's frame and what its hooks take (ADR-0062), the reference script's
-    # declarations (ADR-0051), and the one run of both
+    # the snapshot script's frame and what its hooks take, the reference script's
+    # declaration with its lists, and the one run of both (ADR-0062, decision 2)
     "xippios.core.refresh": {
         "NotFetched", "Page", "Response", "Row", "Section", "Snapshot", "Statement",
         "changed", "decode", "dump_json", "read_json", "run",
-        "Enumeration", "Listed",
+        "Enumeration", "Listed", "Lists",
     },
 }  # fmt: skip
 
