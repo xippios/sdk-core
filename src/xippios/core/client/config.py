@@ -1,4 +1,4 @@
-"""Value objects configuring a client: timeouts, retry policy, rate limit, cache."""
+"""Value objects configuring a client: retry policy, rate limit, cache, read timeout."""
 
 import random
 from collections.abc import Awaitable, Callable, Mapping
@@ -9,21 +9,7 @@ import httpx
 from xippios.core.client.cache import CacheBackend
 from xippios.core.errors import XippiosError
 
-__all__ = ["ClientConfig", "RateLimit", "RetryPolicy", "Timeouts"]
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class Timeouts:
-    """Explicit timeouts in seconds; the defaults are the family's (conventions §6)."""
-
-    connect: float = 10.0
-    read: float = 60.0
-    write: float = 10.0
-    pool: float = 10.0
-
-    def to_httpx(self) -> httpx.Timeout:
-        """The equivalent ``httpx.Timeout``."""
-        return httpx.Timeout(connect=self.connect, read=self.read, write=self.write, pool=self.pool)
+__all__ = ["ClientConfig", "RateLimit", "RetryPolicy"]
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -120,7 +106,10 @@ class ClientConfig:
         source: Source slug, e.g. ``"usda-nass"``; used in the User-Agent and in errors.
         version: Version of the source package, for the User-Agent.
         base_url: Upstream base URL; request paths are joined onto it.
-        timeouts: Connect/read/write/pool timeouts.
+        read_timeout: Seconds to wait for the next bytes of an answer, 60 by default
+            (conventions §6); a source whose upstream builds a large answer slowly raises
+            it, e.g. ``180.0``. Connecting, sending a request and waiting for a pooled
+            connection take 10 s each, the family's.
         retry: Retry policy for 429, 5xx and transport failures.
         rate_limit: Client-side limit; ``None`` disables it.
         cache: Backend for GET responses; ``None`` disables caching. Every GET looks it
@@ -171,7 +160,7 @@ class ClientConfig:
     source: str
     version: str
     base_url: str
-    timeouts: Timeouts = field(default_factory=Timeouts)
+    read_timeout: float = 60.0
     retry: RetryPolicy = field(default_factory=RetryPolicy)
     rate_limit: RateLimit | None = None
     cache: CacheBackend | None = None
@@ -183,6 +172,8 @@ class ClientConfig:
     observe: Callable[[httpx.Response], None] | None = None
 
     def __post_init__(self) -> None:
+        if self.read_timeout <= 0:
+            raise ValueError("read_timeout must be above 0 seconds")
         if self.cache_max_bytes < 1:
             raise ValueError("cache_max_bytes must be at least 1")
 

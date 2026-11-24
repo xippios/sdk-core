@@ -13,17 +13,17 @@ storage URL (Azure SAS) are credentials; ``keyword``, ``author``, ``tokens_used`
 ``design`` and ``sort_key`` are data. A bare ``key`` is not on the list: Eurostat's
 SDMX series ``key`` is data (ADR-0040, decision 6).
 
-A name a ``QueryKeyAuth`` sends its key under is registered when that auth object is
-built, and is a credential from then on for the whole process, matched exactly in any
-letter case: USDA NASS's ``QueryKeyAuth("key", ...)`` makes ``key`` one wherever NASS's
-package is imported, and a process that imports a keyless source alone keeps ``key`` as
-data. Nothing unregisters a name.
+A name a ``KeyAuth`` sends its key under as a query parameter is registered when that auth
+object is built, and is a credential from then on for the whole process, matched exactly in
+any letter case: USDA NASS's ``KeyAuth(..., location="query", name="key")`` makes ``key``
+one wherever NASS's package is imported, and a process that imports a keyless source alone
+keeps ``key`` as data. Nothing unregisters a name.
 
 A source declares a parameter whose name holds ``token`` as a whole word, and no other
 credential word, as data with ``register_data_name``: X's ``next_token`` and
 ``pagination_token``, which a caller reads to page on. It is data from then on for the
 whole process, matched exactly in any letter case, and every name nobody declared keeps
-the rule; a name a ``QueryKeyAuth`` registered stays a credential though declared.
+the rule; a name a query ``KeyAuth`` registered stays a credential though declared.
 
 ``redact_credentials`` also reads each text value that is an ``http`` or ``https`` link:
 a credential in its query or its userinfo reads ``REDACTED``, as ``scrub_url`` writes it,
@@ -105,7 +105,7 @@ _lock = threading.Lock()
 def register_credential_name(name: str) -> None:
     """Make ``name`` a credential for the rest of the process, in any letter case.
 
-    ``QueryKeyAuth`` calls it with its ``param`` when it is built (ADR-0040, decision 6).
+    A query ``KeyAuth`` calls it with its ``name`` when it is built (ADR-0040, decision 6).
     Registering a name again changes nothing.
 
     Args:
@@ -123,7 +123,7 @@ def register_data_name(name: str) -> None:
     cursor such as X's ``next_token``: a source calls it in its ``_client.py``, and the
     value stays as sent in ``ResultMeta.request``, in a recorded fixture and in the
     replay helpers. Matched exactly, in any letter case; every other name with a
-    whole-word ``token`` stays a credential, and so does a name a ``QueryKeyAuth``
+    whole-word ``token`` stays a credential, and so does a name a query ``KeyAuth``
     registers. Declaring a name again changes nothing.
 
     Args:
@@ -156,7 +156,7 @@ def is_credential_name(name: str) -> bool:
 
     A whole word of the module's list (``api_key``, ``token``, ``secret``, ``sig``, ...),
     unless a source declared the name data (``register_data_name``), or a name a
-    ``QueryKeyAuth`` registered (``key`` for USDA NASS), which nothing makes data.
+    query ``KeyAuth`` registered (``key`` for USDA NASS), which nothing makes data.
 
     Args:
         name: A parameter or mapping key name, e.g. ``"access_token"``.

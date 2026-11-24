@@ -17,7 +17,7 @@ environment, the contract of conventions §7, and every task takes the tenant's 
     def build(name: str) -> AsyncClient:
         subdomain = tenants.field(name, "SUBDOMAIN")
         config = ClientConfig(..., base_url=f"https://{subdomain}.example.org/api")
-        return AsyncClient(config, auth=BasicKeyAuth(tenants.var(name, "API_KEY")))
+        return AsyncClient(config, auth=KeyAuth(tenants.var(name, "API_KEY"), location="basic"))
 
 
     client = tenants.client_for("acme", build)

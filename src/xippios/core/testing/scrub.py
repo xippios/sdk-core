@@ -2,7 +2,7 @@
 
 Credentials are always redacted by the one rule of ``xippios.core.redaction``, the rule
 ``ResultMeta.request`` applies (ADR-0030, ADR-0040): a query parameter that names a
-credential (``api_key``, ``token``, ``secret``, ..., and a name a ``QueryKeyAuth``
+credential (``api_key``, ``token``, ``secret``, ..., and a name a query ``KeyAuth``
 registered, such as USDA NASS's ``key``), the userinfo and the credential headers. A
 ``token`` name the source declared data with ``register_data_name``, X's ``next_token``
 say, is written as sent, and replay can match it.

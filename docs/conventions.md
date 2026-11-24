@@ -835,8 +835,9 @@ without case).
 
 ## 7. Configuration
 
-The environment is read through the `EnvKeyAuth` helpers (`QueryKeyAuth`,
-`HeaderKeyAuth`, `BearerAuth`, `BasicKeyAuth`), on the first request: keys from
+The environment is read through the one key class, `KeyAuth(env_var, location=...,
+name=...)`, whose `location` is `query`, `header`, `bearer` or `basic` (ADR-0059,
+decision 7), on the first request: keys from
 `<SOURCE>_API_KEY`, or the issuer's variable where ADR-0032 applies, overridable by
 constructor argument (`key=`; ADR-0002, amendment 2026-10-27). An upstream that exchanges a
 long-lived credential for a short-lived bearer, a login or a refresh token, is served by a
@@ -844,8 +845,8 @@ subclass of `RenewingBearerAuth`: the source writes its token request (`token_re
 the reading of the answer (`read_token` for an HTTP 200, `token_refused` for any other
 status, by default the taxonomy error of the status, quoting nothing of the answer), and
 reads each credential through `credential(name)`, from `credentials=` or else from the
-variable, when it builds the request. The base keeps the bearer until `margin` seconds, 60
-by default, before its `expires_in` runs out, and on a status of `renew_on`, 401 by
+variable, when it builds the request. The base keeps the bearer until 60 seconds before
+its `expires_in` runs out, and on a status of `renew_on`, 401 by
 default, exchanges once more and sends the request again, once (ADR-0025, amendment
 2026-11-18, point c). No config files, no dotenv loading inside the package — the
 environment is the contract (direnv in development, secrets in CI). A source behind

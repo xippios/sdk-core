@@ -91,7 +91,7 @@ def mount_fixture(
     Raises:
         ValueError: A name in ``match_params`` is not a query parameter of the URL served
             (the recorded one, or ``url``), names a credential by the rule of
-            ``xippios.core.redaction`` (``api_key``; ``key`` where a ``QueryKeyAuth``
+            ``xippios.core.redaction`` (``api_key``; ``key`` where a query ``KeyAuth``
             sends it; not a ``token`` name the source declared data), or its value holds
             ``REDACTED`` (whole, or a scrubbed secret inside it, or a data name recorded
             before its declaration); the message names the parameter.
@@ -155,7 +155,7 @@ def sent_urls(route: respx.Route) -> list[str]:
     """The URLs ``route`` received, oldest first, as text with credentials redacted.
 
     Each URL goes through ``scrub_url``, the rule of ``xippios.core.redaction``, so a key
-    sent as a query parameter reads ``REDACTED`` (``key`` where a ``QueryKeyAuth`` sends
+    sent as a query parameter reads ``REDACTED`` (``key`` where a query ``KeyAuth`` sends
     it, ``api_key`` always). A test compares these strings instead of keeping a request from
     ``route.calls`` in its own frame, where a failing assertion or ``pytest -l`` would
     print it with its URL, key included.

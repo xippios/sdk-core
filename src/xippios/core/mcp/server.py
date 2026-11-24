@@ -70,7 +70,7 @@ def quiet_request_logging() -> None:
     root logging before. httpx logs every request at
     ``INFO`` as ``HTTP Request: GET <full URL> "HTTP/1.1 200 OK"``, and MCP clients
     capture a server's stderr into their own logs. The full URL carries the API key for
-    a source that sends it as a query parameter (``QueryKeyAuth``) and names the tenant
+    a source that sends it as a query parameter (a query ``KeyAuth``) and names the tenant
     for a source with one host per tenant; neither belongs in a log (ADR-0030).
     httpcore's ``DEBUG`` traces name the host as well, so httpcore is quieted with it.
     The ``mcp`` SDK 2.x builds its own HTTP client on httpx2 and httpcore2, which log
