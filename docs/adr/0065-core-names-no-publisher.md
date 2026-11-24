@@ -63,7 +63,8 @@ this record to say how the gateway leaves.
 6. **Two checks hold the line.** A test of core lists the shapes that core may name and refuses
    every other in what binds, and it reads no record and no changelog. A step of the
    organization's conventions check takes each source's names from its template answers and
-   finds them in what binds of core; it is the organization repository's to build.
+   finds them in what binds of core; it is the organization repository's to build
+   (https://github.com/xippios/.github/issues/169).
 
 ## Consequences
 
