@@ -171,17 +171,28 @@ release identifier as upstream names it; `ResultMeta` refuses a naive time witho
 flag, the flag without a naive time, and any field it does not define.
 
 A parameter that takes back the `meta.vintage` of an earlier call, to return only what
-changed since, filters with `newer_than`: the source hands its reader of the vintage text,
-`naive_time` for a release time printed without a zone, and the task sets `meta` from the
-whole answer, so an answer with nothing newer still names the newest release (ADR-0052):
+changed since, filters with `newer_than`: the source hands its own reader of the vintage
+text, since core ships none, and the task sets `meta` from the whole answer, so an answer
+with nothing newer still names the newest release (ADR-0052; ADR-0059, decision 4):
 
 ```python
 from datetime import datetime
-from functools import partial
 
-from xippios.core import Result, ResultMeta, naive_time, newer_than
+from xippios.core import InvalidRequestError, Result, ResultMeta, newer_than
 
-read_since = partial(naive_time, source="example")  # refuses a zone and an unreadable text
+
+def read_since(text: str) -> datetime:
+    """A release time printed without a zone; a zone and an unreadable text are refused."""
+    parsed: datetime | None
+    try:
+        parsed = datetime.fromisoformat(text)  # a date alone is its midnight
+    except ValueError:
+        parsed = None
+    if parsed is None or parsed.tzinfo is not None:  # comparing the two would invent a zone
+        raise InvalidRequestError(
+            f"since must be a release time without a zone, got {text!r}.", source="example"
+        )
+    return parsed
 
 
 def released(release: Release) -> datetime:
@@ -210,11 +221,10 @@ than `read(since)`, in upstream's order, an equal release being no newer, and ev
 `since=None`; an item whose `released` gives `None` is kept, since it cannot be shown to be no
 newer. It reads `since` once, before the first item, and the reader's `InvalidRequestError`
 passes as raised. A release that does not compare with what the reader gave, a month against
-a time or a time with a zone against `naive_time`'s, raises `TypeError` naming both values and
-their types: a fault of the source's code, which mypy does not catch. `naive_time` reads with `datetime.fromisoformat`, a date alone as its
-midnight, and refuses a text with a zone, since the release times it is compared with carry
-none and comparing the two would invent one. A source whose vintage is no time hands its own
-reader, a release month `"2026-09"` read into `(2026, 9)` and compared with each record's
+a time or a time with a zone against one without, raises `TypeError` naming both values and
+their types: a fault of the source's code, which mypy does not catch. A source whose vintage
+is no time hands a reader of its own form, a release month `"2026-09"` read into `(2026, 9)`
+and compared with each record's
 `(release_year, release_month)`. A `since` that bounds dates or periods beside an `until`,
 both included, is another rule, and this helper does not serve it (conventions §4).
 
@@ -837,8 +847,8 @@ codes that differ in case alone in a folded list are refused there with `ValueEr
 compare as the check does, and `code`, `name` and `packaged` give the fields and the list, for
 a task's own reading of the list.
 
-Other code lists are read with `load_json` or `load_table` (`load_csv`, which
-`load_table` calls for a CSV file, stays in `xippios.core.reference`). The refresh
+Other code lists are read with `load_json`, and a source that packages a CSV file reads
+it itself (ADR-0059, decision 2). The refresh
 script generates `enums.py` from the lists with one `render_enums` call, then runs
 `ruff format` and `ruff check --fix` on it, and the module is committed as formatted:
 
@@ -1644,7 +1654,8 @@ skips, fails or exits at its import, fails the check, which is never skipped: a 
 that needs an optional dependency or a key skips in itself or in its fixture,
 `pytest.importorskip` among them, so that the module's top level, where the declarations
 stand, imports offline. A source whose fetch is a fixture of its own calls
-the assertion underneath in its own test, `assert_list_current(codes, current)`, with
+the assertion underneath in its own test, `assert_list_current(codes, current)` from
+`xippios.core.testing.live`, with
 `packaged=` the packaged records read as it reads the current ones where its records name
 the release they came from, and gives that test as the list's reason in `NO_LIVE_LIST`.
 
@@ -1994,9 +2005,9 @@ fragment until the release assembles it.
 | `xippios.core.client` | httpx client, retries, rate limit, cache with a byte bound, quota policy, request hooks, env-key auth, the renewing bearer, `get_answer`, `download`, `decode_text`, `decode_csv` | alpha |
 | `xippios.core.errors` | taxonomy, `UnknownCode`, `QueryTooLarge`, the refusal of a query over upstream's limit, response classification, `request_description` | alpha |
 | `xippios.core.data_gov` | `Gateway`: the api.data.gov key, the gateway's `classify` of its own answers with `NoDataForYear` on a data path, one quota policy per process | alpha |
-| `xippios.core.redaction` | the one credential rule of the envelope, the recorder and replay, `register_data_name`, signed links | alpha |
-| `xippios.core.models` | `UpstreamModel` with `dump_upstream`, `Result`, `ResultMeta` with `published_at_naive` and `names`, the name of each country code of a request, `ResultCap` with `paged` and `keep`, `parse`, `newer_than`, the filter of a vintage taken back, `naive_time` | alpha |
-| `xippios.core.reference` | packaged CSV/JSON loaders, `PackagedList`, its `codes` and their `check` of an argument (`PackagedCodes`), `names_codes`, `matches`, `closest`, `nearest`, generated `StrEnum`/`IntEnum` modules | alpha |
+| `xippios.core.redaction` | the one credential rule of the envelope, the recorder and replay, `REDACTED`, which a source's package imports from `xippios.core`, `register_data_name`, signed links | alpha |
+| `xippios.core.models` | `UpstreamModel` with `dump_upstream`, `Result`, `ResultMeta` with `published_at_naive` and `names`, the name of each country code of a request, `ResultCap` with `paged` and `keep`, `parse`, `newer_than`, the filter of a vintage taken back | alpha |
+| `xippios.core.reference` | the packaged JSON loader, `PackagedList`, its `codes` and their `check` of an argument (`PackagedCodes`), `names_codes`, `matches`, `closest`, `nearest`, generated `StrEnum`/`IntEnum` modules | alpha |
 | `xippios.core.pagination` | `paginate_offset` (a page-numbered endpoint maps the offset to its page), `collect`, `fetch_counted`, the count before a query over upstream's limit | alpha |
 | `xippios.core.series` | `Ceiling`, the ceiling of a series over periods with its option on the MCP server, and `fetch_periods`, its requests in order | alpha |
 | `xippios.core.tenants` | `Tenants`, a multi-tenant source's tenants declared in the environment with one client each, `list_task`, the tool that names them, and `TenantLock` with `bind_tasks` and `tenant_instructions`, a server bound to one of them | alpha |

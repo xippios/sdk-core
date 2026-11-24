@@ -6,7 +6,7 @@ import pytest
 
 import xippios.core as core
 
-# What consumers import, and nothing else (ADR-0023, decision 5).
+# What consumers import, and nothing else (ADR-0059, decision 3).
 EXPORTS = {
     "xippios.core": {
         # client
@@ -21,10 +21,12 @@ EXPORTS = {
         "request_description",
         # models and helpers
         "Result", "ResultCap", "ResultMeta", "UpstreamModel", "parse", "parse_decimal",
-        "collect", "paginate_offset", "load_json", "load_table", "PackagedList", "matches",
+        "collect", "paginate_offset", "load_json", "PackagedList", "matches",
         "closest", "sync", "__version__",
-        # the filter of a vintage taken back and core's reader of a naive time (ADR-0052)
-        "newer_than", "naive_time",
+        # the filter of a vintage taken back, each source handing its own reader (ADR-0052)
+        "newer_than",
+        # the mark of a redacted value, by the one path of a source's package (ADR-0059)
+        "REDACTED",
         # the nearest-integer strategy of two sources (https://github.com/xippios/sdk-core/issues/107)
         "nearest",
         # tenants, back from the two sources' copies (ADR-0042, decision 1)
@@ -59,8 +61,6 @@ EXPORTS = {
         "assert_write_tools", "keep_reserved_tenants",
         # the recorder's one send, without the write (ADR-0048, decision 3)
         "send_once", "send_once_sync",
-        # the nightly comparison of a packaged list with upstream's (ADR-0055)
-        "assert_list_current",
         # the recording of every exchange of a task (ADR-0057)
         "record_task", "record_task_sync",
         # the type of a recorder's rewrite step (ADR-0048, decision 1)
@@ -96,6 +96,14 @@ def test_each_package_exports_exactly_what_consumers_import(module: str) -> None
     assert sorted(package.__all__) == sorted(EXPORTS[module])
     for name in package.__all__:
         assert getattr(package, name) is not None
+
+
+def test_redacted_is_one_value_by_both_paths() -> None:
+    # A source's package imports it from the root, its tests from the testing extra.
+    import xippios.core.testing as testing
+
+    assert core.REDACTED is testing.REDACTED
+    assert core.REDACTED == "REDACTED"
 
 
 def test_result_cap_is_one_class_without_the_mcp_extra() -> None:

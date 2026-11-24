@@ -76,10 +76,10 @@ the repository it reviews.
     sent to an upstream, a probe's, a recording's or a live test run's, the keyed ones by
     number (`none` is a count), since a keyed call spends the quota that every source and
     process holding its key draws on (ADR-0032, decision 7).
-11. **Core PR** (`sdk-core`, code added): it names the two consumers of what it adds (in
-    its ADR, or in its description when it has none), or, in its ADR, the one-consumer
-    reason of ADR-0023 decision 3 or the fourth that ADR-0058, decision 1, adds: the
-    maintainer's decision on the closed design question of the step that adds the code.
+11. **Core PR** (`sdk-core`, code added): it names the two consumers of each piece it adds
+    that a caller can name (in its ADR, or in its description when it has none), or, in its
+    ADR, the part of the family's contract that a piece with one consumer serves (ADR-0059,
+    decisions 1, 2 and 4).
 12. **Adoption PR** (conventions §15): judged against conventions §15 and nothing else,
     that is the definition of done's Adoption PR block with its Enforced by CI and
     Process blocks; it deletes only what the adoption itself makes dead (ADR-0039,

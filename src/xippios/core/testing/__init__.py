@@ -20,8 +20,9 @@ source's environment (``keep_reserved_tenants``); the family conformance check,
 ``tests/test_built_answers.py`` (ADR-0049). Neither check is imported here. The nightly
 comparison of a packaged list with the list upstream serves now,
 ``xippios.core.testing.live``, a source collects the same way into ``tests/test_live.py``,
-beside its ``LIVE_LISTS`` and ``NO_LIVE_LIST``; its assertion, ``assert_list_current``, is
-exported here (ADR-0055).
+beside its ``LIVE_LISTS`` and ``NO_LIVE_LIST``; its assertion, ``assert_list_current``,
+stays in that module, which calls it, since no source imports it (ADR-0055; ADR-0059,
+decision 3).
 Enable the plugin in a repo's ``tests/conftest.py``::
 
     pytest_plugins = ["xippios.core.testing.plugin"]
@@ -62,7 +63,6 @@ from xippios.core.testing.fixtures import (
     response_from_fixture,
     write_fixture,
 )
-from xippios.core.testing.live import assert_list_current
 from xippios.core.testing.record import (
     record,
     record_sync,
@@ -82,7 +82,6 @@ __all__ = [
     "ReplayFixture",
     "Rewrite",
     "Scrub",
-    "assert_list_current",
     "assert_projection",
     "assert_time_between",
     "assert_write_tools",
