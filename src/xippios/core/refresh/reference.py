@@ -937,13 +937,16 @@ def _kind(key: str, values: object) -> str:
 
 
 def _described(item: object) -> str:
-    """What ``item`` is, by type, never by value: ``"a str"``, ``"a tuple of int, str"``."""
+    """What ``item`` is, by type, never by value: ``"a str"``, ``"an Answer"``, a tuple's parts.
+
+    The article reads the type's first letter in either case, ``"an Item"`` and not ``"a Item"``.
+    """
     if _is_pair(item):
         return "an (id, name) pair"
     if isinstance(item, tuple):
         return f"a tuple of {', '.join(type(part).__name__ for part in item) or 'nothing'}"
     name = type(item).__name__
-    return f"{'an' if name[:1] in 'aeiou' else 'a'} {name}"
+    return f"{'an' if name[:1].lower() in 'aeiou' else 'a'} {name}"
 
 
 def _derived(text: str) -> str | None:

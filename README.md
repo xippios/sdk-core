@@ -1688,11 +1688,10 @@ the function that fetches the list now. It takes no argument and returns, or awa
 records under upstream's field names, mappings or `UpstreamModel` instances, or the bare
 codes, text or integers, which are compared by code alone, either of them as they stand or
 as the `payload` of an `api/` wrapper's `Answer`, so a wrapper is a fetch as it stands. A
-mapping, or an `Answer` of anything else, the body that holds the records say, fails the test
-naming its type, never read as codes of its keys. A code
-gone from upstream's list,
-a code new in it and a code whose record changed fail the run, in any order of the list, and
-the failure names the codes, the first 20 of each kind, and never a record:
+mapping, a text or bytes, or an `Answer` of one, the body that holds the records say, fails
+the test naming its type, never read as codes of its keys or characters. A code gone from
+upstream's list, a code new in it and a code whose record changed fail the run, in any order
+of the list, and the failure names the codes, the first 20 of each kind, and never a record:
 
 ```text
 packaged list countries (fetched 2026-10-23) differs from the list upstream serves now: 1 gone, 1 new, 1 changed of 3 packaged codes, 3 served; refresh it (conventions §10, ADR-0055):

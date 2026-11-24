@@ -101,8 +101,7 @@ def test_packaged_list_is_current(live_list: str, request: pytest.FixtureRequest
 
     Its entry of ``LIVE_LISTS`` fetches the list, or a wrapper's ``Answer`` of it, and
     ``assert_list_current`` compares it with the packaged records by the declared code: a
-    code gone, new or changed fails the test,
-    naming the codes and never a record (ADR-0055).
+    code gone, new or changed fails the test, naming the codes and never a record (ADR-0055).
     """
     entry = getattr(request.module, _LIVE)[live_list]
     if not _is_entry(entry):
@@ -118,28 +117,43 @@ class _Unreadable(Exception):
     """A side of the comparison that holds neither records nor codes, as ``_read`` says."""
 
 
-def _listed(current: Iterable[_Item] | Answer[Iterable[_Item]]) -> Iterable[object]:
+_PACKAGED = (
+    "the packaged list is {kind}: hand its records, not the body or the text that holds them"
+)
+"""The refusal of a ``packaged=`` side that is no list, ``{kind}`` its type."""
+_CURRENT = (
+    "the list upstream serves now is {kind}: hand its records, or the wrapper's Answer of them, "
+    "not the body or the text that holds them"
+)
+"""The refusal of a current side that is no list."""
+_PAYLOAD = (
+    "the list upstream serves now is an Answer of {kind}: an Answer's payload is the list, so "
+    "hand the records, not the body that holds them"
+)
+"""The refusal of an ``Answer`` whose payload is no list."""
+
+
+def _a_list(items: object, refusal: str) -> Iterable[object]:
+    """``items``, one side of the comparison, where it is a list of records or codes.
+
+    Raises:
+        _Unreadable: ``items`` is a mapping, a text or bytes, whose keys or characters would
+            read as bare codes, or no iterable; ``refusal`` names its type, never a value.
+    """
+    if isinstance(items, str | bytes | Mapping) or not isinstance(items, Iterable):
+        raise _Unreadable(refusal.format(kind=_a(type(items).__name__)))
+    return items
+
+
+def _listed(current: object) -> Iterable[object]:
     """The list ``current`` holds: an ``Answer``'s ``payload``, else ``current`` itself.
 
     Raises:
-        _Unreadable: A mapping, whose keys would read as bare codes, or an ``Answer`` whose
-            payload is no list, the body that holds the records say; the message names the
-            type, never a value.
+        _Unreadable: Either is no list, as ``_a_list`` refuses it.
     """
-    if isinstance(current, Mapping):
-        raise _Unreadable(
-            f"the list upstream serves now is {_a(type(current).__name__)}: hand its records, "
-            "or the wrapper's Answer of them, not the body that holds them"
-        )
-    if not isinstance(current, Answer):
-        return current
-    payload = cast(object, current.payload)  # a wrapper's answer that mypy does not check
-    if isinstance(payload, str | bytes | Mapping) or not isinstance(payload, Iterable):
-        raise _Unreadable(
-            f"the list upstream serves now is an Answer of {_a(type(payload).__name__)}: an "
-            "Answer's payload is the list, so hand the records, not the body that holds them"
-        )
-    return payload
+    if isinstance(current, Answer):
+        return _a_list(cast(object, current.payload), _PAYLOAD)
+    return _a_list(current, _CURRENT)
 
 
 def _is_code(value: object) -> TypeGuard[_Code]:
@@ -147,7 +161,8 @@ def _is_code(value: object) -> TypeGuard[_Code]:
 
 
 def _a(kind: str) -> str:
-    return f"{'an' if kind[:1] in 'aeiou' else 'a'} {kind}"
+    """``kind`` with its article, the vowel read in either case: ``"an Answer"``, ``"a str"``."""
+    return f"{'an' if kind[:1].lower() in 'aeiou' else 'a'} {kind}"
 
 
 def _read(items: Iterable[object], field: str, side: str) -> tuple[dict[_Code, list[str]], bool]:
@@ -225,12 +240,13 @@ def assert_list_current(
         current: The list upstream serves now: its records under upstream's field names, as
             mappings or ``UpstreamModel`` instances, read through ``dump_upstream``, or its
             bare codes, text or integers; or an ``api/`` wrapper's ``Answer`` whose
-            ``payload`` is that list, read as the list is. A mapping, or an ``Answer`` of
-            anything else, the body that holds the records say, fails the test naming its
-            type, and is never read as bare codes of its keys.
-        packaged: The packaged side, read as ``current`` is read, for a list whose records
-            name the release they came from, as records that carry a ``report_month`` do:
-            ``codes.packaged.records`` as the source views them; those records by default.
+            ``payload`` is that list, read as the list is. A mapping, a text or bytes, or an
+            ``Answer`` of one or of no list, the body that holds the records say, fails the
+            test naming its type, never read as bare codes of its keys or characters.
+        packaged: The packaged side, read and refused as ``current`` is, an ``Answer`` apart,
+            for a list whose records name the release they came from, as records that carry
+            a ``report_month`` do: ``codes.packaged.records`` as the source views them; those
+            records by default.
 
     Raises:
         TypeError: ``codes`` is no ``PackagedCodes``.
@@ -241,9 +257,8 @@ def assert_list_current(
         )
     side = codes.packaged.records if packaged is None else packaged
     try:
-        before, packaged_bare = _read(side, codes.code, "the packaged list")
-        served = _listed(current)
-        after, current_bare = _read(served, codes.code, "the list upstream serves now")
+        before, packaged_bare = _read(_a_list(side, _PACKAGED), codes.code, "the packaged list")
+        after, current_bare = _read(_listed(current), codes.code, "the list upstream serves now")
     except _Unreadable as unreadable:
         pytest.fail(f"packaged list {codes.list_name}: {unreadable} (ADR-0055)", pytrace=False)
     by_code_alone = packaged_bare or current_bare
