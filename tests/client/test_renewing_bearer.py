@@ -183,16 +183,17 @@ async def test_two_concurrent_first_requests_exchange_once() -> None:
 @pytest.mark.anyio
 async def test_the_bearer_is_renewed_within_the_margin_of_its_expiry() -> None:
     # The margin is the family's, 60 s: no source gave another
-    # (https://github.com/xippios/sdk-core/issues/475).
+    # (https://github.com/xippios/sdk-core/issues/475). The attribute stays, since two
+    # sources' tests read it (ADR-0059, decisions 1 and 2).
     assert RENEWAL_MARGIN == 60.0
     assert "margin" not in inspect.signature(RenewingBearerAuth).parameters
     clock = Clock()
     auth = LoginAuth(source="example", clock=clock)
-    assert not hasattr(auth, "margin")
+    assert auth.margin == RENEWAL_MARGIN
     upstream = Upstream()
     client, _ = make_client(upstream, auth)
     await client.get("/data")
-    clock.now += EXPIRES_IN - RENEWAL_MARGIN - 1
+    clock.now += EXPIRES_IN - auth.margin - 1
     await client.get("/data")
     assert len(upstream.exchanges) == 1, "outside the margin the bearer is kept"
     clock.now += 1
