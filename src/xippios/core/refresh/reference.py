@@ -502,7 +502,7 @@ def _fetched(listed: Listed) -> PackagedList:
             )
     if isinstance(given, str | bytes) or not isinstance(given, Sequence):
         raise SystemExit(
-            f"{listed.name}'s fetch answered a {type(given).__name__}: it answers records "
+            f"{listed.name}'s fetch answered {_described(given)}: it answers records "
             "or a PackagedList; nothing was written"
         )
     if listed.endpoint is None:

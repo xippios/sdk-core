@@ -1687,8 +1687,9 @@ NO_LIVE_LIST = {  # each packaged list not compared, with the reason
 the function that fetches the list now. It takes no argument and returns, or awaits, the
 records under upstream's field names, mappings or `UpstreamModel` instances, or the bare
 codes, text or integers, which are compared by code alone, either of them as they stand or
-as the `payload` of an `api/` wrapper's `Answer`, so a wrapper is a fetch as it stands, and
-an `Answer` of anything else, the body that holds the records say, fails the test. A code
+as the `payload` of an `api/` wrapper's `Answer`, so a wrapper is a fetch as it stands. A
+mapping, or an `Answer` of anything else, the body that holds the records say, fails the test
+naming its type, never read as codes of its keys. A code
 gone from upstream's list,
 a code new in it and a code whose record changed fail the run, in any order of the list, and
 the failure names the codes, the first 20 of each kind, and never a record:

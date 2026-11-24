@@ -122,9 +122,15 @@ def _listed(current: Iterable[_Item] | Answer[Iterable[_Item]]) -> Iterable[obje
     """The list ``current`` holds: an ``Answer``'s ``payload``, else ``current`` itself.
 
     Raises:
-        _Unreadable: An ``Answer`` whose payload is no list, the body that holds the records
-            say; the message names the payload's type, never a value.
+        _Unreadable: A mapping, whose keys would read as bare codes, or an ``Answer`` whose
+            payload is no list, the body that holds the records say; the message names the
+            type, never a value.
     """
+    if isinstance(current, Mapping):
+        raise _Unreadable(
+            f"the list upstream serves now is {_a(type(current).__name__)}: hand its records, "
+            "or the wrapper's Answer of them, not the body that holds them"
+        )
     if not isinstance(current, Answer):
         return current
     payload = cast(object, current.payload)  # a wrapper's answer that mypy does not check
@@ -219,8 +225,9 @@ def assert_list_current(
         current: The list upstream serves now: its records under upstream's field names, as
             mappings or ``UpstreamModel`` instances, read through ``dump_upstream``, or its
             bare codes, text or integers; or an ``api/`` wrapper's ``Answer`` whose
-            ``payload`` is that list, read as the list is. An ``Answer`` of anything else,
-            the body that holds the records say, fails the test naming the payload's type.
+            ``payload`` is that list, read as the list is. A mapping, or an ``Answer`` of
+            anything else, the body that holds the records say, fails the test naming its
+            type, and is never read as bare codes of its keys.
         packaged: The packaged side, read as ``current`` is read, for a list whose records
             name the release they came from, as records that carry a ``report_month`` do:
             ``codes.packaged.records`` as the source views them; those records by default.
