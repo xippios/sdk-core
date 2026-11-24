@@ -101,11 +101,24 @@ def content_disposition_filename(value: str | None) -> str | None:
     return message.get_filename() or None
 
 
+def statuses_before(response: httpx.Response) -> list[httpx.Response]:
+    """The answers httpx kept before ``response`` in its ``history``, as their statuses alone.
+
+    An auth's flow leaves them there: a ``RenewingBearerAuth``'s token answers and the answer
+    that refused its bearer before the resend. An answer that the client rebuilds keeps them
+    so, as httpx's own answer holds them, so a caller still sees one status for each request
+    the call sent, with no body, header or request, so neither a bearer nor a credential of
+    the token request stays with the answer.
+    """
+    return [httpx.Response(earlier.status_code) for earlier in response.history]
+
+
 async def head_of(response: httpx.Response) -> httpx.Response:
     """``response``'s status and headers with at most ``BODY_LIMIT`` bytes of its body.
 
     For an error answer to a download: enough body for the error's text and for
-    ``classify``, never the whole stream. ``response`` is left for the caller to close.
+    ``classify``, never the whole stream, and the answers before it as ``statuses_before``
+    keeps them. ``response`` is left for the caller to close.
     """
     head = bytearray()
     async for chunk in response.aiter_bytes():
@@ -117,6 +130,7 @@ async def head_of(response: httpx.Response) -> httpx.Response:
         headers=strip_wire_headers(response.headers.multi_items()),
         content=bytes(head[:BODY_LIMIT]),
         request=response.request,
+        history=statuses_before(response),
     )
 
 

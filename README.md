@@ -550,12 +550,17 @@ variables to check or the consent and its scope set. `read_token` raises
 `credential(name)` reads a credential from `credentials=`, given to the constructor, or
 else from the variable, and an unset one raises `ConfigError` with the text of
 `credential_help(name)`. The exchange runs inside httpx's auth flow, where it is not
-paced, observed or cached, and its refusal ends the call; a transport failure of the
+paced or cached, `observe` sees its token answer only in the `history` of the answer that
+follows it, and its refusal ends the call; a transport failure of the
 exchange is the request's own, which the retry policy sends again where it would without
 the exchange, a GET say. It reads the token answer
 and no other, so a `download` streams to its file, and the client sends its auth to the
-base URL's origin only. httpx keeps the token answer in the final response's `history`
-while that response lives; `get_answer`, `post_json` and the cache keep no response.
+base URL's origin only. httpx keeps the token answer, and the refused answer before a
+resend, in the final response's `history` while that response lives; `get_answer`,
+`post_json` and the cache keep no response, and `send_once` and a download's refusal keep
+that history as statuses alone, with no body, header or request. The client counts each
+request that the flow hands to its transport, so the two refresh frames count each token
+request and resend, those of a call that an error ends and a refused login's among them.
 A login and the exchange of a refresh token are the two token requests it serves (ADR-0025).
 
 ## Files: download and decode
@@ -1063,17 +1068,34 @@ sources do beyond that, each source named in ADR-0062, and every hook stops the 
 | writes a section of its own in `FETCHED.md` | `sections=lambda rows: [Section(heading, text)]` |
 | makes a row's note from its answer | `note=lambda row: f"{row.note}; {count} operations"` |
 
+A check of one page against another, a documentation page against the API document it
+renders say, runs in `sections`, which sees every row at once, after the last request and
+before anything is written, in every mode: it returns `()` where it adds no section and
+raises `changed` where the pages disagree (ADR-0062, decisions 3 and 5).
+
+The run counts each request that the client hands to its transport, a redirect's, a retry's
+and each token request and resend of the client's auth, those of a call that an error ends
+and a refused login's among them. It prints the count as its last line, a failed run's too
+once it began to fetch, as the reference frame does, and the line names the auth's requests
+where the client logs in (ADR-0062, decision 4).
+
 A keyed sample alone is sent with the credentials of the snapshot's `client`, which reads
-them itself, a login's included; it follows no redirect, is never retried, and the frame
-prints nothing of it. It lies on the origin of the client's base URL, its scheme, host and
-port, where alone the client sends its credentials (ADR-0037, decision 4), so
+them itself, a login's included; it follows no redirect, is never retried by the frame, a
+renewing auth sending it once more after a refused bearer (ADR-0025), and the frame prints
+nothing of it. A keyed sample lies on the origin of the client's base URL, its scheme, host
+and port, where alone the client sends its credentials (ADR-0037, decision 4), so
 `https://api.example.org/v2/items` is a keyed sample of a client on
 `https://api.example.org/v1` and `https://api.example.org.elsewhere.example.net/v1/items` none.
 `variables` names the environment variables that the credentials are read from: `FETCHED.md`
 names them and never a value, and each must be set before anything is fetched. A shared
 document is cut to the source's part in `reduce` with `read_json`, which refuses a document
 that `dump_json` does not write again as fetched or that holds a key twice, and `dump_json`,
-both indenting by two (ADR-0062, decision 4). A `Last-Modified` stands in UTC, a date without
+both indenting by two (ADR-0062, decision 4). A hook that reads a JSON answer and writes
+nothing of the document again, a `note` that names the API document's version or a
+`sections` that compares two pages, reads it with `parse_json`, which refuses a key twice
+and a body that is no JSON with `changed` and holds the document to no form, so compact JSON
+kept as served is read; `read_json` reads through it (ADR-0062, decision 4). A
+`Last-Modified` stands in UTC, a date without
 a zone read as GMT as HTTP has it, and one that is no HTTP date as sent, in a code span.
 
 ## The reference refresh script's frame

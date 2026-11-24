@@ -69,7 +69,7 @@ from xippios.core.client import Answer, AsyncClient, RetryPolicy
 from xippios.core.errors import TransportError
 from xippios.core.models import UpstreamModel
 from xippios.core.reference import PackagedList
-from xippios.core.refresh.upstream import Snapshot
+from xippios.core.refresh.upstream import Snapshot, _logs_in
 from xippios.core.refresh.upstream import run as _run_snapshot
 
 COMMAND = "uv run python scripts/refresh_reference.py"
@@ -199,53 +199,73 @@ class _Meter:
     """What a run spent: the requests it sent and the quota left that upstream reported.
 
     The client's ``observe`` hook for the run, which core calls with every response from the
-    wire, after the hook the client had, a quota policy's say (ADR-0037).
+    wire, after the hook the client had, a quota policy's say (ADR-0037), and reads the quota
+    header from it. The requests sent are the client's own count since the run began, which
+    takes each request it hands to its transport: one that fails in transit, and each
+    request of a renewing auth's flow, its token requests and its resend after a refused
+    bearer, those of a call that an error ends among them (ADR-0062, decision 14; ADR-0025).
     """
 
     def __init__(
-        self, observe: Callable[[httpx.Response], None] | None, header: str | None
+        self,
+        observe: Callable[[httpx.Response], None] | None,
+        header: str | None,
+        client: AsyncClient,
     ) -> None:
-        self.sent = 0
         self.unanswered = 0
         self.left: int | None = None
         self._observe = observe
         self._header = header
+        self._client = client
+        self._before = client._sent
+
+    @property
+    def sent(self) -> int:
+        """The requests the client sent since the run began."""
+        return self._client._sent - self._before
 
     def __call__(self, response: httpx.Response) -> None:
         if self._observe is not None:
             self._observe(response)
-        self.sent += 1
         value = response.headers.get(self._header) if self._header else None
         if value is not None and value.isascii() and value.isdigit():
             self.left = int(value)
 
     def report(self) -> str:
-        """The requests sent and the quota left, as upstream last reported it, one line."""
+        """The requests sent and the quota left, as upstream last reported it, one line.
+
+        Where the client's auth logs in, the line says that its token requests and resends
+        are among the requests sent, a refused login's too.
+        """
         left = "not reported" if self.left is None else f"{self.left} ({self._header})"
         unanswered = (
             f" ({self.unanswered} ended in a transport error, counted as sent)"
             if self.unanswered
             else ""
         )
-        return f"requests sent: {self.sent}{unanswered}; quota left: {left}"
+        by_auth = (
+            ", each token request and resend of the client's auth among them"
+            if _logs_in(self._client)
+            else ""
+        )
+        return f"requests sent: {self.sent}{unanswered}{by_auth}; quota left: {left}"
 
 
 @contextmanager
 def _metered(client: AsyncClient, header: str | None) -> Iterator[_Meter]:
     """``client`` for the block: one attempt per request, each counted, then the report.
 
-    A request that fails in transport has no response to count, and with one attempt its
-    error ends the block: it is counted as sent, since it may have reached upstream. The
-    client's configuration is restored after the block and the report printed, a failed
-    run's too.
+    The client counts each request it hands to its transport, so one that fails in transit,
+    with no response, is counted as sent, since it may have reached upstream, and so are the
+    requests of a renewing auth in a call that an error ends. The client's configuration is
+    restored after the block and the report printed, a failed run's too.
     """
     configured = client.config
-    meter = _Meter(configured.observe, header)
+    meter = _Meter(configured.observe, header, client)
     client.config = replace(configured, retry=RetryPolicy(max_attempts=1), observe=meter)
     try:
         yield meter
     except TransportError:
-        meter.sent += 1
         meter.unanswered += 1
         raise
     finally:

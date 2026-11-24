@@ -172,6 +172,9 @@ skip it (§8, §9; ADR-0040).
   README says how the frame sends. A converter that a source's hooks use is the source's own
   dependency, never core's (ADR-0062, decision 1). Every file the snapshot holds but
   `FETCHED.md` is written as the source's hooks make it (ADR-0062, decision 6).
+  A check of one page against another runs in the snapshot's `sections`, which sees every
+  row before anything is written, returns `()` where it adds no section and stops the run
+  with `changed` where the pages disagree (ADR-0062, decisions 3 and 5).
   The script names its `Snapshot` `SNAPSHOT` at its top level, which imports and declares
   alone, sends no request and writes no file, its run standing under
   `if __name__ == "__main__":`, the form that sdk-template renders, which the review holds
@@ -265,6 +268,9 @@ skip it (§8, §9; ADR-0040).
   credentials of the client that the snapshot hands it (ADR-0062, decision 4).
   A keyed sample has the origin of the client's base URL, its scheme, host and port, where
   alone the client sends its credentials (ADR-0062, decision 4; ADR-0037, decision 4).
+  A keyed sample is never retried by the frame; a renewing auth sends it once more after a
+  refused bearer, and the run counts both sends and each token request, so a source counts
+  none of the frame's requests itself (ADR-0062, decision 4; ADR-0025).
 - A package returns each value of upstream's data as upstream states it, under upstream's own
   name, code and unit, derives no value of the data and converts none, and where it reads a
   printed text as a number or a time and the reading can lose something, the text stands beside

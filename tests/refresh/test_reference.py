@@ -28,13 +28,16 @@ from typing import Any
 import httpx
 import pytest
 import respx
-from pydantic import Field
+from pydantic import Field, SecretStr
 
 from xippios.core import (
     Answer,
     AsyncClient,
+    AuthError,
+    BearerToken,
     ClientConfig,
     PackagedList,
+    RenewingBearerAuth,
     RetryPolicy,
     TransportError,
     UpstreamModel,
@@ -268,6 +271,79 @@ def test_a_transport_error_is_counted_as_sent(source: Source) -> None:
         error, printed = go_raising(source, two_value_lists(source))
     assert isinstance(error, TransportError), error
     assert "requests sent: 1 (1 ended in a transport error, counted as sent)" in printed
+
+
+ACCOUNT = "EXAMPLE_ACCOUNT"
+BY_AUTH = "each token request and resend of the client's auth among them"
+"""What the count says of a client whose auth logs in, after the number."""
+
+
+class Login(RenewingBearerAuth):
+    """A source's login on its API's origin, its one variable posted as a form, for a bearer."""
+
+    def token_request(self, request: httpx.Request) -> httpx.Request:
+        return httpx.Request("POST", f"{BASE}/token", data={"account": self.credential(ACCOUNT)})
+
+    def read_token(self, response: httpx.Response) -> BearerToken:
+        answer = response.json()
+        return BearerToken(SecretStr(answer["access_token"]), answer["expires_in"])
+
+
+def login_lists() -> tuple[AsyncClient, list[Listed]]:
+    """Two lists of values fetched through a client whose auth logs in for a bearer."""
+    config = ClientConfig(source="example", version="1", base_url=BASE)
+    client = AsyncClient(config, auth=Login(source="example"))
+    lists = [
+        Listed(name, values(client, name), endpoint="get_param_values")
+        for name in ("state_alpha", "unit")
+    ]
+    return client, lists
+
+
+def test_the_requests_of_a_renewing_auth_are_counted(
+    source: Source, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """https://github.com/xippios/sdk-core/issues/579 (ADR-0062, decision 14; ADR-0025): the
+    client's auth logs in before the first list and, its bearer refused with a 401, logs in
+    again and sends the request once more, which is no retry of the run's one attempt; the run
+    counts each of those requests, which the client counts as it sends them, and says so. A
+    login whose answer the auth refuses ends the run, its request counted, and so do the
+    requests before it in its call (https://github.com/xippios/sdk-core/pull/580, finding 2)."""
+    monkeypatch.setenv(ACCOUNT, "someone")
+    token = {"access_token": "made-up-bearer", "expires_in": 3600}
+    client, lists = login_lists()
+    with respx.mock(base_url=BASE) as upstream:
+        login = upstream.post("/token").respond(200, json=token)
+        data = upstream.get("/get_param_values")
+        data.side_effect = [
+            httpx.Response(401),
+            httpx.Response(200, json=["AK"]),
+            httpx.Response(200, json=["kg"]),
+        ]
+        status, printed = go(source, lists, client=client)
+    assert status == 0
+    assert (login.call_count, data.call_count) == (2, 3)
+    assert f"requests sent: 5, {BY_AUTH}; quota left: not reported" in printed, printed
+    assert "made-up-bearer" not in printed
+    client, lists = login_lists()
+    before = source.files()
+    with respx.mock(base_url=BASE, assert_all_called=False) as upstream:
+        upstream.post("/token").respond(401)
+        data = upstream.get("/get_param_values").respond(200, json=["AK"])
+        error, printed = go_raising(source, lists, client=client)
+    assert isinstance(error, AuthError), error
+    assert data.call_count == 0
+    assert f"requests sent: 1, {BY_AUTH}; quota left: not reported" in printed, printed
+    client, lists = login_lists()
+    with respx.mock(base_url=BASE, assert_all_called=False) as upstream:
+        upstream.post("/token").mock(
+            side_effect=[httpx.Response(200, json=token), httpx.Response(401)]
+        )
+        upstream.get("/get_param_values").respond(401)
+        error, printed = go_raising(source, lists, client=client)
+    assert isinstance(error, AuthError), error
+    assert f"requests sent: 3, {BY_AUTH}; quota left: not reported" in printed, "login, 401, login"
+    assert source.files() == before, "nothing written"
 
 
 # --- enums.py ------------------------------------------------------------------------------

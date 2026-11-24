@@ -246,16 +246,21 @@ class RenewingBearerAuth(httpx.Auth):
     refused with one bearer renew it once.
 
     The exchange runs inside httpx's auth flow, below the client's limiter, hooks, cache and
-    ``classify``: it is not paced or observed, and a token answer that ``token_refused`` or
-    ``read_token`` refuses raises an error that ends the call. A transport failure of the
-    exchange counts as one of the request it precedes, so the client's retry policy sends
-    that request again, exchange included, where it would for the request alone (ADR-0011).
-    The flow reads the token answer and no other, so a download through it streams to its
-    file (ADR-0040, decision 1). httpx keeps the token answer, its body read, in the final
-    response's ``history`` for as long as that response lives: a caller that keeps a
-    response of ``request`` or ``get`` keeps the bearer with it, while ``get_answer``,
-    ``post_json`` and the cache keep no response. The client sends its auth to the base
-    URL's origin only (ADR-0037, decision 4).
+    ``classify``: it is not paced, ``observe`` sees its token answer only in the ``history``
+    of the answer that follows it, and a token answer that ``token_refused`` or
+    ``read_token`` refuses raises an error that ends the call, so no hook sees that answer. A
+    transport failure of the exchange counts as one of the request it precedes, so the
+    client's retry policy sends that request again, exchange included, where it would for
+    the request alone (ADR-0011). The flow reads the token answer and no other, so a
+    download through it streams to its file (ADR-0040, decision 1). httpx keeps the token
+    answer, its body read, and the refused answer before a resend in the final response's
+    ``history`` for as long as that response lives: a caller that keeps a response of
+    ``request`` or ``get`` keeps the bearer with it, while ``get_answer``, ``post_json`` and
+    the cache keep no response, and the recorder's ``send_once`` and a download's refusal
+    keep that history as statuses alone. The client counts each request that the flow hands
+    to its transport, so the two refresh frames count each exchange and resend, those of a
+    call that an error ends and a refused one's among them (ADR-0062, decisions 4 and 14).
+    The client sends its auth to the base URL's origin only (ADR-0037, decision 4).
 
     The bearer is kept as a ``SecretStr``, and a credential is read when the token request
     is built and kept nowhere, unless it is given to the constructor. It runs on an async

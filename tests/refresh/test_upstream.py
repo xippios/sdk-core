@@ -28,8 +28,9 @@ from typing import Any
 import httpx
 import pytest
 import respx
+from pydantic import SecretStr
 
-from xippios.core import refresh
+from xippios.core import BearerToken, RenewingBearerAuth, refresh
 from xippios.core.client import AsyncClient, ClientConfig, RetryPolicy
 from xippios.core.errors import ConfigError, RateLimitError, XippiosError
 from xippios.core.refresh import (
@@ -1231,6 +1232,118 @@ def test_a_keyed_sample_follows_no_redirect_and_is_never_retried(
     assert not out.exists(), "nothing written"
 
 
+BY_AUTH = "each redirect and retry counted, and each token request and resend of the client's auth"
+"""What the run's last line says after its count where the client logs in."""
+BEARER = "made-up-bearer"
+"""The bearer that the login's token endpoint answers, which nothing the run prints holds."""
+
+
+class Login(RenewingBearerAuth):
+    """A source's login on its API's origin: its two variables posted as a form, for a bearer."""
+
+    def token_request(self, request: httpx.Request) -> httpx.Request:
+        form = {name: self.credential(name) for name in VARIABLES}
+        return httpx.Request("POST", f"{API}/token", data=form)
+
+    def read_token(self, response: httpx.Response) -> BearerToken:
+        answer = response.json()
+        return BearerToken(SecretStr(answer["access_token"]), answer["expires_in"])
+
+
+def login_snapshot(site: Site, out: Path) -> Snapshot:
+    """A guide and one keyed sample, sent through a client whose auth logs in for a bearer."""
+    token = json.dumps({"access_token": BEARER, "expires_in": 3600}).encode()
+    site.routes[f"{API}/token"] = (200, {"Content-Type": "application/json"}, token)
+    site.routes[f"{API}/items"] = (200, {"Content-Type": "application/json"}, b'{"items": []}')
+    config = ClientConfig(source="example", version=VERSION, base_url=f"{API}/")
+    return declare(
+        out,
+        Page(site.page("guide.html", "<p>Guide</p>"), "pages/guide.html"),
+        Page(f"{API}/items", "samples/items.json", sample=True, keyed=True),
+        client=AsyncClient(config, auth=Login(source="example")),
+        variables=VARIABLES,
+    )
+
+
+def test_the_run_counts_each_request_of_a_renewing_auth(
+    site: Site, out: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """https://github.com/xippios/sdk-core/issues/579 (ADR-0062, decision 4; ADR-0025): the
+    client's auth logs in before the keyed sample and, its bearer refused with a 401, logs in
+    again and sends the sample once more, which is no retry of the frame; the run counts each
+    of those requests, which the client counts as it hands each to its transport. A login
+    whose answer the auth refuses stops the run, and its request is counted too."""
+    for name in VARIABLES:
+        monkeypatch.setenv(name, "someone")
+    snapshot = login_snapshot(site, out)
+    site.later[f"{API}/items"] = [(401, {}, b"")]
+    assert go(snapshot) == 0
+    login, sample = ("POST", f"{API}/token"), ("GET", f"{API}/items")
+    sent = [(request.method, str(request.url)) for request in site.requests]
+    assert sent == [("GET", f"{BASE}/guide.html"), login, sample, login, sample]
+    printed = capsys.readouterr().out
+    assert f"5 requests sent, {BY_AUTH}\n" in printed, printed
+    assert BEARER not in printed
+    assert BEARER not in fetched(out)
+    refused = login_snapshot(site, out)
+    site.routes[f"{API}/token"] = (401, {}, b"")
+    with pytest.raises(SystemExit, match=r"401 from POST /v1/token: Unauthorized"):
+        go(refused)
+    printed = capsys.readouterr().out
+    assert f"2 requests sent, {BY_AUTH}\n" in printed, "the guide and the refused login"
+
+
+def test_a_call_that_an_error_ends_counts_the_auth_s_requests_before_it(
+    site: Site, out: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """https://github.com/xippios/sdk-core/pull/580, finding 2: the client counts each request
+    it hands to its transport, so a call that an error ends counts the auth's requests before
+    it, which no answer carries: a login, the sample refused with a 401 and a second login
+    that the auth refuses are three, and a login and a sample that fails in transit two."""
+    for name in VARIABLES:
+        monkeypatch.setenv(name, "someone")
+    snapshot = login_snapshot(site, out)
+    token = site.routes[f"{API}/token"]
+    site.later[f"{API}/token"] = [token]
+    site.routes[f"{API}/token"] = (401, {}, b"")
+    site.later[f"{API}/items"] = [(401, {}, b"")]
+    capsys.readouterr()
+    with pytest.raises(SystemExit, match=r"401 from POST /v1/token: Unauthorized"):
+        go(snapshot)
+    assert f"4 requests sent, {BY_AUTH}\n" in capsys.readouterr().out, "the guide and three"
+    snapshot = login_snapshot(site, out)
+    del site.routes[f"{API}/items"]
+    with pytest.raises(SystemExit, match="is not served; a keyed request is not retried"):
+        go(snapshot)
+    assert f"3 requests sent, {BY_AUTH}\n" in capsys.readouterr().out, "the guide and two"
+    assert not out.exists(), "nothing written"
+
+
+def test_a_failed_run_prints_the_requests_it_sent(
+    site: Site, out: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """ADR-0062, decisions 4 and 14 (https://github.com/xippios/sdk-core/issues/579): the run
+    prints the requests it sent after its last one, a failed run's too, as the reference
+    frame does: a page that fails after its retry, and a check across pages that stops the
+    run after the last request. A run that stops before its first request prints none."""
+    url = site.page("guide.html", "<p>Guide</p>")
+    site.later[url] = [(503, {}, b""), (502, {}, b"")]
+    with pytest.raises(SystemExit, match=r"\(after one retry\)"):
+        go(declare(out, Page(url, "pages/guide.html")))
+    assert "2 requests sent, each redirect and retry counted\n" in capsys.readouterr().out
+
+    def disagree(rows: Sequence[Row]) -> Sequence[Section]:
+        raise refresh.changed(url, "it no longer renders the API document")
+
+    with pytest.raises(SystemExit, match="no longer renders the API document"):
+        go(declare(out, Page(url, "pages/guide.html"), sections=disagree))
+    assert "1 requests sent, each redirect and retry counted\n" in capsys.readouterr().out
+    with pytest.raises(SystemExit, match="Nothing to fetch"):
+        go(declare(out))
+    assert "requests sent" not in capsys.readouterr().out
+    assert not out.exists(), "nothing written"
+
+
 def test_the_variables_are_checked_by_name_before_anything_is_fetched(
     site: Site, out: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1600,6 +1713,57 @@ def test_read_json_reads_a_document_that_dump_json_writes_again(site: Site, out:
     assert not hasattr(refresh, "load_json")
 
 
+def test_parse_json_refuses_a_key_twice_and_keeps_the_document_as_served(
+    site: Site, out: Path
+) -> None:
+    """https://github.com/xippios/sdk-core/issues/579 (ADR-0059, decision 5; ADR-0062,
+    decision 4): the frame's plain reader of a JSON answer parses it and stops the run with
+    ``changed`` on a key twice, which ``json.loads`` would drop silently, or on a body that is
+    no JSON, before anything is written. It holds the document to no form, so a compact
+    document kept as served is read and written as fetched."""
+    compact = '{"openapi":"3.1.0","paths":{}}'
+    url = site.page("openapi.json", compact)
+    read: list[Any] = []
+
+    def reduce(page: Page, response: Response) -> bytes:
+        read.append(refresh.parse_json(response))
+        return response.body
+
+    snapshot = declare(out, Page(url, "openapi/openapi.json"), reduce=reduce)
+    assert go(snapshot) == 0
+    assert read == [{"openapi": "3.1.0", "paths": {}}]
+    assert (out / "openapi/openapi.json").read_text(encoding="utf-8") == compact
+    before = fetched(out)
+    site.page("openapi.json", '{"openapi":"3.1.0","openapi":"3.1.1"}')
+    duplicate = r"openapi\.json changed: not usable JSON \(duplicate keys \['openapi'\]\)"
+    with pytest.raises(SystemExit, match=duplicate) as stop:
+        go(snapshot)
+    assert "Nothing was written." in str(stop.value)
+    site.page("openapi.json", '{"openapi":')
+    with pytest.raises(SystemExit, match=r"openapi\.json changed: not usable JSON \("):
+        go(snapshot)
+    assert fetched(out) == before, "nothing written"
+
+
+def test_read_json_still_refuses_what_it_refused() -> None:
+    """https://github.com/xippios/sdk-core/issues/579: ``read_json`` reads through
+    ``parse_json`` and still holds the document to ``dump_json``'s form, so the compact
+    document that ``parse_json`` keeps, a key twice and a body that is no JSON stop it."""
+    url = f"{BASE}/openapi.json"
+    served = Response(url, 200, b'{"openapi":"3.1.0"}', "application/json", None, None, ())
+    assert refresh.parse_json(served) == {"openapi": "3.1.0"}
+    with pytest.raises(SystemExit, match=r"json\.dumps\(indent=2, ensure_ascii=False\)"):
+        refresh.read_json(served)
+    for body, refusal in [
+        (b'{\n  "a": 1,\n  "a": 2\n}\n', "duplicate keys"),
+        (b'{\n  "a": ', "not usable JSON"),
+    ]:
+        with pytest.raises(SystemExit, match=refusal):
+            refresh.read_json(replace(served, body=body))
+    indented = replace(served, body=b'{\n  "openapi": "3.1.0"\n}\n')
+    assert refresh.read_json(indented) == refresh.parse_json(indented) == {"openapi": "3.1.0"}
+
+
 def test_the_command_line_takes_no_out(
     site: Site, out: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -1644,6 +1808,37 @@ def test_a_section_of_the_sources_own_stands_before_the_files(
     capsys.readouterr()
     assert go(snapshot, "--check") == 1
     assert "differs: FETCHED.md" in capsys.readouterr().out
+
+
+def test_a_check_across_pages_runs_in_sections_before_anything_is_written(
+    site: Site, out: Path
+) -> None:
+    """https://github.com/xippios/sdk-core/issues/579 (ADR-0062, decisions 3 and 5): a hook
+    of one page sees one page, while ``sections`` sees every row, after the last request and
+    before anything is written, in every mode, so a check of a documentation page against
+    the API document it renders returns ``()`` while they agree and stops the run with
+    ``changed`` where they part."""
+    spec = site.page("openapi.json", '{"openapi": "3.1.0", "info": {"version": "2.1"}}')
+    docs = site.page("redoc.html", "<p>API version 2.1</p>")
+
+    def agree(rows: Sequence[Row]) -> Sequence[Section]:
+        by_url = {row.page.url: row.response for row in rows}
+        version = refresh.parse_json(by_url[spec])["info"]["version"]
+        if f"version {version}" not in refresh.decode(by_url[docs]):
+            raise refresh.changed(docs, f"it no longer renders version {version}")
+        return ()
+
+    snapshot = declare(
+        out, Page(spec, "openapi/openapi.json"), Page(docs, note="renders SPEC"), sections=agree
+    )
+    assert go(snapshot) == 0
+    before = fetched(out)
+    site.page("redoc.html", "<p>API version 2.0</p>")
+    for mode in ((), ("--check",)):
+        with pytest.raises(SystemExit, match=r"redoc\.html changed: .*version 2\.1") as stop:
+            go(snapshot, *mode)
+        assert "Nothing was written." in str(stop.value)
+    assert fetched(out) == before, "nothing written"
 
 
 def test_a_rows_note_is_made_from_its_answer(site: Site, out: Path) -> None:
