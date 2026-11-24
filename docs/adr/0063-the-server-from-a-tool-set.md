@@ -154,6 +154,14 @@ change of the family check.
   `get_thread` today.
 - The host moves to `register_tasks(server, tool_set)` and the tool set's fields, and imports
   nothing private of core, at its adoption of core 0.5.0, which brings it from core 0.3.
+- The consumers of the names that decision 2 adds to the root, by ADR-0059, decisions 1 and 2:
+  `tool_name` from `xippios.core`, and its text form, serve the refusals that name another
+  task's tool, which sdk-usda-esmis and sdk-eurostat write by hand since their adoption of core
+  0.4.0, the second saying why in its decision 4 (https://github.com/xippios/sdk-usda-esmis/pull/46,
+  https://github.com/xippios/sdk-eurostat/pull/68, as https://github.com/xippios/sdk-core/issues/336
+  asks), and the host, which names a source's tools with it (decision 4); `tool_functions` from
+  `xippios.core` serves the host under the package contract (ADR-0059, decision 4) and every
+  source's rendered `mcp.py`, which calls the same function today.
 - The pieces with one consumer that stay, by ADR-0059, decision 2: `loopback_only`, which
   sdk-google-mail declares and the host reads; the noun of a tenant, sdk-cashctrl's; and
   `option_defaults()`, which the host reads under the package contract (ADR-0059, decision 4)
