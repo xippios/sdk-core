@@ -77,6 +77,11 @@ source stands on a frozen template tag or before a release from which a rule bin
   checklist no longer lag it.
 - A source's adoption reads one part of the handover and its own adoption issue, and core's
   handover changes when a release does, not when a source does.
+- ADR-0027, the record of one source's metered and content-bearing upstream, leaves core for that
+  source's first record,
+  https://github.com/xippios/sdk-x/blob/main/docs/adr/0001-x-metered-content-source.md, by part 4
+  of the answer on https://github.com/xippios/sdk-core/issues/484, so a rule that it held cites
+  that record (decision 2), while the superseded ADR-0010, ADR-0012 and ADR-0016 stay as written.
 - ADR-0039 is amended: decision 2's third route leaves, and the definition of done's Adoption PR
   block points to §15 in place of mirroring it.
 - A rule that a test pins keeps its sentence form, so a trim moves few pins, and the tests that
