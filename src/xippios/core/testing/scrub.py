@@ -9,17 +9,20 @@ registered, such as a source's ``key``), the userinfo and the credential headers
 ``scrub_params``, ``scrub_url`` and ``scrub_headers`` are that module's, importable from
 here as well. A ``Scrub`` adds what only the source knows: the secret values themselves,
 named before the request or read from its answer, such as a login's tokens, each replaced
-and verified as given, percent-encoded and behind a JSON escape (ADR-0066, decision 11).
+as given, percent-encoded, behind a JSON escape or both, and verified in every text that the
+exchange decodes to (ADR-0066, decision 11).
 What a source rewrites beyond them, a tenant's host or a field by key, it rewrites in its
 own step on the ``Fixture``, which the recorder runs after the scrub and checks before
 the write (``rewrite=``; ADR-0066, decisions 1 and 2).
 """
 
 import base64
+import json
 import re
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import unquote
 
 import httpx
 
@@ -45,12 +48,24 @@ class Scrub:
     that is not UTF-8 text is refused with ``ValueError`` unless ``allow_binary`` is
     set, and is then stored base64, unscrubbed, flagged with ``body_base64``.
 
+    Before anything is kept, the scrubbed exchange is verified: a secret value still in
+    the URL, a header value or a text body in any of its forms, or in any text that one of
+    them decodes to, JSON-unescaped and percent-decoded in either order until it no longer
+    changes, refuses it with ``ValueError``, which names the place, never the value. So any
+    nesting of a percent-encoding and a JSON escape that the scrub does not replace is
+    refused, a percent-encoding encoded again or a JSON text stringified twice say, and so
+    is a text that still decodes after eight rounds: nine nested encodings, or a run of 128
+    or more backslashes in a JSON string (257 in a text body), since each round halves such
+    a run. That refusal is a false one, which sends the answer to review and writes no
+    secret (ADR-0066, decision 11).
+
     Attributes:
         secrets: Values that must never be written, e.g. a key or a tenant name. Each
             becomes ``REDACTED`` wherever it appears in the URL, the headers and the
             bodies, the longest value first, in the letter case given, and in its every
             form: each character as given, percent-encoded in either hex case (a space
-            also as ``+``), or behind a JSON escape (``\u00e9``, ``\/``), in any mix
+            also as ``+``), the sign of either also behind a JSON escape (``\u0025``,
+            ``\u002B``), or behind a JSON escape (``\u00e9``, ``\/``), in any mix
             (ADR-0066, decision 11). An empty value is refused with ``ValueError``. Left
             out of the ``repr``.
         response_secrets: A function that reads the values that must never be written
@@ -127,29 +142,77 @@ _JSON_SHORT = {
 }
 """The short JSON escapes of a character, ``\\/`` among them, which some encoders write."""
 
+_PERCENT = r"(?:%|\\u0025)"
+r"""A percent-encoding's sign, ``%``, as given or behind a JSON escape, ``\u0025``."""
+
+_PLUS = r"(?:\+|\\u002[Bb])"
+r"""A space's ``+`` in a query or a form, as given or behind a JSON escape, ``\u002B``."""
+
 
 def _forms(value: str) -> str:
     r"""A pattern for ``value`` in its every form, character by character (ADR-0066, decision 11).
 
     Each character as given; percent-encoded, its UTF-8 bytes in either hex case, and a
-    space also as ``+``, as a query or a form writes it; or behind a JSON escape,
-    ``\uXXXX`` in either hex case, a surrogate pair beyond the Basic Multilingual Plane,
-    or its short escape. Any mix of the three matches, in the letter case of ``value``.
+    space also as ``+``, as a query or a form writes it, the sign of either also behind a
+    JSON escape (``\u0025``, ``\u002B``), as a JSON body writes a query it echoes; or behind
+    a JSON escape, ``\uXXXX`` in either hex case, a surrogate pair beyond the Basic
+    Multilingual Plane, or its short escape. Any mix of the three matches, in the letter
+    case of ``value``. A deeper nesting is no form here: the verify decodes each text to
+    find it (``_decodings``).
     """
     parts = []
     for char in value:
         units = char.encode("utf-16-be")
         options = [
             re.escape(char),
-            "".join(f"%{_hex(f'{byte:02X}')}" for byte in char.encode("utf-8")),
+            "".join(f"{_PERCENT}{_hex(f'{byte:02X}')}" for byte in char.encode("utf-8")),
             "".join(rf"\\u{_hex(units[i : i + 2].hex())}" for i in range(0, len(units), 2)),
         ]
         if char == " ":
-            options.append(r"\+")
+            options.append(_PLUS)
         if char in _JSON_SHORT:
             options.append(re.escape(_JSON_SHORT[char]))
         parts.append(f"(?:{'|'.join(options)})")
     return "".join(parts)
+
+
+_ESCAPES = re.compile(r'(?:\\(?:u[0-9A-Fa-f]{4}|["\\/bfnrt]))+')
+"""A run of JSON escapes, decoded whole so that a surrogate pair becomes its one character."""
+
+_ROUNDS = 8
+"""The rounds of decoding that the verify takes of a text; one still changing is refused."""
+
+
+def _unescaped(text: str) -> str:
+    """``text`` with each run of JSON escapes decoded, as a JSON string decodes it."""
+    return _ESCAPES.sub(lambda run: str(json.loads(f'"{run.group(0)}"')), text)
+
+
+def _decodings(text: str) -> tuple[list[str], bool]:
+    """Every text that ``text`` decodes to, and whether the decoding came to its end.
+
+    Each round JSON-unescapes and percent-decodes every text that the round before gave,
+    each way alone, so the two nest in either order and to any depth: a percent-encoding
+    encoded again, a JSON escape percent-encoded, a JSON text stringified twice, a repeated
+    key's every value. A text that neither changes ends its line, and each change makes a
+    text shorter. After ``_ROUNDS`` rounds the decoding stops, and the flag says whether a
+    text it gave would still change (ADR-0066, decision 11).
+    """
+    seen = {text}
+    frontier = [text]
+    decoded: list[str] = []
+    for _ in range(_ROUNDS):
+        later = []
+        for old in frontier:
+            for new in (unquote(old), _unescaped(old)):
+                if new not in seen:
+                    seen.add(new)
+                    later.append(new)
+        if not later:
+            return decoded, True
+        decoded += later
+        frontier = later
+    return decoded, all(unquote(old) in seen and _unescaped(old) in seen for old in frontier)
 
 
 class _Scrubber:
@@ -192,9 +255,15 @@ class _Scrubber:
         Runs on what the scrub produced, before anything is kept or written, when the
         ``Scrub`` names secrets: the URL, every header value and both bodies are
         searched for each value in its every form, as the scrub replaces it, in the
-        letter case given; ``REDACTED`` is masked first and never counts. A backstop
-        (ADR-0030): a body stored base64 (``allow_binary``) is not searched, since it is
-        kept unscrubbed by design.
+        letter case given, and so is every text that each of them decodes to,
+        JSON-unescaped and percent-decoded in either order until it no longer changes,
+        so any nesting of the two encodings that the scrub does not replace is refused,
+        a repeated JSON key's every value read (``_decodings``; ADR-0066, decision 11).
+        A text that still changes after ``_ROUNDS`` rounds is refused, never passed, a run
+        of 128 backslashes in a JSON string among them, which each round halves.
+        ``REDACTED`` is masked first and never counts. A backstop (ADR-0030): a body
+        stored base64 (``allow_binary``) is not searched, since it is kept unscrubbed by
+        design.
 
         Args:
             url: The scrubbed request URL.
@@ -204,9 +273,10 @@ class _Scrubber:
             response_body: The scrubbed response body; ``None`` when base64.
 
         Raises:
-            ValueError: A secret value is still present; the message names the location
-                (``request URL``, a header by name, ``request body``, ``response body``),
-                never the value.
+            ValueError: A secret value is still present, the message naming the location
+                (``request URL``, a header by name, ``request body``, ``response body``,
+                and ``, decoded`` after it where a decoded text holds it), never the value;
+                or a text still decodes after ``_ROUNDS`` rounds, the message naming where.
         """
         __tracebackhide__ = True  # pytest would print the arguments: the refused text
         if not self._secrets:
@@ -218,11 +288,20 @@ class _Scrubber:
             if body is not None:
                 places.append((location, body))
         for location, text in places:
-            masked = text.replace(REDACTED, "\0")
-            if any(pattern.search(masked) for pattern in self._secrets):
+            decoded, settled = _decodings(text)
+            searched = [(location, text)] + [(f"{location}, decoded", each) for each in decoded]
+            for where, each in searched:
+                masked = each.replace(REDACTED, "\0")
+                if any(pattern.search(masked) for pattern in self._secrets):
+                    raise ValueError(
+                        f"the scrubbed fixture still holds a secret value in the {where}; "
+                        "it is refused before anything is written"
+                    )
+            if not settled:
                 raise ValueError(
-                    f"the scrubbed fixture still holds a secret value in the {location}; "
-                    "it is refused before anything is written"
+                    f"the scrubbed fixture holds text in the {location} that still decodes "
+                    f"after {_ROUNDS} rounds of JSON-unescaping and percent-decoding; it is "
+                    "refused before anything is written"
                 )
 
     def body(self, content: bytes) -> tuple[str, bool]:

@@ -151,14 +151,26 @@ carry a sentence each that points here.
     percent-encoded as its UTF-8 bytes in either hex case, a space also as `+`, or behind a JSON
     escape, `\uXXXX` in either hex case (a surrogate pair for a character beyond the Basic
     Multilingual Plane), `\/`, `\"`, `\\` and the short escape of a control character, in any
-    mix, the letter case given, the longest value first. The verify searches the URL, every
-    header value and both text bodies for the same forms, `REDACTED` masked first, and a body
-    stored base64 is searched for none. Core held the percent-encoded matching until 0.3.0
-    (ADR-0042, decision 1), and three sources carry it today: sdk-cashctrl's patterns of its key
-    and its basic-auth token, sdk-google-mail's `forms_of`, and sdk-faostat's instructions, which
-    name the encoded forms of a login at each recording. Their lines for a secret's forms leave
-    at their adoption, while sdk-cashctrl's patterns of a tenant's host stay its own (decision 5).
-    This amends ADR-0042, decisions 1 and 3.
+    mix, the letter case given, the longest value first. The sign of a percent-encoding, `%` or
+    a space's `+`, is replaced behind a JSON escape too, `\u0025` or `\u002B` in either hex
+    case, as a JSON body writes a query it echoes
+    (https://github.com/xippios/sdk-core/issues/581). The verify searches the URL, every header
+    value and both text bodies for the same forms, and every text that each of them decodes to,
+    JSON-unescaped and percent-decoded in either order, round after round until it no longer
+    changes, so any nesting of the two encodings that the replacement does not offer, a hex digit
+    behind a JSON escape, a percent-encoding encoded again or a JSON text stringified twice,
+    refuses the recording as a value left does (https://github.com/xippios/sdk-core/pull/587). The
+    decoding takes eight rounds at most, and a text that still changes after them is refused rather
+    than passed: nine nested encodings, or a run of 128 or more backslashes in a JSON string (257
+    in a text body), since each round halves such a run, a false refusal that sends the answer to
+    review and writes no secret
+    (https://github.com/xippios/sdk-core/pull/587#pullrequestreview-6049058589). `REDACTED` is
+    masked first, and a body stored base64 is searched for none. Core held the percent-encoded
+    matching until 0.3.0 (ADR-0042, decision 1), and three sources carry it today: sdk-cashctrl's
+    patterns of its key and its basic-auth token, sdk-google-mail's `forms_of`, and sdk-faostat's
+    instructions, which name the encoded forms of a login at each recording. Their lines for a
+    secret's forms leave at their adoption, while sdk-cashctrl's patterns of a tenant's host stay
+    its own (decision 5). This amends ADR-0042, decisions 1 and 3.
 12. **The cut keeps a JSON array alone.** `max_bytes=` cuts a body that is a JSON array, by whole
     elements in upstream's own text, the first ones or with `keep="last"` the last; `array_key=`
     and the cut of a text leave, since every fixture of the family over the 256 KiB cap holds a
@@ -188,7 +200,8 @@ carry a sentence each that points here.
   without a recorder of their own gain the guard on an encoded secret with it.
 - A recording whose secret stands only percent-encoded or behind a JSON escape, which core
   wrote before, is now redacted, so a fixture recorded again can differ from the one before in
-  that place alone.
+  that place alone, and one that holds it, in any place, in a nesting of the two that the
+  scrub does not replace is refused.
 - ADR-0028, decision 8, and ADR-0064, decisions 4 and 5, name `mount_fixture`, which no source
   imports: the check reads a call of `replay_fixture` or `replay` with `url=`, the census keeps
   what `replay` mounts, and a recording is served at another URL by `replay(url=)`. ADR-0037,

@@ -230,8 +230,10 @@ def fixture_from_response(
     those its ``response_secrets`` reads from ``response``, and decides about a binary
     body; ``None`` is ``Scrub()``: nothing else replaced, a binary body refused. With
     secret values, the result is verified before it is returned: a secret value still
-    present in the URL, a header value or a text body, as given, percent-encoded or behind
-    a JSON escape, refuses the exchange (conventions §10; ADR-0066, decision 11).
+    present in the URL, a header value or a text body, as given, percent-encoded, behind a
+    JSON escape or both, or in any text that one of them decodes to, JSON-unescaped and
+    percent-decoded until it no longer changes, refuses the exchange, and so does a text
+    that still decodes after eight rounds (conventions §10; ADR-0066, decision 11).
 
     ``rewrite`` is the source's own step, for what it replaces beyond the secret values, a
     tenant's host or a field by key: it runs on the scrubbed ``Fixture`` and returns it
@@ -337,8 +339,8 @@ def fixture_from_response(
 def _verify(scrubber: _Scrubber, fixture: Fixture) -> None:
     """The scrub's verify on ``fixture``: no secret value left in it in any of its forms.
 
-    As given, percent-encoded or behind a JSON escape, the forms the scrub replaces
-    (ADR-0066, decision 11).
+    As given, percent-encoded, behind a JSON escape or both, the forms the scrub replaces,
+    in every place and in every text that a place decodes to (ADR-0066, decision 11).
     """
     __tracebackhide__ = True  # pytest would print the arguments: the refused text
     kept = fixture.request.content_type
@@ -388,13 +390,17 @@ def _run(rewrite: Rewrite, fixture: Fixture) -> tuple[Fixture, tuple[str, ...]]:
     return rewritten, tuple(value for value in values if value)
 
 
+class _Object(list[tuple[str, Any]]):
+    """A decoded JSON object as its pairs, each kept where the object repeats a key."""
+
+
 def _strings(node: object) -> Iterator[str]:
     """Every key and string of a decoded JSON value, outermost first."""
     if isinstance(node, str):
         yield node
-    elif isinstance(node, dict):
-        for key, value in node.items():
-            yield str(key)
+    elif isinstance(node, _Object):
+        for key, value in node:
+            yield key
             yield from _strings(value)
     elif isinstance(node, list):
         for item in node:
@@ -404,10 +410,11 @@ def _strings(node: object) -> Iterator[str]:
 def _decoded_strings(body: str) -> list[str]:
     """Every key and string of ``body`` decoded as JSON, a byte order mark allowed.
 
-    ``[]`` for a body that is not JSON.
+    Each pair of an object is read, the first value of a key that it repeats too, which
+    ``json.loads`` alone would drop. ``[]`` for a body that is not JSON.
     """
     try:
-        decoded = json.loads(body.removeprefix("﻿"))
+        decoded = json.loads(body.removeprefix("\ufeff"), object_pairs_hook=_Object)
     except ValueError:
         return []
     return list(_strings(decoded))

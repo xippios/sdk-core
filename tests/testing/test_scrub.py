@@ -1,11 +1,12 @@
 import dataclasses
 import json
+from urllib.parse import quote
 
 import httpx
 import pytest
 
 from xippios.core import redaction
-from xippios.core.testing import REDACTED, Scrub, fixture_from_response, scrub
+from xippios.core.testing import REDACTED, Fixture, Scrub, fixture_from_response, scrub
 from xippios.core.testing.scrub import _Scrubber
 
 
@@ -114,3 +115,264 @@ def test_the_verify_refuses_an_encoded_form_that_the_scrub_left(
     with pytest.raises(ValueError, match=refusal) as refused:
         fixture_from_response(response, scrub=Scrub(secrets=[ENCODED]))
     assert "nit" not in str(refused.value), "the message names the place, never the value"
+
+
+# A percent-encoding behind a JSON escape (ADR-0066, decision 11;
+# https://github.com/xippios/sdk-core/issues/581): the scrub replaces the sign of a
+# percent-encoding written as a JSON escape, and the verify searches a JSON body's keys and
+# strings decoded, and percent-decoded, so a nesting that the scrub leaves is refused. The
+# key is invented.
+
+INVENTED = "k3y-INVENTED-0001"
+"""An invented key, its letters in both cases, a digit and a hyphen."""
+
+
+def _percent(value: str) -> str:
+    """``value`` percent-encoded whole, each UTF-8 byte as ``%XX`` in upper hex."""
+    return "".join(f"%{byte:02X}" for byte in value.encode())
+
+
+def _answer(response_body: str, request_body: str = "") -> httpx.Response:
+    """A JSON answer to a POST whose URL names no secret, its JSON body ``request_body``."""
+    request = httpx.Request(
+        "POST",
+        "https://api.example.test/v1/x",
+        content=request_body.encode(),
+        headers={"content-type": "application/json"},
+    )
+    return httpx.Response(200, content=response_body.encode(), request=request)
+
+
+@pytest.mark.parametrize(
+    ("secret", "encoded"),
+    [
+        (INVENTED, _percent(INVENTED).replace("%", "\\u0025")),
+        (INVENTED, _percent(INVENTED).lower().replace("%", "\\u0025", 1)),
+        ("k3y INVENTED 0002", "k3y\\u002BINVENTED\\u002b0002"),
+    ],
+    ids=["every-sign-escaped-upper-hex", "one-sign-escaped-lower-hex", "a-space-s-plus-escaped"],
+)
+def test_a_percent_encoding_behind_a_json_escape_is_replaced(secret: str, encoded: str) -> None:
+    # A JSON body that echoes the query it was sent, its "%" or "+" written as % or +.
+    body = '{"link": "https://files.example.test/?k=' + encoded + '&n=1"}'
+    fixture = fixture_from_response(_answer(body), scrub=Scrub(secrets=[secret]))
+    assert json.loads(fixture.response.body) == {
+        "link": f"https://files.example.test/?k={REDACTED}&n=1"
+    }
+
+
+@pytest.mark.parametrize(
+    "nested",
+    [
+        _percent(INVENTED).replace("%6B", "%\\u0036B", 1),
+        _percent(INVENTED).replace("%", "%25"),
+        "%5Cu006B" + INVENTED[1:],
+    ],
+    ids=[
+        "a-hex-digit-behind-a-json-escape",
+        "percent-encoded-twice",
+        "a-json-escape-percent-encoded",
+    ],
+)
+@pytest.mark.parametrize(
+    ("side", "template"),
+    [("response body", '{{"link": "{}"}}'), ("request body", '{{"{}": 1}}')],
+    ids=["a-string-of-the-response-body", "a-key-of-the-request-body"],
+)
+def test_the_verify_refuses_a_nesting_that_the_scrub_leaves(
+    nested: str, side: str, template: str
+) -> None:
+    # The scrub replaces none of these in the raw text; decoded, and percent-decoded, each is
+    # a form of the key, and the verify refuses it before anything is written.
+    text = template.format(nested)
+    response = _answer(text, "") if side == "response body" else _answer("{}", text)
+    refusal = (
+        rf"^the scrubbed fixture still holds a secret value in the {side}, decoded; it is "
+        r"refused before anything is written$"
+    )
+    with pytest.raises(ValueError, match=refusal) as refused:
+        fixture_from_response(response, scrub=Scrub(secrets=[INVENTED]))
+    assert "INVENTED" not in str(refused.value), "the message names the place, never the value"
+
+
+@pytest.mark.parametrize(
+    "form",
+    [
+        INVENTED,
+        _percent(INVENTED),
+        _percent(INVENTED).lower(),
+        "\\u006b3y\\u002dINVENTED-0001",
+        "k3y%2DINVENTED\\u002d0001",
+    ],
+    ids=["as-given", "percent-encoded-upper", "percent-encoded-lower", "json-escaped", "a-mix"],
+)
+@pytest.mark.parametrize("is_json", [True, False], ids=["a-json-body", "a-text-body"])
+def test_the_forms_that_stood_are_replaced_and_pass_the_decoded_search(
+    form: str, is_json: bool
+) -> None:
+    # The decoded search refuses nothing that the scrub replaced: REDACTED in a decoded string,
+    # or in it percent-decoded, is masked as in the raw text, and a text body is not decoded.
+    body = '{"link": "?k=' + form + '&n=1"}' if is_json else f"k={form}&n=1"
+    fixture = fixture_from_response(_answer(body), scrub=Scrub(secrets=[INVENTED]))
+    assert fixture.response.body == body.replace(form, REDACTED)
+
+
+# The verify decodes every place it reads, JSON-unescaping and percent-decoding in either order
+# until the text no longer changes, eight rounds at most, and refuses a text that still changes
+# after the eighth (ADR-0066, decision 11; the review of
+# https://github.com/xippios/sdk-core/pull/587, findings 1 to 3). The keys are invented.
+
+
+def _q(value: str, times: int = 1) -> str:
+    """``value`` percent-encoded ``times`` times, as a query encodes it, ``/`` included."""
+    for _ in range(times):
+        value = quote(value, safe="")
+    return value
+
+
+def _refusal(place: str) -> str:
+    """The verify's refusal of a secret found in ``place`` decoded, as a pattern."""
+    return (
+        rf"^the scrubbed fixture still holds a secret value in the {place}, decoded; it is "
+        r"refused before anything is written$"
+    )
+
+
+def _sent(
+    url: str = "https://api.example.test/v1/x",
+    request_body: str = "",
+    content_type: str = "application/json",
+    response_body: str = "{}",
+    **headers: str,
+) -> httpx.Response:
+    """An exchange of a POST with ``request_body`` and an answer with ``headers``."""
+    request = httpx.Request(
+        "POST", url, content=request_body.encode(), headers={"content-type": content_type}
+    )
+    return httpx.Response(200, content=response_body.encode(), headers=headers, request=request)
+
+
+TWICE = _q(ENCODED, 2)
+"""The value with a space, a slash and a plus, percent-encoded twice: %25C3%259Cnit%2520..."""
+
+
+@pytest.mark.parametrize(
+    ("place", "response"),
+    [
+        (
+            "request URL",
+            _sent(url="https://api.example.test/v1/x?next=" + _q("/cb?t=" + _q(ENCODED))),
+        ),
+        (
+            "request body",
+            _sent(request_body=f"next={TWICE}", content_type="application/x-www-form-urlencoded"),
+        ),
+        ("response body", _sent(response_body=f'<a href="/go?next={TWICE}">go</a>')),
+        (
+            "response header 'link'",
+            _sent(link=f'<https://api.example.test/?n={TWICE}>; rel="next"'),
+        ),
+    ],
+    ids=["a-callback-in-the-request-url", "a-form-body", "an-html-body", "a-link-header"],
+)
+def test_the_verify_percent_decodes_every_place_it_reads(
+    place: str, response: httpx.Response
+) -> None:
+    # Finding 1: percent-encoded twice outside a JSON body, which the scrub does not replace.
+    with pytest.raises(ValueError, match=_refusal(place)) as refused:
+        fixture_from_response(response, scrub=Scrub(secrets=[ENCODED]))
+    assert "nit" not in str(refused.value), "the message names the place, never the value"
+
+
+THIRD_LAYERS = {
+    "percent-encoded-three-times": (ENCODED, _q(ENCODED, 3)),
+    "a-json-escape-percent-encoded-twice": (INVENTED, _q("\\", 2) + "u006B" + INVENTED[1:]),
+    "json-stringified-twice": (
+        INVENTED,
+        json.dumps(json.dumps('{"k": "k3y\\u002dINVENTED-0001"}'))[1:-1],
+    ),
+}
+"""Three layers of the two encodings, each in a JSON string, a pair of the secret and its form."""
+
+
+@pytest.mark.parametrize(("secret", "nested"), THIRD_LAYERS.values(), ids=THIRD_LAYERS.keys())
+def test_the_verify_decodes_a_third_layer_in_a_json_string(secret: str, nested: str) -> None:
+    # Finding 2: decoded until it no longer changes, not once.
+    response = _sent(response_body='{"q": "' + nested + '"}')
+    with pytest.raises(ValueError, match=_refusal("response body")):
+        fixture_from_response(response, scrub=Scrub(secrets=[secret]))
+
+
+def test_the_verify_reads_the_first_of_a_repeated_key() -> None:
+    # Finding 3: json.loads keeps a repeated key's last value; the verify reads the text.
+    response = _sent(response_body='{"next": "' + TWICE + '", "next": "x"}')
+    with pytest.raises(ValueError, match=_refusal("response body")):
+        fixture_from_response(response, scrub=Scrub(secrets=[ENCODED]))
+
+
+def test_the_check_of_a_rewrite_step_reads_the_first_of_a_repeated_key() -> None:
+    # Finding 3: the step says it replaced the title, which stands JSON-escaped in the first of
+    # two "title" keys; every pair of the body is read, not the last one alone.
+    def rewrite(fixture: Fixture) -> tuple[Fixture, list[str]]:
+        return fixture, ["Zürich"]
+
+    response = _sent(response_body='{"title": "Z\\u00fcrich", "title": "x"}')
+    refusal = (
+        r"^the rewritten fixture still holds a value the rewrite step replaced, in the response "
+        r"body, a decoded JSON string; nothing is written$"
+    )
+    with pytest.raises(ValueError, match=refusal):
+        fixture_from_response(response, rewrite=rewrite)
+
+
+def test_a_text_that_still_decodes_after_eight_rounds_is_refused() -> None:
+    # Nine layers of percent-encoding over "A": the verify stops at its bound and refuses the
+    # text rather than pass what it has not read to the end.
+    deep = _q("%41", 9)
+    response = _sent(response_body='{"q": "' + deep + '"}')
+    refusal = (
+        r"^the scrubbed fixture holds text in the response body that still decodes after 8 "
+        r"rounds of JSON-unescaping and percent-decoding; it is refused before anything is "
+        r"written$"
+    )
+    with pytest.raises(ValueError, match=refusal):
+        fixture_from_response(response, scrub=Scrub(secrets=[INVENTED]))
+
+
+def test_an_exchange_without_the_secret_passes_the_decoding() -> None:
+    # Encodings, nested and odd, of nothing secret: the exchange is kept as sent.
+    body = json.dumps(
+        {
+            "near": _q("k3y-INVENTED-0002", 3),
+            "signs": "100%25 sure, 50%, %%%, %ZZ, %5Cu0041",
+            "inner": json.dumps({"k": "k3y-INVENTED-000", "e": "ä \U0001f511"}),
+            "redacted": "%52EDACTED \\u0025REDACTED",
+        }
+    )
+    response = _sent(
+        url="https://api.example.test/v1/x?a=%2525&b=" + _q("k3y-INVENTED-0002", 2),
+        response_body=body,
+        link='<https://api.example.test/?n=%252F>; rel="next"',
+    )
+    fixture = fixture_from_response(response, scrub=Scrub(secrets=[INVENTED]))
+    assert fixture.response.body == body
+    assert fixture.request.url == str(response.request.url)
+
+
+# Each JSON-unescape round halves a run of backslashes, so a run counts as rounds against the
+# bound: a JSON string with 128 literal backslashes and no secret is refused, a false refusal
+# that writes no secret, and 127 are written (the review of
+# https://github.com/xippios/sdk-core/pull/587, round 2).
+
+
+def test_a_json_string_of_127_backslashes_is_written() -> None:
+    body = json.dumps({"path": "\\" * 127})
+    fixture = fixture_from_response(_sent(response_body=body), scrub=Scrub(secrets=[INVENTED]))
+    assert fixture.response.body == body
+
+
+def test_a_json_string_of_128_backslashes_is_refused_at_the_bound() -> None:
+    body = json.dumps({"path": "\\" * 128})
+    refusal = r"^the scrubbed fixture holds text in the response body that still decodes after 8 "
+    with pytest.raises(ValueError, match=refusal):
+        fixture_from_response(_sent(response_body=body), scrub=Scrub(secrets=[INVENTED]))
