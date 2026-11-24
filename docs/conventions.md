@@ -605,7 +605,14 @@ into `total`, which stays `None` unless upstream counts the whole request (ADR-0
 ADR-0034, amendment 2026-11-24). When
 every page is collected, the count kept is the one upstream reported on the last page
 fetched, and a mismatch with `len(data)` is upstream's and is not corrected; a task that
-returns one page, or caps what it collects, can have `total > len(data)` by design.
+returns one page, or whose stop rule ends its walk, can have `total > len(data)` by design.
+A task collects every page of an offset-paged list with core's `fetch_pages(fetch, *,
+page_size, most, paging)`, under a bound of `most` pages that its docstring states as the most
+requests one call spends, retries counted (ADR-0061, decision 8): the walk sends no request at
+or past upstream's count and returns nothing where it needs more pages than the bound, refusing
+with `InvalidRequestError` once the count shows it, or at the bound where the task's stop rule
+runs, and its refusal names the count, the bound, the paging argument, the requests sent, the
+page reached and the total of pages (ADR-0034, decision 2, amendment 2026-11-24).
 
 A paginated task may instead return one upstream page per call and collect nothing in
 the two cases where collecting would cost what no call bounds: a list unbounded by
