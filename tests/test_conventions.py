@@ -10,8 +10,8 @@ ADR-0066, decision 7, §15's items that hold an adoption against the two lists o
 handover's section for the release, to which the review checklist and the definition of done
 point, ADR-0058's decision 2, what a core patch keeps compatible, ADR-0059's rule for code with
 one consumer, as the definition of done, the review checklist and §15 name it, the publisher's
-shared package of ADR-0065 in §7 and §12, and ADR-0068's documents: one case per rule, no
-history and the adoption's items once.
+shared package of ADR-0065 in §7 and §12, ADR-0068's documents: one case per rule, no
+history and the adoption's items once, and ADR-0069's failed release run in §12.
 
 The organization's release check quotes the conventions from sdk-core's `main`, and a finding
 blocks only where it quotes the sentence that a change breaks
@@ -1381,6 +1381,33 @@ def test_section_3_cites_no_superseded_record_of_the_frames() -> None:
         assert record not in section(3), f"§3 still cites {record}"
 
 
+def test_no_file_of_the_package_and_no_document_that_binds_cites_a_superseded_record() -> None:
+    # A rule cites the record that holds it now, so a docstring of the package cites the
+    # successor too: the frame's three still cited ADR-0046, decision 7, for the attribution check
+    # (finding 3 of the organization's conventions check on
+    # https://github.com/xippios/sdk-core/pull/558#issuecomment-7140020024). The handover names a
+    # superseded record only as what a rule's citation replaces, and the records and the
+    # changelog tell history, so neither is read here.
+    records = json.loads(INDEX.read_text(encoding="utf-8"))["records"]
+    superseded = {r["id"] for r in records if r["superseded_by"]}
+    paths = [
+        *sorted((ROOT / "src").rglob("*.py")),
+        CONVENTIONS,
+        CHECKLIST,
+        DONE,
+        ROOT / "README.md",
+        ROOT / "CLAUDE.md",
+    ]
+    cited = [
+        f"{path.relative_to(ROOT)}:{number}: {found}"
+        for path in paths
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+        for found in re.findall(r"ADR-\d{4}", line)
+        if found in superseded
+    ]
+    assert not cited, "cites a superseded record:\n" + "\n".join(cited)
+
+
 def test_the_review_checklist_holds_the_script_s_form() -> None:
     # No check of core reads the script any more, so the review alone holds its form
     # (ADR-0062, decision 3).
@@ -1555,43 +1582,94 @@ def test_no_sentence_of_section_8_makes_the_whole_docstring_the_description() ->
     assert "The function docstring is the tool description" not in section(8)
 
 
-RELEASE_TRAIN = "ADR-0039, decision 6"
-"""The record of the release train, by whose jobs a failed release run is finished."""
+# §12, a failed release run: the recovery stood in the handover's part of core 0.2.1 and moved to
+# §12 when the handover kept one part (ADR-0068, decision 5), citing ADR-0039, decision 6, which
+# states none of it. ADR-0069 states the four rules as they stand, and when a release PR merges
+# stays the process of the work (ADR-0039, decision 3): finding 2 of the organization's
+# conventions check on https://github.com/xippios/sdk-core/pull/558#issuecomment-7140020024
+# (https://github.com/xippios/sdk-core/issues/559).
+
+FAILED_RUN = "ADR-0069"
+"""The record of how a release run that fails is finished."""
+RELEASE_TRAIN = "ADR-0039"
+"""The release train's record, whose decision 6 states none of the four rules."""
+MERGE = "ADR-0039, decision 3"
+"""Who merges a release PR, and when, is the process of the work and binds no repository."""
 
 
 @pytest.mark.parametrize(
-    ("phrase", "names"),
+    ("phrase", "decision", "names"),
     [
         pytest.param(
             "A release run that fails is finished by its own jobs",
+            1,
             ("never by a push", '"Re-run failed jobs"', "`release-check`", "a patch release"),
             id="its-own-jobs",
         ),
         pytest.param(
             "A `ci` that fails before the tag is re-run",
+            2,
             ("the deployment-branch policy of `pypi`", "to `main`"),
             id="before-the-tag",
         ),
         pytest.param(
             "`publish.yml` keeps no `concurrency` group",
-            ("one pending run of a group", "not merged while another release run waits at `pypi`"),
+            3,
+            ("one pending run of a group", "both find the version untagged"),
             id="no-concurrency-group",
         ),
         pytest.param(
             "Where two runs found the version untagged",
+            4,
             ("the run whose commit is the release", "rejects", "made again as a patch"),
             id="two-runs",
         ),
     ],
 )
-def test_section_12_says_how_a_failed_release_run_is_finished(
-    phrase: str, names: tuple[str, ...]
+def test_section_12_says_how_a_failed_release_run_is_finished_by_adr_0069(
+    phrase: str, decision: int, names: tuple[str, ...]
 ) -> None:
-    # The recovery stood in the handover's part of core 0.2.1 and moves to §12 when the handover
-    # keeps one part (ADR-0068, decision 5), one sentence per rule that cites its record.
+    # One sentence per rule, citing the decision of the record that states it as it stands.
     rule = sentence(section(12), phrase)
-    for name in (*names, RELEASE_TRAIN):
+    for name in (*names, f"{FAILED_RUN}, decision {decision}"):
         assert name in rule, f"§12: {rule!r} does not name {name!r}"
+    assert RELEASE_TRAIN not in rule, f"§12: {rule!r} cites the release train's record"
+    held = decisions(FAILED_RUN)[decision]
+    for name in names:
+        assert name in held, f"{FAILED_RUN}, decision {decision}, does not state {name!r}"
+
+
+def test_section_12_leaves_when_a_release_pr_merges_to_the_process_of_the_work() -> None:
+    # ADR-0039, decision 3: no rule of the family says when a release PR merges, so neither
+    # §12 nor the record makes one of a merge while another release run waits at `pypi`.
+    text = section(12)
+    assert "is not merged while" not in text, "§12 makes a rule of a release PR's merge"
+    rule = sentence(text, "while another release run waits at `pypi`")
+    for name in ("the process of the work", MERGE):
+        assert name in rule, f"§12: {rule!r} does not name {name!r}"
+    for number, body in decisions(FAILED_RUN).items():
+        assert "merged while" not in body, f"{FAILED_RUN}, decision {number}, rules on a merge"
+
+
+def test_the_record_of_a_failed_release_run_stands_beside_the_release_train() -> None:
+    # It states rules that no record held and changes no decision of ADR-0039, which keeps its
+    # two amendments and is superseded by nothing.
+    records = {r["id"]: r for r in json.loads(INDEX.read_text(encoding="utf-8"))["records"]}
+    found = records[FAILED_RUN]
+    assert found["decided_by"] == DOCUMENTS_QUESTION
+    assert (found["supersedes"], found["amends"]) == ([], [])
+    assert len(decisions(FAILED_RUN)) == 4, "one decision per rule of §12"
+    train = records[RELEASE_TRAIN]
+    assert train["superseded_by"] is None
+    assert len(train["amended"]) == 2, "the release train keeps its two amendments"
+
+
+def test_the_handover_cites_the_record_for_a_failed_release_run() -> None:
+    text = flat((ROOT / "docs" / "handover.md").read_text(encoding="utf-8"))
+    item = text.split("**§12, versioning and releases**", 1)[1].split("- **§13", 1)[0]
+    rule = sentence(item, "how a release run that fails is finished")
+    assert FAILED_RUN in rule, f"the handover: {rule!r} does not cite {FAILED_RUN}"
+    assert f"{RELEASE_TRAIN}, decision 6" not in rule, f"the handover: {rule!r} cites decision 6"
 
 
 def test_section_13_s_rule_on_a_workflow_s_comments_cites_its_record() -> None:
