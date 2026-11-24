@@ -3,7 +3,7 @@ the preview rule of ADR-0050, the recorder's names, a task's fixtures and a secr
 forms of ADR-0066, the names of a
 request's and a record's codes, the notes and the integers of ADR-0067, the snapshot script's
 form, the mark of FETCHED.md's form
-and the one comparison of a snapshot of ADR-0062, the attribution check of ADR-0046, decision 7,
+and the one comparison of a snapshot of ADR-0062, the attribution check of ADR-0062, decision 10,
 the refusal of a hinted value of ADR-0041's amendment of 2026-11-22, the two sentences of a
 period series that ADR-0054's amendment of 2026-11-22 words, a recorder's field of a request of
 ADR-0066, decision 7, §15's items that hold an adoption against the two lists of the
@@ -443,13 +443,46 @@ def test_section_1_keeps_the_one_departure_from_upstream_s_name() -> None:
         assert name in rule, f"§1: {rule!r} does not name {name!r}"
 
 
-def test_the_header_names_no_source_but_example_outside_a_record_s_citation() -> None:
+def test_the_header_names_no_source_but_example_outside_a_public_record_s_citation() -> None:
     # The conventions cite records that name a source, so the sentence says where a name stands
     # (ADR-0068's consequences; finding 2 of the review of
     # https://github.com/xippios/sdk-core/pull/553).
     text = flat(CONVENTIONS.read_text(encoding="utf-8").split("\n## 1.", 1)[0])
     rule = sentence(text, "names no source but `example`")
-    assert "outside the citation of a record" in rule, f"the header: {rule!r}"
+    # §2 and §3 cite a public decision on an issue, so the sentence names every citation that
+    # the test of what core may name admits (finding 11 of the conventions check on
+    # https://github.com/xippios/sdk-core/pull/552#issuecomment-7138691721, and finding 1 of
+    # the review of https://github.com/xippios/sdk-core/pull/556).
+    exception = (
+        "outside the citation of a public record of the organization, which is an issue, a pull "
+        "request, a record or a report"
+    )
+    assert exception in rule, f"the header: {rule!r}"
+
+
+EXCEPTION = "outside the citation of a public record of the organization"
+"""The header's exception, which every document that binds words the same way."""
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        CONVENTIONS,
+        CHECKLIST,
+        DONE,
+        ROOT / "docs" / "handover.md",
+        ROOT / "README.md",
+        ROOT / "CLAUDE.md",
+    ],
+    ids=lambda path: path.name,
+)
+def test_every_document_that_binds_words_the_exception_as_the_header_does(path: Path) -> None:
+    # One wording for the citation in which a source's name may stand (findings 1 of the reviews
+    # of https://github.com/xippios/sdk-core/pull/556), so no document keeps an older one.
+    text = flat(path.read_text(encoding="utf-8"))
+    for start in [found.start() for found in re.finditer("outside the citation of ", text)]:
+        assert text.startswith(EXCEPTION, start), f"{path.name}: {text[start : start + 90]!r}"
+    assert "or of a public decision" not in text, f"{path.name} keeps the older exception"
 
 
 def test_the_conventions_word_the_organization_s_check_as_planned() -> None:
@@ -1203,13 +1236,15 @@ def test_no_sentence_of_section_3_holds_the_check_without_a_request() -> None:
 
 
 # §3, the snapshot: what the frame's attribution check reads and accepts, by the maintainer's
-# answer on https://github.com/xippios/sdk-core/issues/437 (ADR-0046, decision 7), and the rule
-# on an API document's `info` that only the code and its tests stated
-# (https://github.com/xippios/sdk-x/issues/57), which no question decided and ADR-0046 states in
-# its Consequences (finding 2 of the review of https://github.com/xippios/sdk-core/pull/451).
+# answer on https://github.com/xippios/sdk-core/issues/437, and the rule on an API document's
+# `info` that only the code and its tests stated (https://github.com/xippios/sdk-x/issues/57)
+# (finding 2 of the review of https://github.com/xippios/sdk-core/pull/451). ADR-0062,
+# decision 10, carries both from ADR-0046, decision 7, and its Consequences, which it
+# supersedes, so each rule cites it (finding 5 of the conventions check on
+# https://github.com/xippios/sdk-core/pull/552#issuecomment-7138691721).
 
-ATTRIBUTION_DECISION = "ADR-0046, decision 7"
-ATTRIBUTION_CONSEQUENCES = "ADR-0046, Consequences"
+ATTRIBUTION_DECISION = "ADR-0062, decision 10"
+SUPERSEDED = "ADR-0046"
 
 ATTRIBUTION_RULES = [
     pytest.param(
@@ -1232,7 +1267,7 @@ ATTRIBUTION_RULES = [
     ),
     pytest.param(
         "An API document in JSON names a licence, terms or a contact in its `info`",
-        ATTRIBUTION_CONSEQUENCES,
+        ATTRIBUTION_DECISION,
         ("`license`", "`termsOfService`", "`contact`", "YAML"),
         id="s3-an-api-document-s-info",
     ),
@@ -1240,14 +1275,19 @@ ATTRIBUTION_RULES = [
 
 
 @pytest.mark.parametrize(("phrase", "record", "names"), ATTRIBUTION_RULES)
-def test_each_rule_of_the_attribution_check_is_one_sentence_that_cites_adr_0046(
+def test_each_rule_of_the_attribution_check_is_one_sentence_that_cites_adr_0062(
     phrase: str, record: str, names: tuple[str, ...]
 ) -> None:
     rule = sentence(section(3), phrase)
     for name in (record, *names):
         assert name in rule, f"§3: {rule!r} does not name {name!r}"
-    others = {ATTRIBUTION_DECISION, ATTRIBUTION_CONSEQUENCES} - {record}
-    assert not any(other in rule for other in others), f"§3: {rule!r} cites another part"
+    assert SUPERSEDED not in rule, f"§3: {rule!r} cites the superseded record"
+
+
+def test_section_3_cites_no_superseded_record_of_the_frames() -> None:
+    # ADR-0062 supersedes ADR-0046 and ADR-0051 whole and numbers their decisions anew.
+    for record in ("ADR-0046", "ADR-0051"):
+        assert record not in section(3), f"§3 still cites {record}"
 
 
 def test_the_review_checklist_holds_the_script_s_form() -> None:
@@ -1394,3 +1434,54 @@ def test_each_rule_of_the_contract_and_the_description_cites_adr_0063(
 
 def test_no_sentence_of_section_8_makes_the_whole_docstring_the_description() -> None:
     assert "The function docstring is the tool description" not in section(8)
+
+
+RELEASE_TRAIN = "ADR-0039, decision 6"
+"""The record of the release train, by whose jobs a failed release run is finished."""
+
+
+@pytest.mark.parametrize(
+    ("phrase", "names"),
+    [
+        pytest.param(
+            "A release run that fails is finished by its own jobs",
+            ("never by a push", '"Re-run failed jobs"', "`release-check`", "a patch release"),
+            id="its-own-jobs",
+        ),
+        pytest.param(
+            "A `ci` that fails before the tag is re-run",
+            ("the deployment-branch policy of `pypi`", "to `main`"),
+            id="before-the-tag",
+        ),
+        pytest.param(
+            "`publish.yml` keeps no `concurrency` group",
+            ("one pending run of a group", "not merged while another release run waits at `pypi`"),
+            id="no-concurrency-group",
+        ),
+        pytest.param(
+            "Where two runs found the version untagged",
+            ("the run whose commit is the release", "rejects", "made again as a patch"),
+            id="two-runs",
+        ),
+    ],
+)
+def test_section_12_says_how_a_failed_release_run_is_finished(
+    phrase: str, names: tuple[str, ...]
+) -> None:
+    # The recovery stood in the handover's part of core 0.2.1 and moves to §12 when the handover
+    # keeps one part (ADR-0068, decision 5), one sentence per rule that cites its record.
+    rule = sentence(section(12), phrase)
+    for name in (*names, RELEASE_TRAIN):
+        assert name in rule, f"§12: {rule!r} does not name {name!r}"
+
+
+def test_section_13_s_rule_on_a_workflow_s_comments_cites_its_record() -> None:
+    # Finding 6 of the conventions check on
+    # https://github.com/xippios/sdk-core/pull/552#issuecomment-7138691721: the rule cites
+    # ADR-0039's amendment, with the organization's issue beside it.
+    rule = sentence(section(13), "A workflow carries no comment but the version")
+    for name in (
+        "ADR-0039, decision 7, amendment 2026-11-24",
+        "https://github.com/xippios/.github/issues/111",
+    ):
+        assert name in rule, f"§13: {rule!r} does not name {name!r}"

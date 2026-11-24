@@ -70,13 +70,19 @@ source stands on a frozen template tag or before a release from which a rule bin
 
 ## Consequences
 
-- The conventions name no source but `example`, outside the citation of a record, and a reader
-  finds a real upstream's case in the record that a rule cites. They lose 145 lines of 1,695, and
+- The conventions name no source but `example`, outside the citation of a public record of the
+  organization, which is an issue, a pull request, a record or a report, and a reader finds a
+  real upstream's case in the record that a rule cites. They lose 145 lines of 1,695, and
   the README holds what they gave up of the client's hooks and its download.
 - An adoption's review reads one list, §15's, and the definition of done and the review
   checklist no longer lag it.
 - A source's adoption reads one part of the handover and its own adoption issue, and core's
   handover changes when a release does, not when a source does.
+- ADR-0027, the record of one source's metered and content-bearing upstream, leaves core for that
+  source's first record,
+  https://github.com/xippios/sdk-x/blob/main/docs/adr/0001-x-metered-content-source.md, by part 4
+  of the answer on https://github.com/xippios/sdk-core/issues/484, so a rule that it held cites
+  that record (decision 2), while the superseded ADR-0010, ADR-0012 and ADR-0016 stay as written.
 - ADR-0039 is amended: decision 2's third route leaves, and the definition of done's Adoption PR
   block points to §15 in place of mirroring it.
 - A rule that a test pins keeps its sentence form, so a trim moves few pins, and the tests that

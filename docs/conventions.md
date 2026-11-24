@@ -1,6 +1,6 @@
 # xippios SDK family — conventions
 
-Version 1.29 · 2026-11-22 · applies to every `sdk-*` repository under
+Version 1.30 · 2026-11-24 · applies to every `sdk-*` repository under
 github.com/xippios, and to the host `xippios-mcp` where ADR-0026 binds it.
 Changes to this file require an ADR in `docs/adr/` and a PR against `sdk-core`. A
 convention that seems wrong is followed, and said in the pull request that meets it, until
@@ -10,7 +10,8 @@ sentence that cites its record, with at most one case for each of its parts, the
 source `example`'s, while core's README says how core's names are called and the records tell
 each rule's history (ADR-0068, decisions 1 to 3).
 What binds in core, this file among it, names no source but `example` outside the citation
-of a record, and a step of the organization's conventions check that finds each source's names
+of a public record of the organization, which is an issue, a pull request, a record or a
+report, and a step of the organization's conventions check that finds each source's names
 from its template answers is planned with the organization's package after the sources' first
 wave, so no release of core waits for it (ADR-0065, decisions 5 and 6;
 https://github.com/xippios/.github/issues/169).
@@ -164,13 +165,13 @@ skip it (§8, §9; ADR-0040).
   it.
   A source's `scripts/refresh_upstream.py` declares its snapshot to core's frame, a
   `Snapshot` of `xippios.core.refresh` with its pages, its attribution and its hooks, and
-  calls `run(snapshot)` (ADR-0046, decision 2). The fetch, the attribution check,
+  calls `run(snapshot)` (ADR-0062, decisions 2 and 3). The fetch, the attribution check,
   `FETCHED.md`, the write and `--check` are the frame's, and no hook of a source replaces
-  them (ADR-0046, decision 2). A source that needs its credentials, its pace or its
+  them (ADR-0062, decision 3). A source that needs its credentials, its pace or its
   `classify` for the fetch hands the frame its own client (ADR-0062, decision 4), and core's
   README says how the frame sends. A converter that a source's hooks use is the source's own
-  dependency, never core's (ADR-0046, decision 1). Every file the snapshot holds but
-  `FETCHED.md` is written as the source's hooks make it (ADR-0046, decision 3).
+  dependency, never core's (ADR-0062, decision 1). Every file the snapshot holds but
+  `FETCHED.md` is written as the source's hooks make it (ADR-0062, decision 6).
   The script names its `Snapshot` `SNAPSHOT` at its top level, which imports and declares
   alone, sends no request and writes no file, its run standing under
   `if __name__ == "__main__":`, the form that sdk-template renders, which the review holds
@@ -181,11 +182,11 @@ skip it (§8, §9; ADR-0040).
   in it, is kept as its HTML in the Markdown snapshot, and one line in `FETCHED.md` says
   so (ADR-0028, decision 4).
   The frame writes `FETCHED.md` in one form for every source, and the first run of a
-  source's ported script rewrites it once (ADR-0046, decision 3). Every ETag in
+  source's ported script rewrites it once (ADR-0062, decision 6). Every ETag in
   `FETCHED.md` stands in a code span, on a row that ends in the secret scan's allowlist
-  mark, hex or not (ADR-0046, decision 4). A row's `Last-Modified` stands in UTC, a date
+  mark, hex or not (ADR-0062, decision 7). A row's `Last-Modified` stands in UTC, a date
   without a zone read as GMT as every HTTP date is, and one that is no HTTP date as sent,
-  in a code span (ADR-0046, decision 4).
+  in a code span (ADR-0062, decision 7).
   The frame ends `FETCHED.md` with one line that names the file's form, and a change of core
   that rewords what the frame writes into the file raises the form (ADR-0062, decision 8).
   No check compares a committed `FETCHED.md` with its script's declaration without a request:
@@ -202,16 +203,16 @@ skip it (§8, §9; ADR-0040).
   between are searched as before, and the whole text of any other page, while a sample, a
   page that an anonymous client cannot read and a binary body are not read, and it stops the
   run, before writing, on a copyright, a licence or terms of use that the attribution does
-  not record (ADR-0046, decision 7).
+  not record (ADR-0062, decision 10).
   A statement recorded with a link passes the check only as the text of a link to its
   target, on any page that prints the link, while a statement without a link and a word of
   the vocabulary pass wherever they stand, and a page that is no HTML has no link, so a
-  linked statement's words stop the run there (ADR-0046, decision 7).
+  linked statement's words stop the run there (ADR-0062, decision 10).
   An API document in JSON names a licence, terms or a contact in its `info` only as the
   attribution records them from that document: each of `license`, `termsOfService` and
   `contact` that it holds is quoted by a statement's text or link, and the three leave the
   document's text before the search, while a document in YAML or in another form is searched
-  as text whole (ADR-0046, Consequences).
+  as text whole (ADR-0062, decision 10).
 - A source whose API is one part of a shared upstream document (several APIs of one
   publisher described in one OpenAPI document) snapshots its own part and records the full
   document's byte size and sha256 in `FETCHED.md`, so a refresh can tell the part from
@@ -251,9 +252,9 @@ skip it (§8, §9; ADR-0040).
   to, and the public pages that state the same facts are the snapshot's statement of the
   subject (ADR-0028, decision 6).
   `FETCHED.md` carries the table `Not fetched` under its heading even when the table has no
-  row (ADR-0046, decision 4). A page that redirects to another host stops the run unless
+  row (ADR-0062, decision 7). A page that redirects to another host stops the run unless
   the snapshot records it by that status, and then its row in `Not fetched` names the host
-  (ADR-0046, decision 4).
+  (ADR-0062, decision 7).
 - A small answer of the API, kept verbatim under `docs/upstream/samples/`, documents the
   answer's shape and is not a test fixture: its row in `FETCHED.md`'s file table gives
   the URL it was requested from and says that it is a sample. A sample whose operation
@@ -618,7 +619,7 @@ A paginated task may instead return one upstream page per call and collect nothi
 the two cases where collecting would cost what no call bounds: a list unbounded by
 nature, where collecting would spend hundreds of calls for a result the cap cuts at 200
 rows (a mailbox's `list_messages`), and a metered upstream, which bills
-per resource returned (sdk-x, decision 4 of its first record,
+per resource returned (decision 4 of
 https://github.com/xippios/sdk-x/blob/main/docs/adr/0001-x-metered-content-source.md). The cursor upstream returns stays
 on its data under upstream's name (`next_page_token`, or `data.meta.next_token`),
 the caller passes it back to the page parameter upstream names, and the docstring says
@@ -1402,6 +1403,20 @@ which §12 bounds to one minor.
   uploads. A tag ruleset admits no other `v*` tag. sdk-template, which publishes nothing
   to PyPI, tags from the top `## [X.Y.Z] - ` heading of its `CHANGELOG.md` with its own
   `release.yml`, under the same ruleset. Yanks are a human action. No tokens anywhere.
+- A release run that fails is finished by its own jobs, never by a push: once the tag stands,
+  only "Re-run failed jobs" finishes it, since a dispatch or "Re-run all jobs" stops at
+  `release-check`, which finds the tag, and a build that fails for good after the tag leaves a
+  tag without a release, which a patch release mends (ADR-0039, decision 6). A `ci` that fails
+  before the tag is re-run the same way, and so is a run that the deployment-branch policy of
+  `pypi` refused, once a maintainer has set the policy to `main` (ADR-0039, decision 6).
+  `publish.yml` keeps no `concurrency` group, since GitHub keeps one pending run of a group and
+  cancels it for the next, so two pushes to `main` close together can both find the version
+  untagged, and a release PR is not merged while another release run waits at `pypi`
+  (ADR-0039, decision 6). Where two runs found the version untagged, the second run's push of
+  the tag fails or, where the first run's `ci` failed, the second tags a later commit: the
+  failed jobs of the run whose commit is the release are re-run, and where the other run tagged
+  a later commit, a maintainer rejects its deployment at `pypi` and the release is made again
+  as a patch (ADR-0039, decision 6).
 - A source may depend on another source package, consuming its task layer only: it
   imports `xippios.<dep>.tasks` and its models, never `api/` or `_client`, and declares
   `xippios-<dep>~=X.Y.0`, one minor, like core (ADR-0021). Both share one core minor:
@@ -1433,13 +1448,13 @@ which §12 bounds to one minor.
   30-second example · MCP client config snippet · status table of covered endpoints ·
   upstream terms and attribution · licence.
 - Topics on GitHub: `xippios-sdk`, `python`, `mcp`, plus the domain (`agriculture`,
-  `trade-data`, `accounting`, `email` (ADR-0025), `social-media` (sdk-x's first record,
-  https://github.com/xippios/sdk-x/blob/main/docs/adr/0001-x-metered-content-source.md)) as
+  `trade-data`, `accounting`, `email` (ADR-0025), `social-media`
+  (https://github.com/xippios/sdk-x/blob/main/docs/adr/0001-x-metered-content-source.md)) as
   appropriate.
 - Workflows are hardened (ADR-0039, decision 7). Every action is pinned to a
   commit SHA with its version in a comment, and bumped deliberately. A workflow carries no
-  comment but the version after a pinned action
-  (https://github.com/xippios/.github/issues/111). Every checkout sets
+  comment but the version after a pinned action (ADR-0039, decision 7, amendment 2026-11-24;
+  https://github.com/xippios/.github/issues/111). Every checkout sets
   `persist-credentials: false`, except in a job that pushes with the token, the release
   train's `tag` job, which the README's paragraph on `publish.yml` names as the exception
   (ADR-0039, decision 7, amendment 2026-11-24). Every workflow declares
