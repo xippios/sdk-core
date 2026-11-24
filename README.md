@@ -1048,8 +1048,8 @@ sends no request and writes no file, its run under `if __name__ == "__main__":`,
 sdk-template renders (conventions §3).
 
 Beside `reduce`, `canonical` and `linked`, a snapshot declares the hooks for what some
-sources do beyond that, each source named in ADR-0062, decision 5, and every hook stops the
-run with `changed(url, what)` on a page it does not recognise:
+sources do beyond that, each source named in ADR-0062, and every hook stops the run with
+`changed(url, what)` on a page it does not recognise:
 
 | The source does | The declaration takes |
 | --- | --- |
@@ -2039,19 +2039,6 @@ PyPI's trusted publisher names its file. It is handed no secret, and each job ta
 it needs: `release-check` reads the tags with the job's token, the job `tag` pushes the tag
 with that token from the one checkout that keeps its credentials (conventions §13), and PyPI
 trusts the workflow itself. No variable switches it off.
-
-A release run that fails is finished by its own jobs, never by a push. The tag comes before
-the build, so a build that fails for good leaves a tag without a release, which a patch
-release mends. Once the tag stands, only "Re-run failed jobs" finishes the release: a
-dispatch or "Re-run all jobs" stops at `release-check`, which finds the tag. Where the
-deployment-branch policy of `pypi` refuses `main` on the first run, a maintainer sets it to
-`main` and re-runs the failed jobs, and a `ci` that fails before the tag is re-run too. Runs
-are not serialised, and GitHub keeps one pending run of a group and cancels it for the next,
-so two pushes close together can both find a version untagged: the second run's push of the
-tag fails, or, where the first run's `ci` failed, the second tags a later commit. The failed
-jobs of the run whose commit is the release are then re-run, and where the other run tagged a
-later commit, the maintainer rejects its deployment and the release is made again as a patch.
-A release is therefore not merged while another release run waits at `pypi`.
 
 `conventions.yml` calls the organization's review of a pull request against the documents
 listed under Documents below, the check `conventions / conventions`, when a pull request
