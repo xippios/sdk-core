@@ -8,7 +8,8 @@ A packaged list, the records of one upstream operation as the refresh script fet
 them, is a ``PackagedList``: it loads the file, builds the ``ResultMeta`` of an answer
 from it (ADR-0041), parses its records and writes the file. ``PackagedList.codes``
 declares its code field, its name field and its folding once, a ``PackagedCodes``, whose
-``check`` returns an argument as given or raises ``UnknownCode`` (ADR-0045), and from which
+``check`` returns an argument, one code or a list of codes, as given or raises
+``UnknownCode`` (ADR-0045), and from which
 ``names_codes`` names each country code of a task's call in ``meta.names`` (ADR-0056).
 ``matches`` is the ``search`` filter of the ``list_*`` tasks; ``closest``, by text, and
 ``nearest``, by number, find the known codes near a value that ``UnknownCode`` refuses.
@@ -39,7 +40,14 @@ from typing import Any, Self, cast
 import pydantic
 from pydantic import BaseModel, ConfigDict, field_validator
 
-from xippios.core.errors import InvalidRequestError, UnknownCode, ValidationError, _raise
+from xippios.core.errors import (
+    _UNSENT,
+    InvalidRequestError,
+    UnknownCode,
+    ValidationError,
+    _asked,
+    _raise,
+)
 from xippios.core.models import Result, ResultMeta, _validation_text, parse
 
 __all__ = [
@@ -281,11 +289,13 @@ class PackagedCodes:
     other type is refused, never compared by its text. The index is built once, when the
     list is declared, and kept with the declaration for the process.
 
-    ``check`` is conventions §5's refusal of a code the packaged list lacks, in one call; the
-    live comparison of a list (https://github.com/xippios/sdk-core/issues/374) and the names
-    of a request's codes in ``meta`` (https://github.com/xippios/sdk-core/issues/375) read
-    the same declaration through ``code``, ``name``, ``packaged``, ``names`` and
-    ``name_of``. Its properties are read-only.
+    ``check`` is conventions §5's refusal of a code the packaged list lacks, in one call, for
+    one code or a list of them; the live comparison of a list
+    (https://github.com/xippios/sdk-core/issues/374) and the names of a request's codes in
+    ``meta`` (https://github.com/xippios/sdk-core/issues/375) read the same declaration
+    through ``code``, ``list_name``, ``packaged``, ``integer`` and ``name_of``, the members
+    that core reads and the ones that stay (ADR-0045, amendment 2026-11-24). Its properties
+    are read-only.
     """
 
     __slots__ = (
@@ -340,57 +350,32 @@ class PackagedCodes:
         return self._code
 
     @property
-    def name(self) -> str | None:
-        """The field that holds the name, e.g. ``"countryName"``; ``None`` for a list of values."""
-        return self._name
-
-    @property
-    def fold_case(self) -> bool:
-        """Whether codes are compared without case."""
-        return self._fold_case
-
-    @property
     def list_name(self) -> str:
         """The list as a refusal names it: ``list_name`` as declared, else the list's ``param``."""
         return self._list_name
-
-    @property
-    def source(self) -> str | None:
-        """Source slug every refusal carries, or ``None``."""
-        return self._source
 
     @property
     def integer(self) -> bool:
         """``True`` for a list of integer codes, ``False`` for one of text codes."""
         return self._integer
 
-    @property
-    def names(self) -> Mapping[str | int, str]:
-        """Each code to its name in upstream order, read-only.
-
-        A code listed twice keeps the name of its first record, and a code without a name,
-        every code of a list of values among them, is named by its own text.
-        """
-        return self._names
-
     def name_of(self, value: object) -> str | None:
         """The name of the code ``value`` stands for, compared as ``check`` compares it.
 
+        A code listed twice keeps the name of its first record, and a code without a name,
+        every code of a list of values among them, is named by its own text.
+
         Args:
-            value: A code as a caller gives it, e.g. ``"va"`` for a folded list, ``401``
+            value: A code as a caller gives it, e.g. ``"r1"`` for a folded list, ``10``
                 for integer codes, or an enum member, read by its value.
 
         Returns:
-            The code's name as ``names`` holds it, e.g. ``"Corn"``, and for a list of
-            values the code as upstream spells it, ``"VA"``; ``None`` when the list lacks
+            The code's name as its record holds it, e.g. ``"North"``, and for a list of
+            values the code as upstream spells it, ``"R1"``; ``None`` when the list lacks
             the code or ``value`` is of the other type.
         """
         found = self._canonical(_plain(value))
         return None if found is None else self._names[found]
-
-    def __contains__(self, value: object) -> bool:
-        """Whether the list holds ``value``, compared as ``check`` compares it."""
-        return self._canonical(_plain(value)) is not None
 
     def check[V](
         self,
@@ -404,14 +389,26 @@ class PackagedCodes:
     ) -> V:
         """``value`` as the caller gave it, or the refusal of a code the list lacks (§5).
 
-        The value is compared with the list's codes as upstream compares them, without case
-        where the list folds it, an enum member by its value, and is returned itself, so
-        the task sends it, and records it in ``meta.request``, as given: under folding the
-        caller's spelling, which upstream compares without case.
+        The value is one code or a list of codes, several values of one filter, and each
+        code is compared with the list's codes as upstream compares them, without case where
+        the list folds it, an enum member by its value. The value is returned itself, so the
+        task sends it, and records it in ``meta.request``, as given: under folding the
+        caller's spelling, which upstream compares without case. A list is checked in its
+        order and refused for its first code that the check refuses, and an empty list is
+        refused, since it holds no code to send.
+
+        A task calls ``check`` before any request of the call, which makes the sentence of
+        each refusal, ``Nothing was sent.``, true (conventions §5; ADR-0045, amendment
+        2026-11-24)::
+
+            REGIONS.check("region_code", ["R1", "R9"])
+            # UnknownCode: 'R9' is not a region_code in the packaged regions list (fetched
+            # 2026-10-23). Nothing was sent. Did you mean R1 (North)? ...
 
         Args:
-            param: The parameter, as the package names it, e.g. ``"country_code"``.
-            value: The value given, e.g. ``"US"`` or ``401``.
+            param: The parameter, as the package names it, e.g. ``"region_code"``.
+            value: The value given: one code, e.g. ``"R1"`` or ``10``, or a list (or a
+                tuple) of codes, e.g. ``["R1", "R3"]``.
             hints: Values that are no codes, each with the text that explains it in place
                 of the closest codes, e.g. ``{"all": "Omit country_code for every
                 country."}``; read with the value's text stripped and without case, as the
@@ -431,36 +428,66 @@ class PackagedCodes:
                 returns no pair for one it does not read, and the codes are then named by
                 name (ADR-0045, amendment 2026-11-22).
             reason: Why the package refuses the value rather than asking upstream, e.g.
-                ``"PSD answers unknown codes with an empty result, so the package refuses
-                them."``.
+                ``"Example answers an unknown code with an empty list, so the package
+                refuses it."``.
 
         Returns:
             ``value``, the very object given.
 
         Raises:
-            UnknownCode: The list lacks the code; it names the list, its fetch date, the
-                closest codes, or the hint, or ``otherwise``, the reason and the source.
-            InvalidRequestError: ``value`` is not of the list's type and the hint table
+            UnknownCode: The list lacks the code, a list's first such code; it names the
+                list, its fetch date, that nothing was sent, the closest codes, or the hint,
+                or ``otherwise``, the reason and the source.
+            InvalidRequestError: The code is not of the list's type and the hint table
                 does not hold it: a text of digits for integer codes names the integer to
                 pass, another text the codes the source's strategy names for it, else
                 those whose name holds it or comes close, an integer for text codes its
                 text or the codes close to it; ``otherwise`` where none is named, then the
-                reason and the source.
+                reason and the source. Or the list is empty: the refusal names the codes
+                the parameter takes, then ``otherwise``.
         """
-        plain = _plain(value)
+        codes: Sequence[object] = value if isinstance(value, list | tuple) else [value]
+        if not codes:
+            raise self._empty(param, otherwise)
+        for code in codes:
+            refusal = self._refusal(
+                param, code, hints=hints, otherwise=otherwise, strategy=closest, reason=reason
+            )
+            if refusal is not None:
+                raise refusal
+        return value
+
+    def _refusal(
+        self,
+        param: str,
+        code: object,
+        *,
+        hints: Mapping[str, str] | None,
+        otherwise: str | None,
+        strategy: _Strategy | None,
+        reason: str | None,
+        asked: bool = False,
+    ) -> InvalidRequestError | None:
+        """The refusal of one code, ``None`` for a code the list holds.
+
+        ``asked`` is the switch of core's own check after the call, ``names_codes``: its
+        refusal leaves out ``Nothing was sent.``, since upstream was asked, and its reason
+        says so (ADR-0045, amendment 2026-11-24).
+        """
+        plain = _plain(code)
         if self._canonical(plain) is not None:
-            return value
+            return None
         hint = _hint(plain, hints)
         if hint is None and not self._typed(plain):
-            raise self._wrong_type(
-                param, plain, otherwise=otherwise, strategy=closest, reason=reason
+            return self._wrong_type(
+                param, plain, otherwise=otherwise, strategy=strategy, reason=reason, asked=asked
             )
         close: Sequence[tuple[Any, str]] = ()
         outdated = hint is None  # the table's value is no code: no refresh makes it one
         if hint is None:
-            close = self._closest(plain, closest)
+            close = self._closest(plain, strategy)
             hint = None if close else otherwise
-        raise UnknownCode(
+        refusal = UnknownCode(
             param,
             cast(str | int, plain),
             list_name=self._list_name,
@@ -471,6 +498,24 @@ class PackagedCodes:
             source=self._source,
             outdated=outdated,
         )
+        return _asked(refusal) if asked else refusal
+
+    def _empty(self, param: str, otherwise: str | None) -> InvalidRequestError:
+        """The refusal of an empty list of codes, which names what ``param`` takes."""
+        return InvalidRequestError(
+            f"{param} lists no code: it takes one or more {self._kind()} codes of the packaged "
+            f"{self._list_name} list (fetched {self._packaged.fetched:%Y-%m-%d}){self._such()}. "
+            f"{_UNSENT}{' ' + otherwise if otherwise else ''}",
+            source=self._source,
+        )
+
+    def _kind(self) -> str:
+        return "integer" if self._integer else "text"
+
+    def _such(self) -> str:
+        """``, such as R1 (North)``, the list's first code as a refusal shows it, or nothing."""
+        first = next(iter(self._shown_names().items()), None)
+        return "" if first is None else f", such as {_named([first])}"
 
     def _typed(self, plain: object) -> bool:
         if isinstance(plain, bool):
@@ -509,13 +554,15 @@ class PackagedCodes:
         otherwise: str | None,
         strategy: _Strategy | None,
         reason: str | None,
+        asked: bool,
     ) -> InvalidRequestError:
         """The refusal of a value that is not of the list's type (ADR-0045, decision 4).
 
         A text that is no number, given for integer codes, is named by the source's strategy
         first, as an ISO code names the area it stands for, and by name where the strategy
-        names none or none is given (ADR-0045, decision 4, amended 2026-11-22). The refusal
-        ends with the ``reason``, as ``UnknownCode`` does (conventions §5).
+        names none or none is given (ADR-0045, decision 4, amended 2026-11-22). After its
+        first sentence it says that nothing was sent unless ``asked``, as ``UnknownCode``
+        does, and it ends with the ``reason`` (conventions §5).
         """
         shown = self._shown_names()
         tail = ""
@@ -537,13 +584,12 @@ class PackagedCodes:
             tail = f" {otherwise}"
         if reason:
             tail += f" {reason}"
-        kind = "integer" if self._integer else "text"
-        first = next(iter(shown.items()), None)
-        such = "" if first is None else f", such as {_named([first])}"
+        kind = self._kind()
         return InvalidRequestError(
             f"{plain!r} is not {'an' if self._integer else 'a'} {kind} code: {param} takes the "
             f"{kind} codes of the packaged {self._list_name} list (fetched "
-            f"{self._packaged.fetched:%Y-%m-%d}){such}.{tail}",
+            f"{self._packaged.fetched:%Y-%m-%d}){self._such()}.{'' if asked else ' ' + _UNSENT}"
+            f"{tail}",
             source=self._source,
         )
 
@@ -600,8 +646,10 @@ def names_codes[F: Callable[..., Any]](
     decorator's own replace them for its parameters, so two decorators stack, one per
     separator. The task checks its codes before the call with its own hints and reason, so a
     code the list lacks never reaches the decorator; one that does, sent unchecked, is
-    refused with ``check``'s refusal, its reason saying that the answer is withheld. What
-    the task raises passes as raised, and the answer's own object is not changed.
+    refused with ``check``'s refusal, its reason saying that upstream was asked and that the
+    answer is withheld, and without ``Nothing was sent.``, the sentence of a refusal before
+    the call (ADR-0045, amendment 2026-11-24). What the task raises passes as raised, and the
+    answer's own object is not changed.
 
     Args:
         separator: The text between several codes in one text, e.g. ``","`` for
@@ -759,7 +807,11 @@ def _name(param: str, member: object, listed: PackagedCodes) -> tuple[str, str]:
         read = str(plain)
     else:
         read = plain
-    listed.check(param, read, reason=_WITHHELD)  # a code the list lacks withholds the answer
+    refusal = listed._refusal(  # a code the list lacks withholds the answer, upstream asked
+        param, read, hints=None, otherwise=None, strategy=None, reason=_WITHHELD, asked=True
+    )
+    if refusal is not None:
+        raise refusal
     text = str(plain)
     return text, " ".join((listed.name_of(read) or text).split()) or text
 
@@ -887,38 +939,32 @@ def matches(search: str | None, *fields: object) -> bool:
     return any(needle in str(field).casefold() for field in fields if field is not None)
 
 
-def closest(
-    value: str, codes: Mapping[str, str], *, n: int = 3, cutoff: float = 0.6
-) -> list[tuple[str, str]]:
+def closest(value: str, codes: Mapping[str, str], *, n: int = 3) -> list[tuple[str, str]]:
     """Up to ``n`` known codes close to ``value``: by code first, then by upstream name.
 
     Two ``difflib.get_close_matches`` passes: ``value`` upper-cased against the codes,
     then ``value`` lower-cased against the lower-cased names, each code named once, best
-    match first. An agent that passes ``"us"`` for ``"US"`` or ``"wheat"`` for
-    ``"0410000"`` is led to the code. For ``UnknownCode``'s ``closest``; ``nearest``
-    matches integer codes by number instead.
+    match first, each match at ``difflib``'s own similarity of 0.6 or more. An agent that
+    passes ``"r1"`` for ``"R1"`` or ``"north"`` for ``"R1"`` is led to the code. For
+    ``UnknownCode``'s ``closest``; ``nearest`` matches integer codes by number instead.
 
     Args:
-        value: The value given, e.g. ``"wheat"``.
-        codes: Upstream's code to its name, e.g. ``{"0410000": "Wheat"}``, or each value
-            to itself for a list of bare values, e.g. ``{"VA": "VA"}``.
+        value: The value given, e.g. ``"north"``.
+        codes: Upstream's code to its name, e.g. ``{"R1": "North"}``, or each value to
+            itself for a list of bare values, e.g. ``{"VA": "VA"}``.
         n: The most pairs returned.
-        cutoff: The least similarity a match needs in either pass, from 0 to 1, as
-            ``difflib`` scores it: 0.6, ``difflib``'s own, by default; 0.5 lets a code of
-            two characters with one of them wrong match, ``"VS"`` naming ``"VA"``.
 
     Returns:
-        ``(code, name)`` pairs, e.g. ``[("0410000", "Wheat")]``; empty when none is close.
+        ``(code, name)`` pairs, e.g. ``[("R1", "North")]``; empty when none is close.
 
     Raises:
-        ValueError: ``n`` is less than 1, or ``cutoff`` is outside 0 to 1, as ``difflib``
-            refuses them.
+        ValueError: ``n`` is less than 1, as ``difflib`` refuses it.
     """
-    found = difflib.get_close_matches(value.upper(), list(codes), n=n, cutoff=cutoff)
+    found = difflib.get_close_matches(value.upper(), list(codes), n=n)
     by_name = {name.lower(): code for code, name in codes.items()}
     found += [
         by_name[name]
-        for name in difflib.get_close_matches(value.lower(), list(by_name), n=n, cutoff=cutoff)
+        for name in difflib.get_close_matches(value.lower(), list(by_name), n=n)
         if by_name[name] not in found
     ]
     return [(code, codes[code]) for code in found[:n]]

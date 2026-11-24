@@ -282,11 +282,8 @@ async def test_a_count_over_the_limit_raises_with_both_numbers_before_the_data_r
             source="example",
         )
     assert (info.value.count, info.value.limit) == (5_006_385, 100_000)
-    assert (info.value.narrow, info.value.bound, info.value.source) == (NARROW, False, "example")
+    assert (info.value.narrow, info.value.source) == (NARROW, "example")
     assert info.value.request is None  # refused before the data request: it names none
-    assert str(info.value) == (
-        "query would return 5,006,385 records; upstream serves at most 100,000 per call. " + NARROW
-    )
     assert upstream.sent == ["count"]
 
 

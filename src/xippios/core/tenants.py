@@ -78,7 +78,7 @@ from typing import Any
 
 from xippios.core._loop import as_async
 from xippios.core.client import AsyncClient
-from xippios.core.errors import ConfigError, InvalidRequestError
+from xippios.core.errors import _UNSENT, ConfigError, InvalidRequestError
 from xippios.core.models import Result, ResultMeta
 
 __all__ = ["TenantLock", "Tenants", "bind_tasks", "list_task", "tenant_instructions"]
@@ -283,11 +283,16 @@ class Tenants:
     def require(self, name: str) -> str:
         """Return ``name`` when it is a declared tenant, a reserved one that is present included.
 
+        A task resolves its tenant before any request of the call, through ``client_for``,
+        which makes the refusal's ``Nothing was sent.`` true (conventions §5; ADR-0045,
+        amendment 2026-11-24).
+
         Raises:
             InvalidRequestError: ``name`` is not declared, the caller's bad argument
                 (ADR-0007); the message lists the declared tenants or, when there are
                 none, the variables to set, and for an absent reserved tenant the
-                variables that declare it; never a value.
+                variables that declare it, never a value, and says that nothing was sent:
+                ``unknown tenant 'nope'; declared tenants: acme. Nothing was sent.``
             ConfigError: ``list_var`` is malformed (see ``names``).
         """
         declared = self.names()
@@ -304,7 +309,7 @@ class Tenants:
             for reserved in self.reserved:
                 variables = " and ".join(self.var(reserved, field) for field in self.fields)
                 hint += f"; {reserved!r} is declared by {variables} alone"
-        raise InvalidRequestError(f"unknown tenant {name!r}; {hint}", source=self.source)
+        raise InvalidRequestError(f"unknown tenant {name!r}; {hint}. {_UNSENT}", source=self.source)
 
     def field(self, name: str, field: str) -> str:
         """The value of tenant ``name``'s ``field`` variable, stripped.

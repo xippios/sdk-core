@@ -24,6 +24,7 @@ from xippios.core.client.cache import CachedResponse, cache_key, strip_wire_head
 from xippios.core.client.config import ClientConfig
 from xippios.core.client.download import (
     Downloaded,
+    check_dest,
     content_disposition_filename,
     head_of,
     stream_to,
@@ -33,7 +34,6 @@ from xippios.core.client.ratelimit import TokenBucket
 from xippios.core.client.retry import send_with_retries
 from xippios.core.errors import (
     BODY_LIMIT,
-    InvalidRequestError,
     UpstreamError,
     ValidationError,
     XippiosError,
@@ -619,21 +619,14 @@ class AsyncClient:
 
         Raises:
             InvalidRequestError: ``dest`` is a directory, or its directory does not
-                exist, a bad argument (conventions §5); nothing is sent, the hooks
-                included.
+                exist, a bad argument (conventions §5), by ``check_dest``; nothing is sent,
+                the hooks included, and the refusal says so. A task that sends a request
+                before its download calls ``check_dest`` first.
             XippiosError: The taxonomy error for the answer (``classify`` first, then the
                 status), ``UpstreamError`` for a 1xx or 3xx, ``TransportError`` for a
                 transport failure that is not retried; ``dest`` is untouched.
         """
-        target = Path(dest)
-        if target.is_dir():
-            raise InvalidRequestError(
-                "dest is a directory; name the file to write", source=self.source
-            )
-        if not target.parent.is_dir():
-            raise InvalidRequestError(
-                "dest's directory does not exist; create it first", source=self.source
-            )
+        target = check_dest(dest, source=self.source)
         pool = self._pool()
         reach = self._reach(auth)
         handle, name = tempfile.mkstemp(

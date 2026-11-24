@@ -307,7 +307,7 @@ def test_errors_survive_copy_and_pickle(
         assert vars(clone) == vars(error)
         for name in (
             "status", "retry_after", "raw", "body", "fields", "upstream_message", "closest",
-            "count", "limit", "narrow", "bound", "year", "request",
+            "count", "limit", "narrow", "year", "request",
         ):  # fmt: skip
             assert getattr(clone, name, None) == getattr(error, name, None)
 
@@ -326,9 +326,14 @@ FETCHED = datetime(2026, 10, 23, 9, 15, tzinfo=UTC)
 REFRESH = "If upstream added it since, the packaged list is out of date."
 """The tail every refusal ends with: no maintainer's command, which an agent cannot run."""
 
+UNSENT = "Nothing was sent."
+"""The sentence after the first of every refusal made before a request (conventions §5)."""
 
-def test_unknown_code_names_the_closest_codes_and_a_list_out_of_date() -> None:
-    # The copies of sdk-usda-psd, sdk-usda-esr and sdk-usda-gats, one message (ADR-0041).
+
+def test_unknown_code_says_nothing_was_sent_then_names_the_closest_codes() -> None:
+    # The copies of sdk-usda-psd, sdk-usda-esr and sdk-usda-gats, one message (ADR-0041), which
+    # says after its first sentence that nothing was sent
+    # (https://github.com/xippios/sdk-core/issues/481). Core's tests hold the message here alone.
     closest = [("0410000", "Wheat"), ("0440000", "Corn")]
     error = UnknownCode(
         "commodity_code",
@@ -341,7 +346,7 @@ def test_unknown_code_names_the_closest_codes_and_a_list_out_of_date() -> None:
     assert isinstance(error, InvalidRequestError)
     assert str(error) == (
         "'0410001' is not a commodity_code in the packaged commodities list (fetched "
-        "2026-10-23). Did you mean 0410000 (Wheat), 0440000 (Corn)? " + REFRESH
+        "2026-10-23). Nothing was sent. Did you mean 0410000 (Wheat), 0440000 (Corn)? " + REFRESH
     )
     assert (error.param, error.value, error.fetched) == ("commodity_code", "0410001", FETCHED)
     assert (error.list_name, error.source) == ("commodities", "usda-psd")
@@ -360,12 +365,13 @@ def test_unknown_code_takes_a_hint_over_the_closest_and_a_reason() -> None:
     )
     assert str(error) == (
         "999 is not an attribute_id in the packaged commodityAttributes list (fetched "
-        "2026-10-23). Omit attribute_id for every attribute. An id the list lacks selects "
-        "nothing, so the package refuses it. " + REFRESH
+        "2026-10-23). Nothing was sent. Omit attribute_id for every attribute. An id the list "
+        "lacks selects nothing, so the package refuses it. " + REFRESH
     )
     bare = UnknownCode("partner_code", "ZZ", list_name="countries", fetched=FETCHED)
     assert str(bare) == (
-        "'ZZ' is not a partner_code in the packaged countries list (fetched 2026-10-23). " + REFRESH
+        "'ZZ' is not a partner_code in the packaged countries list (fetched 2026-10-23). "
+        f"{UNSENT} {REFRESH}"
     )
     assert bare.closest == ()
 
@@ -386,19 +392,19 @@ def test_unknown_code_of_a_value_that_is_no_code_leaves_out_the_lists_age() -> N
         outdated=False,
     )
     assert str(error) == (
-        "'CHE' is not a reporter_code in the packaged Reporters list (fetched 2026-10-23). CHE "
-        "is the ISO alpha-3 code of 757 (Switzerland): pass 757. UN Comtrade answers a code it "
-        "does not have with count 0."
+        "'CHE' is not a reporter_code in the packaged Reporters list (fetched 2026-10-23). "
+        "Nothing was sent. CHE is the ISO alpha-3 code of 757 (Switzerland): pass 757. UN "
+        "Comtrade answers a code it does not have with count 0."
     )
     assert (error.param, error.value, error.closest) == ("reporter_code", "CHE", ())
     for clone in [copy.deepcopy(error), *_pickled(error)]:
         assert str(clone) == str(error)
     plain = UnknownCode("reporter_code", 0, list_name="Reporters", fetched=FETCHED, outdated=False)
     assert str(plain) == (
-        "0 is not a reporter_code in the packaged Reporters list (fetched 2026-10-23)."
+        f"0 is not a reporter_code in the packaged Reporters list (fetched 2026-10-23). {UNSENT}"
     )
     kept = UnknownCode("reporter_code", 0, list_name="Reporters", fetched=FETCHED, outdated=True)
-    assert str(kept).endswith(f"(fetched 2026-10-23). {REFRESH}")  # the default, said aloud
+    assert str(kept).endswith(f"(fetched 2026-10-23). {UNSENT} {REFRESH}")  # the default, aloud
 
 
 def test_unknown_code_names_a_bare_code_once_and_no_command_of_a_maintainer() -> None:
@@ -410,7 +416,7 @@ def test_unknown_code_names_a_bare_code_once_and_no_command_of_a_maintainer() ->
     )
     assert str(error) == (
         "'VS' is not a state_alpha in the packaged state_alpha list (fetched 2026-10-23). "
-        "Did you mean VA, VT (Vermont)? " + REFRESH
+        f"{UNSENT} Did you mean VA, VT (Vermont)? {REFRESH}"
     )
     assert "/refresh-reference-data" not in str(error)
     assert error.closest == tuple(closest)
@@ -426,24 +432,18 @@ def test_query_too_large_words_the_count_the_limit_and_what_narrows_the_query() 
     assert str(error) == (
         "query would return 5,006,385 records; upstream serves at most 100,000 per call. " + narrow
     )
-    assert (error.count, error.limit, error.narrow, error.bound) == (
-        5_006_385,
-        100_000,
-        narrow,
-        False,
-    )
+    assert (error.count, error.limit, error.narrow) == (5_006_385, 100_000, narrow)
     assert error.source == "comtrade"
 
 
-def test_query_too_large_says_a_bound_was_read_from_the_arguments_and_nothing_counted() -> None:
-    # sdk-comtrade's slices: product codes times periods, refused before any request.
-    narrow = "Name fewer product codes or periods per call."
-    error = QueryTooLarge(100_008, limit=100_000, narrow=narrow, bound=True)
-    assert str(error) == (
-        "query could return up to 100,008 records, a size read from its arguments with nothing "
-        "counted or sent; upstream serves at most 100,000 per call. " + narrow
-    )
-    assert (error.count, error.bound) == (100_008, True)
+def test_query_too_large_takes_no_size_read_from_the_arguments() -> None:
+    # The form of a bound read from the arguments had one caller, whose tasks the boundary of
+    # a source package takes out (https://github.com/xippios/sdk-core/issues/481, part 3).
+    with pytest.raises(TypeError, match="bound"):
+        QueryTooLarge(  # type: ignore[call-arg]
+            100_008, limit=100_000, narrow="Name fewer.", bound=True
+        )
+    assert not hasattr(QueryTooLarge(5, limit=1, narrow="Split."), "bound")
 
 
 def test_query_too_large_without_a_count_says_upstream_refused_the_query() -> None:
@@ -453,14 +453,13 @@ def test_query_too_large_without_a_count_says_upstream_refused_the_query() -> No
         "upstream refused the query as too large; it serves at most 50,000 records per call. "
         "Narrow the filters."
     )
-    assert (error.count, error.limit, error.bound) == (None, 50_000, False)
+    assert (error.count, error.limit) == (None, 50_000)
 
 
 def test_query_too_large_names_no_request_unless_given() -> None:
     # The package's own refusals, before the data request, name none (conventions §5).
     for error in (
         QueryTooLarge(5_006_385, limit=100_000, narrow="Split."),
-        QueryTooLarge(100_008, limit=100_000, narrow="Name fewer.", bound=True),
         QueryTooLarge(None, limit=50_000, narrow="Narrow."),
     ):
         assert error.request is None
@@ -494,20 +493,6 @@ def test_query_too_large_from_classify_names_its_request_beside_upstream_s_count
         "GET /v1/thing would return 13,344,840 records; upstream serves at most 5,000,000 per "
         "call. Name fewer."
     )
-
-
-def test_a_bound_without_a_count_is_refused() -> None:
-    with pytest.raises(ValueError, match="bound"):
-        QueryTooLarge(None, limit=100_000, narrow="Name fewer codes.", bound=True)
-
-
-def test_a_bound_with_a_request_is_refused() -> None:
-    # A size read from the arguments is the package's refusal before any request, which
-    # names none (conventions §5; ADR-0053, decision 7).
-    with pytest.raises(ValueError, match="bound=True names no request"):
-        QueryTooLarge(
-            100_008, limit=100_000, narrow="Name fewer.", bound=True, request="GET /v1/thing"
-        )
 
 
 def test_a_source_s_subclass_keeps_its_own_attribute_and_core_s_wording() -> None:

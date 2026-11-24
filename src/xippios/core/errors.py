@@ -173,6 +173,14 @@ class InvalidRequestError(XippiosError):
 _OUTDATED = "If upstream added it since, the packaged list is out of date."
 """The tail of ``UnknownCode``'s message, for a value upstream may have added as a code."""
 
+_UNSENT = "Nothing was sent."
+"""The sentence after the first of each of core's refusals before a request (conventions §5).
+
+``UnknownCode``, the check's refusal of a value of the wrong type and of an empty list,
+``check_dest`` and ``Tenants.require`` say it, and a task calls each of them before any
+request of the call, which makes it true (ADR-0045, amendment 2026-11-24).
+"""
+
 
 class UnknownCode(InvalidRequestError):
     """A value the packaged reference list does not contain, refused before any call.
@@ -182,12 +190,20 @@ class UnknownCode(InvalidRequestError):
     and refuses one the list lacks, naming the closest known codes (ADR-0041). A source
     finds them with ``xippios.core.closest``, with ``xippios.core.nearest`` for integer
     codes, or with a strategy of its own (ISO codes first) and passes the result. The
-    message names the value, the parameter, the list with its fetch date, the closest codes
-    (``Did you mean 0410000 (Wheat), 0440000 (Corn)?``, and a code whose name is its own
-    text named once, ``Did you mean VA?``) unless ``hint`` is given, the ``reason`` when
-    given, and, while ``outdated`` is true, that the packaged list is out of date if upstream
-    added the value since. An agent reads the message over MCP, so it names no command of
-    the package's maintainers.
+    message names the value, the parameter and the list with its fetch date, says that
+    nothing was sent, then names the closest codes (``Did you mean 0410000 (Wheat),
+    0440000 (Corn)?``, and a code whose name is its own text named once, ``Did you mean
+    VA?``) unless ``hint`` is given, the ``reason`` when given, and, while ``outdated`` is
+    true, that the packaged list is out of date if upstream added the value since::
+
+        'XX' is not a country_code in the packaged countries list (fetched 2026-10-23).
+        Nothing was sent. Did you mean US (United States)? If upstream added it since, the
+        packaged list is out of date.
+
+    A source raises it before any request of the call, which makes ``Nothing was sent.``
+    true; core's own check after the call, ``names_codes``, leaves the sentence out and says
+    that upstream was asked (conventions §5; ADR-0045, amendment 2026-11-24). An agent
+    reads the message over MCP, so it names no command of the package's maintainers.
 
     Args:
         param: The parameter, as the package names it, e.g. ``"commodity_code"``.
@@ -238,10 +254,9 @@ class UnknownCode(InvalidRequestError):
                 str(code) if name == str(code) else f"{code} ({name})" for code, name in closest
             )
             hint = f"Did you mean {', '.join(named)}?"
-        article = "an" if param[:1] in set("aeiou") else "a"
         super().__init__(
-            f"{value!r} is not {article} {param} in the packaged {list_name} list (fetched "
-            f"{fetched:%Y-%m-%d}).{' ' + hint if hint else ''}{' ' + reason if reason else ''}"
+            f"{_not_listed(param, value, list_name, fetched)} {_UNSENT}"
+            f"{' ' + hint if hint else ''}{' ' + reason if reason else ''}"
             f"{' ' + _OUTDATED if outdated else ''}",
             source=source,
         )
@@ -252,18 +267,37 @@ class UnknownCode(InvalidRequestError):
         self.closest = tuple(closest)
 
 
+def _not_listed(param: str, value: object, list_name: str, fetched: date) -> str:
+    """The first sentence of ``UnknownCode``'s message."""
+    article = "an" if param[:1] in set("aeiou") else "a"
+    return (
+        f"{value!r} is not {article} {param} in the packaged {list_name} list (fetched "
+        f"{fetched:%Y-%m-%d})."
+    )
+
+
+def _asked(error: UnknownCode) -> UnknownCode:
+    """``error`` without ``Nothing was sent.``, for a check made once upstream was asked.
+
+    The switch of core's own check after the call, ``names_codes``, whose reason says that
+    upstream was asked (ADR-0045, amendment 2026-11-24). The first sentence is worded again
+    from the error's attributes, so a value whose text holds the sentence is left as given.
+    """
+    first = _not_listed(error.param, error.value, error.list_name, error.fetched)
+    error.message = first + error.message.removeprefix(f"{first} {_UNSENT}")
+    error.args = (error.message,)
+    return error
+
+
 class QueryTooLarge(InvalidRequestError):
     """A query over upstream's per-call record limit, refused before its data is fetched.
 
     Raised by ``fetch_counted`` when upstream's count of the query's records is over the
-    limit, by a task whose arguments bound its rows over the limit, with ``bound=True`` and
-    before any request, and by a source's ``classify`` for upstream's own refusal of a query
-    as too large, with no count (ADR-0053). Core words the message from the fields, in one
-    of three forms with ``narrow`` last, so every source's refusal reads alike::
+    limit, and by a source's ``classify`` for upstream's own refusal of a query as too
+    large, with no count (ADR-0053). Core words the message from the fields, in one of two
+    forms with ``narrow`` last, so every source's refusal reads alike::
 
         query would return 5,006,385 records; upstream serves at most 100,000 per call.
-        query could return up to 100,008 records, a size read from its arguments with
-        nothing counted or sent; upstream serves at most 100,000 per call.
         upstream refused the query as too large; it serves at most 50,000 records per call.
 
     The error a source's ``classify`` maps from upstream's answer names its request, as
@@ -276,29 +310,21 @@ class QueryTooLarge(InvalidRequestError):
 
     Args:
         count: The records the query would return, as upstream counted them, e.g.
-            ``5_006_385``; with ``bound``, the most it could return, read from its
-            arguments; ``None`` where upstream refused the query as too large without a
-            count.
+            ``5_006_385``; ``None`` where upstream refused the query as too large
+            without a count.
         limit: The most records upstream serves per call, e.g. ``100_000``.
         narrow: What narrows the query, the sentences that end the message, e.g.
             ``"Split by period, then by reporter."``.
-        bound: ``True`` where ``count`` was read from the arguments and nothing counted.
         request: The request upstream refused, as ``request_description(response)`` gives
             it, e.g. ``"GET /v1/data"``, for the error a source's ``classify`` maps;
             ``None``, the default, for a refusal before the data request.
-        source: Source slug, e.g. ``"comtrade"``.
+        source: Source slug, e.g. ``"example"``.
 
     Attributes:
         count: As given.
         limit: As given.
         narrow: As given.
-        bound: As given.
         request: As given.
-
-    Raises:
-        ValueError: ``bound`` is ``True`` and ``count`` is ``None``, since a bound is a
-            number, or ``bound`` is ``True`` with a ``request``, since a size read from the
-            arguments is refused before any request and names none.
     """
 
     def __init__(
@@ -307,28 +333,15 @@ class QueryTooLarge(InvalidRequestError):
         *,
         limit: int,
         narrow: str,
-        bound: bool = False,
         request: str | None = None,
         source: str | None = None,
     ) -> None:
-        if bound and count is None:
-            raise ValueError("bound=True needs the count read from the arguments, not None")
-        if bound and request is not None:
-            raise ValueError(
-                "bound=True names no request: a size read from the arguments is refused before "
-                "any request is sent"
-            )
         query = "query" if request is None else request
         if count is None:
             refused = "the query" if request is None else request
             size = (
                 f"upstream refused {refused} as too large; it serves at most {limit:,} records "
                 "per call."
-            )
-        elif bound:
-            size = (
-                f"query could return up to {count:,} records, a size read from its arguments "
-                f"with nothing counted or sent; upstream serves at most {limit:,} per call."
             )
         else:
             size = (
@@ -339,7 +352,6 @@ class QueryTooLarge(InvalidRequestError):
         self.count = count
         self.limit = limit
         self.narrow = narrow
-        self.bound = bound
         self.request = request
 
 

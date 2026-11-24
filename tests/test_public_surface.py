@@ -12,6 +12,8 @@ EXPORTS = {
         # client
         "AsyncClient", "ClientConfig", "MemoryCache", "QuotaPolicy", "RateLimit",
         "RetryPolicy", "Downloaded", "Answer", "RenewingBearerAuth", "BearerToken",
+        # the check of a download's dest, called before a task's first request (ADR-0045)
+        "check_dest",
         # the one key class, where the key travels (ADR-0059, decision 7)
         "KeyAuth",
         # errors
@@ -52,7 +54,7 @@ EXPORTS = {
     "xippios.core.client": {
         "AsyncClient", "CachedResponse", "ClientConfig", "KeyAuth", "MemoryCache",
         "QuotaPolicy", "RateLimit", "RetryPolicy", "cache_key", "decode_csv", "Downloaded",
-        "Answer", "RenewingBearerAuth", "BearerToken",
+        "Answer", "RenewingBearerAuth", "BearerToken", "check_dest",
     },
     "xippios.core.testing": {
         "CLOCK_SLACK", "REDACTED", "Fixture", "FixtureResponse", "ReplayFixture", "Scrub",

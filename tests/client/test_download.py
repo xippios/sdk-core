@@ -22,6 +22,7 @@ from xippios.core.client import (
     KeyAuth,
     MemoryCache,
     RetryPolicy,
+    check_dest,
     decode_csv,
 )
 from xippios.core.errors import (
@@ -235,8 +236,11 @@ async def test_a_redirect_is_refused(respx_mock: respx.MockRouter, tmp_path: Pat
 @pytest.mark.parametrize(
     ("dest", "message"),
     [
-        (".", "dest is a directory; name the file to write"),
-        ("missing/qs.crops.txt", "dest's directory does not exist; create it first"),
+        (".", "dest is a directory; name the file to write. Nothing was sent."),
+        (
+            "missing/qs.crops.txt",
+            "dest's directory does not exist; create it first. Nothing was sent.",
+        ),
     ],
     ids=["a-directory", "in-a-missing-directory"],
 )
@@ -255,6 +259,37 @@ async def test_a_bad_dest_is_an_invalid_request_and_nothing_is_sent(
     assert not route.called
     assert hooked == []  # refused before the hook, the limiter and the wire
     assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize(
+    ("dest", "message"),
+    [
+        (".", "dest is a directory; name the file to write. Nothing was sent."),
+        (
+            "missing/report.pdf",
+            "dest's directory does not exist; create it first. Nothing was sent.",
+        ),
+    ],
+    ids=["a-directory", "in-a-missing-directory"],
+)
+def test_the_check_of_dest_alone_refuses_before_a_task_s_first_request(
+    tmp_path: Path, dest: str, message: str
+) -> None:
+    # A task that sends a request of its own before its download calls the check first, so a
+    # bad dest sends nothing (https://github.com/xippios/sdk-core/issues/481, part 1).
+    with pytest.raises(InvalidRequestError) as info:
+        check_dest(tmp_path / dest, source="example")
+    assert str(info.value) == message
+    assert info.value.source == "example"
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_the_check_of_dest_returns_the_file_as_a_path(tmp_path: Path) -> None:
+    assert check_dest(tmp_path / "report.pdf") == tmp_path / "report.pdf"
+    assert check_dest(str(tmp_path / "report.pdf")) == tmp_path / "report.pdf"
+    with pytest.raises(InvalidRequestError) as info:
+        check_dest(tmp_path)
+    assert info.value.source is None
 
 
 @pytest.mark.anyio

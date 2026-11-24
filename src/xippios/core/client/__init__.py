@@ -12,7 +12,7 @@ from xippios.core.client._core import Answer, AsyncClient, decode_csv
 from xippios.core.client.auth import BearerToken, KeyAuth, RenewingBearerAuth
 from xippios.core.client.cache import CachedResponse, MemoryCache, cache_key
 from xippios.core.client.config import ClientConfig, RateLimit, RetryPolicy
-from xippios.core.client.download import Downloaded
+from xippios.core.client.download import Downloaded, check_dest
 from xippios.core.client.quota import QuotaPolicy
 
 __all__ = [
@@ -29,5 +29,6 @@ __all__ = [
     "RenewingBearerAuth",
     "RetryPolicy",
     "cache_key",
+    "check_dest",
     "decode_csv",
 ]

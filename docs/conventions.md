@@ -657,11 +657,12 @@ not released does where the package knows the latest release (§4; ADR-0061, dec
 Source packages subclass only when upstream has a distinct, documented failure mode;
 a refusal the package makes itself, such as an unknown filter name, subclasses
 `InvalidRequestError`. A query over upstream's per-call record limit is refused with core's `QueryTooLarge`, an `InvalidRequestError`
-that carries the count, `None` where upstream refused the query without one, the limit,
-what narrows the query and whether the count is a bound read from the arguments, and
-whose message core words from them, so a source subclasses it only for an attribute of
-its own (ADR-0053). A task whose upstream counts a query's records on request counts
-before it fetches with core's `fetch_counted(count, fetch, *, limit, empty, narrow)`,
+that carries the count, `None` where upstream refused the query without one, the limit
+and what narrows the query, and whose message core words from them, so a source
+subclasses it only for an attribute of its own (ADR-0053). A size that a source reads from
+the arguments, with nothing counted, is the source's own refusal before any request
+(ADR-0053, amendment 2026-11-24). A task whose upstream counts a query's records on request
+counts before it fetches with core's `fetch_counted(count, fetch, *, limit, empty, narrow)`,
 which answers a count of 0 with the task's empty answer and no data request, refuses a
 count over the limit with `QueryTooLarge` before the data request and returns the data
 with the count, which the task sets as `meta.total` (ADR-0053).
@@ -674,8 +675,11 @@ named once (`Did you mean VA?`), and that the
 packaged list is out of date if upstream added the code since, naming no command of the
 package's maintainers (ADR-0041, decision 8). A source checks an argument against a packaged
 list with core's one check, `check(param, value)` of the list's declaration
-`PackagedList.codes(code, name, fold_case=...)`, which returns the value as the caller gave it
-or raises `UnknownCode` (ADR-0045).
+`PackagedList.codes(code, name, fold_case=...)`, which takes one code or a list of codes,
+several values of one filter, and returns the value as the caller gave it or raises
+`UnknownCode` for the first code that the list lacks, and refuses an empty list (ADR-0045,
+amendment 2026-11-24). A task calls `check` before any request of the call, so that its
+refusal's `Nothing was sent.` is true, and a source loops over no codes to check each.
 A refusal of the call as given names the first problem that it finds, in core's words, and a
 package gathers no list of every problem into one refusal (ADR-0061, decision 7).
 A refusal of a value of the check's hint table, which is no
@@ -704,7 +708,13 @@ is, while two kinds of a source's own messages name none (ADR-0030, decision 4; 
 A refusal that the package makes of the call as given, before any request or after a read
 and before the write, names no request: it names the argument, the record or the tool that
 it refuses and says that nothing was sent (sdk-cashctrl's refusals before a write; ADR-0030,
-decision 4; ADR-0043). The subject of a decoder that reads a body without its response
+decision 4; ADR-0043). Core's own refusals before a request say `Nothing was sent.` after
+their first sentence: `UnknownCode`, the check's refusal of a value of the other type or of
+an empty list, `check_dest`'s and `Tenants.require`'s of an unknown tenant. A source's own
+refusal before a request says it the same way, and core gives no helper for it, while core's
+`names_codes`, which checks an answer's codes after the call, says that upstream was asked
+(ADR-0045, amendment 2026-11-24). A task that refuses only after a request of the call words
+what was sent itself. The subject of a decoder that reads a body without its response
 names no request either: it names the operation that its caller gives it, as core's `parse`
 names the `endpoint` that a wrapper passes (ADR-0030, decision 4; ADR-0043).
 
@@ -834,8 +844,10 @@ without case).
   body going to the file unread, and a 1xx or 3xx raises `UpstreamError`, since
   redirects are not followed (ADR-0040, decision 1). A `dest` that is a
   directory, or whose directory does not exist, is refused with `InvalidRequestError`
-  before anything is sent, and the file is written with mode `0600` (ADR-0040,
-  decision 1). `Downloaded` carries `path`, `bytes`, `content_type`, the file
+  before anything is sent, by core's `check_dest(dest, *, source=None)`, which a task that
+  sends a request before its download calls before that first request, in place of a
+  check of its own, and the file is written with mode `0600` (ADR-0040, decision 1;
+  ADR-0045, amendment 2026-11-24). `Downloaded` carries `path`, `bytes`, `content_type`, the file
   name from `Content-Disposition` when sent, `etag`, `last_modified` and `retrieved_at`.
 - `decode_csv(data, *, source=None)` reads the rows of a comma-separated file, a path such
   as `Path("crops.csv")` or an open text stream such as a gzip or ZIP member the source
