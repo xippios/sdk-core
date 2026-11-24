@@ -803,8 +803,8 @@ def decode_json(
 
     Args:
         response: A response with its body read, e.g. from ``AsyncClient.get``.
-        source: Source slug for the error, e.g. ``"usda-psd"``.
-        path: The request path the message names, e.g. ``"/api/psd/regions"``; ``None``
+        source: Source slug for the error, e.g. ``"example"``.
+        path: The request path the message names, e.g. ``"/v1/regions"``; ``None``
             takes the path of the response's request. Never the host or query
             (conventions §5).
 

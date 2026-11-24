@@ -3,9 +3,9 @@
 Credentials are always redacted by the one rule of ``xippios.core.redaction``, the rule
 ``ResultMeta.request`` applies (ADR-0030, ADR-0040): a query parameter that names a
 credential (``api_key``, ``token``, ``secret``, ..., and a name a query ``KeyAuth``
-registered, such as USDA NASS's ``key``), the userinfo and the credential headers. A
-``token`` name the source declared data with ``register_data_name``, X's ``next_token``
-say, is written as sent, and replay can match it.
+registered, such as a source's ``key``), the userinfo and the credential headers. A
+``token`` name the source declared data with ``register_data_name``, a paging cursor
+``next_token`` say, is written as sent, and replay can match it.
 ``scrub_params``, ``scrub_url`` and ``scrub_headers`` are that module's, importable from
 here as well. A ``Scrub`` adds what only the source knows: the secret values themselves,
 named before the request or read from its answer, such as a login's tokens, each replaced

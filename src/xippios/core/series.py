@@ -61,7 +61,7 @@ class Ceiling:
             mcp=24,
             option="--series-months",
             help="one request per month, so 60 months take about a minute of calls",
-            source="usda-gats",
+            source="example",
         )
         mcp_add_options = SERIES.add_options  # the tool set's hooks
         mcp_apply_options = SERIES.apply_options
@@ -78,7 +78,7 @@ class Ceiling:
             ``-``, ``series_months``; given with ``mcp``.
         help: What the option's help says after its range and default, e.g. ``"one request
             per month, so 60 months take about a minute of calls"``; ``None`` for nothing.
-        source: Source slug, which the refusals carry, e.g. ``"usda-gats"``.
+        source: Source slug, which the refusals carry, e.g. ``"example"``.
 
     Attributes:
         most: As given.
@@ -110,16 +110,13 @@ class Ceiling:
             raise ValueError(f"most must be a whole number of {unit} from 1, got {most!r}")
         if (mcp is None) != (option is None):
             raise ValueError(
-                "mcp and option come together: the MCP server's ceiling and the option that "
-                f"sets another, e.g. mcp=24, option='--series-months'; got mcp={mcp!r}, "
-                f"option={option!r}"
+                "mcp and option come together: the MCP server's ceiling and the long option "
+                f"that sets another; got mcp={mcp!r}, option={option!r}"
             )
         if mcp is not None and (not _whole(mcp) or not 1 <= mcp <= most):
             raise ValueError(f"mcp must be a whole number from 1 to most, {most}, got {mcp!r}")
         if option is not None and (not option.startswith("--") or len(option) < 3):
-            raise ValueError(
-                f"option must be a long option, e.g. '--series-months', got {option!r}"
-            )
+            raise ValueError(f"option must be a long option, '--' and its name, got {option!r}")
         if help is not None and option is None:
             raise ValueError("help is the option's: it comes with mcp and option")
         self.most = most
@@ -165,8 +162,8 @@ class Ceiling:
 
         A task calls it before any request of the call, which makes the refusal's
         ``Nothing was sent.`` true: a task that checks a range only after a request of the
-        call, as sdk-usda-nass's split of ``year__GE`` alone after its count of the range,
-        words that refusal itself and says what was sent (ADR-0054, amendment 2026-11-22).
+        call, as one that splits a range after a count of it, words that refusal itself
+        and says what was sent (ADR-0054, amendment 2026-11-22).
 
         The refusal is the caller's ``InvalidRequestError``: the range as the task names it,
         or else the count asked, then the ceiling in force with its unit, and, below
@@ -311,7 +308,7 @@ async def fetch_periods[P, T](
     gives it. Answered holds for a pass that fetches and for one that counts, as a task may
     run the loop over its counts before its data::
 
-        503 from GET /api/esr/exports/commodityCode/104/allCountries/marketYear/2023:
+        503 from GET /v1/regions/EX/series/2023:
         Service Unavailable. The series stopped at 2023 after 2 periods answered, 2021 to
         2022, and returns nothing.
 

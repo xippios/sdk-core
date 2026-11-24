@@ -96,7 +96,7 @@ class ClientConfig:
     """Everything a client needs to talk to one upstream.
 
     Attributes:
-        source: Source slug, e.g. ``"usda-nass"``; used in the User-Agent and in errors.
+        source: Source slug, e.g. ``"example"``; used in the User-Agent and in errors.
         version: Version of the source package, for the User-Agent.
         base_url: Upstream base URL; request paths are joined onto it.
         read_timeout: Seconds to wait for the next bytes of an answer, 60 by default

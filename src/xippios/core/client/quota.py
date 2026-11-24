@@ -197,7 +197,7 @@ class QuotaPolicy:
             from any ``observe`` hook does, except on a ``download``'s success, whose
             body goes to the file unread: reading it there is suppressed and counts as
             nothing observed (ADR-0040).
-        source: Name for the ``RateLimitError`` and the log line, e.g. ``"usda-psd"``,
+        source: Name for the ``RateLimitError`` and the log line, e.g. ``"example"``,
             or the gateway's name where one policy serves several sources.
         clock: The current time, timezone-aware, replaceable in tests.
         sleep: Async sleep for the pause, replaceable in tests.

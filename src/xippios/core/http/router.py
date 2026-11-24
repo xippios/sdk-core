@@ -186,7 +186,7 @@ def router_from_tasks(
     declare is ignored, as FastAPI ignores it.
 
     Args:
-        source: Source slug, e.g. ``"usda-nass"``; becomes the path prefix and the tag.
+        source: Source slug, e.g. ``"example"``; becomes the path prefix and the tag.
         tasks: Task functions, e.g. ``[getattr(tasks, n) for n in tasks.__all__]``; one
             in its module's ``BULK_TASKS`` is skipped.
         prefix: Path prefix; defaults to ``/<source>``.

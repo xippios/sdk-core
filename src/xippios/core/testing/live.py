@@ -198,7 +198,7 @@ def assert_list_current(
             mappings or ``UpstreamModel`` instances, read through ``dump_upstream``, or its
             bare codes, text or integers.
         packaged: The packaged side, read as ``current`` is read, for a list whose records
-            name the release they came from, as sdk-usda-wasde's carry ``report_month``:
+            name the release they came from, as records that carry a ``report_month`` do:
             ``codes.packaged.records`` as the source views them; those records by default.
 
     Raises:

@@ -42,8 +42,8 @@ __all__ = ["MAX_READ_BYTES", "record", "send_once"]
 MAX_READ_BYTES: Final = 32 * 1024 * 1024
 """The most bytes of a body a recording reads by default, 32 MiB.
 
-Four times the largest body a source records whole (sdk-usda-gats, 7.6 MB), and a
-fifth of the unfiltered Eurostat dataset upstream may answer at once, 145 MB
+Four times the largest body a source records whole, 7.6 MB, and a fifth of the largest
+unfiltered dataset that an upstream may answer at once, 145 MB
 (https://github.com/xippios/sdk-core/issues/62; ADR-0040, decision 5).
 """
 

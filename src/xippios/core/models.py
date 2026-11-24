@@ -46,8 +46,9 @@ __all__ = [
 def parse_decimal(text: str) -> Decimal | None:
     """A published figure as a number, or ``None`` when it is a code rather than a value.
 
-    Thousands separators are removed (``"510,000"`` → ``510000``); anything that is not
-    a finite number, such as a suppression code like ``"(D)"``, an empty string,
+    It reads a comma between thousands and a point before decimals: the commas are
+    removed (``"510,000"`` → ``510000``, ``"1,234.5"`` → ``1234.5``). Anything that is not
+    a finite number, such as a code in place of a withheld value, an empty string,
     ``"NaN"`` or ``"Infinity"``, gives ``None``. Within-source hygiene only: the text is
     never reinterpreted.
     """
@@ -511,7 +512,7 @@ class ResultMeta(BaseModel):
     silently: a misspelt ``totl=`` is an error, not a lost count.
 
     Attributes:
-        source: Source slug, e.g. ``"usda-nass"``.
+        source: Source slug, e.g. ``"example"``.
         endpoint: Upstream operation name, e.g. ``"api_GET"``; for a packaged answer the
             operation the list came from (ADR-0041), as ``PackagedList.meta`` sets it.
         retrieved_at: When we fetched the data; timezone-aware UTC, defaults to now. A
@@ -520,7 +521,7 @@ class ResultMeta(BaseModel):
         published_at: Upstream publication or release time when known, timezone-aware;
             naive only with ``published_at_naive`` set.
         published_at_naive: ``True`` when upstream printed ``published_at`` without a
-            zone (FAS: ``2026-10-06T08:00:00``): the value is stored as given, no zone
+            zone (e.g. ``2026-10-06T08:00:00``): the value is stored as given, no zone
             attached, upstream's text and not comparable across sources (ADR-0041,
             decision 2). Set only with a naive ``published_at``.
         vintage: Upstream release identifier when the source has one, as upstream names

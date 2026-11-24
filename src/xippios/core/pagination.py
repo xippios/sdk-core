@@ -186,7 +186,7 @@ async def fetch_counted[T, E](
         empty: The task's answer to a query that nothing matches, e.g. ``[]``.
         narrow: What narrows the query, the sentences that end the refusal, e.g.
             ``"Split by period, then by reporter."``.
-        source: Source slug the refusal carries, e.g. ``"comtrade"``.
+        source: Source slug the refusal carries, e.g. ``"example"``.
 
     Returns:
         The data and the count, and ``(empty, 0)`` for a count of 0. ``empty`` is typed apart

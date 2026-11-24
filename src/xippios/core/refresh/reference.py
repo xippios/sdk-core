@@ -722,8 +722,8 @@ def id_name_pairs(
     """``(id, name)`` pairs from upstream's records, in upstream order, for ``render_enums``.
 
     Args:
-        records: Upstream's records under upstream's field names, e.g. PSD's
-            ``commodityAttributes``.
+        records: Upstream's records under upstream's field names, e.g. the
+            ``regionAttributes`` of an answer.
         id_field: The field holding the integer id, e.g. ``"attributeId"``; an ``int`` or
             a string of ASCII digits without leading zeros (``"28"``, not ``"007"``).
         name_field: The field holding the name, a string, e.g. ``"attributeName"``.

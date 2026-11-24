@@ -63,11 +63,11 @@ REQUEST_ID_HEADERS = frozenset(
         "x-amz-request-id",
         "x-amzn-requestid",  # API Gateway, Lambda
         "x-amzn-trace-id",  # AWS's load balancers and X-Ray
-        "x-api-umbrella-request-id",  # api.data.gov
+        "x-api-umbrella-request-id",  # API Umbrella
         "x-ms-request-id",  # Azure
         "x-oracle-dms-ecid",  # Oracle's middleware
         "x-request-id",
-        "x-transaction-id",  # X
+        "x-transaction-id",
         "x-vcap-request-id",  # Cloud Foundry
     }
 )
@@ -97,7 +97,7 @@ class FixtureRequest(BaseModel):
         url: Request URL, credentials and whatever the ``Scrub`` names removed.
         body: The request body as UTF-8 text, scrubbed, e.g. ``"a=1&b=2"`` for a form
             or the JSON text sent; base64 when ``body_base64`` is set; ``None`` when the
-            request had no body. Fixtures written by xippios-core 0.1.0 have none.
+            request had no body.
         body_base64: True when the body was not UTF-8 text and was stored as it came.
         content_type: The request's ``Content-Type``, e.g.
             ``"application/x-www-form-urlencoded"``; ``None`` when it sent none.
@@ -201,7 +201,7 @@ def fixture_path(root: Path, endpoint: str, case: str) -> Path:
     Args:
         root: The fixtures directory, e.g. ``Path("tests/fixtures")``.
         endpoint: The fixture directory: the wrapper function's name, e.g. ``"api_get"``
-            for sdk-usda-nass's ``/api/api_GET/``, or the task's for an exchange recorded
+            for a wrapper of ``GET /v1/data``, or the task's for an exchange recorded
             through a task.
         case: The case, e.g. ``"corn_2024"``.
     """
@@ -256,7 +256,7 @@ def fixture_from_response(
       alone does not fit is refused;
     - a JSON object or another JSON value, a text that is not JSON, and a body declared
       JSON that does not parse are refused: record a small real answer instead (a short
-      date range, one commodity);
+      date range, a few records);
     - XML (``text/xml``, ``application/xml``, ``...+xml``, or a body starting with
       ``<?xml``), ZIP, XLSX, gzip and XLS bodies, and a body that is not UTF-8 text, are
       refused: record a small real sample (a short query, one member of the archive, a
@@ -496,7 +496,7 @@ def _refuse_interim(response: httpx.Response) -> None:
 _SAMPLE = (
     "record a small real sample instead (a short query, one member of the archive, a few rows)"
 )
-_SMALL_ANSWER = "record a small real answer instead (a short date range, one commodity)"
+_SMALL_ANSWER = "record a small real answer instead (a short date range, a few records)"
 _ARRAY_ALONE = "since a cut keeps whole elements of a JSON array alone (ADR-0066, decision 12)"
 _CUT_FILE = "since a cut-off binary or compressed file cannot be parsed"
 _MAGIC = (

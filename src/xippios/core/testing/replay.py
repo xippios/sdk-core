@@ -32,7 +32,7 @@ class ReplayFixture(Protocol):
     ``replay_fixture("api_get", "corn_2024")`` mounts
     ``tests/fixtures/api_get/corn_2024.json`` on the ``respx_mock`` router and returns
     the route; ``match_params`` and ``url`` are passed on to ``replay``. The
-    directory is the wrapper function's, here sdk-usda-nass's ``api_get``, or the task's
+    directory is the wrapper function's, here ``api_get``, or the task's
     for an exchange recorded through a task (conventions §10).
     """
 

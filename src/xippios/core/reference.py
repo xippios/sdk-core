@@ -74,7 +74,7 @@ def load_json(package: str, name: str) -> Any:
     """Decoded contents of a packaged JSON file.
 
     Args:
-        package: Import path of the source package, e.g. ``"xippios.usda.nass"``.
+        package: Import path of the source package, e.g. ``"xippios.example"``.
         name: File name under ``reference/``, e.g. ``"countries.json"``.
     """
     return json.loads(_read_text(package, name))
@@ -94,15 +94,13 @@ class PackagedList(BaseModel):
         param: The list, as upstream names it, e.g. ``"commodities"`` or
             ``"state_alpha"``.
         endpoint: The upstream operation the list was fetched from, an operationId or a
-            URL path, e.g. ``"PSDData_GetCommodities"`` or
-            ``"files/v1/app/reference/Reporters.json"``; never ``"reference"`` or a
+            URL path, e.g. ``"Regions_List"`` or
+            ``"v1/reference/regions.json"``; never ``"reference"`` or a
             file of the package (ADR-0041, decision 1).
         fetched: When the refresh script fetched the list, timezone-aware UTC; ``write``
-            writes it to the second (``"2026-10-27T09:15:00Z"``). A bare date, as
-            refresh scripts wrote it before template v0.3.0 (``"2026-10-23"``), reads as
-            00:00 UTC of that day, the start of the day the old scripts truncated the
-            time to; the source's next refresh writes the full time. A time without a
-            zone is refused.
+            writes it to the second (``"2026-10-27T09:15:00Z"``). A bare date
+            (``"2026-10-23"``) reads as 00:00 UTC of that day, and the source's next
+            refresh writes the full time. A time without a zone is refused.
         note: Free-text provenance the source keeps with the list, e.g. what a derived
             list is derived from or how a list was reconciled with upstream's
             documentation; ``None`` when there is none. Core reads nothing from it.
@@ -149,8 +147,8 @@ class PackagedList(BaseModel):
         returns a new instance.
 
         Args:
-            package: Import path of the source package, e.g. ``"xippios.usda.psd"``.
-            name: The file, with or without ``.json``, e.g. ``"commodities"``.
+            package: Import path of the source package, e.g. ``"xippios.example"``.
+            name: The file, with or without ``.json``, e.g. ``"regions"``.
 
         Raises:
             FileNotFoundError: The package ships no such file.
@@ -183,7 +181,7 @@ class PackagedList(BaseModel):
         ``None``, since the list carries no count of upstream's.
 
         Args:
-            source: Source slug, e.g. ``"usda-psd"``.
+            source: Source slug, e.g. ``"example"``.
             request: The task's parameters, e.g. ``{"search": "wheat"}``; a ``None``
                 is dropped, as for every ``ResultMeta``.
             vintage: Upstream's release identifier of the list, when upstream has one;
@@ -206,7 +204,7 @@ class PackagedList(BaseModel):
 
         Args:
             model: The record model, e.g. a ``UpstreamModel`` subclass ``Commodity``.
-            source: Source slug for the error, e.g. ``"usda-psd"``.
+            source: Source slug for the error, e.g. ``"example"``.
 
         Raises:
             ValidationError: A record does not fit ``model``; the message names the
@@ -234,10 +232,10 @@ class PackagedList(BaseModel):
             name: The field that holds the code's name, e.g. ``"commodityName"``;
                 ``None`` for a list of values, each its own name.
             fold_case: ``True`` to compare without case, for a list of text codes that
-                upstream compares so, as Quick Stats does; ``False`` compares exactly.
+                upstream compares so; ``False`` compares exactly.
             list_name: The list as a refusal names it, e.g. ``"element_QCL"`` where the
                 file's name says more than its ``param``; ``param`` by default.
-            source: Source slug every refusal carries, e.g. ``"usda-psd"``.
+            source: Source slug every refusal carries, e.g. ``"example"``.
 
         Raises:
             ValueError: A record lacks ``code`` or ``name``, a code is neither text nor an
@@ -526,7 +524,7 @@ class PackagedCodes:
         return cast(str | int, plain) if plain in self._names else None
 
     def _shown_names(self) -> Mapping[str | int, str]:
-        """Each code to its name as a refusal shows it, white space collapsed: ESR pads."""
+        """Each code to its name as a refusal shows it, white space collapsed, as upstream pads."""
         if self._shown is None:
             self._shown = MappingProxyType(
                 {code: " ".join(name.split()) or str(code) for code, name in self._names.items()}
@@ -593,8 +591,8 @@ _DECLARED = "_xippios_names_codes"
 """The attribute of a task that ``names_codes`` wraps: its parameters to their lists."""
 
 _WITHHELD = (
-    "Upstream was asked, but an answer names the country of each code it is for, and the "
-    "packaged list holds no name for this one, so the answer is withheld."
+    "Upstream was asked, but an answer names each code it is for, and the packaged list "
+    "holds no name for this one, so the answer is withheld."
 )
 """The reason of a refusal after the call, for a code that reached the answer unchecked."""
 
@@ -942,12 +940,11 @@ def nearest[K: (int, str)](
 ) -> list[tuple[K, str]]:
     """Up to ``n`` known integer codes nearest to ``value`` by number, nearest first.
 
-    The strategy sdk-usda-esr and sdk-usda-gats carried for their integer codes, where a
-    code close in number is likelier the one meant than a code close in spelling: ``999``
-    among ``902``, ``1001`` and ``104`` names ``1001``, then ``902``, then ``104``. Of two
-    codes equally near, the lower comes first. A code keyed by its text, as sdk-usda-gats
-    keys its customs districts (``"10"``), is compared as the integer it writes and
-    returned as given. For ``UnknownCode``'s ``closest``, as ``closest`` is for codes
+    For integer codes, where a code close in number is likelier the one meant than a code
+    close in spelling: ``999`` among ``902``, ``1001`` and ``104`` names ``1001``, then
+    ``902``, then ``104``. Of two codes equally near, the lower comes first. A code keyed
+    by its text, such as ``"10"``, is compared as the integer it writes and returned as
+    given. For ``UnknownCode``'s ``closest``, as ``closest`` is for codes
     matched by their text and names.
 
     Args:
