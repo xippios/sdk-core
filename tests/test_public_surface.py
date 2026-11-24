@@ -84,7 +84,7 @@ EXPORTS = {
     # declaration with its lists, and the one run of both (ADR-0062, decision 2)
     "xippios.core.refresh": {
         "NotFetched", "Page", "Response", "Row", "Section", "Snapshot", "Statement",
-        "changed", "decode", "dump_json", "read_json", "run",
+        "changed", "decode", "dump_json", "parse_json", "read_json", "run",
         "Enumeration", "Listed", "Lists",
     },
 }  # fmt: skip

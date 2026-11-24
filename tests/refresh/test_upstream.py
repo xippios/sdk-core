@@ -28,8 +28,9 @@ from typing import Any
 import httpx
 import pytest
 import respx
+from pydantic import SecretStr
 
-from xippios.core import refresh
+from xippios.core import BearerToken, RenewingBearerAuth, refresh
 from xippios.core.client import AsyncClient, ClientConfig, RetryPolicy
 from xippios.core.errors import ConfigError, RateLimitError, XippiosError
 from xippios.core.refresh import (
@@ -1231,6 +1232,69 @@ def test_a_keyed_sample_follows_no_redirect_and_is_never_retried(
     assert not out.exists(), "nothing written"
 
 
+BEARER = "made-up-bearer"
+"""The bearer that the login's token endpoint answers, which nothing the run prints holds."""
+
+
+class Login(RenewingBearerAuth):
+    """A source's login on its API's origin: its two variables posted as a form, for a bearer."""
+
+    def token_request(self, request: httpx.Request) -> httpx.Request:
+        form = {name: self.credential(name) for name in VARIABLES}
+        return httpx.Request("POST", f"{API}/token", data=form)
+
+    def read_token(self, response: httpx.Response) -> BearerToken:
+        answer = response.json()
+        return BearerToken(SecretStr(answer["access_token"]), answer["expires_in"])
+
+
+def login_snapshot(site: Site, out: Path) -> Snapshot:
+    """A guide and one keyed sample, sent through a client whose auth logs in for a bearer."""
+    token = json.dumps({"access_token": BEARER, "expires_in": 3600}).encode()
+    site.routes[f"{API}/token"] = (200, {"Content-Type": "application/json"}, token)
+    site.routes[f"{API}/items"] = (200, {"Content-Type": "application/json"}, b'{"items": []}')
+    config = ClientConfig(source="example", version=VERSION, base_url=f"{API}/")
+    return declare(
+        out,
+        Page(site.page("guide.html", "<p>Guide</p>"), "pages/guide.html"),
+        Page(f"{API}/items", "samples/items.json", sample=True, keyed=True),
+        client=AsyncClient(config, auth=Login(source="example")),
+        variables=VARIABLES,
+    )
+
+
+def test_the_run_counts_each_request_of_a_renewing_auth(
+    site: Site, out: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """https://github.com/xippios/sdk-core/issues/579 (ADR-0062, decision 4; ADR-0025): the
+    client's auth logs in before the keyed sample and, its bearer refused with a 401, logs in
+    again and sends the sample once more, which is no retry of the frame; the run counts each
+    of those requests, from the history that the client's answer keeps as statuses alone. A
+    login whose answer the auth refuses stops the run, and its request is not counted."""
+    for name in VARIABLES:
+        monkeypatch.setenv(name, "someone")
+    snapshot = login_snapshot(site, out)
+    site.later[f"{API}/items"] = [(401, {}, b"")]
+    assert go(snapshot) == 0
+    login, sample = ("POST", f"{API}/token"), ("GET", f"{API}/items")
+    sent = [(request.method, str(request.url)) for request in site.requests]
+    assert sent == [("GET", f"{BASE}/guide.html"), login, sample, login, sample]
+    printed = capsys.readouterr().out
+    assert (
+        "5 requests sent, each redirect and retry counted, and each token request and resend "
+        "of the client's auth"
+    ) in printed, printed
+    assert BEARER not in printed
+    assert BEARER not in fetched(out)
+    refused = login_snapshot(site, out)
+    site.routes[f"{API}/token"] = (401, {}, b"")
+    assert refused.client is not None
+    capture = upstream._Capture(refused, refused.client, keyless=False)
+    with pytest.raises(SystemExit, match=r"401 from POST /v1/token: Unauthorized"):
+        capture.fetch(f"{API}/items", (200,), keyed=True)
+    assert capture.sent == 0, "a login whose answer the auth refused is not counted"
+
+
 def test_the_variables_are_checked_by_name_before_anything_is_fetched(
     site: Site, out: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1598,6 +1662,57 @@ def test_read_json_reads_a_document_that_dump_json_writes_again(site: Site, out:
     for function in (refresh.read_json, refresh.dump_json):
         assert "indent" not in inspect.signature(function).parameters
     assert not hasattr(refresh, "load_json")
+
+
+def test_parse_json_refuses_a_key_twice_and_keeps_the_document_as_served(
+    site: Site, out: Path
+) -> None:
+    """https://github.com/xippios/sdk-core/issues/579 (ADR-0059, decision 5; ADR-0062,
+    decision 4): the frame's plain reader of a JSON answer parses it and stops the run with
+    ``changed`` on a key twice, which ``json.loads`` would drop silently, or on a body that is
+    no JSON, before anything is written. It holds the document to no form, so a compact
+    document kept as served is read and written as fetched."""
+    compact = '{"openapi":"3.1.0","paths":{}}'
+    url = site.page("openapi.json", compact)
+    read: list[Any] = []
+
+    def reduce(page: Page, response: Response) -> bytes:
+        read.append(refresh.parse_json(response))
+        return response.body
+
+    snapshot = declare(out, Page(url, "openapi/openapi.json"), reduce=reduce)
+    assert go(snapshot) == 0
+    assert read == [{"openapi": "3.1.0", "paths": {}}]
+    assert (out / "openapi/openapi.json").read_text(encoding="utf-8") == compact
+    before = fetched(out)
+    site.page("openapi.json", '{"openapi":"3.1.0","openapi":"3.1.1"}')
+    duplicate = r"openapi\.json changed: not usable JSON \(duplicate keys \['openapi'\]\)"
+    with pytest.raises(SystemExit, match=duplicate) as stop:
+        go(snapshot)
+    assert "Nothing was written." in str(stop.value)
+    site.page("openapi.json", '{"openapi":')
+    with pytest.raises(SystemExit, match=r"openapi\.json changed: not usable JSON \("):
+        go(snapshot)
+    assert fetched(out) == before, "nothing written"
+
+
+def test_read_json_still_refuses_what_it_refused() -> None:
+    """https://github.com/xippios/sdk-core/issues/579: ``read_json`` reads through
+    ``parse_json`` and still holds the document to ``dump_json``'s form, so the compact
+    document that ``parse_json`` keeps, a key twice and a body that is no JSON stop it."""
+    url = f"{BASE}/openapi.json"
+    served = Response(url, 200, b'{"openapi":"3.1.0"}', "application/json", None, None, ())
+    assert refresh.parse_json(served) == {"openapi": "3.1.0"}
+    with pytest.raises(SystemExit, match=r"json\.dumps\(indent=2, ensure_ascii=False\)"):
+        refresh.read_json(served)
+    for body, refusal in [
+        (b'{\n  "a": 1,\n  "a": 2\n}\n', "duplicate keys"),
+        (b'{\n  "a": ', "not usable JSON"),
+    ]:
+        with pytest.raises(SystemExit, match=refusal):
+            refresh.read_json(replace(served, body=body))
+    indented = replace(served, body=b'{\n  "openapi": "3.1.0"\n}\n')
+    assert refresh.read_json(indented) == refresh.parse_json(indented) == {"openapi": "3.1.0"}
 
 
 def test_the_command_line_takes_no_out(

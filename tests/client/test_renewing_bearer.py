@@ -32,6 +32,7 @@ from xippios.core.errors import (
     ValidationError,
     XippiosError,
 )
+from xippios.core.testing import send_once
 from xippios.core.testing.plugin import PLACEHOLDER_KEY
 
 BASE = "https://api.example.test/v1"
@@ -455,6 +456,52 @@ async def test_the_token_answer_stays_in_the_response_s_history() -> None:
     client, _ = make_client(upstream)
     response = await client.get("/data")
     assert [str(earlier.request.url) for earlier in response.history] == [TOKEN_URL]
+    await client.aclose()
+
+
+def assert_statuses_alone(history: list[httpx.Response]) -> None:
+    """Each earlier answer is its status alone: no body, no header and no request, so neither
+    a bearer nor a credential of the token request stays with the answer."""
+    for earlier in history:
+        assert earlier.content == b""
+        assert not earlier.headers
+        with pytest.raises(RuntimeError):
+            earlier.request  # noqa: B018 - httpx raises for an answer without its request
+
+
+@pytest.mark.anyio
+async def test_the_one_send_keeps_the_history_as_statuses_alone() -> None:
+    """https://github.com/xippios/sdk-core/issues/579: the recorder's one send rebuilds its
+    answer, and keeps the answers before it, the two token answers and the refused one, as
+    their statuses, so the refresh frames count each request the call sent, and nothing else
+    of them; ``observe`` sees that answer."""
+    upstream = Upstream()
+    upstream.refusals = [401]
+    seen: list[httpx.Response] = []
+    client, _ = make_client(upstream, observe=seen.append)
+    response = await send_once.async_fn(client, "/data")
+    assert response.status_code == 200
+    assert [earlier.status_code for earlier in response.history] == [200, 401, 200]
+    assert_statuses_alone(response.history)
+    assert seen == [response]
+    await client.aclose()
+
+
+@pytest.mark.anyio
+async def test_a_download_s_refusal_keeps_the_history_as_statuses_alone(tmp_path: Path) -> None:
+    """https://github.com/xippios/sdk-core/issues/579: a download's refusal is rebuilt from
+    its first bytes, and ``observe`` sees it with the token answer before it, as its status
+    alone, so a refresh frame that downloads counts the login too."""
+    upstream = Upstream()
+    upstream.api = lambda request: httpx.Response(404, text="gone")
+    seen: list[httpx.Response] = []
+    client, _ = make_client(upstream, observe=seen.append)
+    with pytest.raises(NotFoundError):
+        await client.download("/files/data.csv", tmp_path / "data.csv")
+    (refusal,) = seen
+    assert refusal.status_code == 404
+    assert [earlier.status_code for earlier in refusal.history] == [200]
+    assert_statuses_alone(refusal.history)
     await client.aclose()
 
 

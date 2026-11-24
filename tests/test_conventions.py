@@ -1306,6 +1306,27 @@ SNAPSHOT_RULES = [
         ("without a request", "`--check`", "the one comparison", "whole", "ADR-0062, decision 9"),
         id="s3-no-check-without-a-request",
     ),
+    # https://github.com/xippios/sdk-core/issues/579: what a source's login and its own
+    # check across pages meet in the frame.
+    pytest.param(
+        "A keyed sample is never retried by the frame",
+        (
+            "a renewing auth sends it once more after a refused bearer",
+            "ADR-0062, decision 4",
+            "ADR-0025",
+        ),
+        id="s3-a-keyed-sample-and-a-renewing-auth",
+    ),
+    pytest.param(
+        "A check of one page against another runs in the snapshot's `sections`",
+        (
+            "before anything is written",
+            "returns `()`",
+            "`changed`",
+            "ADR-0062, decisions 3 and 5",
+        ),
+        id="s3-a-check-across-pages-runs-in-sections",
+    ),
 ]
 
 
