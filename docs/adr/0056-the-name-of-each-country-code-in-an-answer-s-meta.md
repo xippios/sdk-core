@@ -1,6 +1,6 @@
 # ADR-0056: The name of each country code in an answer's meta
 
-Status: Accepted · Date: 2026-11-22 · Decided by https://github.com/xippios/sdk-core/issues/375
+Status: Superseded by ADR-0067 · Date: 2026-11-22 · Decided by https://github.com/xippios/sdk-core/issues/375
 
 ## Context
 

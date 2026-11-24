@@ -9,8 +9,8 @@ them, is a ``PackagedList``: it loads the file, builds the ``ResultMeta`` of an 
 from it (ADR-0041), parses its records and writes the file. ``PackagedList.codes``
 declares its code field, its name field and its folding once, a ``PackagedCodes``, whose
 ``check`` returns an argument, one code or a list of codes, as given or raises
-``UnknownCode`` (ADR-0045), and from which
-``names_codes`` names each country code of a task's call in ``meta.names`` (ADR-0056).
+``UnknownCode`` (ADR-0045), and from which ``names_codes`` names each code of a task's call,
+and a record's ``NamedBy`` each code of the answer's records, in ``meta.names`` (ADR-0067).
 ``matches`` is the ``search`` filter of the ``list_*`` tasks; ``closest``, by text, and
 ``nearest``, by number, find the known codes near a value that ``UnknownCode`` refuses.
 
@@ -29,7 +29,6 @@ import os
 import re
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from collections.abc import Set as AbstractSet
 from datetime import UTC, date, datetime, time
 from enum import Enum
 from importlib import resources
@@ -48,7 +47,14 @@ from xippios.core.errors import (
     _asked,
     _raise,
 )
-from xippios.core.models import Result, ResultMeta, _validation_text, parse
+from xippios.core.models import (
+    Result,
+    ResultMeta,
+    _code,
+    _codes_in,
+    _validation_text,
+    parse,
+)
 
 __all__ = [
     "PackagedCodes",
@@ -604,15 +610,13 @@ _WITHHELD = (
 """The reason of a refusal after the call, for a code that reached the answer unchecked."""
 
 
-def names_codes[F: Callable[..., Any]](
-    *, separator: str | None = None, **codes: PackagedCodes
-) -> Callable[[F], F]:
-    """Name each country code of a call in ``meta.names`` of the answer (ADR-0056).
+def names_codes[F: Callable[..., Any]](**codes: PackagedCodes) -> Callable[[F], F]:
+    """Name each code of a call in ``meta.names`` of the answer (ADR-0067, decision 3).
 
-    A task that takes a country, an area, a reporter or a partner declares, per parameter,
-    the list that names its codes, ``PackagedList.codes`` (ADR-0045), and every ``Result``
-    it returns carries the name of each code it was called with, as the family check holds
-    (conventions §4)::
+    A task that takes a code that an answer names, a country's say, declares, per
+    parameter, the list that names its codes, ``PackagedList.codes`` (ADR-0045), and every
+    ``Result`` it returns carries the name of each code it was called with (conventions
+    §4). The codes of the answer's records are named by their model's ``NamedBy``::
 
         COUNTRIES = PackagedList.load("xippios.example", "countries").codes(
             "countryCode", "countryName", source="example"
@@ -634,27 +638,25 @@ def names_codes[F: Callable[..., Any]](
     The codes are read from the call's arguments, defaults applied, once the task returned:
 
     - ``None`` names nothing: the task asked for every country;
-    - a text is one code, or several split on ``separator``; a list, a tuple or a set holds
-      several, each text in it split the same way; an enum member is read by its value;
+    - a text is one code, and a list, a tuple or a set holds several, since several values
+      of one filter are a list (ADR-0061, decision 1); an enum member is read by its value;
     - a text of digits is read as the integer for a list of integer codes, and an integer as
       its text for a list of text codes, as a task whose parameter takes upstream's text or
       its integers sends them;
     - each code stands once, under its text as the caller gave it, with the name its list
       holds, runs of white space collapsed as a refusal shows it.
 
-    Names the answer carries already are kept, those of a composed answer say, and the
-    decorator's own replace them for its parameters, so two decorators stack, one per
-    separator. The task checks its codes before the call with its own hints and reason, so a
-    code the list lacks never reaches the decorator; one that does, sent unchecked, is
-    refused with ``check``'s refusal, its reason saying that upstream was asked and that the
-    answer is withheld, and without ``Nothing was sent.``, the sentence of a refusal before
-    the call (ADR-0045, amendment 2026-11-24). What the task raises passes as raised, and the
-    answer's own object is not changed.
+    Names the answer carries already are kept, those of its records or of a composed answer
+    say, beside the decorator's own, which take a code's place where both name it, so two
+    decorators stack. The task checks its codes before the call with its own hints and
+    reason, so a code the list lacks never reaches the decorator; one that does, sent
+    unchecked, is refused with ``check``'s refusal, its reason saying that upstream was asked
+    and that the answer is withheld, and without ``Nothing was sent.``, the sentence of a
+    refusal before the call (ADR-0045, amendment 2026-11-24). What the task raises passes as
+    raised, and the answer's own object is not changed.
 
     Args:
-        separator: The text between several codes in one text, e.g. ``","`` for
-            ``"757,842"``; ``None`` reads a text as one code.
-        **codes: Each country parameter of the task to the list that names its codes, e.g.
+        **codes: Each code parameter of the task to the list that names its codes, e.g.
             ``country_code=COUNTRIES``.
 
     Returns:
@@ -665,7 +667,6 @@ def names_codes[F: Callable[..., Any]](
             task is decorated, a name is no parameter of it, or its ``**`` parameter, or is
             named by a decorator of the task already; a decorated task's answer that is no
             ``Result``.
-        ValueError: ``separator`` is empty or no text.
         UnknownCode: A code that its list lacks reached the answer.
         InvalidRequestError: A value that is neither a code of its list's type nor its
             digits or its text reached the answer.
@@ -679,19 +680,15 @@ def names_codes[F: Callable[..., Any]](
                 "names_codes takes a PackagedCodes per parameter, PackagedList.codes(...), and "
                 f"{param} is {_article(kind)} {kind}"
             )
-    if separator is not None and (not isinstance(separator, str) or not separator):
-        raise ValueError("separator is a text of one character or more, or None")
     declared = MappingProxyType(dict(codes))
 
     def decorate(task: F) -> F:
-        return cast(F, _naming(task, declared, separator))
+        return cast(F, _naming(task, declared))
 
     return decorate
 
 
-def _naming(
-    task: Callable[..., Any], codes: Mapping[str, PackagedCodes], separator: str | None
-) -> Callable[..., Any]:
+def _naming(task: Callable[..., Any], codes: Mapping[str, PackagedCodes]) -> Callable[..., Any]:
     """``task`` wrapped to name its codes; see ``names_codes``."""
     signature = inspect.signature(task)
     name = getattr(task, "__name__", repr(task))
@@ -714,7 +711,7 @@ def _naming(
         raise TypeError(f"names_codes names {_and(twice)} of {name} twice")
 
     def answer(result: object, args: tuple[Any, ...], kwargs: dict[str, Any]) -> Any:
-        return _with_names(result, name, signature.bind(*args, **kwargs), codes, separator)
+        return _with_names(result, name, signature.bind(*args, **kwargs), codes)
 
     wrapper: Callable[..., Any]
     if inspect.iscoroutinefunction(task):
@@ -732,7 +729,7 @@ def _naming(
 
         twin = getattr(task, "async_fn", None)  # a sync facade's, which the adapters await
         if twin is not None and inspect.iscoroutinefunction(twin):
-            named.async_fn = _naming(twin, codes, separator)  # type: ignore[attr-defined]
+            named.async_fn = _naming(twin, codes)  # type: ignore[attr-defined]
         wrapper = named
     setattr(wrapper, _DECLARED, MappingProxyType({**inner, **codes}))
     return wrapper
@@ -743,7 +740,7 @@ def _named_parameters(fn: Callable[..., Any]) -> dict[str, PackagedCodes]:
 
     Read from ``fn`` and each ``__wrapped__`` below it, as ``functools.wraps`` leaves them,
     so a ``sync`` facade of a decorated async function, a decorated facade and two stacked
-    decorators all count; the family check reads it (ADR-0056, decision 5).
+    decorators all count, and a parameter named twice is refused.
     """
     found: dict[str, PackagedCodes] = {}
     seen: set[int] = set()
@@ -761,24 +758,23 @@ def _with_names(
     task: str,
     call: inspect.BoundArguments,
     codes: Mapping[str, PackagedCodes],
-    separator: str | None,
 ) -> Result[Any]:
     """``result`` with the names of the codes of ``call`` in its ``meta.names``."""
     if not isinstance(result, Result):
         kind = type(result).__name__
         raise TypeError(
             f"{task} returned {_article(kind)} {kind}, not a Result: names_codes names the codes "
-            "of an answer's meta (conventions §4, ADR-0056)"
+            "of an answer's meta (conventions §4, ADR-0067)"
         )
     call.apply_defaults()
     named: dict[str, dict[str, str]] = {}
     for param, listed in codes.items():
         found: dict[str, str] = {}
-        for member in _members(call.arguments.get(param), separator):
+        for member in _codes_in(call.arguments.get(param)):
             text, label = _name(param, member, listed)
             found.setdefault(text, label)
         if found:
-            named[param] = found
+            named[param] = {**result.meta.names.get(param, {}), **found}
     if not named:
         return result
     meta = result.meta
@@ -787,32 +783,14 @@ def _with_names(
     return result.model_copy(update={"meta": type(meta)(**fields)})
 
 
-def _members(value: object, separator: str | None) -> list[object]:
-    """The codes ``value`` holds: none for ``None``, a text's parts, a collection's members."""
-    if value is None:
-        return []
-    if isinstance(value, str):
-        return list(value.split(separator)) if separator else [value]
-    if isinstance(value, Sequence | AbstractSet) and not isinstance(value, bytes | bytearray):
-        return [code for member in value for code in _members(member, separator)]
-    return [value]
-
-
 def _name(param: str, member: object, listed: PackagedCodes) -> tuple[str, str]:
     """``member``'s text as given and the name ``listed`` holds for it, or the list's refusal."""
-    plain = _plain(member)
-    if listed.integer and isinstance(plain, str) and plain.isascii() and plain.isdigit():
-        read: object = int(plain)
-    elif not listed.integer and isinstance(plain, int) and not isinstance(plain, bool):
-        read = str(plain)
-    else:
-        read = plain
+    text, read = _code(member, listed.integer)
     refusal = listed._refusal(  # a code the list lacks withholds the answer, upstream asked
         param, read, hints=None, otherwise=None, strategy=None, reason=_WITHHELD, asked=True
     )
     if refusal is not None:
         raise refusal
-    text = str(plain)
     return text, " ".join((listed.name_of(read) or text).split()) or text
 
 

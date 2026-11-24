@@ -1,10 +1,14 @@
 """Result envelope, release metadata and the base for upstream payload models (conventions §4)."""
 
-from collections.abc import Callable, Iterable
+import functools
+import typing
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
-from typing import Any, Literal, Protocol, Self
+from enum import Enum
+from typing import Any, Literal, Protocol, Self, runtime_checkable
 
 import pydantic
 from pydantic import (
@@ -27,6 +31,7 @@ from xippios.core.redaction import REDACTED, redact_credentials
 
 __all__ = [
     "REDACTED",
+    "NamedBy",
     "Result",
     "ResultCap",
     "ResultMeta",
@@ -53,12 +58,24 @@ def parse_decimal(text: str) -> Decimal | None:
     return number if number.is_finite() else None
 
 
+def _json_number(value: Decimal) -> int | float:
+    """``value`` as JSON carries it: an integer without fractional digits, else a number.
+
+    Read from the exponent, never from the value, so ``Decimal("16217")`` is ``16217`` and
+    upstream's ``Decimal("16217.0")`` keeps its digit as ``16217.0`` (ADR-0067, decision 10).
+    """
+    exponent = value.as_tuple().exponent
+    if isinstance(exponent, int) and exponent >= 0:  # a NaN's or an infinity's is a letter
+        return int(value)
+    return float(value)
+
+
 def _as_json_number(value: Any, rendered: Any) -> Any:
     if isinstance(value, Decimal):
-        return float(value)
+        return _json_number(value)
     if isinstance(value, list | tuple) and isinstance(rendered, list):
         return [
-            float(item) if isinstance(item, Decimal) else out
+            _json_number(item) if isinstance(item, Decimal) else out
             for item, out in zip(value, rendered, strict=True)
         ]
     return rendered
@@ -89,8 +106,9 @@ class UpstreamModel(BaseModel):
     Instances are frozen. Fields upstream adds later are ignored rather than rejected,
     and fields can be populated by name as well as by alias, so upstream ``camelCase``
     maps onto ``snake_case`` attributes without breaking construction in tests.
-    ``Decimal`` fields serialise as JSON numbers in both adapters (ADR-0031); Python
-    keeps the ``Decimal``. ``dump_upstream`` gives the record back under upstream's
+    ``Decimal`` fields serialise as JSON numbers in both adapters (ADR-0031), one without
+    fractional digits as an integer, ``16217`` and not ``16217.0`` (ADR-0067, decision 10);
+    Python keeps the ``Decimal``. ``dump_upstream`` gives the record back under upstream's
     names, for a packaged reference file.
     """
 
@@ -168,6 +186,319 @@ class UpstreamModel(BaseModel):
         }
 
 
+class _Listed(Protocol):
+    @property
+    def fetched(self) -> datetime: ...
+
+
+@runtime_checkable
+class _Codes(Protocol):
+    """What the names of a record's codes read of their list: a ``PackagedCodes`` (ADR-0045).
+
+    ``xippios.core.reference`` builds it above this module, so it is read by its members.
+    """
+
+    @property
+    def list_name(self) -> str: ...
+
+    @property
+    def integer(self) -> bool: ...
+
+    @property
+    def packaged(self) -> _Listed: ...
+
+    def name_of(self, value: object) -> str | None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class NamedBy:
+    """Where the names of a record's codes come from (conventions §4, ADR-0067, decision 6).
+
+    The mark of a code field of a record's model, in its annotation: the packaged list that
+    names the field's codes, ``PackagedList.codes(...)`` (ADR-0045), or the name of the field
+    of the same record in which upstream sends the code's name::
+
+        REGIONS = PackagedList.load("xippios.example", "regions").codes(
+            "regionCode", "regionName"
+        )
+
+
+        class Row(UpstreamModel):
+            region_code: Annotated[str, NamedBy(REGIONS)] = Field(validation_alias="regionCode")
+            item_code: Annotated[int, NamedBy("item")] = Field(validation_alias="itemCode")
+            item: str
+
+    With a list, every ``Result`` whose data holds the record names each code of the field in
+    ``meta.names`` under the field's name, so every task that returns the model is named, and a
+    code that the list lacks is left out of the map and said in a note of ``meta.notes``. With a
+    field, the name stands on the record beside its code, in upstream's words, and ``meta.names``
+    takes nothing for it. A field holds one code, text or an integer, or a list of them, and
+    ``None`` holds none.
+
+    Attributes:
+        by: The list, a ``PackagedCodes``, e.g. ``REGIONS``; or the name of the field that holds
+            the code's name, e.g. ``"item"``.
+
+    Raises:
+        TypeError: ``by`` is neither a ``PackagedCodes`` nor a field's name.
+    """
+
+    by: _Codes | str
+
+    def __post_init__(self) -> None:
+        by: object = self.by
+        if isinstance(by, str) and by.isidentifier():
+            return
+        if not isinstance(by, str) and isinstance(by, _Codes):
+            return
+        shown = repr(by) if isinstance(by, str) else _a(type(by).__name__)
+        raise TypeError(
+            "NamedBy takes the list that names the codes, PackagedList.codes(...), or the name "
+            f"of the field beside the code that holds its name, and got {shown}"
+        )
+
+
+def _a(word: str) -> str:
+    return f"{'an' if word[:1].lower() in 'aeiou' else 'a'} {word}"
+
+
+def _bare(annotation: Any) -> Any:
+    """The annotation without the ``Annotated`` around it."""
+    while typing.get_origin(annotation) is typing.Annotated:
+        annotation = typing.get_args(annotation)[0]
+    return annotation
+
+
+def _kinds(annotation: Any) -> list[Any]:
+    """The kinds an annotation allows besides ``None``: ``int | None`` gives ``[int]``."""
+    annotation = _bare(annotation)
+    if typing.get_origin(annotation) in (typing.Union, type(int | str)):
+        return [_bare(kind) for kind in typing.get_args(annotation) if kind is not type(None)]
+    return [annotation]
+
+
+def _holds_text(annotation: Any) -> bool:
+    """A field of ``str`` or a subclass of it, ``None`` allowed beside it."""
+    kinds = _kinds(annotation)
+    return bool(kinds) and all(isinstance(kind, type) and issubclass(kind, str) for kind in kinds)
+
+
+_COLLECTIONS = (list, tuple, set, frozenset, Sequence, AbstractSet)
+
+
+def _holds_codes(annotation: Any) -> bool:
+    """A field of text or integer codes, one or a list of them, ``None`` allowed beside it."""
+    kinds: list[Any] = []
+    for kind in _kinds(annotation):
+        if typing.get_origin(kind) in _COLLECTIONS:
+            kinds += [_bare(item) for item in typing.get_args(kind) if item is not Ellipsis]
+        else:
+            kinds.append(kind)
+    return bool(kinds) and all(
+        isinstance(kind, type) and issubclass(kind, str | int) and not issubclass(kind, bool)
+        for kind in kinds
+    )
+
+
+def _reaches_model(annotation: Any) -> bool:
+    """Whether an annotation names a pydantic model, alone, in a union or in a container."""
+    annotation = _bare(annotation)
+    if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+        return True
+    return any(_reaches_model(argument) for argument in typing.get_args(annotation))
+
+
+_UNREAD = (
+    "carries NamedBy inside its type, where no answer reads it: mark the field, "
+    "Annotated[str | None, NamedBy(...)] or Annotated[str, NamedBy(...)] | None"
+)
+
+
+def _marks_in(annotation: Any) -> bool:
+    """Whether a ``NamedBy`` stands anywhere in ``annotation``, at any depth."""
+    if typing.get_origin(annotation) is typing.Annotated:
+        if any(isinstance(mark, NamedBy) for mark in annotation.__metadata__):
+            return True
+        return _marks_in(typing.get_args(annotation)[0])
+    return any(_marks_in(argument) for argument in typing.get_args(annotation))
+
+
+def _field_marks(info: FieldInfo) -> tuple[list[NamedBy], bool]:
+    """The marks of a field that a ``Result`` reads, and whether another stands unread.
+
+    A mark reads on the field, ``Annotated[str | None, NamedBy(...)]``, whose metadata pydantic
+    keeps, and on an optional code, ``Annotated[str, NamedBy(...)] | None`` or ``Optional`` of
+    it, the plain spelling. A mark anywhere else, on a list's items or in a union of codes,
+    would name nothing (https://github.com/xippios/sdk-core/pull/537, finding 1).
+    """
+    marks = [mark for mark in info.metadata if isinstance(mark, NamedBy)]
+    inside: Any = info.annotation
+    if typing.get_origin(inside) in (typing.Union, type(int | str)):
+        kinds = [kind for kind in typing.get_args(inside) if kind is not type(None)]
+        if len(kinds) == 1 and typing.get_origin(kinds[0]) is typing.Annotated:
+            marks += [mark for mark in kinds[0].__metadata__ if isinstance(mark, NamedBy)]
+            inside = typing.get_args(kinds[0])[0]
+    return marks, _marks_in(inside)
+
+
+def _named_by(model: type[BaseModel]) -> tuple[list[tuple[str, NamedBy]], list[str]]:
+    """Each field of ``model`` that a ``NamedBy`` marks, with it, and what is wrong with them.
+
+    A field marked twice, a mark that no answer reads, a field that holds no code, and a name
+    that is no other field of the model or one that holds no text are wrong (ADR-0067,
+    decision 6); each problem is one text that names the model and the field.
+    """
+    marked: list[tuple[str, NamedBy]] = []
+    problems: list[str] = []
+    fields = model.model_fields
+    for field, info in fields.items():
+        marks, unread = _field_marks(info)
+        where = f"{model.__name__}.{field}"
+        if unread:
+            problems.append(f"{where} {_UNREAD}")
+            continue
+        if not marks:
+            continue
+        if len(marks) > 1:
+            problems.append(f"{where} is marked by NamedBy twice; keep one")
+            continue
+        if not _holds_codes(info.annotation):
+            problems.append(
+                f"{where} holds {_shown(info.annotation)}, no code: NamedBy marks a field of "
+                "text or integer codes, one or a list of them"
+            )
+            continue
+        by = marks[0].by
+        if isinstance(by, str):
+            if by == field or by not in fields:
+                problems.append(f"{where} is named by {by}, which is no other field of the model")
+                continue
+            if not _holds_text(fields[by].annotation):
+                problems.append(
+                    f"{where} is named by {by}, which holds "
+                    f"{_shown(fields[by].annotation)}, not text"
+                )
+                continue
+        marked.append((field, marks[0]))
+    return marked, problems
+
+
+def _shown(annotation: Any) -> str:
+    bare = _bare(annotation)
+    return bare.__name__ if isinstance(bare, type) else repr(bare)
+
+
+@dataclass(frozen=True, slots=True)
+class _Reading:
+    """What naming the codes of a record reads of its model: built once per model."""
+
+    lists: tuple[tuple[str, _Codes], ...]
+    """The fields named by a packaged list, each with its list."""
+    nested: tuple[str, ...]
+    """The fields whose annotation names a model, which can hold more records."""
+
+
+@functools.cache
+def _reading(model: type[BaseModel]) -> _Reading:
+    """How the codes of ``model``'s records are named, or a ``TypeError`` for a wrong mark."""
+    marked, problems = _named_by(model)
+    if problems:
+        raise TypeError("; ".join(problems) + " (conventions §4, ADR-0067, decision 6)")
+    return _Reading(
+        lists=tuple((field, mark.by) for field, mark in marked if not isinstance(mark.by, str)),
+        nested=tuple(
+            field for field, info in model.model_fields.items() if _reaches_model(info.annotation)
+        ),
+    )
+
+
+def _codes_in(value: object) -> list[object]:
+    """The codes ``value`` holds: none for ``None``, one for a text, a collection's members."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, Sequence | AbstractSet) and not isinstance(value, bytes | bytearray):
+        return [code for member in value for code in _codes_in(member)]
+    return [value]
+
+
+def _code(member: object, integer: bool) -> tuple[str, object]:
+    """A code's text as given and the value its list compares, digits and integers crossed.
+
+    A text of digits reads as the integer for a list of integer codes, and an integer as its
+    text for a list of text codes, as an upstream or a caller may send either; an enum member
+    reads by its value.
+    """
+    plain = member.value if isinstance(member, Enum) else member
+    if integer and isinstance(plain, str) and plain.isascii() and plain.isdigit():
+        return plain, int(plain)
+    if not integer and isinstance(plain, int) and not isinstance(plain, bool):
+        return str(plain), str(plain)
+    return str(plain), plain
+
+
+def _and(words: Sequence[str], last: str = "and") -> str:
+    """``a``, ``a and b``, ``a, b and c``."""
+    if len(words) < 2:
+        return "".join(words)
+    return f"{', '.join(words[:-1])} {last} {words[-1]}"
+
+
+class _Names:
+    """The names of the codes of an answer's records, and the codes their lists lack."""
+
+    def __init__(self) -> None:
+        self.names: dict[str, dict[str, str]] = {}
+        # Each field with its list, then the codes that the list lacks in order, since two models
+        # of one answer may mark fields of one name with two lists.
+        self.lacking: dict[tuple[str, _Codes], dict[str, None]] = {}
+
+    def read(self, value: object) -> None:
+        """Name the codes of every record that ``value`` holds, at any depth."""
+        if isinstance(value, BaseModel):
+            reading = _reading(type(value))
+            for field, listed in reading.lists:
+                for member in _codes_in(getattr(value, field)):
+                    self._name(field, listed, member)
+            for field in reading.nested:
+                self.read(getattr(value, field))
+        elif isinstance(value, Mapping):
+            for item in value.values():
+                self.read(item)
+        elif isinstance(value, list | tuple | AbstractSet):
+            for item in value:
+                self.read(item)
+
+    def _name(self, field: str, listed: _Codes, member: object) -> None:
+        text, compared = _code(member, listed.integer)
+        name = listed.name_of(compared)
+        if name is None:
+            self.lacking.setdefault((field, listed), {})[text] = None
+        else:
+            self.names.setdefault(field, {}).setdefault(text, " ".join(name.split()) or text)
+
+    def notes(self) -> list[str]:
+        """One sentence per field and list that lacks a code (ADR-0067, decision 7).
+
+        A code that another list names under the field's name, as the answer is read whole,
+        stands in ``meta.names`` and is no gap.
+        """
+        notes = []
+        for (field, listed), texts in self.lacking.items():
+            named = self.names.get(field, {})
+            codes = [code for code in texts if code not in named]
+            if not codes:
+                continue
+            notes.append(
+                f"The packaged {listed.list_name} list (fetched "
+                f"{listed.packaged.fetched:%Y-%m-%d}) holds no name for {field} "
+                f"{_and(codes, 'or')} of this answer, so meta.names leaves "
+                f"{'it' if len(codes) == 1 else 'them'} out."
+            )
+        return notes
+
+
 def utcnow() -> datetime:
     """Current time as a timezone-aware UTC datetime."""
     return datetime.now(UTC)
@@ -210,17 +541,24 @@ class ResultMeta(BaseModel):
         tenant: The tenant the data came from, by name, e.g. ``"acme"``; never a
             credential, nor a host or another value of the tenant's (conventions §7).
             ``None`` for a single-tenant source and for the list of tenant names.
-        names: Each country parameter of the request to its codes and the names their
-            packaged list holds, e.g. ``{"country_code": {"CN": "Comoros"}}``, a code under
-            its text as the caller gave it; ``names_codes`` fills it (ADR-0056). Empty for a
-            task without such a parameter, and left out of a dump while it is empty, so such
-            an answer dumps as it did before the field.
+        names: Each code parameter of the request, and each code field of the answer's
+            records that its model names by a packaged list, to its codes and the names the
+            list holds, e.g. ``{"country_code": {"CN": "Comoros"}}``: a request's code under
+            its text as the caller gave it, which ``names_codes`` fills, and a record's under
+            its text as upstream sent it, which the ``Result`` fills from the model's
+            ``NamedBy`` (ADR-0067, decisions 2, 3 and 6). Empty for an answer without such a
+            code, and left out of a dump while it is empty.
+        notes: One sentence per fact that the task says about its answer and that neither
+            a record nor another field states, e.g. the periods a series passed over, or a
+            record's code that its list does not name (ADR-0067, decisions 1 and 7). Empty
+            by default, and left out of a dump while it is empty, so an answer without a
+            note dumps as it did before the field.
 
     Raises:
         pydantic.ValidationError: A field the model does not define; a naive
             ``retrieved_at``; a naive ``published_at`` without ``published_at_naive``,
             or the flag set with an aware ``published_at`` or none; a negative
-            ``total``.
+            ``total``; a blank note.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -235,17 +573,27 @@ class ResultMeta(BaseModel):
     total: int | None = None
     tenant: str | None = None
     names: dict[str, dict[str, str]] = Field(default_factory=dict)
+    notes: list[str] = Field(default_factory=list)
 
     # No return annotation, on purpose: pydantic then reads the schema of a dump from the
-    # fields, ``names`` an optional property, where ``-> Any`` would make it a dump of any
-    # shape, and an HTTP route's response and an MCP tool's output read that schema.
+    # fields, ``names`` and ``notes`` optional properties, where ``-> Any`` would make it a
+    # dump of any shape, and an HTTP route's response and an MCP tool's output read that schema.
     @model_serializer(mode="wrap")
-    def _names_once_named(self, handler: SerializerFunctionWrapHandler):  # type: ignore[no-untyped-def]  # noqa: ANN202
-        """The dump, ``names`` left out while it is empty (ADR-0056, decision 1)."""
+    def _empty_lists_left_out(self, handler: SerializerFunctionWrapHandler):  # type: ignore[no-untyped-def]  # noqa: ANN202
+        """The dump, ``names`` and ``notes`` left out while empty (ADR-0067, decisions 1, 2)."""
         dumped = handler(self)
-        if not self.names and isinstance(dumped, dict):
-            dumped.pop("names", None)
+        if isinstance(dumped, dict):
+            for field in ("names", "notes"):
+                if not getattr(self, field):
+                    dumped.pop(field, None)
         return dumped
+
+    @field_validator("notes")
+    @classmethod
+    def _sentences(cls, value: list[str]) -> list[str]:
+        if any(not note.strip() for note in value):
+            raise ValueError("a note is a sentence about the answer, never blank")
+        return value
 
     @field_validator("retrieved_at")
     @classmethod
@@ -365,10 +713,39 @@ def _later[K: _Ordered](release: K, after: K) -> bool:
 
 
 class Result[T](BaseModel):
-    """What every task function returns: the data plus its release metadata."""
+    """What every task function returns: the data plus its release metadata.
+
+    Built or validated, it names the codes of the records its data holds where their model
+    marks a code field with ``NamedBy(<list>)``: each code with its name in ``meta.names``
+    under the field's name, beside the names already there, and one note in ``meta.notes``
+    per field for the codes its list lacks (ADR-0067, decisions 6 and 7). A record is read
+    in the data, in a list, a tuple, a set or a mapping's values, and in the fields of a
+    record whose annotation names a model. ``meta`` is then a new ``ResultMeta``, so the
+    object the task passed is not changed.
+
+    Raises:
+        TypeError: A model of the data marks a field wrongly with ``NamedBy``.
+    """
 
     data: T
     meta: ResultMeta
+
+    @model_validator(mode="after")
+    def _names_of_the_records(self) -> Self:
+        found = _Names()
+        found.read(self.data)
+        notes = [note for note in found.notes() if note not in self.meta.notes]
+        names = {
+            field: {**codes, **self.meta.names.get(field, {})}
+            for field, codes in found.names.items()
+        }
+        if not notes and all(self.meta.names.get(field) == codes for field, codes in names.items()):
+            return self
+        fields = {field: getattr(self.meta, field) for field in type(self.meta).model_fields}
+        fields["names"] = {**self.meta.names, **names}
+        fields["notes"] = [*self.meta.notes, *notes]
+        self.meta = type(self.meta)(**fields)
+        return self
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

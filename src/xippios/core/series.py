@@ -20,9 +20,13 @@ answer for the task to assemble, its vintage included::
             skip=(NoDataForYear,),
         )
         records = [record for _, answer in fetched for record in answer]
+        answered = {year for year, _ in fetched}
+        passed = [str(year) for year in range(start_year, end_year + 1) if year not in answered]
+        notes = [f"Market years {', '.join(passed)} hold no data."] if passed else []
 
 The two stay apart, since a task may send a request between them, and a range over the
-ceiling is still refused before any request.
+ceiling is still refused before any request. The task says the periods it passed over in a note
+of ``meta.notes``, since no record states them (ADR-0067, decision 1).
 """
 
 import argparse

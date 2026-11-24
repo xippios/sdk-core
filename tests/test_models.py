@@ -129,13 +129,13 @@ FIELDS = [
     "total",
     "tenant",
 ]
-"""The fields an answer's ``meta`` dumped before ``names`` (conventions §4)."""
+"""The fields an answer's ``meta`` dumped before ``names`` and ``notes`` (conventions §4)."""
 
 
-def test_names_is_empty_by_default_and_left_out_of_a_dump_while_empty() -> None:
-    # ADR-0056, decision 1: an answer of a task without a country parameter dumps as before.
+def test_names_and_notes_are_empty_by_default_and_left_out_of_a_dump_while_empty() -> None:
+    # ADR-0067, decisions 1 and 2: an answer without a name or a note dumps as before.
     meta = ResultMeta(source="example", endpoint="data", request={"year": 2024})
-    assert meta.names == {}
+    assert (meta.names, meta.notes) == ({}, [])
     assert list(meta.model_dump()) == FIELDS
     assert list(json.loads(meta.model_dump_json())) == FIELDS
     result = Result[list[int]](data=[1], meta=meta)
@@ -164,17 +164,39 @@ def test_names_refuses_another_shape(names: object) -> None:
         ResultMeta(source="example", endpoint="data", names=names)
 
 
-def test_the_schema_of_meta_gains_the_optional_property_alone() -> None:
+def test_notes_hold_one_sentence_each_in_their_order_and_round_trip() -> None:
+    # ADR-0067, decision 1 (https://github.com/xippios/sdk-core/issues/478, part 1).
+    notes = ["Market years 2021 and 2023 held no data.", "The walk ended at the bound."]
+    meta = ResultMeta(source="example", endpoint="data", notes=notes)
+    dumped = meta.model_dump(mode="json")
+    assert list(dumped) == [*FIELDS, "notes"]
+    assert dumped["notes"] == notes
+    assert ResultMeta.model_validate(dumped) == meta
+    assert ResultMeta.model_validate_json(meta.model_dump_json()) == meta
+
+
+@pytest.mark.parametrize("notes", [[""], ["A sentence.", "  "], "A sentence.", [None]])
+def test_notes_refuse_a_blank_note_and_another_shape(notes: object) -> None:
+    with pytest.raises(pydantic.ValidationError, match="notes"):
+        ResultMeta(source="example", endpoint="data", notes=notes)
+
+
+def test_the_schema_of_meta_gains_the_optional_properties_alone() -> None:
     # An HTTP route's response and an MCP tool's output take the schema in serialization mode,
-    # which a dump that leaves a field out would otherwise lose (ADR-0056, decision 1).
+    # which a dump that leaves a field out would otherwise lose (ADR-0067, decisions 1 and 2).
     serialization = ResultMeta.model_json_schema(mode="serialization")
     assert serialization == ResultMeta.model_json_schema(mode="validation")
-    assert list(serialization["properties"]) == [*FIELDS, "names"]
+    assert list(serialization["properties"]) == [*FIELDS, "names", "notes"]
     assert serialization["required"] == ["source", "endpoint"]
     assert serialization["properties"]["names"] == {
         "additionalProperties": {"additionalProperties": {"type": "string"}, "type": "object"},
         "title": "Names",
         "type": "object",
+    }
+    assert serialization["properties"]["notes"] == {
+        "items": {"type": "string"},
+        "title": "Notes",
+        "type": "array",
     }
     envelope = Result[list[int]].model_json_schema(mode="serialization")
     assert envelope["$defs"]["ResultMeta"]["properties"] == serialization["properties"]
@@ -293,13 +315,41 @@ def test_parse_decimal(text: str, expected: Decimal | None) -> None:
 
 
 def test_decimal_fields_serialise_as_json_numbers() -> None:
-    row = Row(label="x", amount=Decimal("98.5"), amounts=[Decimal("1"), Decimal("2.25")])
+    row = Row(label="x", amount=Decimal("98.5"), amounts=[Decimal("1.0"), Decimal("2.25")])
     assert row.model_dump(mode="json") == {"label": "x", "amount": 98.5, "amounts": [1.0, 2.25]}
     assert json.loads(row.model_dump_json())["amount"] == 98.5
     assert row.model_dump()["amount"] == Decimal("98.5")
     assert Row(label="x", amount=None, amounts=[]).model_dump(mode="json")["amount"] is None
     envelope = Result[list[Row]](data=[row], meta=ResultMeta(source="s", endpoint="e"))
-    assert envelope.model_dump(mode="json")["data"][0]["amounts"] == [1.0, 2.25]
+    assert envelope.model_dump_json().startswith(
+        '{"data":[{"label":"x","amount":98.5,"amounts":[1.0,2.25]}'
+    )
+
+
+@pytest.mark.parametrize(
+    ("value", "text"),
+    [
+        pytest.param(Decimal("16217"), "16217", id="whole"),
+        pytest.param(Decimal("16217.0"), "16217.0", id="upstream-s-digit-kept"),
+        pytest.param(Decimal("4.61"), "4.61", id="fraction"),
+        pytest.param(Decimal("1E+3"), "1000", id="positive-exponent"),
+        pytest.param(Decimal("-0"), "0", id="negative-zero"),
+        pytest.param(
+            Decimal("123456789012345678901234567890"),
+            "123456789012345678901234567890",
+            id="past-a-float",
+        ),
+    ],
+)
+def test_a_decimal_without_fractional_digits_is_a_json_integer(value: Decimal, text: str) -> None:
+    # Read from the exponent, never the value, so upstream's 16217.0 keeps its digit
+    # (ADR-0067, decision 10; https://github.com/xippios/sdk-core/issues/478, part 5).
+    row = Row(label="x", amount=value, amounts=[value])
+    assert row.model_dump_json() == f'{{"label":"x","amount":{text},"amounts":[{text}]}}'
+    dumped = row.model_dump(mode="json")
+    assert type(dumped["amount"]) is (float if "." in text else int)
+    assert to_jsonable_python(row)["amount"] == dumped["amount"], "as the MCP adapter dumps it"
+    assert row.model_dump()["amount"] == value, "Python keeps the Decimal"
 
 
 def test_project_copies_same_named_fields_and_applies_overrides() -> None:
@@ -375,6 +425,7 @@ def test_computed_decimal_fields_serialise_as_json_numbers() -> None:
     dumped = priced.model_dump(mode="json")
     assert dumped == {"label": "x", "value": "1,234.5", "value_number": 1234.5}
     assert json.loads(priced.model_dump_json())["value_number"] == 1234.5
+    assert '"value_number":1234}' in Priced(label="x", value="1,234").model_dump_json()
     assert Priced(label="x", value="(D)").model_dump(mode="json")["value_number"] is None
     assert priced.model_dump()["value_number"] == Decimal("1234.5")
 

@@ -1,7 +1,8 @@
 # ADR-0031: Hardening core from the first source package
 
 Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under
-https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0008
+https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0008 ·
+Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/478
 
 ## Context
 
@@ -85,3 +86,14 @@ as they stand, and changes no decision; their history stays in ADR-0008.
 The conventions' header, §3, §6, §8 and §15, the review checklist's item 3, the README and
 the docstrings of `ClientConfig`, `UpstreamModel`, `xippios.core.reference` and
 `assert_projection` state its decisions from 1.28 on.
+
+## Amendment 2026-11-24
+
+Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/478: in decision 1 a `Decimal`
+whose exponent is zero or more, without fractional digits, serialises as a JSON integer, `16217`,
+and one with fractional digits as a JSON number with the digits upstream sent (ADR-0067,
+decision 10), and decision 2's raw response, which a caller asked for with
+`raise_on_error=False`, reads `send_once`, the recorder's one request, which asks no `classify`
+since nothing is retried or raised, as the switch left the client by ADR-0037's amendment of the
+same day (https://github.com/xippios/sdk-core/issues/479), while the rest of decisions 1 and 2,
+decisions 3 to 6 and the consequences stand as written.

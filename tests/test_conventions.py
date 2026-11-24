@@ -1,7 +1,8 @@
 """The sentences of `docs/conventions.md` that the cases of ADR-0043 stand on, and ADR-0055's,
 the preview rule of ADR-0050, the recorder's names, a task's fixtures and a secret's encoded
 forms of ADR-0066, the names of a
-request's country codes of ADR-0056, the snapshot script's form, the mark of FETCHED.md's form
+request's and a record's codes, the notes and the integers of ADR-0067, the snapshot script's
+form, the mark of FETCHED.md's form
 and the one comparison of a snapshot of ADR-0062, the attribution check of ADR-0046, decision 7,
 the refusal of a hinted value of ADR-0041's amendment of 2026-11-22, the two sentences of a
 period series that ADR-0054's amendment of 2026-11-22 words, a recorder's field of a request of
@@ -205,37 +206,65 @@ def test_each_rule_of_the_live_comparison_is_one_sentence_that_cites_adr_0055(
         assert name in rule, f"§10: {rule!r} does not name {name!r}"
 
 
-EXEMPTION = "stands in `UNNAMED_CODES` of its tasks module with the reason"
-"""The phrase of §4's sentence on the exemption and the family check (ADR-0056)."""
-
 NAMES_RULES = [
-    # §4, at the envelope's meta: the name of each country code of a request
-    # (https://github.com/xippios/sdk-core/issues/375).
+    # §4, at the envelope's meta: the names of the codes of a request and of the answer's
+    # records, and the notes of a task (https://github.com/xippios/sdk-core/issues/478).
     pytest.param(
-        "`meta.names` maps each country parameter of the request",
-        ("`dict[str, dict[str, str]]`", "left out of a dumped answer while it is empty"),
+        "`meta.names` maps each code parameter of the request",
+        (
+            "`dict[str, dict[str, str]]`",
+            "left out of a dumped answer while it is empty",
+            "decision 2",
+        ),
         id="s4-the-field",
     ),
     pytest.param(
-        "fills it with core's decorator `names_codes",
-        ("one `PackagedCodes` per parameter", "withholds an answer for a code its list lacks"),
+        "fills it for the request with core's decorator `names_codes`",
+        (
+            "takes several codes as a list",
+            "withholds an answer for a code its list lacks",
+            "decisions 3 and 4",
+        ),
         id="s4-the-decorator",
     ),
     pytest.param(
-        EXEMPTION,
-        ("the family check fails", "and stands in neither"),
-        id="s4-the-exemption",
+        "A record's model names the codes of a code field",
+        ("NamedBy(REGIONS)", "one note per field", "withholds no answer", "decisions 6 and 7"),
+        id="s4-the-record-s-model",
+    ),
+    pytest.param(
+        "The family check fails a field that `NamedBy` marks twice",
+        ("no word of a parameter's name", "the review's", "decision 8"),
+        id="s4-the-family-check",
+    ),
+    pytest.param(
+        "`notes` holds one sentence per fact",
+        ("left out of a dumped answer while it is empty", "a cursor is no note", "decision 1"),
+        id="s4-the-notes",
     ),
 ]
 
 
 @pytest.mark.parametrize(("phrase", "names"), NAMES_RULES)
-def test_each_rule_of_the_names_of_codes_is_one_sentence_that_cites_adr_0056(
+def test_each_rule_of_the_names_of_codes_and_the_notes_is_one_sentence_that_cites_adr_0067(
     phrase: str, names: tuple[str, ...]
 ) -> None:
     rule = sentence(section(4), phrase)
-    for name in ("ADR-0056", *names):
+    for name in ("ADR-0067", *names):
         assert name in rule, f"§4: {rule!r} does not name {name!r}"
+
+
+def test_the_json_integer_of_a_decimal_is_one_sentence_that_cites_adr_0067() -> None:
+    # §3: a Decimal without fractional digits is a JSON integer, read from its exponent
+    # (https://github.com/xippios/sdk-core/issues/478, part 5).
+    rule = sentence(section(3), "A `Decimal` field of an `UpstreamModel` serialises as a")
+    for name in (
+        "as a JSON integer",
+        "upstream's `16217.0` stays",
+        "ADR-0031",
+        "ADR-0067, decision 10",
+    ):
+        assert name in rule, f"§3: {rule!r} does not name {name!r}"
 
 
 def test_the_refusal_of_a_hinted_value_is_one_sentence_that_cites_its_amendment() -> None:
@@ -285,16 +314,6 @@ def test_each_rule_of_a_series_message_is_one_sentence_that_cites_its_amendment(
     rule = sentence(section(4), phrase)
     for name in names:
         assert name in rule, f"§4: {rule!r} does not name {name!r}"
-
-
-def test_the_exemption_s_sentence_names_the_words_of_the_family_check_in_their_order() -> None:
-    # The organization's check quotes the sentence alone, so it lists exactly the words that
-    # the check looks for (ADR-0056, decision 5), read here from the check itself.
-    words = family._COUNTRY.pattern.split("|")
-    assert all(word.isalpha() for word in words), f"{words!r}: a word, no pattern"
-    listed = ", ".join(f"`{word}`" for word in words[:-1]) + f" or `{words[-1]}`"
-    rule = sentence(section(4), EXEMPTION)
-    assert listed in rule, f"§4: {rule!r} does not list {listed!r}"
 
 
 @pytest.mark.parametrize(

@@ -49,10 +49,12 @@ It gives a source package the things that should be identical across the family:
   (source, endpoint, retrieved_at, published_at with published_at_naive for a time
   upstream printed without a zone, vintage, request without the parameters left `None`,
   total: upstream's count of the matching records when the source reports one,
-  tenant: the tenant the data came from, by name, for a multi-tenant source, and names:
-  the name of each country code of the request, which `names_codes` writes); a field it
-  does not define is refused. `Decimal` fields of upstream models arrive as JSON numbers
-  in both adapters; `UpstreamModel.project` builds a projection of a record under
+  tenant: the tenant the data came from, by name, for a multi-tenant source, names:
+  the name of each code of the request, which `names_codes` writes, and of the records,
+  which their model's `NamedBy` declares, and notes: what the task says about its answer);
+  a field it does not define is refused. `Decimal` fields of upstream models arrive as JSON
+  numbers in both adapters, an integer where upstream sent no fractional digit;
+  `UpstreamModel.project` builds a projection of a record under
   upstream names, `dump_upstream` gives a record back under upstream's field names,
   `parse_decimal` reads a published figure.
 - **Reference data**: loaders for code lists shipped inside a package, `PackagedList`
@@ -897,7 +899,7 @@ once and loads its file where the source makes it, so a large list is declared b
 codes that differ in case alone in a folded list are refused there with `ValueError`.
 `name_of(value)` gives the name of a code, compared as the check compares it, and `code`,
 `list_name`, `integer` and `packaged` give the code's field, the list's name, its type and the
-list, which the live comparison and `names_codes` read.
+list, which the live comparison, `names_codes` and `NamedBy` read.
 
 Other code lists are read with `load_json`, and a source that packages a CSV file reads
 it itself (ADR-0059, decision 2). The refresh
@@ -957,80 +959,88 @@ source = render_enums(
 )
 ```
 
-### The country a code stands for
+### The names of codes in an answer
 
 A country argument takes upstream's own code and no second one, and every answer names the
 country it stands for, since a known code can be another country than the caller meant: in a
-list where `CN` is Comoros, China is `CH`. A task that takes a country, an area, a reporter or
-a partner declares the list of each such parameter with `names_codes`, and `meta.names` of
-every answer it returns maps each parameter to its codes and their names (conventions §4,
-ADR-0056):
+list where `CN` is Comoros, China is `CH`. `meta.names` maps a code parameter of the request,
+or a code field of the answer's records, to its codes and the names that its packaged list
+holds (conventions §4, ADR-0067). A task declares the list of each code parameter with
+`names_codes`, and a record's model declares the list of each code field with `NamedBy`, so
+that every task that returns the model is named:
 
 ```python
-from xippios.core import PackagedList, Result, names_codes, sync
+from typing import Annotated
 
-COUNTRIES = PackagedList.load("xippios.example", "countries").codes(
-    "countryCode", "countryName", source="example"
-)  # CN Comoros, CH China, ...
-REPORTERS = PackagedList.load("xippios.example", "reporters").codes(
-    "reporterCode", "reporterDesc", source="example"
-)  # integer codes: 757 Switzerland, 842 USA
+from pydantic import Field
 
+from xippios.core import NamedBy, PackagedList, Result, UpstreamModel, names_codes, sync
 
-@names_codes(country_code=COUNTRIES)
-async def get_data_async(country_code: str | None = None) -> Result[list[Row]]: ...
+REGIONS = PackagedList.load("xippios.example", "regions").codes(
+    "regionCode", "regionName", source="example"
+)  # R1 North, R2 South, ...
 
 
-@names_codes(reporter_code=REPORTERS, separator=",")  # upstream's "757,842"
-async def get_flows_async(reporter_code: str) -> Result[list[Flow]]: ...
+class Row(UpstreamModel):
+    region_code: Annotated[str, NamedBy(REGIONS)] = Field(validation_alias="regionCode")
+    item_code: Annotated[int, NamedBy("item")] = Field(validation_alias="itemCode")
+    item: str  # upstream sends the item's name beside its code
 
 
-get_data = sync(get_data_async)
-get_flows = sync(get_flows_async)
+@names_codes(region_code=REGIONS)
+async def get_series_async(region_code: list[str] | None = None) -> Result[list[Row]]: ...
+
+
+get_series = sync(get_series_async)
 ```
 
 ```python
->>> get_data("CN").meta.names
-{'country_code': {'CN': 'Comoros'}}
->>> get_flows("757,842").meta.names
-{'reporter_code': {'757': 'Switzerland', '842': 'USA'}}
->>> get_data().meta.names  # every country: no entry, and the dump has no names
-{}
+>>> get_series(["R1"]).meta.names  # the request's code and the rows' under one entry
+{'region_code': {'R1': 'North'}}
+>>> every = get_series()  # every region: each code of the rows
+>>> every.meta.names
+{'region_code': {'R1': 'North', 'R2': 'South'}}
+>>> every.meta.notes  # a row's code that upstream added after the list was fetched
+['The packaged regions list (fetched 2026-10-23) holds no name for region_code R9 of this answer, so meta.names leaves it out.']
 ```
 
 The decorator reads the call's arguments, defaults applied, once the task returned: a text is
-one code, or several split on `separator`; a list, a tuple or a set holds several; a code
-stands once, under its text as the caller gave it, so an integer by its digits, with the name
-its list holds, white space collapsed. A text of digits is read as the integer for a list of
-integer codes, and an integer as its text for a list of text codes. It wraps an `async def`, a
-plain function or a `sync` facade, whose async twin it wraps too, so the MCP tool, the HTTP
-route and a server bound by `bind_tasks` answer with the names, and the tool's schema, the
-docstring and the signature stay the task's. A name that is no parameter of the task, a value
-that is no `PackagedCodes` and a parameter named twice are refused with `TypeError` when the
-module is imported, and a decorated task that returns anything but a `Result` raises
-`TypeError`. Names the answer carries already, a composed answer's, are kept, and two
-decorators stack, one per separator.
+one code, and a list, a tuple or a set holds several, since several values of one filter are a
+list (ADR-0061, decision 1); a code stands once, under its text as the caller gave it, so an
+integer by its digits, with the name its list holds, white space collapsed. A text of digits is
+read as the integer for a list of integer codes, and an integer as its text for a list of text
+codes. It wraps an `async def`, a plain function or a `sync` facade, whose async twin it wraps
+too, so the MCP tool, the HTTP route and a server bound by `bind_tasks` answer with the names,
+and the tool's schema, the docstring and the signature stay the task's. A name that is no
+parameter of the task, a value that is no `PackagedCodes` and a parameter named twice are
+refused with `TypeError` when the module is imported, and a decorated task that returns
+anything but a `Result` raises `TypeError`. Names the answer carries already, its records' or
+a composed answer's, are kept beside the decorator's own, and two decorators stack.
 
 The task checks its codes before the call, with its hints and its reason, so a code the list
 lacks never reaches the decorator. One that does, a code sent unchecked, is refused after the
 call with the list's own refusal, `UnknownCode`, whose reason says that upstream was asked
 and that the answer is withheld, without the `Nothing was sent.` of a refusal before the call
-(ADR-0045, amendment 2026-11-24): an answer whose country no list names is never returned. The
-name is the one the source's own list holds for the code, so nothing is mapped between sources
-(ADR-0028).
+(ADR-0045, amendment 2026-11-24). The name is the one the source's own list holds for the code,
+so nothing is mapped between sources (ADR-0028).
 
-A task whose codes no packaged list can name, or a parameter whose name holds one of the
-family check's words while it takes no code, is exempt with the reason, in `UNNAMED_CODES`
-beside `BULK_TASKS` in `tasks.py`:
+A `Result`, built or validated, names the codes of the records its data holds, in a list, a
+tuple, a set or a mapping's values and in a record's fields whose annotation names a model, in
+`meta.names` under the field's name. A record's code that its list lacks is no fault of the
+call, since upstream returned it: the answer stands, the code is left out of the map, and one
+note per field says which codes are left out. A field marked `NamedBy("item")` names its code by
+the field of the same record in which upstream sends the name, so the name stands on the record
+beside its code and `meta.names` takes nothing for it. A mark reads on the field and on an
+optional code, `Annotated[str, NamedBy(REGIONS)] | None`. A mark that cannot name, a field
+marked twice, a mark on a list's items or in a union of codes, which no answer reads, a marked
+field that holds no code, text or integers, one or a list of them, or a named field that is no
+other field of the model or holds no text, raises `TypeError` when an answer holds the record,
+and the family check names it first. Where two models of one answer mark fields of one name
+with two lists, each list's note says its own gaps and no code that the other names.
 
-```python
-UNNAMED_CODES = {
-    "get_data": {
-        "area": "Under area_cs it is an ISO3 or M49 code, which no packaged list names.",
-        "area_cs": "The coding system of area, no code.",
-    },
-}
-```
+`meta.notes` holds one sentence per fact that a task says about its answer and that neither a
+record nor another field states, such as the periods that a series passed over or the rule that
+ended a walk of pages; it is empty by default and left out of a dump while it is empty.
 
 ## The snapshot script's frame
 
@@ -1663,14 +1673,12 @@ address's `street_number`, is upstream's own and passes, so the check holds a re
 and the review whether a reading that can lose something keeps its text. A time is read into the
 type that keeps all of it, with no text and no suffix, so the check reads no time.
 
-Every task, read and write, bulk or not, with a parameter whose name holds `country`,
-`countries`, `area`, `reporter` or `partner`, in any case, names its codes with `names_codes`
-for that parameter or stands in `UNNAMED_CODES` of its module with the reason (see The
-country a code stands for; ADR-0056). An entry for a task outside the module's `__all__`, for
-a parameter the task lacks or that holds none of the words, for a parameter `names_codes`
-names as well, or without its reason fails too. The check reads signatures, so a country
-inside a free-form mapping, such as a `filters` argument, is the review's, and it fails at once
-from core 0.4.1 on.
+In every model that a task's `Result[T]` reaches, read and write, bulk or not, a field that
+`NamedBy` marks holds codes and is marked once, and a field that it names as the one in which
+upstream sends the name stands in the same model and holds text, so that a code and its label
+stand side by side (see The names of codes in an answer; ADR-0067, decision 8). The check reads
+the model's declaration and no word of a parameter's name, so whether a code is owed a name is
+the review's.
 
 A source that keeps `docs/upstream/OBSERVED.md`, its notes of what upstream does but never
 documents, is held to three rules of conventions §3, one test each (ADR-0044):
@@ -2043,7 +2051,7 @@ fragment until the release assembles it.
 | `xippios.core.client` | httpx client, retries, rate limit, cache with a byte bound, quota policy, request hooks, the one key class, the renewing bearer, `get_answer`, `download`, `check_dest`, the check of a download's `dest` before a task's first request, `decode_csv` | alpha |
 | `xippios.core.errors` | taxonomy, `UnknownCode`, `QueryTooLarge`, the refusal of a query over upstream's limit, response classification, `request_description` | alpha |
 | `xippios.core.redaction` | the one credential rule of the envelope, the recorder and replay, `REDACTED`, which a source's package imports from `xippios.core`, `register_data_name`, signed links | alpha |
-| `xippios.core.models` | `UpstreamModel` with `dump_upstream`, `Result`, `ResultMeta` with `published_at_naive` and `names`, the name of each country code of a request, `ResultCap` with `paged` and `keep`, `parse`, `newer_than`, the filter of a vintage taken back | alpha |
+| `xippios.core.models` | `UpstreamModel` with `dump_upstream`, `Result`, `ResultMeta` with `published_at_naive`, `names`, the name of each code of a request and of the records, and `notes`, `NamedBy`, the mark of a record's code field, `ResultCap` with `paged` and `keep`, `parse`, `newer_than`, the filter of a vintage taken back | alpha |
 | `xippios.core.reference` | the packaged JSON loader, `PackagedList`, its `codes` and their `check` of an argument (`PackagedCodes`), `names_codes`, `matches`, `closest`, `nearest`, generated `StrEnum`/`IntEnum` modules | alpha |
 | `xippios.core.pagination` | `fetch_pages`, the one walk of pages, which refuses at its bound and returns nothing (a page-numbered endpoint maps the offset to its page), `fetch_counted`, the count before a query over upstream's limit | alpha |
 | `xippios.core.series` | `Ceiling`, the ceiling of a series over periods with its option on the MCP server, and `fetch_periods`, its requests in order | alpha |
