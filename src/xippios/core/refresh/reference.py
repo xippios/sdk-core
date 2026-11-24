@@ -69,7 +69,7 @@ from xippios.core.client import Answer, AsyncClient, RetryPolicy
 from xippios.core.errors import TransportError
 from xippios.core.models import UpstreamModel
 from xippios.core.reference import PackagedList
-from xippios.core.refresh.upstream import Snapshot
+from xippios.core.refresh.upstream import Snapshot, _logs_in
 from xippios.core.refresh.upstream import run as _run_snapshot
 
 COMMAND = "uv run python scripts/refresh_reference.py"
@@ -199,35 +199,53 @@ class _Meter:
     """What a run spent: the requests it sent and the quota left that upstream reported.
 
     The client's ``observe`` hook for the run, which core calls with every response from the
-    wire, after the hook the client had, a quota policy's say (ADR-0037).
+    wire, after the hook the client had, a quota policy's say (ADR-0037). A response counts
+    one request, and one more for each answer in its ``history``: the token requests of a
+    renewing auth and the request it sent again after a refused bearer, which the client
+    keeps there as statuses alone (ADR-0062, decision 14; ADR-0025).
     """
 
     def __init__(
-        self, observe: Callable[[httpx.Response], None] | None, header: str | None
+        self,
+        observe: Callable[[httpx.Response], None] | None,
+        header: str | None,
+        *,
+        logs_in: bool = False,
     ) -> None:
         self.sent = 0
         self.unanswered = 0
         self.left: int | None = None
         self._observe = observe
         self._header = header
+        self._logs_in = logs_in
 
     def __call__(self, response: httpx.Response) -> None:
         if self._observe is not None:
             self._observe(response)
-        self.sent += 1
+        self.sent += 1 + len(response.history)
         value = response.headers.get(self._header) if self._header else None
         if value is not None and value.isascii() and value.isdigit():
             self.left = int(value)
 
     def report(self) -> str:
-        """The requests sent and the quota left, as upstream last reported it, one line."""
+        """The requests sent and the quota left, as upstream last reported it, one line.
+
+        Where the client's auth logs in, the line says that its token requests and resends
+        are counted and a refused one is not: a token request whose answer the auth refuses
+        ends the run with its error, which no response carries to the count.
+        """
         left = "not reported" if self.left is None else f"{self.left} ({self._header})"
         unanswered = (
             f" ({self.unanswered} ended in a transport error, counted as sent)"
             if self.unanswered
             else ""
         )
-        return f"requests sent: {self.sent}{unanswered}; quota left: {left}"
+        by_auth = (
+            ", each token request and resend of the client's auth among them, a refused one not"
+            if self._logs_in
+            else ""
+        )
+        return f"requests sent: {self.sent}{unanswered}{by_auth}; quota left: {left}"
 
 
 @contextmanager
@@ -236,11 +254,13 @@ def _metered(client: AsyncClient, header: str | None) -> Iterator[_Meter]:
 
     A request that fails in transport has no response to count, and with one attempt its
     error ends the block: it is counted as sent, since it may have reached upstream. The
-    client's configuration is restored after the block and the report printed, a failed
-    run's too.
+    token requests of a renewing auth and its resend after a refused bearer are counted from
+    the response's ``history``, and a token request whose answer the auth refused is not,
+    since its error ends the block with no response. The client's configuration is restored
+    after the block and the report printed, a failed run's too.
     """
     configured = client.config
-    meter = _Meter(configured.observe, header)
+    meter = _Meter(configured.observe, header, logs_in=_logs_in(client))
     client.config = replace(configured, retry=RetryPolicy(max_attempts=1), observe=meter)
     try:
         yield meter

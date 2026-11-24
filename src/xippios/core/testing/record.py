@@ -72,7 +72,8 @@ async def send_once(
     needs a client built for one attempt; the client's base URL, timeouts, rate limit,
     ``before_request`` and ``observe`` apply as for any request (ADR-0037, decision 6).
     The answer is returned whatever its final status, a 4xx or a 5xx included, its body
-    read and decoded, with the request as sent.
+    read and decoded, with the request as sent and, in its ``history``, the answers that the
+    client's auth had before it, a login's token answer say, as their statuses alone.
 
     Args:
         client: The source's configured client.

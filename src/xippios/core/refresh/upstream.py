@@ -60,7 +60,7 @@ from urllib.parse import urljoin, urlsplit
 import httpx
 
 from xippios.core._loop import run as _run_coroutine
-from xippios.core.client import AsyncClient, ClientConfig
+from xippios.core.client import AsyncClient, ClientConfig, RenewingBearerAuth
 from xippios.core.errors import RateLimitError, TransportError, XippiosError, parse_retry_after
 
 COMMAND = "uv run scripts/refresh_upstream.py"
@@ -130,7 +130,9 @@ class Page:
             answer: it names no ``file`` of its own.
         keyed: A sample whose operation needs the source's credentials: it is sent with
             those of the snapshot's ``client``, on the origin of the client's base URL alone,
-            follows no redirect and is never retried (conventions §3).
+            follows no redirect and is never retried by the frame; a renewing auth sends it
+            once more after a refused bearer, and the run counts both sends and each token
+            request (conventions §3; ADR-0062, decision 4; ADR-0025).
     """
 
     url: str
@@ -300,6 +302,10 @@ class Snapshot:
         split: The files a page marked ``split`` gives, by name under ``docs/upstream/``,
             in their order, from the page and its answer.
         sections: The sections of the source's own in ``FETCHED.md``, made from the rows.
+            It sees every row at once, before anything is written, in every mode, so a
+            check of one page against another runs here, a documentation page against the
+            API document it renders say: it returns ``()`` where it adds no section, and
+            raises ``changed`` where the pages disagree (ADR-0062, decisions 3 and 5).
         client: The source's own client, which every request goes through, for its
             credentials, sent on the samples marked ``keyed`` alone, or for its pace, its
             headers or the wait its retry policy gives a 429; ``None``: the frame builds one
@@ -415,15 +421,38 @@ def dump_json(value: Any) -> bytes:
     return (json.dumps(value, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
 
 
+def parse_json(response: Response) -> Any:
+    """The JSON document of ``response`` as served, a key twice stopping the run.
+
+    The frame's plain reader of a JSON answer, for a hook that reads the document and writes
+    the body as fetched, or nothing of it: an API document whose version a ``note`` names, a
+    page a ``sections`` check compares, a sample whose shape it checks (ADR-0062, decision 4).
+    It holds the document to no form, so compact JSON kept as served is read. A duplicate key,
+    which ``json.loads`` would drop silently, and a body that is no JSON stop the run with
+    ``changed``. ``read_json`` reads through it.
+
+    Args:
+        response: The answer that holds the document.
+
+    Returns:
+        The document, its objects as ``dict`` in the order served.
+    """
+    try:
+        return json.loads(response.body, object_pairs_hook=_no_duplicates)
+    except ValueError as error:
+        raise changed(response.url, f"not usable JSON ({error})") from None
+
+
 def read_json(response: Response) -> Any:
     """The JSON document of ``response``, once re-serialising it reproduces the fetched text.
 
-    The frame's reader of a JSON answer, named apart from the root's ``load_json``, which
-    reads a packaged file (ADR-0062, decision 4). A source that keeps a JSON document cut to
-    its part, or in the form ``canonical`` gives it, writes it with ``dump_json``; this check
-    makes sure that the whole document, written the same way, is the fetched text up to line
-    endings, so what is written is upstream's text. A duplicate key, which ``json.loads``
-    would drop silently, stops the run too.
+    The frame's reader of a JSON answer that a source writes again, named apart from the
+    root's ``load_json``, which reads a packaged file (ADR-0062, decision 4). A source that
+    keeps a JSON document cut to its part, or in the form ``canonical`` gives it, writes it
+    with ``dump_json``; this check makes sure that the whole document, written the same way,
+    is the fetched text up to line endings, so what is written is upstream's text. It reads
+    the document with ``parse_json``, so a duplicate key or a body that is no JSON stops the
+    run too; a hook that writes nothing of the document reads it with ``parse_json`` alone.
 
     Args:
         response: The answer that holds the document.
@@ -431,10 +460,7 @@ def read_json(response: Response) -> Any:
     Returns:
         The document.
     """
-    try:
-        document = json.loads(response.body, object_pairs_hook=_no_duplicates)
-    except ValueError as error:
-        raise SystemExit(f"GET {response.url}: not usable JSON ({error})") from None
+    document = parse_json(response)
     fetched = response.body.replace(b"\r\n", b"\n").rstrip(b"\n")
     if dump_json(document).rstrip(b"\n") != fetched:
         raise SystemExit(
@@ -572,6 +598,11 @@ def _check_page(snapshot: Snapshot, page: Page) -> None:
         )
 
 
+def _logs_in(client: AsyncClient) -> bool:
+    """Whether the client's auth sends requests of its own, a ``RenewingBearerAuth``'s."""
+    return isinstance(client._auth, RenewingBearerAuth)
+
+
 class _Capture:
     """One run's requests through the client: the pause, the redirects, the retry, the count."""
 
@@ -586,8 +617,13 @@ class _Capture:
 
         The client's request that is sent once, never retried, cached or raised for its
         status, as the recorder's is (ADR-0066, decision 4): the client's limiter, its hooks,
-        its headers and, for a keyed sample alone, its credentials apply. The request is
-        counted once it answers or fails in transit, where it may have reached upstream.
+        its headers and, for a keyed sample alone, its credentials apply. A renewing auth
+        sends its token request before a keyed sample and, after a refused bearer, a second
+        one and the sample once more: the answer's ``history`` keeps one status for each, so
+        the GET counts one request and one per status there (ADR-0062, decision 4; ADR-0025).
+        A request is counted once it answers or fails in transit, where it may have reached
+        upstream; a token request whose answer the auth refuses ends the call with its error,
+        uncounted, and stops the run.
         """
         try:
             if keyed:
@@ -597,8 +633,19 @@ class _Capture:
         except TransportError:
             self.sent += 1
             raise
-        self.sent += 1
+        self.sent += 1 + len(answer.history)
         return answer
+
+    def report(self) -> str:
+        """The requests sent, one line, which names an auth's own where the client logs in.
+
+        It is printed after the last request of a run that compares or writes, so a token
+        request whose answer the auth refused, which stops the run, never stands in it.
+        """
+        line = f"{self.sent} requests sent, each redirect and retry counted"
+        if _logs_in(self.client):
+            line += ", and each token request and resend of the client's auth"
+        return line
 
     def _get(self, url: str, expect: tuple[int, ...], keyed: bool) -> Response:
         """GET ``url``, following its redirects on its host, and read the final answer.
@@ -1519,10 +1566,10 @@ def run(snapshot: Snapshot, argv: Sequence[str] | None = None) -> int:
             if differ
             else "The snapshot is current: upstream serves what it records."
         )
-        _log(f"{capture.sent} requests sent, each redirect and retry counted")
+        _log(capture.report())
         return 1 if differ else 0
     write_snapshot(out, rows, render_fetched(snapshot, rows, fetched, (out / OBSERVED).is_file()))
     written = sum(1 for row in rows if row.content is not None)
     _log(f"Wrote {written} files and {FETCHED} under {out} (Fetched {fetched})")
-    _log(f"{capture.sent} requests sent, each redirect and retry counted")
+    _log(capture.report())
     return 0

@@ -27,6 +27,7 @@ from xippios.core.client.download import (
     check_dest,
     content_disposition_filename,
     head_of,
+    statuses_before,
     stream_to,
     unread_is_none,
 )
@@ -465,7 +466,10 @@ class AsyncClient:
 
         Returns:
             The answer with its body read, without the wire-encoding headers, since the
-            body is decoded, and with the request as sent, credentials included.
+            body is decoded, and with the request as sent, credentials included; its
+            ``history`` holds the answers an auth's flow had before it, a token answer's
+            say, as their statuses alone (``statuses_before``), so a caller counts each
+            request the call sent and keeps no bearer with them.
 
         Raises:
             ValueError: Both ``json`` and ``data``, before anything is sent; or the body
@@ -493,6 +497,7 @@ class AsyncClient:
                 headers=strip_wire_headers(streamed.headers.multi_items()),
                 content=body,
                 request=streamed.request,
+                history=statuses_before(streamed),
             )
 
         response = await self._send(

@@ -25,6 +25,7 @@ from xippios.core.refresh.upstream import (
     changed,
     decode,
     dump_json,
+    parse_json,
     read_json,
 )
 
@@ -42,6 +43,7 @@ __all__ = [
     "changed",
     "decode",
     "dump_json",
+    "parse_json",
     "read_json",
     "run",
 ]
