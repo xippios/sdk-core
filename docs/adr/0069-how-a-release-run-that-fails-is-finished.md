@@ -20,11 +20,12 @@ decision 3, leaves to the process of the work: the organization's conventions ch
 https://github.com/xippios/sdk-core/issues/559).
 
 This record states the four sentences of §12 as they stand, so no rule changes, and supersedes
-no record, since these rules were never among ADR-0039's decisions; ADR-0039 keeps its two
-amendments. ADR-0039, decision 3, leaves who merges a release PR, and when, to the process of the
-work, which binds no repository. This record adds to it the one constraint that the missing
-`concurrency` group imposes on when a release PR merges (decision 3), and everything else about
-who merges and when stays the process of the work.
+no record, since these rules were never among ADR-0039's decisions. ADR-0039, decision 3, leaves
+who merges a release PR, and when, to the process of the work, which binds no repository. This
+record adds to it the one constraint that the missing `concurrency` group imposes on when a
+release PR merges (decision 3), and everything else about who merges and when stays the process
+of the work. ADR-0039 holds two amendments already, both of 2026-11-24, so the change is a record
+of its own, to which ADR-0039 points.
 
 ## Decision
 
