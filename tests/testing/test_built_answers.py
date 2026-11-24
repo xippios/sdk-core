@@ -210,7 +210,7 @@ def test_a_comment_above_an_enclosing_statement_reaches_inside_it() -> None:
     import httpx
 
     def test_one(respx_mock):
-        # The 429 as sdk-usda-psd recorded it, served here (conventions §10, kind 3).
+        # The 429 as a source recorded it, served here (conventions §10, kind 3).
         with respx_mock:
             respx_mock.get("https://api.example.test/v1/x").mock(
                 return_value=httpx.Response(429)
@@ -220,7 +220,7 @@ def test_a_comment_above_an_enclosing_statement_reaches_inside_it() -> None:
     outside = """
     import httpx
 
-    # The 429 as sdk-usda-psd recorded it, served here (conventions §10, kind 3).
+    # The 429 as a source recorded it, served here (conventions §10, kind 3).
     def test_one(respx_mock):
         with respx_mock:
             respx_mock.get("https://api.example.test/v1/x").mock(
@@ -339,7 +339,7 @@ def test_the_input_s_sentence_is_fixed_up_to_the_word_test() -> None:
         Series.model_validate({{"id": 1}})
     '''
     assert lines(source) == []
-    assert lines(source.replace("Example", "CashCtrl")) == [], "the upstream is the source's"
+    assert lines(source.replace("Example", "Acme")) == [], "the upstream is the source's"
     assert lines(source.replace("is an input of", "is one of the inputs of")) == []
     assert lines(source.replace("of the test", "to the test")) == [3]
     assert lines(source.replace("of the test", "of this test")) == [3]
@@ -700,7 +700,7 @@ import pytest
 
 from xippios.core.client import KeyAuth
 
-# key is a credential here, as in sdk-usda-nass
+# key is a credential here, as in a source that sends it as ?key=
 KeyAuth("EXAMPLE_API_KEY", location="query", name="key", source="example")
 
 SERIES = "https://api.example.test/v1/series"

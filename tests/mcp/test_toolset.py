@@ -222,7 +222,7 @@ def test_the_slug_forms_are_gone() -> None:
 @pytest.mark.anyio
 async def test_a_host_builds_one_server_from_two_tool_sets_each_with_its_own_caps() -> None:
     other = ToolSet("other", [list_regions], version="0.3.0")  # the default cap
-    server = MCPServer("xippios-group")
+    server = MCPServer("example-host")
     names = register_tasks(server, example_tools()) + register_tasks(server, other)
     assert names == ["example_get_series", "example_list_areas", "other_list_regions"]
     assert {t.name for t in await server.list_tools()} == set(names)
@@ -235,7 +235,7 @@ async def test_a_host_builds_one_server_from_two_tool_sets_each_with_its_own_cap
 @pytest.mark.anyio
 async def test_a_server_from_a_tool_set_keeps_the_annotated_constraints() -> None:
     # The blocking finding of step 4: a tool that lost its Annotated metadata.
-    hosted = MCPServer("xippios-group")
+    hosted = MCPServer("example-host")
     register_tasks(hosted, example_tools())
     for server in (build_server(example_tools()), hosted):
         tool = {t.name: t for t in await server.list_tools()}["example_get_series"]

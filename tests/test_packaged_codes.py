@@ -1,13 +1,10 @@
 """The check of an argument against a packaged list (ADR-0045, sdk-core#313).
 
-Each form the nine sources' copies take has its test: a text code (sdk-usda-psd), an
-integer code (sdk-usda-esr), a folded case (sdk-usda-nass), a hint table (sdk-usda-psd's
-``COUNTRY_HINTS``), a text for a list of integer codes, the text for when no code is close
-(sdk-usda-nass, sdk-usda-gats), a strategy of the source's own (sdk-usda-esr, sdk-usda-gats,
-sdk-comtrade, sdk-usda-wasde) and the reason. The cases that the trial of the release met in
-sdk-comtrade and sdk-usda-nass have theirs: a text for integer codes that the source's strategy
-names, a hinted refusal of a value that is no code, and the reason on the refusal of a value of
-the other type.
+Each form the sources' copies take has its test: a text code, an integer code, a folded
+case, a hint table (``COUNTRY_HINTS``), a text for a list of integer codes, the text for when no
+code is close, a strategy of the source's own and the reason. The cases that the trial of the
+release met have theirs: a text for integer codes that the source's strategy names, a hinted
+refusal of a value that is no code, and the reason on the refusal of a value of the other type.
 """
 
 import importlib
@@ -27,10 +24,10 @@ from xippios.core.reference import _read_text
 
 FETCHED = "2026-10-23"
 
-PSD_COUNTRIES = PackagedList.model_validate(
+COUNTRIES = PackagedList.model_validate(
     {
         "param": "countries",
-        "endpoint": "PSDData_GetCountries",
+        "endpoint": "countries",
         "fetched": FETCHED,
         "records": [
             {"countryCode": "US", "countryName": "United States", "regionCode": "R01"},
@@ -39,12 +36,12 @@ PSD_COUNTRIES = PackagedList.model_validate(
         ],
     }
 )
-"""sdk-usda-psd's countries, text codes."""
+"""A list of countries, text codes."""
 
-ESR_COMMODITIES = PackagedList.model_validate(
+COMMODITIES = PackagedList.model_validate(
     {
         "param": "commodities",
-        "endpoint": "ESRData_GetCommodities",
+        "endpoint": "commodities",
         "fetched": FETCHED,
         "records": [
             {"commodityCode": 104, "commodityName": "Wheat - White"},
@@ -54,9 +51,9 @@ ESR_COMMODITIES = PackagedList.model_validate(
         ],
     }
 )
-"""sdk-usda-esr's commodities, integer codes."""
+"""A list of commodities, integer codes."""
 
-NASS_STATES = PackagedList.model_validate(
+STATES = PackagedList.model_validate(
     {
         "param": "state_alpha",
         "endpoint": "api/get_param_values",
@@ -64,26 +61,26 @@ NASS_STATES = PackagedList.model_validate(
         "records": [{"state_alpha": "VA"}, {"state_alpha": "IA"}, {"state_alpha": "US"}],
     }
 )
-"""sdk-usda-nass's states, a value list that Quick Stats compares without case."""
+"""A list of states, a value list that upstream compares without case."""
 
-REASON = "PSD answers unknown codes with an empty result, so the package refuses them."
+REASON = "Upstream answers unknown codes with an empty result, so the package refuses them."
 
 COUNTRY_HINTS = {
-    "all": "Omit country_code for every country; PSD's 'all' is a path element, not a code.",
+    "all": "Omit country_code for every country; upstream's 'all' is a path element, not a code.",
 }
-"""sdk-usda-psd's hint table: a value that is no code, with what to do instead."""
+"""A hint table: a value that is no code, with what to do instead."""
 
 
 def countries() -> PackagedCodes:
-    return PSD_COUNTRIES.codes("countryCode", "countryName", source="usda-psd")
+    return COUNTRIES.codes("countryCode", "countryName", source="example")
 
 
 def commodities() -> PackagedCodes:
-    return ESR_COMMODITIES.codes("commodityCode", "commodityName", source="usda-esr")
+    return COMMODITIES.codes("commodityCode", "commodityName", source="example")
 
 
 def states() -> PackagedCodes:
-    return NASS_STATES.codes("state_alpha", fold_case=True, source="usda-nass")
+    return STATES.codes("state_alpha", fold_case=True, source="example")
 
 
 # The forms of the row's proof
@@ -111,7 +108,7 @@ def test_a_text_code_the_list_lacks_raises_unknown_code_naming_list_date_and_clo
     assert (error.param, error.value, error.list_name) == ("country_code", "us", "countries")
     assert error.fetched == datetime(2026, 10, 23, tzinfo=UTC)
     assert error.closest == (("US", "United States"),)
-    assert error.source == "usda-psd"
+    assert error.source == "example"
 
 
 def test_an_integer_code_the_list_holds_is_returned_as_given() -> None:
@@ -132,7 +129,7 @@ def test_a_folded_case_passes_and_the_callers_spelling_is_returned() -> None:
 
 
 def test_without_folding_another_case_is_unknown() -> None:
-    exact = NASS_STATES.codes("state_alpha")
+    exact = STATES.codes("state_alpha")
     with pytest.raises(UnknownCode) as info:
         exact.check("state_alpha", "va")
     assert "Did you mean VA?" in str(info.value)  # a value list: the code named once
@@ -195,7 +192,7 @@ def test_a_digit_text_for_a_list_of_integer_codes_is_refused_with_the_integer_to
         "commodities list (fetched 2026-10-23), such as 104 (Wheat - White). Nothing was sent. "
         "Pass it as the integer 104."
     )
-    assert info.value.source == "usda-esr"
+    assert info.value.source == "example"
 
 
 def test_a_name_for_a_list_of_integer_codes_is_refused_naming_the_codes_by_name() -> None:
@@ -216,7 +213,7 @@ def test_a_value_of_no_integer_type_is_refused_for_a_list_of_integer_codes(value
 
 def test_an_integer_for_a_list_of_text_codes_is_refused_with_the_text_to_pass() -> None:
     reporters = PackagedList.model_validate(
-        {**PSD_COUNTRIES.model_dump(), "records": [{"code": "757", "name": "Switzerland"}]}
+        {**COUNTRIES.model_dump(), "records": [{"code": "757", "name": "Switzerland"}]}
     ).codes("code", "name")
     with pytest.raises(InvalidRequestError) as info:
         reporters.check("reporter_code", 757)
@@ -228,11 +225,11 @@ def test_an_integer_for_a_list_of_text_codes_is_refused_with_the_text_to_pass() 
 
 
 def test_an_integer_for_a_list_of_text_codes_names_the_closest_texts() -> None:
-    psd = PackagedList.model_validate(
-        {**PSD_COUNTRIES.model_dump(), "records": [{"code": "0410000", "name": "Wheat"}]}
+    texts = PackagedList.model_validate(
+        {**COUNTRIES.model_dump(), "records": [{"code": "0410000", "name": "Wheat"}]}
     ).codes("code", "name")
     with pytest.raises(InvalidRequestError) as info:
-        psd.check("commodity_code", 410000)  # the leading zero lost
+        texts.check("commodity_code", 410000)  # the leading zero lost
     assert str(info.value).endswith("Did you mean 0410000 (Wheat)?")
 
 
@@ -427,7 +424,7 @@ def test_every_refusal_of_the_check_says_that_nothing_was_sent() -> None:
 
 # What the trial of the release met (https://github.com/xippios/sdk-core/issues/410)
 
-COMTRADE_PARTNERS = PackagedList.model_validate(
+PARTNERS = PackagedList.model_validate(
     {
         "param": "partnerAreas",
         "endpoint": "partnerAreas.json",
@@ -441,19 +438,19 @@ COMTRADE_PARTNERS = PackagedList.model_validate(
         ],
     }
 )
-"""sdk-comtrade's partner areas, integer codes, each with its ISO alpha-2 code."""
+"""A list of partner areas, integer codes, each with its ISO alpha-2 code."""
 
-COMTRADE_REASON = (
-    "UN Comtrade answers a code it does not have with count 0, so the package refuses it "
+PARTNER_REASON = (
+    "Upstream answers a code it does not have with count 0, so the package refuses it "
     "before the call."
 )
 
 ALPHA_3_HINTS = {"CHE": "CHE is the ISO alpha-3 code of 757 (Switzerland): pass 757."}
-"""sdk-comtrade's hint table: an ISO alpha-3 code is no code of upstream's (ADR-0067, 11)."""
+"""A hint table: an ISO alpha-3 code is no code of upstream's (ADR-0067, 11)."""
 
 
 def partners() -> PackagedCodes:
-    return COMTRADE_PARTNERS.codes("PartnerCode", "PartnerDesc", source="comtrade")
+    return PARTNERS.codes("PartnerCode", "PartnerDesc", source="example")
 
 
 PARTNER_NAMES = {36: "Australia", 40: "Austria", 112: "Belarus", 757: "Switzerland", 842: "USA"}
@@ -461,10 +458,10 @@ PARTNER_NAMES = {36: "Australia", 40: "Austria", 112: "Belarus", 757: "Switzerla
 
 
 def alpha_2_first(seen: list[tuple[object, Mapping[Any, str]]]) -> Any:
-    """sdk-comtrade's own strategy: an ISO alpha-2 code names its area, else nothing."""
+    """A source's own strategy: an ISO alpha-2 code names its area, else nothing."""
     by_alpha_2 = {
         str(record["PartnerCodeIsoAlpha2"]): int(record["PartnerCode"])
-        for record in COMTRADE_PARTNERS.records
+        for record in PARTNERS.records
     }
 
     def strategy(value: object, names: Mapping[Any, str]) -> list[tuple[Any, str]]:
@@ -481,12 +478,12 @@ def test_a_text_for_integer_codes_asks_the_sources_strategy() -> None:
     # (https://github.com/xippios/sdk-core/issues/418).
     seen: list[tuple[object, Mapping[Any, str]]] = []
     with pytest.raises(InvalidRequestError) as info:
-        partners().check("partner_code", "US", closest=alpha_2_first(seen), reason=COMTRADE_REASON)
+        partners().check("partner_code", "US", closest=alpha_2_first(seen), reason=PARTNER_REASON)
     assert not isinstance(info.value, UnknownCode)
     assert str(info.value) == (
         "'US' is not an integer code: partner_code takes the integer codes of the packaged "
         "partnerAreas list (fetched 2026-10-23), such as 36 (Australia). Nothing was sent. Did "
-        f"you mean 842 (USA)? {COMTRADE_REASON}"
+        f"you mean 842 (USA)? {PARTNER_REASON}"
     )
     assert seen == [("US", PARTNER_NAMES)]  # the value as given, the names as shown
 
@@ -535,10 +532,10 @@ def test_a_value_of_the_hint_table_leaves_out_that_the_list_is_out_of_date() -> 
     # "CHE" is no code at all: no refresh of the list makes it one
     # (https://github.com/xippios/sdk-core/issues/430).
     with pytest.raises(UnknownCode) as info:
-        partners().check("reporter_code", "CHE", hints=ALPHA_3_HINTS, reason=COMTRADE_REASON)
+        partners().check("reporter_code", "CHE", hints=ALPHA_3_HINTS, reason=PARTNER_REASON)
     assert str(info.value).endswith(
         f"Nothing was sent. CHE is the ISO alpha-3 code of 757 (Switzerland): pass 757. "
-        f"{COMTRADE_REASON}"
+        f"{PARTNER_REASON}"
     )
     assert "out of date" not in str(info.value)
 
@@ -546,9 +543,9 @@ def test_a_value_of_the_hint_table_leaves_out_that_the_list_is_out_of_date() -> 
 def test_a_refusal_without_a_hint_keeps_that_the_list_may_be_out_of_date() -> None:
     tail = "If upstream added it since, the packaged list is out of date."
     with pytest.raises(UnknownCode) as close:
-        partners().check("partner_code", 843, hints=ALPHA_3_HINTS, reason=COMTRADE_REASON)
+        partners().check("partner_code", 843, hints=ALPHA_3_HINTS, reason=PARTNER_REASON)
     assert str(close.value).endswith(
-        f"Did you mean 842 (USA), 757 (Switzerland), 112 (Belarus)? {COMTRADE_REASON} {tail}"
+        f"Did you mean 842 (USA), 757 (Switzerland), 112 (Belarus)? {PARTNER_REASON} {tail}"
     )
     with pytest.raises(UnknownCode) as far:
         states().check("state_alpha", "ZZZZZZ", hints={"all": "never shown"}, otherwise="Ask.")
@@ -556,7 +553,7 @@ def test_a_refusal_without_a_hint_keeps_that_the_list_may_be_out_of_date() -> No
 
 
 def test_an_integer_for_text_codes_carries_the_reason() -> None:
-    # sdk-usda-nass's agg_level_desc=19 (https://github.com/xippios/sdk-core/issues/432).
+    # An aggregation level given as 19 (https://github.com/xippios/sdk-core/issues/432).
     levels = PackagedList.model_validate(
         {
             "param": "agg_level_desc",
@@ -564,8 +561,8 @@ def test_an_integer_for_text_codes_carries_the_reason() -> None:
             "fetched": FETCHED,
             "records": [{"agg_level_desc": "COUNTY"}, {"agg_level_desc": "STATE"}],
         }
-    ).codes("agg_level_desc", fold_case=True, source="usda-nass")
-    reason = "Quick Stats answers an unknown value with HTTP 400, so nothing was sent."
+    ).codes("agg_level_desc", fold_case=True, source="example")
+    reason = "Upstream answers an unknown value with HTTP 400, so nothing was sent."
     with pytest.raises(InvalidRequestError) as info:
         levels.check("agg_level_desc", 19, reason=reason)
     assert not isinstance(info.value, UnknownCode)
@@ -574,7 +571,7 @@ def test_an_integer_for_text_codes_carries_the_reason() -> None:
         f"agg_level_desc list (fetched 2026-10-23), such as COUNTY. Nothing was sent. {reason}"
     )
     reporters = PackagedList.model_validate(
-        {**PSD_COUNTRIES.model_dump(), "records": [{"code": "757", "name": "Switzerland"}]}
+        {**COUNTRIES.model_dump(), "records": [{"code": "757", "name": "Switzerland"}]}
     ).codes("code", "name")
     with pytest.raises(InvalidRequestError) as text:
         reporters.check("reporter_code", 757, reason=reason)
@@ -584,7 +581,7 @@ def test_an_integer_for_text_codes_carries_the_reason() -> None:
 
 
 def test_a_text_for_integer_codes_carries_the_reason_after_its_hint() -> None:
-    reason = "ESR answers unknown codes with an empty result, so the package refuses them."
+    reason = "Upstream answers unknown codes with an empty result, so the package refuses them."
     with pytest.raises(InvalidRequestError) as digits:
         commodities().check("commodity_code", "104", reason=reason)
     assert str(digits.value) == (
@@ -612,7 +609,7 @@ def package(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
     root = tmp_path / name
     (root / "reference").mkdir(parents=True)
     (root / "__init__.py").write_text("")
-    PSD_COUNTRIES.write(root / "reference" / "countries.json")
+    COUNTRIES.write(root / "reference" / "countries.json")
     monkeypatch.syspath_prepend(str(tmp_path))
     monkeypatch.delitem(sys.modules, name, raising=False)
     importlib.invalidate_caches()
@@ -639,7 +636,7 @@ def test_two_checks_of_one_declaration_load_the_list_once(
 
 
 def test_the_index_is_built_once_when_the_list_is_declared() -> None:
-    packaged = PSD_COUNTRIES.model_copy(deep=True)
+    packaged = COUNTRIES.model_copy(deep=True)
     declared = packaged.codes("countryCode", "countryName")
     packaged.records.clear()  # what a check reads is the declaration's own index
     assert declared.check("country_code", "BR") == "BR"
@@ -656,7 +653,7 @@ def test_the_declaration_reads_what_core_reads_of_it() -> None:
         "countries",
         False,
     )
-    assert declared.packaged is PSD_COUNTRIES
+    assert declared.packaged is COUNTRIES
 
 
 def test_the_members_that_no_caller_read_have_left() -> None:
@@ -687,7 +684,7 @@ def test_name_of_compares_as_the_check_does() -> None:
 
 
 def test_a_list_names_itself_by_its_param_unless_given_its_own_name() -> None:
-    faostat = PackagedList.model_validate(
+    elements = PackagedList.model_validate(
         {
             "param": "element",
             "endpoint": "definitions/domain/QCL/element",
@@ -695,8 +692,8 @@ def test_a_list_names_itself_by_its_param_unless_given_its_own_name() -> None:
             "records": [{"code": "5510", "label": "Production"}],
         }
     )
-    assert faostat.codes("code", "label").list_name == "element"
-    declared = faostat.codes("code", "label", list_name="element_QCL")
+    assert elements.codes("code", "label").list_name == "element"
+    declared = elements.codes("code", "label", list_name="element_QCL")
     with pytest.raises(UnknownCode) as info:
         declared.check("element", "5511")
     assert info.value.list_name == "element_QCL"
@@ -706,7 +703,7 @@ def test_a_list_names_itself_by_its_param_unless_given_its_own_name() -> None:
 def test_a_code_without_a_name_is_named_by_its_own_text() -> None:
     listed = PackagedList.model_validate(
         {
-            **PSD_COUNTRIES.model_dump(),
+            **COUNTRIES.model_dump(),
             "records": [{"code": "A", "label": None}, {"code": "B", "label": ""}],
         }
     ).codes("code", "label")
@@ -716,7 +713,7 @@ def test_a_code_without_a_name_is_named_by_its_own_text() -> None:
 def test_a_code_listed_twice_keeps_the_name_of_its_first_record() -> None:
     matrices = PackagedList.model_validate(
         {
-            **PSD_COUNTRIES.model_dump(),
+            **COUNTRIES.model_dump(),
             "records": [
                 {"commodity": "CORN", "table": "sr12"},
                 {"commodity": "CORN", "table": "x"},
@@ -727,18 +724,18 @@ def test_a_code_listed_twice_keeps_the_name_of_its_first_record() -> None:
 
 
 def test_names_show_upstreams_padding_collapsed_in_a_refusal_and_kept_in_names() -> None:
-    esr = PackagedList.model_validate(
+    padded = PackagedList.model_validate(
         {
-            **ESR_COMMODITIES.model_dump(),
+            **COMMODITIES.model_dump(),
             "records": [{"countryCode": 1220, "countryDescription": "CANADA                  "}],
         }
     ).codes("countryCode", "countryDescription")
-    assert esr.name_of(1220) == "CANADA                  "  # upstream's record, verbatim
+    assert padded.name_of(1220) == "CANADA                  "  # upstream's record, verbatim
     with pytest.raises(UnknownCode) as info:
-        esr.check("country_code", 1202)
+        padded.check("country_code", 1202)
     assert info.value.closest == ((1220, "CANADA"),)
     with pytest.raises(InvalidRequestError) as named:
-        esr.check("country_code", "canada")
+        padded.check("country_code", "canada")
     assert str(named.value).endswith(
         "such as 1220 (CANADA). Nothing was sent. By name: 1220 (CANADA)."
     )
@@ -748,7 +745,7 @@ def test_names_show_upstreams_padding_collapsed_in_a_refusal_and_kept_in_names()
 
 
 def records(*items: dict[str, Any]) -> PackagedList:
-    return PackagedList.model_validate({**PSD_COUNTRIES.model_dump(), "records": list(items)})
+    return PackagedList.model_validate({**COUNTRIES.model_dump(), "records": list(items)})
 
 
 @pytest.mark.parametrize(
@@ -797,7 +794,7 @@ def test_a_declaration_refuses_records_that_do_not_fit_naming_the_field_never_th
 
 def test_folding_is_refused_for_integer_codes_and_for_codes_one_fold_apart() -> None:
     with pytest.raises(ValueError, match="commodities: fold_case compares text"):
-        ESR_COMMODITIES.codes("commodityCode", fold_case=True)
+        COMMODITIES.codes("commodityCode", fold_case=True)
     with pytest.raises(ValueError, match="in two cases") as info:
         records({"region": "CORN"}, {"region": "Corn"}).codes("region", fold_case=True)
     assert str(info.value) == "countries: records 0 and 1 hold one code in two cases: 'Corn'"

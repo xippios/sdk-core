@@ -51,11 +51,11 @@ def test_result_meta_rejects_naive_datetimes() -> None:
 
 
 def test_a_naive_release_time_is_kept_as_printed_with_the_flag() -> None:
-    # ADR-0041, decision 2: FAS prints release times without a zone (sdk-usda-gats).
+    # ADR-0041, decision 2: an upstream that prints release times without a zone.
     printed = datetime(2026, 10, 6, 8, 0)
     meta = ResultMeta(
-        source="usda-gats",
-        endpoint="GATSData_GetCensusExportDataReleaseInfo",
+        source="example",
+        endpoint="release_info",
         published_at=printed,
         published_at_naive=True,
         vintage="2026-10-06T08:00:00",
@@ -81,13 +81,13 @@ def test_the_flag_without_a_naive_release_time_is_refused(
 
 
 def test_result_meta_refuses_a_field_it_does_not_define() -> None:
-    # Queue row 21 a (sdk-cashctrl): an unknown field used to be dropped without a word.
+    # An unknown field used to be dropped without a word.
     with pytest.raises(ValueError, match=r"totl\n  Extra inputs are not permitted"):
         ResultMeta(source="s", endpoint="e", totl=3)  # type: ignore[call-arg]
 
 
 def test_request_omits_what_the_caller_left_none() -> None:
-    # ADR-0041, decision 3 (sdk-usda-psd): request records what was sent.
+    # ADR-0041, decision 3: request records what was sent.
     meta = ResultMeta(
         source="s",
         endpoint="e",
@@ -222,7 +222,7 @@ def test_parse_model_and_generic() -> None:
 
 
 MARKER = "payload-marker-of-row-42"
-"""What a failing payload carries: it reaches ``raw``, never a printed traceback (row 42)."""
+"""What a failing payload carries: it reaches ``raw``, never a printed traceback."""
 
 
 def test_parse_raises_the_first_failure_without_a_value_and_keeps_the_payload_on_raw() -> None:
@@ -268,7 +268,7 @@ def test_project():
 def test_a_failing_parse_prints_no_payload_under_pytests_default_traceback(
     pytester: pytest.Pytester,
 ) -> None:
-    # Row 42 (sdk-cashctrl): --tb=auto prints the raising frame long, its arguments too.
+    # --tb=auto prints the raising frame long, its arguments too.
     pytester.makepyfile(FAILING_PARSES)
     result = pytester.runpytest()
     result.assert_outcomes(failed=2)
@@ -386,7 +386,7 @@ class Country(UpstreamModel):
 
 
 def test_dump_upstream_restores_upstream_names_at_every_level() -> None:
-    # Queue row 32 a: psd's, esr's, gats's and the template's upstream_record.
+    # Three sources' and the template's upstream_record.
     record = {
         "countryCode": "US",
         "regionCode": "R01",

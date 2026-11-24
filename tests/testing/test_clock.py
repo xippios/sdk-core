@@ -9,8 +9,8 @@ NOW = datetime(2026, 10, 26, 12, 0, tzinfo=UTC)
 
 
 def test_a_time_inside_the_bracket_or_the_slack_passes() -> None:
-    # sdk-usda-gats carried CLOCK_SLACK; usda-psd and usda-esr bracket retrieved_at
-    # without it, exposed to the WSL2 host's two-second step back.
+    # One source carried CLOCK_SLACK; two others bracket retrieved_at without it,
+    # exposed to the WSL2 host's two-second step back.
     later = NOW + timedelta(seconds=1)
     assert_time_between(NOW, NOW, later)
     assert_time_between(NOW - timedelta(seconds=2), NOW, later)

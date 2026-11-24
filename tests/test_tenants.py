@@ -1,7 +1,7 @@
 """Tenants and list_task: declaration in the environment, lookup, one client per tenant.
 
 The tests of the two copies that return to core (ADR-0042, decision 1),
-sdk-cashctrl's ``tests/test_tenants.py`` and core's own tests at ``cb8ecdf``, and the
+a source's ``tests/test_tenants.py`` and core's own tests at ``cb8ecdf``, and the
 variable prefix apart from the source slug (ADR-0036, decision 1). A field's check, a
 client rebuilt on a changed variable and ``list_task(source=)`` left core in 0.5.0
 (ADR-0036, amendment 2026-11-24). All on invented sources whose variables no shell sets.
@@ -29,16 +29,16 @@ from xippios.core import (
 from xippios.core.mcp import ToolSet, build_server
 from xippios.core.testing import mcp_call
 
-SOURCE = "fictive-src"
-PREFIX = "FICTIVE_SRC_"
-LIST_VAR = "FICTIVE_SRC_TENANTS"
+SOURCE = "example-src"
+PREFIX = "EXAMPLE_SRC_"
+LIST_VAR = "EXAMPLE_SRC_TENANTS"
 FIELDS = ("SUBDOMAIN", "API_KEY")
 
-# A source whose variables carry a prefix that is not its slug, as sdk-google-mail's
-# GOOGLE_<NAME>_REFRESH_TOKEN do under the prefix every Google source shares.
-MAIL_SOURCE = "fictive-mail"
-MAIL_PREFIX = "FICTIVE"
-MAIL_LIST_VAR = "FICTIVE_ACCOUNTS"
+# A source whose variables carry a prefix that is not its slug, as the sources of one
+# publisher share one prefix for their <PREFIX>_<NAME>_REFRESH_TOKEN.
+MAIL_SOURCE = "example-mail"
+MAIL_PREFIX = "EXAMPLE"
+MAIL_LIST_VAR = "EXAMPLE_ACCOUNTS"
 
 # Values that must never appear in a message.
 HIDDEN_SUBDOMAIN = "xa-hidden-subdomain"
@@ -46,7 +46,7 @@ HIDDEN_KEY = "xa-hidden-key-value"  # pragma: allowlist secret
 
 
 @pytest.fixture(autouse=True)
-def no_fictive_variables(monkeypatch: pytest.MonkeyPatch) -> None:
+def no_example_variables(monkeypatch: pytest.MonkeyPatch) -> None:
     """Every test starts without a variable of the fictitious sources, by name."""
     for name in [name for name in os.environ if name.startswith(f"{MAIL_PREFIX}_")]:
         monkeypatch.delenv(name, raising=False)
@@ -91,8 +91,8 @@ def declare(monkeypatch: pytest.MonkeyPatch, name: str, *, key: bool = True) -> 
 
 
 def declare_demo(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("FICTIVE_SRC_DEMO_SUBDOMAIN", "demo")
-    monkeypatch.setenv("FICTIVE_SRC_DEMO_API_KEY", "demo-key")  # pragma: allowlist secret
+    monkeypatch.setenv("EXAMPLE_SRC_DEMO_SUBDOMAIN", "demo")
+    monkeypatch.setenv("EXAMPLE_SRC_DEMO_API_KEY", "demo-key")  # pragma: allowlist secret
 
 
 def assert_no_value(message: str) -> None:
@@ -105,11 +105,11 @@ def assert_no_value(message: str) -> None:
 
 def test_variable_names_follow_the_scheme() -> None:
     tenants = make()
-    assert tenants.var("acme_test", "SUBDOMAIN") == "FICTIVE_SRC_ACME_TEST_SUBDOMAIN"
-    assert tenants.var("demo", "API_KEY") == "FICTIVE_SRC_DEMO_API_KEY"  # pragma: allowlist secret
-    assert Tenants("cashctrl", list_var="CASHCTRL_ORGS", param="org", fields=["SUBDOMAIN"]).var(
+    assert tenants.var("acme_test", "SUBDOMAIN") == "EXAMPLE_SRC_ACME_TEST_SUBDOMAIN"
+    assert tenants.var("demo", "API_KEY") == "EXAMPLE_SRC_DEMO_API_KEY"  # pragma: allowlist secret
+    assert Tenants("example", list_var="EXAMPLE_ORGS", param="org", fields=["SUBDOMAIN"]).var(
         "acme", "SUBDOMAIN"
-    ) == ("CASHCTRL_ACME_SUBDOMAIN")
+    ) == ("EXAMPLE_ACME_SUBDOMAIN")
     with pytest.raises(ValueError, match="unknown field 'subdomain'; fields: SUBDOMAIN, API_KEY"):
         tenants.var("acme", "subdomain")
 
@@ -118,14 +118,14 @@ def test_attributes_and_repr_name_the_scheme_only(monkeypatch: pytest.MonkeyPatc
     declare(monkeypatch, "xa")
     tenants = make()
     assert tenants.source == SOURCE
-    assert tenants.var_prefix == "FICTIVE_SRC"  # the slug upper-cased, "-" made "_"
+    assert tenants.var_prefix == "EXAMPLE_SRC"  # the slug upper-cased, "-" made "_"
     assert tenants.list_var == LIST_VAR
     assert tenants.param == "org"
     assert tenants.fields == FIELDS
     assert tenants.reserved == ("demo",)
     assert tenants.noun is None, "the parameter stands for the noun"
     assert repr(tenants) == (
-        "Tenants('fictive-src', var_prefix='FICTIVE_SRC', list_var='FICTIVE_SRC_TENANTS', "
+        "Tenants('example-src', var_prefix='EXAMPLE_SRC', list_var='EXAMPLE_SRC_TENANTS', "
         "param='org', fields=('SUBDOMAIN', 'API_KEY'), reserved=('demo',), noun=None)"
     )
 
@@ -149,8 +149,8 @@ def test_the_registry_holds_the_noun_of_one_tenant() -> None:
         ({"param": "an org"}, ValueError, "param 'an org' is not a parameter name"),
         ({"param": "org-name"}, ValueError, "param 'org-name' is not a parameter name"),
         ({"var_prefix": ""}, ValueError, "var_prefix '' is not upper-case"),
-        ({"var_prefix": "fictive"}, ValueError, "var_prefix 'fictive' is not upper-case"),
-        ({"var_prefix": "FICTIVE-SRC"}, ValueError, "var_prefix 'FICTIVE-SRC' is not upper"),
+        ({"var_prefix": "example"}, ValueError, "var_prefix 'example' is not upper-case"),
+        ({"var_prefix": "EXAMPLE-SRC"}, ValueError, "var_prefix 'EXAMPLE-SRC' is not upper"),
         ({"fields": ()}, ValueError, "at least one"),
         ({"fields": ("subdomain",)}, ValueError, "field 'subdomain' is not upper-case"),
         ({"fields": ("A", "B", "A")}, ValueError, "field given twice: A"),
@@ -206,17 +206,17 @@ def test_construction_needs_the_tenant_s_parameter() -> None:
 def test_the_variable_prefix_names_the_variables_and_the_slug_the_source(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """sdk-google-mail's case: GOOGLE_<NAME>_REFRESH_TOKEN for the source google-mail."""
+    """A shared prefix: EXAMPLE_<NAME>_REFRESH_TOKEN for the source example-mail."""
     tenants = make_mail()
     assert tenants.source == MAIL_SOURCE
     assert tenants.var_prefix == MAIL_PREFIX
-    assert tenants.var("work", "REFRESH_TOKEN") == "FICTIVE_WORK_REFRESH_TOKEN"
+    assert tenants.var("work", "REFRESH_TOKEN") == "EXAMPLE_WORK_REFRESH_TOKEN"
     assert repr(tenants) == (
-        "Tenants('fictive-mail', var_prefix='FICTIVE', list_var='FICTIVE_ACCOUNTS', "
+        "Tenants('example-mail', var_prefix='EXAMPLE', list_var='EXAMPLE_ACCOUNTS', "
         "param='account', fields=('REFRESH_TOKEN',), reserved=('demo',), noun=None)"
     )
     monkeypatch.setenv(MAIL_LIST_VAR, "work")
-    monkeypatch.setenv("FICTIVE_DEMO_REFRESH_TOKEN", "demo-token")
+    monkeypatch.setenv("EXAMPLE_DEMO_REFRESH_TOKEN", "demo-token")
     assert tenants.names() == ("work", "demo")
 
 
@@ -225,8 +225,8 @@ def test_errors_name_the_source_slug_and_the_prefixed_variables() -> None:
     with pytest.raises(InvalidRequestError) as info:
         tenants.require("work")
     assert str(info.value) == (
-        "unknown tenant 'work'; no tenant is declared; set FICTIVE_ACCOUNTS and, per name, "
-        "FICTIVE_<NAME>_REFRESH_TOKEN; 'demo' is declared by FICTIVE_DEMO_REFRESH_TOKEN alone. "
+        "unknown tenant 'work'; no tenant is declared; set EXAMPLE_ACCOUNTS and, per name, "
+        "EXAMPLE_<NAME>_REFRESH_TOKEN; 'demo' is declared by EXAMPLE_DEMO_REFRESH_TOKEN alone. "
         "Nothing was sent."
     )
     assert info.value.source == MAIL_SOURCE
@@ -239,7 +239,7 @@ def test_a_missing_field_under_the_prefix_names_its_variable_and_the_source(
     with pytest.raises(ConfigError) as info:
         make_mail().field("work", "REFRESH_TOKEN")
     assert str(info.value) == (
-        "FICTIVE_WORK_REFRESH_TOKEN is not set; export the REFRESH_TOKEN of tenant 'work'"
+        "EXAMPLE_WORK_REFRESH_TOKEN is not set; export the REFRESH_TOKEN of tenant 'work'"
     )
     assert info.value.source == MAIL_SOURCE
 
@@ -267,8 +267,8 @@ def test_a_reserved_tenant_is_appended_when_all_its_variables_are_set(
 def test_reserved_tenants_follow_in_their_given_order(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(LIST_VAR, "xa")
     declare_demo(monkeypatch)
-    monkeypatch.setenv("FICTIVE_SRC_SANDBOX_SUBDOMAIN", "sandbox")
-    monkeypatch.setenv("FICTIVE_SRC_SANDBOX_API_KEY", "sandbox-key")  # pragma: allowlist secret
+    monkeypatch.setenv("EXAMPLE_SRC_SANDBOX_SUBDOMAIN", "sandbox")
+    monkeypatch.setenv("EXAMPLE_SRC_SANDBOX_API_KEY", "sandbox-key")  # pragma: allowlist secret
     assert make(reserved=("sandbox", "demo")).names() == ("xa", "sandbox", "demo")
 
 
@@ -279,9 +279,9 @@ def test_a_reserved_tenant_needs_every_variable(
 ) -> None:
     declare_demo(monkeypatch)
     if value is None:
-        monkeypatch.delenv(f"FICTIVE_SRC_DEMO_{missing}")
+        monkeypatch.delenv(f"EXAMPLE_SRC_DEMO_{missing}")
     else:
-        monkeypatch.setenv(f"FICTIVE_SRC_DEMO_{missing}", value)
+        monkeypatch.setenv(f"EXAMPLE_SRC_DEMO_{missing}", value)
     assert make().names() == ()
 
 
@@ -298,7 +298,7 @@ def test_a_reserved_tenant_cannot_be_listed(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setenv(LIST_VAR, "xa,demo")
     with pytest.raises(ConfigError, match="reserved") as info:
         make().names()
-    assert "FICTIVE_SRC_DEMO_SUBDOMAIN and FICTIVE_SRC_DEMO_API_KEY alone" in str(info.value)
+    assert "EXAMPLE_SRC_DEMO_SUBDOMAIN and EXAMPLE_SRC_DEMO_API_KEY alone" in str(info.value)
     assert info.value.source == SOURCE
 
 
@@ -311,7 +311,7 @@ def test_malformed_names_are_refused_by_position_never_quoted(
         make().names()
     message = str(info.value)
     assert message == (
-        "entry 3 of FICTIVE_SRC_TENANTS is not a tenant name; names use only lower-case "
+        "entry 3 of EXAMPLE_SRC_TENANTS is not a tenant name; names use only lower-case "
         "letters, digits and underscores"
     )
     assert name not in message
@@ -348,9 +348,9 @@ def test_require_without_any_declaration_names_the_variables() -> None:
     with pytest.raises(InvalidRequestError) as info:
         make().require("demo")
     assert str(info.value) == (
-        "unknown tenant 'demo'; no tenant is declared; set FICTIVE_SRC_TENANTS and, per "
-        "name, FICTIVE_SRC_<NAME>_SUBDOMAIN and FICTIVE_SRC_<NAME>_API_KEY; 'demo' is "
-        "declared by FICTIVE_SRC_DEMO_SUBDOMAIN and FICTIVE_SRC_DEMO_API_KEY alone. Nothing was "
+        "unknown tenant 'demo'; no tenant is declared; set EXAMPLE_SRC_TENANTS and, per "
+        "name, EXAMPLE_SRC_<NAME>_SUBDOMAIN and EXAMPLE_SRC_<NAME>_API_KEY; 'demo' is "
+        "declared by EXAMPLE_SRC_DEMO_SUBDOMAIN and EXAMPLE_SRC_DEMO_API_KEY alone. Nothing was "
         "sent."
     )
 
@@ -359,12 +359,12 @@ def test_require_names_the_variables_of_an_absent_reserved_tenant(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv(LIST_VAR, "xa")
-    monkeypatch.setenv("FICTIVE_SRC_DEMO_SUBDOMAIN", HIDDEN_SUBDOMAIN)  # the key is missing
+    monkeypatch.setenv("EXAMPLE_SRC_DEMO_SUBDOMAIN", HIDDEN_SUBDOMAIN)  # the key is missing
     with pytest.raises(InvalidRequestError) as info:
         make().require("demo")
     assert str(info.value) == (
         "unknown tenant 'demo'; declared tenants: xa; 'demo' is declared by "
-        "FICTIVE_SRC_DEMO_SUBDOMAIN and FICTIVE_SRC_DEMO_API_KEY alone. Nothing was sent."
+        "EXAMPLE_SRC_DEMO_SUBDOMAIN and EXAMPLE_SRC_DEMO_API_KEY alone. Nothing was sent."
     )
     with pytest.raises(InvalidRequestError) as info:
         make().require("nope")
@@ -398,10 +398,10 @@ def test_a_missing_field_names_the_variable(
 ) -> None:
     monkeypatch.setenv(LIST_VAR, "xa")
     if value is not None:
-        monkeypatch.setenv("FICTIVE_SRC_XA_SUBDOMAIN", value)
+        monkeypatch.setenv("EXAMPLE_SRC_XA_SUBDOMAIN", value)
     with pytest.raises(ConfigError) as info:
         make().field("xa", "SUBDOMAIN")
-    expected = "FICTIVE_SRC_XA_SUBDOMAIN is not set; export the SUBDOMAIN of tenant 'xa'"
+    expected = "EXAMPLE_SRC_XA_SUBDOMAIN is not set; export the SUBDOMAIN of tenant 'xa'"
     assert str(info.value) == expected
 
 
@@ -513,9 +513,9 @@ def test_a_missing_value_is_a_config_error(
 ) -> None:
     monkeypatch.setenv(LIST_VAR, "xa")
     if value is not None:
-        monkeypatch.setenv("FICTIVE_SRC_XA_SUBDOMAIN", value)
+        monkeypatch.setenv("EXAMPLE_SRC_XA_SUBDOMAIN", value)
     tenants = make()
-    with pytest.raises(ConfigError, match="FICTIVE_SRC_XA_SUBDOMAIN is not set"):
+    with pytest.raises(ConfigError, match="EXAMPLE_SRC_XA_SUBDOMAIN is not set"):
         tenants.client_for("xa", Builder(tenants))
 
 
@@ -533,7 +533,7 @@ async def test_a_declared_tenant_without_its_key_fails_on_the_first_request(
     declare(monkeypatch, "xa", key=False)
     tenants = make()
     client = tenants.client_for("xa", Builder(tenants, httpx.MockTransport(answer)))
-    with pytest.raises(ConfigError, match="FICTIVE_SRC_XA_API_KEY is not set"):
+    with pytest.raises(ConfigError, match="EXAMPLE_SRC_XA_API_KEY is not set"):
         await client.get("/fiscalperiod/list.json")
     assert sent == []
 
@@ -649,14 +649,14 @@ async def test_list_task_is_a_tool(monkeypatch: pytest.MonkeyPatch) -> None:
     task: Callable[[], Result[list[str]]] = list_task(tenants, name="list_organisations")
     server = build_server(ToolSet(SOURCE, [task]))
     tools = {tool.name: tool for tool in await server.list_tools()}
-    tool = tools["fictive_src_list_organisations"]
+    tool = tools["example_src_list_organisations"]
     assert tool.input_schema.get("properties", {}) == {}
     assert tool.description is not None
     assert tool.description.startswith("List the tenants")
-    payload = await mcp_call(server, "fictive_src_list_organisations", {})
+    payload = await mcp_call(server, "example_src_list_organisations", {})
     assert payload["data"] == ["xa"]
     assert payload["meta"]["endpoint"] == "list_organisations"
     assert payload["meta"]["tenant"] is None
     monkeypatch.setenv(LIST_VAR, "xa,xa")
     with pytest.raises(AssertionError, match=r"error: ConfigError: .* lists 'xa' twice"):
-        await mcp_call(server, "fictive_src_list_organisations", {})
+        await mcp_call(server, "example_src_list_organisations", {})

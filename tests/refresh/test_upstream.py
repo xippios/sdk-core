@@ -155,7 +155,7 @@ def cells(row: str) -> list[str]:
 
 
 def test_the_frame_fetches_writes_and_checks(site: Site, out: Path) -> None:
-    """Rows 35 c and 67 c of sdk-template: the frame writes a file row and a row without a
+    """As sdk-template's tests had it: the frame writes a file row and a row without a
     file, and ``--check`` compares without writing; the table ``Not fetched`` stands with its
     heading where it has no row (https://github.com/xippios/sdk-core/issues/363)."""
     with pytest.raises(SystemExit, match="Nothing to fetch"):
@@ -186,9 +186,10 @@ def test_the_frame_fetches_writes_and_checks(site: Site, out: Path) -> None:
 
 
 def test_a_statement_the_attribution_lacks_stops_the_run(site: Site, out: Path) -> None:
-    """Row 35 b of sdk-template: every run checks the attribution and stops before writing
+    """As sdk-template's tests had it: every run checks the attribution and stops before writing
     on a copyright, licence or terms it does not record; a recorded one is quoted under
-    Attribution with no second period after its own (#123)."""
+    Attribution with no second period after its own
+    (https://github.com/xippios/sdk-template/issues/123)."""
     url = site.page("guide.html", "<p>Guide</p><footer>&copy; 2026 Example Ltd.</footer>\n")
     with pytest.raises(SystemExit, match="attribution does not record"):
         go(declare(out, Page(url, "pages/guide.html")))
@@ -405,9 +406,7 @@ def test_an_api_documents_info_states_only_what_the_attribution_records(
 # https://github.com/xippios/sdk-core/issues/437 (ADR-0046, decision 7): a statement recorded
 # with a link passes the search only as the text of a link to its target, on any page, while a
 # statement without a link and the vocabulary pass anywhere, and an image's alternative text is
-# text of the page where the image stands. The trial of the release met both
-# (https://github.com/xippios/sdk-google-mail/issues/72, https://github.com/xippios/sdk-x/issues/57,
-# https://github.com/xippios/sdk-cashctrl/issues/134).
+# text of the page where the image stands. The trial of the release met both.
 
 TOS = "https://example.org/tos"
 FOOTER = f"<footer><a href='{TOS}'>Terms of Service</a></footer>"
@@ -431,7 +430,7 @@ def linked_terms(url: str) -> Statement:
 def test_a_linked_statement_s_words_on_another_page_stop_the_run(
     site: Site, out: Path, words: str
 ) -> None:
-    """Misfit 1 of sdk-google-mail's trial: the words of a statement recorded with a link stop the
+    """A source's trial met it: the words of a statement recorded with a link stop the
     run on another page, in prose or as the text of a link to another target, as its script had
     it, the stop naming the link that the words pass as, and nothing is written."""
     index = site.page("index.html", f"<p>Index</p>{FOOTER}")
@@ -466,9 +465,9 @@ def test_a_second_link_with_the_statement_s_text_on_its_page_stops_the_run(
 
 
 def test_the_recorded_link_passes_on_every_page_that_prints_it(site: Site, out: Path) -> None:
-    """sdk-google-mail records the link of a footer that seven pages print from one of them: it
+    """A source records the link of a footer that seven pages print from one of them: it
     passes on every page, its target absolute or relative to the page and written with white
-    space around it, which a browser strips as sdk-google-mail's script did (finding 1 of the
+    space around it, which a browser strips as the source's script did (finding 1 of the
     review of https://github.com/xippios/sdk-core/pull/451), and only its text leaves the page,
     so other words of the page are still searched."""
     terms = f"{BASE}/legal/tos"
@@ -491,9 +490,9 @@ def test_the_recorded_link_passes_on_every_page_that_prints_it(site: Site, out: 
 
 
 def test_a_statement_without_a_link_and_the_vocabulary_pass_anywhere(site: Site, out: Path) -> None:
-    """sdk-comtrade's and sdk-faostat's statements carry no link and pass on every page as
-    before, a word of the vocabulary too, and so does a statement without a link that holds a
-    linked one's words, as sdk-google-mail's step of enabling an API does."""
+    """Two sources' statements carry no link and pass on every page as before, a word of
+    the vocabulary too, and so does a statement without a link that holds a linked one's
+    words, as a source's step of enabling an API does."""
     notice = "\N{COPYRIGHT SIGN} 2026 Example Ltd."
     step = "If prompted, read and accept the API's Terms of Service."
     footer = "<footer>&copy; 2026 Example Ltd.</footer>"
@@ -515,7 +514,7 @@ def test_a_statement_without_a_link_and_the_vocabulary_pass_anywhere(site: Site,
 
 def test_a_page_that_is_no_html_has_no_link_for_a_linked_statement(site: Site, out: Path) -> None:
     """A page that is no HTML has no link, so the words of a statement recorded with a link stop
-    the run there wherever they stand, as sdk-x's script searched its Markdown pages whole; a
+    the run there wherever they stand, as a source's script searched its Markdown pages whole; a
     statement without a link passes there as on any page."""
     index = site.page("index.html", f"<p>Index</p>{FOOTER}")
     notes = f"{BASE}/notes.md"
@@ -534,9 +533,9 @@ def test_a_page_that_is_no_html_has_no_link_for_a_linked_statement(site: Site, o
 
 
 def test_an_api_document_s_licence_recorded_with_its_link_passes(site: Site, out: Path) -> None:
-    """sdk-x records its document's licence by its name, its URL the link: the document is no HTML,
-    and the licence, the terms and the contact of its ``info`` leave its text before the search,
-    so the statement passes as before."""
+    """A source records its document's licence by its name, its URL the link: the document is
+    no HTML, and the licence, the terms and the contact of its ``info`` leave its text before
+    the search, so the statement passes as before."""
     licence = {"name": "Example License", "url": "https://example.org/license"}
     info = {"title": "Example", "license": licence, "termsOfService": licence["url"]}
     url = site.page("openapi.json", json.dumps({"openapi": "3.1.0", "info": info, "paths": {}}))
@@ -547,7 +546,7 @@ def test_an_api_document_s_licence_recorded_with_its_link_passes(site: Site, out
 def test_a_statement_in_an_image_s_alternative_text_is_checked_on_its_page(
     site: Site, out: Path
 ) -> None:
-    """Misfit 6 of sdk-cashctrl's trial: a notice that stands in the alternative text of the
+    """A source's trial met it: a notice that stands in the alternative text of the
     footer's logo is read where the image stands, so the statement names its page, which must
     print it, and FETCHED.md quotes it as printed there."""
     statement = "\N{COPYRIGHT SIGN} 2026 Example Ltd. All rights reserved."
@@ -1090,7 +1089,7 @@ def test_fetched_md_says_that_nothing_but_observed_md_is_edited_by_hand(
 def test_a_file_no_longer_produced_goes_from_the_subdirectories_the_run_writes_to(
     site: Site, out: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """ADR-0046, Consequences, and sdk-cashctrl's test of a stale file
+    """ADR-0046, Consequences, and a source's test of a stale file
     (https://github.com/xippios/sdk-core/issues/425): a file the run no longer produces, under
     a subdirectory it writes to, is named by ``--check`` as no longer produced and removed by
     the write; a file at the top of ``docs/upstream/`` and one under a subdirectory the run no
@@ -1118,7 +1117,7 @@ def test_a_file_no_longer_produced_goes_from_the_subdirectories_the_run_writes_t
 
 
 def test_every_declared_page_is_checked_before_the_first_request(site: Site, out: Path) -> None:
-    """sdk-google-mail's and sdk-x's tests of a page kept as OBSERVED.md
+    """Two sources' tests of a page kept as OBSERVED.md
     (https://github.com/xippios/sdk-core/issues/425): a declared page that the frame cannot
     record as declared stops the run before any request, wherever it stands among the pages,
     and nothing is written."""
@@ -1203,7 +1202,7 @@ def test_a_keyed_sample_alone_sends_the_client_s_credentials(
 def test_a_keyed_sample_follows_no_redirect_and_is_never_retried(
     site: Site, out: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """sdk-faostat's rule: a request with the credentials reaches the base alone, so a
+    """A source's rule: a request with the credentials reaches the base alone, so a
     redirect stops the run unfollowed, and a 5xx, a 429 or a network error costs one keyed
     call and stops it."""
     monkeypatch.setenv("EXAMPLE_ACCOUNT", "someone")
@@ -1438,7 +1437,7 @@ def test_a_reduce_hook_keeps_a_file_as_recorded_where_only_noise_moved(
 
 
 def test_one_page_gives_several_files(site: Site, out: Path) -> None:
-    """sdk-cashctrl's one page: ``split`` makes a file per entry from a page marked
+    """A source's one page: ``split`` makes a file per entry from a page marked
     ``split``, each with a row that holds the page's URL, size and sha256 and says so; a split
     that gives no file, a hand-written file's name, or a page that also names a file is
     refused before any write."""
@@ -1618,10 +1617,10 @@ def test_the_command_line_takes_no_out(
 def test_a_section_of_the_sources_own_stands_before_the_files(
     site: Site, out: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """sdk-comtrade's "Products found": ``sections`` adds a section of the source's own,
+    """A source's "Products found": ``sections`` adds a section of the source's own,
     made from the rows, after "How this is captured", whose paragraphs ``capture`` holds;
     ``--check`` counts a change to it."""
-    url = site.page("bundle.txt", "products: comtrade, tariffline")
+    url = site.page("bundle.txt", "products: series, regions")
 
     def sections(rows: Sequence[Row]) -> list[Section]:
         names = rows[0].response.body.decode().split(": ")[1].split(", ")
@@ -1637,18 +1636,18 @@ def test_a_section_of_the_sources_own_stands_before_the_files(
     assert go(snapshot) == 0
     text = fetched(out)
     assert "## How this is captured\n\nThe first paragraph.\n\nThe second paragraph.\n\n" in text
-    section = "## Products found\n\n| Product |\n| --- |\n| comtrade |\n| tariffline |\n\n## Files"
+    section = "## Products found\n\n| Product |\n| --- |\n| series |\n| regions |\n\n## Files"
     assert section in text
     assert text.index("## How this is captured") < text.index("## Products found")
     assert go(snapshot, "--check") == 0
-    site.page("bundle.txt", "products: comtrade")
+    site.page("bundle.txt", "products: series")
     capsys.readouterr()
     assert go(snapshot, "--check") == 1
     assert "differs: FETCHED.md" in capsys.readouterr().out
 
 
 def test_a_rows_note_is_made_from_its_answer(site: Site, out: Path) -> None:
-    """sdk-faostat's and the FAS kit's notes, which count what the answer holds: ``note``
+    """A source's and a shared kit's notes, which count what the answer holds: ``note``
     makes the row's note from the row, and stops the run with ``changed`` on an answer it does
     not recognise, before anything is written."""
     url = site.page("openapi.json", '{"openapi": "3.1.0", "paths": {"/a": {}, "/b": {}}}')
@@ -1788,7 +1787,7 @@ def every_sentence_rendered() -> str:
         False,
     )
     guide = Page(GUIDE, "pages/guide.md", note="converted")
-    part = Page(f"{BASE}/fas.json", "openapi/part.json", excerpt=True)
+    part = Page(f"{BASE}/part.json", "openapi/part.json", excerpt=True)
     sample = Page(f"{API}/items", "samples/items.json", sample=True, keyed=True)
     wadl = Page(f"{BASE}/api.wadl", "wadl/api.wadl")
     toc = Page(f"{BASE}/toc.html", split=True, note="one file per heading")
@@ -1851,7 +1850,7 @@ FORMS = {
     # pragma: allowlist nextline secret (a digest of the render, not a key)
     1: "4a19cba319af24e05fc71ebd50586fe9b9d891cf6beb661b0cee492bcf997cf7",
     # pragma: allowlist nextline secret (a digest of the render, not a key)
-    2: "ab0879899f581ebd2e96a6afbb9681d471ef3a31698e3f366edc4611e3cc047f",
+    2: "3cc77834171e0bd3909ef304b64fbdb33dd4fcd6de2bd80b0c2f5f88b3f2bf6b",
 }
 """The digest of ``every_sentence_rendered`` for each form of FETCHED.md, by its number.
 
@@ -1863,7 +1862,9 @@ fetch through core's client, which names the client's User-Agent and leaves the 
 file kept as recorded and of a second origin (ADR-0062, decisions 4 to 6), so the render of
 form 1 no longer stands and its digest is the record of what 0.4.1 wrote. Form 2 took its
 digest again while unreleased, when it came to state the floor of the one retry (finding 2 of
-the review of https://github.com/xippios/sdk-core/pull/536)."""
+the review of https://github.com/xippios/sdk-core/pull/536), and when the made-up rows took
+the invented source's names, a page's path among them
+(https://github.com/xippios/sdk-core/issues/485)."""
 
 
 def test_a_change_of_what_the_frame_writes_raises_the_form() -> None:

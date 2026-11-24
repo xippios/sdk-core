@@ -1,8 +1,8 @@
 """QuotaPolicy: the quota snapshot and the pause before a request into a spent quota.
 
-The behaviours are the ones sdk-usda-psd proved in its own client (``Quota``,
+The behaviours are the ones a source proved in its own client (``Quota``,
 ``observe_quota``, ``quota_pause``, ``QuotaAwareClient``; its tests/test_client.py),
-on a fictitious upstream. Headers and statuses follow api.data.gov's documented answers.
+on a fictitious upstream. Headers and statuses follow a gateway's documented answers.
 A test that exercises the pause or the refusal is marked ``rate_limited``: otherwise the
 plugin turns both off (ADR-0035).
 """
@@ -167,7 +167,7 @@ def test_the_header_names_are_the_policy_s() -> None:
 
 
 def test_header_reading_can_be_turned_off() -> None:
-    # UN Comtrade's x-ratelimit-* headers describe its per-second pace, not its daily quota.
+    # An upstream's x-ratelimit-* headers may describe its per-second pace, not its daily quota.
     policy = hourly(limit_header=None, remaining_header=None, clock=Clock())
     policy.observe(answer(headers=SPENT))
     assert policy.snapshot() is None, "a 200 leaving remaining 0 is not read"
@@ -295,8 +295,8 @@ def test_describe_names_numbers_and_times_only() -> None:
 _REPLENISHED = re.compile(r"replenished in (\d+):(\d{2}):(\d{2})")
 
 
-def comtrade_spent(response: httpx.Response) -> float | None:
-    """sdk-comtrade's daily quota: a 403 whose body names the time left (APIM's text)."""
+def daily_spent(response: httpx.Response) -> float | None:
+    """A daily quota: a 403 whose body names the time left (APIM's text)."""
     match = _REPLENISHED.search(response.text) if response.status_code == 403 else None
     if match is None:
         return None
@@ -311,7 +311,7 @@ def quota_403(left: str) -> httpx.Response:
 
 
 def test_spent_marks_a_documented_refusal_as_a_spent_quota() -> None:
-    policy = hourly(spent=comtrade_spent, window=86_400.0, clock=Clock())
+    policy = hourly(spent=daily_spent, window=86_400.0, clock=Clock())
     policy.observe(quota_403("05:04:03"))
     assert policy.snapshot() == QuotaSnapshot(
         limit=None,
@@ -358,9 +358,9 @@ def test_spent_returning_nan_is_a_programming_error() -> None:
 @pytest.mark.anyio
 @pytest.mark.rate_limited
 async def test_after_a_documented_refusal_the_next_request_is_not_sent() -> None:
-    # ADR-0033, decision 4 for a source whose spent limit is not a 429 (sdk-comtrade).
+    # ADR-0033, decision 4 for a source whose spent limit is not a 429.
     events: list[str] = []
-    policy = hourly(spent=comtrade_spent, window=86_400.0, clock=Clock(), source="example")
+    policy = hourly(spent=daily_spent, window=86_400.0, clock=Clock(), source="example")
     upstream = Upstream(events, quota_403("20:00:00"))
     client = AsyncClient(policy.install(make_config()), transport=upstream)
     with pytest.raises(AuthError):
@@ -557,7 +557,7 @@ async def test_an_error_answer_and_retried_attempts_update_the_snapshot() -> Non
 @pytest.mark.anyio
 @pytest.mark.rate_limited
 async def test_a_keyless_call_into_a_spent_quota_is_sent_and_paced() -> None:
-    # sdk-comtrade's public operations spend no quota, yet a spent key quota held them back.
+    # A source's public operations spend no quota, yet a spent key quota held them back.
     events: list[str] = []
     clock = Clock()
     policy = hourly(clock=clock, sleep=Sleeper(events, clock), source="example")

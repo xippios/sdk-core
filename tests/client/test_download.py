@@ -86,30 +86,30 @@ async def test_download_streams_the_file_and_keeps_what_upstream_said(
 ) -> None:
     headers = {
         "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": "attachment; filename*=UTF-8''psd_alldata_%C3%A9.csv",
+        "Content-Disposition": "attachment; filename*=UTF-8''series_all_%C3%A9.csv",
         "ETag": '"abc"',
         "Last-Modified": "Tue, 27 Oct 2026 08:00:00 GMT",
     }
-    route = respx_mock.get(f"{BASE}/files/psd.csv").respond(200, text=CSV, headers=headers)
+    route = respx_mock.get(f"{BASE}/files/rows.csv").respond(200, text=CSV, headers=headers)
     cache = MemoryCache()
     client = make_client(
         cache=cache, auth=KeyAuth("EXAMPLE_API_KEY", location="query", name="key", source="example")
     )
     before = datetime.now(UTC)
-    got = await client.download("/files/psd.csv", tmp_path / "psd.csv")
+    got = await client.download("/files/rows.csv", tmp_path / "rows.csv")
     assert got == Downloaded(
-        path=tmp_path / "psd.csv",
+        path=tmp_path / "rows.csv",
         bytes=len(CSV.encode()),
         content_type="text/csv; charset=utf-8",
-        filename="psd_alldata_é.csv",
+        filename="series_all_é.csv",
         etag='"abc"',
         last_modified="Tue, 27 Oct 2026 08:00:00 GMT",
         retrieved_at=got.retrieved_at,
     )
     assert before <= got.retrieved_at <= datetime.now(UTC)
-    assert (tmp_path / "psd.csv").read_text(encoding="utf-8") == CSV
-    await client.download(f"{BASE}/files/psd.csv", tmp_path / "again.csv", auth=None)
-    assert sent_urls(route) == [f"{BASE}/files/psd.csv?key={REDACTED}", f"{BASE}/files/psd.csv"]
+    assert (tmp_path / "rows.csv").read_text(encoding="utf-8") == CSV
+    await client.download(f"{BASE}/files/rows.csv", tmp_path / "again.csv", auth=None)
+    assert sent_urls(route) == [f"{BASE}/files/rows.csv?key={REDACTED}", f"{BASE}/files/rows.csv"]
     assert len(cache) == 0  # never the cache
     assert leftovers(tmp_path) == []
 
@@ -147,7 +147,7 @@ async def test_a_download_from_another_host_carries_no_credential(
 ) -> None:
     # https://github.com/xippios/sdk-core/issues/163: a catalog's file link on another host
     # got the client's key by default; it goes without it, and its request says so.
-    link = "https://files.example.test/bulk/psd.csv"
+    link = "https://files.example.test/bulk/rows.csv"
     route = respx_mock.get(link).respond(200, text=CSV)
     seen: list[object] = []
     client = make_client(
@@ -155,11 +155,11 @@ async def test_a_download_from_another_host_carries_no_credential(
         before_request=lambda request: seen.append(request.extensions.get("xippios_origin")),
         observe=lambda response: seen.append(response.request.extensions.get("xippios_auth")),
     )
-    await client.download(link, tmp_path / "psd.csv")
+    await client.download(link, tmp_path / "rows.csv")
     assert sent_urls(route) == [link]
     assert "authorization" not in route.calls.last.request.headers
     assert seen == ["other", "client"]
-    assert (tmp_path / "psd.csv").read_text(encoding="utf-8") == CSV
+    assert (tmp_path / "rows.csv").read_text(encoding="utf-8") == CSV
     await client.download(link, tmp_path / "again.csv", auth=httpx.BasicAuth("user", "pw"))
     assert route.calls.last.request.headers["authorization"].startswith("Basic ")
 
@@ -343,7 +343,7 @@ def test_decode_csv_reads_a_file_or_a_stream_and_nothing_else() -> None:
 
 
 def test_decode_csv_reads_a_file_row_by_row(tmp_path: Path) -> None:
-    path = tmp_path / "psd.csv"
+    path = tmp_path / "rows.csv"
     path.write_text('\ufeffCommodity,Value (1000 MT)\nCORN,"15,341"\nWHEAT,\n', encoding="utf-8")
     rows = decode_csv(path)
     assert inspect.isgenerator(rows)
@@ -355,9 +355,9 @@ def test_decode_csv_reads_a_file_row_by_row(tmp_path: Path) -> None:
     ):
         list(decode_csv(tmp_path / "latin.csv"))
     (tmp_path / "wide.csv").write_text("a\n" + "x" * 200_000 + "\n")  # over csv's field limit
-    with pytest.raises(ValidationError, match=r"^usda-nass: wide.csv is not CSV the csv") as info:
-        list(decode_csv(str(tmp_path / "wide.csv"), source="usda-nass"))  # a str path too
-    assert info.value.source == "usda-nass"
+    with pytest.raises(ValidationError, match=r"^example: wide.csv is not CSV the csv") as info:
+        list(decode_csv(str(tmp_path / "wide.csv"), source="example"))  # a str path too
+    assert info.value.source == "example"
 
 
 def test_decode_csv_reads_an_open_text_stream_row_by_row(tmp_path: Path) -> None:
@@ -367,7 +367,7 @@ def test_decode_csv_reads_an_open_text_stream_row_by_row(tmp_path: Path) -> None
     with gzip.open(path, "wt", encoding="utf-8", newline="") as packed:
         packed.write("\ufeffCommodity,Year\n" + rows)
     with gzip.open(path) as raw, io.TextIOWrapper(raw, encoding="utf-8", newline="") as text:
-        read = decode_csv(text, source="usda-nass")
+        read = decode_csv(text, source="example")
         assert inspect.isgenerator(read)
         assert next(read) == {"Commodity": "CORN", "Year": "0"}  # the byte order mark stripped
         assert raw.tell() < len(rows) // 2  # row by row: most of the member is still unread
@@ -380,14 +380,14 @@ def test_decode_csv_names_the_stream_and_the_decoder_s_reason(tmp_path: Path) ->
     with gzip.open(path, "wb") as packed:
         packed.write(b"geo,OBS_VALUE\nAT,1\nC\xf4te,2\n")
     with gzip.open(path, "rt", encoding="utf-8-sig", newline="") as text:
-        read = decode_csv(text, source="eurostat")
+        read = decode_csv(text, source="example")
         with pytest.raises(ValidationError) as info:
             list(read)
     assert (
         str(info.value)
-        == "eurostat: apro_mk_cola.csv.gz is not UTF-8 text: invalid continuation byte"
+        == "example: apro_mk_cola.csv.gz is not UTF-8 text: invalid continuation byte"
     )
-    assert info.value.source == "eurostat"
+    assert info.value.source == "example"
     assert b"C\xf4te" in info.value.raw  # type: ignore[operator]
     assert (info.value.__cause__, info.value.__suppress_context__) == (None, True)
     archive = tmp_path / "QCL.zip"

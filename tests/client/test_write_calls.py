@@ -58,7 +58,7 @@ async def test_post_json_sends_a_json_body_and_decodes_the_answer(
 
 @pytest.mark.anyio
 async def test_post_json_sends_a_form_with_its_headers(respx_mock: respx.MockRouter) -> None:
-    # sdk-cashctrl: CashCtrl's writes take form fields, with the charset declared.
+    # A source whose writes take form fields, with the charset declared.
     route = respx_mock.post(f"{BASE}/v1/journal/create.json").respond(
         200, json={"success": True, "insertId": 51}
     )

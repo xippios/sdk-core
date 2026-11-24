@@ -198,7 +198,7 @@ async def test_explicit_key_wins_and_is_resolved_once(
 
 
 def test_apply_reads_the_key_itself() -> None:
-    # sdk-usda-nass: apply(request, key) made the key an argument of a traceback frame,
+    # A source's apply(request, key) made the key an argument of a traceback frame,
     # which pytest's long tracebacks print.
     for cls in (EnvKeyAuth, KeyAuth):
         assert list(inspect.signature(cls.apply).parameters) == ["self", "request"], cls

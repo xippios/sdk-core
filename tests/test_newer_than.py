@@ -153,7 +153,7 @@ def test_an_item_without_a_release_time_is_kept() -> None:
 
 @dataclass(frozen=True)
 class MonthRecord:
-    """A record of sdk-usda-psd's release list: a country and the month of its last release."""
+    """A record of a release list: a country and the month of its last release."""
 
     country_code: str
     release_year: int
@@ -172,7 +172,7 @@ def read_month(since: str) -> tuple[int, int]:
     if not RELEASE_MONTH.fullmatch(since):
         raise InvalidRequestError(
             f"since must be a release month 'YYYY-MM' such as '2026-09', got {since!r}.",
-            source="usda-psd",
+            source="example",
         )
     return int(since[:4]), int(since[5:])
 
@@ -192,7 +192,7 @@ def test_a_source_hands_its_own_reader_of_a_month() -> None:
 
 
 def test_the_newest_release_is_kept_whole_or_not_at_all() -> None:
-    """sdk-usda-psd's ``get_latest_release``: the records of the newest release, if newer."""
+    """A source's ``get_latest_release``: the records of the newest release, if newer."""
     newest = max(release_month(record) for record in MONTHS)
     latest = [record for record in MONTHS if release_month(record) == newest]
     assert newer_than("2026-09", latest, released=release_month, read=read_month) == latest
@@ -235,4 +235,4 @@ def test_the_sources_refusal_passes_as_the_reader_raised_it() -> None:
     assert str(info.value) == (
         "since must be a release month 'YYYY-MM' such as '2026-09', got '2026-13'."
     ), "the reader's own wording, its class unchanged"
-    assert info.value.source == "usda-psd"
+    assert info.value.source == "example"

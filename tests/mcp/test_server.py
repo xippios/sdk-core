@@ -479,7 +479,7 @@ NOTHING_SENT = "Nothing was sent."
 async def test_arguments_the_schema_refuses_are_answered_in_the_family_form(
     arguments: dict[str, Any], expected: str
 ) -> None:
-    # Row 41 a (sdk-usda-esr): the SDK answered "Error executing tool ...", pydantic's text.
+    # The SDK answered "Error executing tool ...", pydantic's text.
     server = build_server(ToolSet("example", [get_top]))
     register_tasks(server, ToolSet("example", [plain]))  # the middleware is installed once
     names = [getattr(middleware, "__name__", "") for middleware in server.middleware]

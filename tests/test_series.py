@@ -35,7 +35,7 @@ def market_years() -> Ceiling:
 
 
 def months() -> Ceiling:
-    """A ceiling lowered on the MCP server, with its option, as sdk-usda-gats declares it."""
+    """A ceiling lowered on the MCP server, with its option, as a source declares it."""
     return Ceiling(
         60,
         unit="months",
@@ -332,9 +332,9 @@ async def test_one_period_answered_is_named_alone() -> None:
 
 @pytest.mark.anyio
 async def test_a_pass_that_counts_names_the_periods_counted_as_answered() -> None:
-    """sdk-usda-nass's split counts every year on the loop before it fetches one, so the
+    """A source's split counts every year on the loop before it fetches one, so the
     periods before a failed count were counted and never fetched: the sentence holds for
-    both passes (https://github.com/xippios/sdk-usda-nass/issues/86)."""
+    both passes."""
     error = unavailable(2021)
     counted: list[int] = []
 

@@ -21,18 +21,18 @@ from xippios.core.testing import scrub
 # A signed link as Azure Blob Storage and Amazon S3 write one: the signature and the
 # credential are in the query, beside parameters that only describe the grant.
 AZURE_LINK = (
-    "https://example.blob.core.windows.net/files/psd.csv"
+    "https://example.blob.core.windows.net/files/series.csv"
     "?sv=2024-11-04&se=2026-11-18T09%3A00%3A00Z&sp=r&sig=c2lnbmF0dXJl"
 )
 S3_LINK = (
-    "https://example.s3.amazonaws.com/psd.csv?X-Amz-Algorithm=AWS4-HMAC-SHA256"
+    "https://example.s3.amazonaws.com/series.csv?X-Amz-Algorithm=AWS4-HMAC-SHA256"
     "&X-Amz-Credential=AKIDEXAMPLE%2F20261118&X-Amz-Date=20261118T080000Z"
     "&X-Amz-Expires=3600&X-Amz-Signature=5f2b"
 )
 
 
 def test_one_redacted_everywhere() -> None:
-    # sdk-cashctrl imports both spellings.
+    # A source imports both spellings.
     assert models.REDACTED is testing.REDACTED is scrub.REDACTED is REDACTED
 
 
@@ -51,7 +51,7 @@ def test_a_credential_word_is_always_a_credential(name: str) -> None:
     ["key", "sort_key", "keyword", "author", "tokens_used", "design", "commodity_desc", "year"],
 )
 def test_a_name_without_a_credential_word_is_data(name: str) -> None:
-    # Eurostat's SDMX series key is data (ADR-0040, decision 6); sort_key with it.
+    # An SDMX series key is data (ADR-0040, decision 6); sort_key with it.
     assert not is_credential_name(name)
 
 
@@ -233,16 +233,16 @@ def test_a_registered_credential_name_stays_one_though_declared_data() -> None:
 def test_a_signed_link_in_the_request_reads_its_signature_redacted() -> None:
     meta = ResultMeta(
         source="example",
-        endpoint="psd.csv",
+        endpoint="series.csv",
         request={"url": AZURE_LINK, "mirrors": [{"href": S3_LINK}], "year": 2026},
     )
     assert meta.request["url"] == (
-        "https://example.blob.core.windows.net/files/psd.csv"
+        "https://example.blob.core.windows.net/files/series.csv"
         f"?sv=2024-11-04&se=2026-11-18T09%3A00%3A00Z&sp=r&sig={REDACTED}"
     )
     (mirror,) = meta.request["mirrors"]
     assert mirror["href"] == (
-        "https://example.s3.amazonaws.com/psd.csv?X-Amz-Algorithm=AWS4-HMAC-SHA256"
+        "https://example.s3.amazonaws.com/series.csv?X-Amz-Algorithm=AWS4-HMAC-SHA256"
         f"&X-Amz-Credential={REDACTED}&X-Amz-Date=20261118T080000Z"
         f"&X-Amz-Expires=3600&X-Amz-Signature={REDACTED}"
     )

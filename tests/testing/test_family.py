@@ -778,30 +778,30 @@ def test_text_is_a_str_or_a_subclass_none_allowed_beside_it(annotation: Any, tex
 
 
 def _family_at(package_dir: Path) -> FamilySource:
-    package = ModuleType("xippios.usda.example")
+    package = ModuleType("xippios.example.api")
     package.__file__ = str(package_dir / "__init__.py")
     return FamilySource(
         root=package_dir,
-        import_path="xippios.usda.example",
+        import_path="xippios.example.api",
         package=package,
-        source="usda-example",
-        tasks=ModuleType("xippios.usda.example.tasks"),
+        source="example-api",
+        tasks=ModuleType("xippios.example.api.tasks"),
         tasks_write=None,
     )
 
 
 def test_a_filled_namespace_level_fails_naming_it(tmp_path: Path) -> None:
-    # A nested source (ADR-0006): an __init__.py in xippios/usda/ would shadow the others.
-    package_dir = tmp_path / "src" / "xippios" / "usda" / "example"
+    # A nested source (ADR-0006): an __init__.py in xippios/example/ would shadow the others.
+    package_dir = tmp_path / "src" / "xippios" / "example" / "api"
     package_dir.mkdir(parents=True)
     family.test_family_namespace_levels_are_empty(_family_at(package_dir))
     (package_dir.parent / "__init__.py").write_text("")
-    with pytest.raises(pytest.fail.Exception, match=r"(?s)must stay empty.*usda/__init__\.py"):
+    with pytest.raises(pytest.fail.Exception, match=r"(?s)must stay empty.*example/__init__\.py"):
         family.test_family_namespace_levels_are_empty(_family_at(package_dir))
 
 
 def test_a_missing_typing_marker_fails(tmp_path: Path) -> None:
-    package_dir = tmp_path / "src" / "xippios" / "usda" / "example"
+    package_dir = tmp_path / "src" / "xippios" / "example" / "api"
     package_dir.mkdir(parents=True)
     with pytest.raises(pytest.fail.Exception, match=r"py\.typed is missing"):
         family.test_family_package_ships_py_typed(_family_at(package_dir))
@@ -874,7 +874,7 @@ def test_write_tasks_are_checked_and_listed_and_the_write_server_built(
     ],
 )
 def test_a_task_function_cell_yields_the_names_it_starts_with(cell: str, names: list[str]) -> None:
-    # The cells of usda-psd, usda-nass, cashctrl and usda-gats on 2026-10-26.
+    # The cells of four sources on 2026-10-26.
     assert _cell_tasks(cell) == names
 
 
@@ -1312,8 +1312,8 @@ def test_a_source_that_keeps_observed_md_passes_the_three_rules_it_meets(tmp_pat
 @pytest.mark.parametrize(
     "row",
     [
-        f"| OBSERVED.md | - | - | {HAND} |",  # sdk-cashctrl's four cells
-        f"| OBSERVED.md | - | - | - | - | {HAND} |",  # the six of sdk-eurostat's script
+        f"| OBSERVED.md | - | - | {HAND} |",  # a source's four cells
+        f"| OBSERVED.md | - | - | - | - | {HAND} |",  # the six of a source's script
         f"| OBSERVED.md | - | - | - | - | - | - | - | {HAND} |",  # the nine of four sources
         "| OBSERVED.md | Written by hand, never fetched |",
     ],
@@ -1325,7 +1325,7 @@ def test_the_row_of_observed_md_is_told_by_its_cells_at_any_width(row: str) -> N
 @pytest.mark.parametrize(
     "row",
     [
-        "",  # sdk-eurostat's FETCHED.md on 2026-11-21: the file kept, its row not written
+        "",  # a source's FETCHED.md on 2026-11-21: the file kept, its row not written
         f"| OBSERVED.md | https://example.org/observed | - | {HAND} |",
         "| OBSERVED.md | - | - | the notes on what upstream does but never documents |",
         f"| docs/upstream/OBSERVED.md | - | - | {HAND} |",
@@ -1451,7 +1451,7 @@ Probe: 2026-10-29, `get_data`; sample `tests/fixtures/get_data/no_filter_500.jso
 
 
 def test_a_span_that_wraps_onto_the_next_line_hides_no_citation_after_it(tmp_path: Path) -> None:
-    """A span may wrap onto the next line of its paragraph, as two of sdk-faostat's do.
+    """A span may wrap onto the next line of its paragraph, as two of a source's do.
 
     Read line by line, its closing backtick would pair with the opening one of the next span,
     and the path after it would go unread. A fenced block holds no code span.
@@ -1502,7 +1502,7 @@ def packaged(param: str, code: str, *codes: str) -> str:
 LISTS_TREE: dict[str, str | None] = {
     f"{REFERENCE}/countries.json": packaged("countries", "countryCode", "US", "BR"),
     f"{REFERENCE}/regions.json": packaged("regions", "regionCode", "R01"),
-    # sdk-eurostat's index of its lists holds no records: no packaged list
+    # A source's index of its lists holds no records: no packaged list
     f"{REFERENCE}/lists.json": json.dumps({"fetched": "2026-11-20T09:00:00Z", "lists": []}),
     f"{REFERENCE}/README.md": "# Reference data\n",
 }

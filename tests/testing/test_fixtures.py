@@ -68,7 +68,7 @@ def test_write_scrubs_and_round_trips(tmp_path: Path) -> None:
 
 
 def test_write_fixture_writes_a_rewritten_fixture_as_record_lays_it_out(tmp_path: Path) -> None:
-    # Row 125: sdk-cashctrl, sdk-google-mail, sdk-x and sdk-usda-wasde each copied the
+    # Four sources each copied the
     # private writer to write a fixture they had rewritten (ADR-0042, decision 4).
     recorded = fixture_from_response(_response(content=b'{"org": "acme"}'))
     response = recorded.response.model_copy(update={"body": '{"org": "ORG"}'})
@@ -140,7 +140,7 @@ def test_wire_headers_are_dropped(tmp_path: Path) -> None:
 
 
 def test_the_headers_that_only_identify_a_request_are_dropped() -> None:
-    # Row 161: sdk-faostat's x-amz-cf-id and sdk-x's x-transaction-id, a new value in every
+    # Two sources' x-amz-cf-id and x-transaction-id, a new value in every
     # recording, each needed an audited entry of the secret scan's baseline.
     ids = {
         "X-Amz-Cf-Id": "request-1",
@@ -244,7 +244,7 @@ def _answer(content: bytes, content_type: str) -> httpx.Response:
 
 
 def test_max_bytes_cuts_a_json_array_at_an_element_boundary_of_its_text() -> None:
-    # Row 43 (sdk-usda-gats): list fixtures over the 256 KiB cap. Upstream's text is kept:
+    # List fixtures over the 256 KiB cap. Upstream's text is kept:
     # 1.50 stays 1.50 and a long figure keeps its digits, as a Decimal parser needs.
     body = '\ufeff[\n  {"id": 0, "v": 1.50},\n  {"id": 1, "v": 12345678901234567890.1},\n'
     body += "".join(f'  {{"id": {i}, "v": 2.00}},\n' for i in range(2, 50)) + '  {"id": 50}\n]'
@@ -258,7 +258,7 @@ def test_max_bytes_cuts_a_json_array_at_an_element_boundary_of_its_text() -> Non
 
 
 def _envelope(rows: str) -> str:
-    """Quick Stats' shape: the rows under ``data`` between two other members."""
+    """An upstream's shape: the rows under ``data`` between two other members."""
     return '{"count": 50, "data": [\n' + rows + '], "note": "Île"}\n'
 
 
@@ -269,7 +269,7 @@ ENVELOPE = _envelope(ROWS + '  {"id": 49}\n')
 
 
 def test_max_bytes_keeps_the_last_elements_on_request() -> None:
-    # Row 127 (sdk-usda-psd): a list ordered oldest first lost the years its tests read.
+    # A list ordered oldest first lost the years its tests read.
     array = (
         "[\n" + "".join(f'  {{"year": {1960 + i}}},\n' for i in range(63)) + '  {"year": 2023}\n]\n'
     )

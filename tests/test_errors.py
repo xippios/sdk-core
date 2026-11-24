@@ -68,9 +68,9 @@ def test_message_never_contains_query_string() -> None:
     [(401, AuthError), (404, NotFoundError), (429, RateLimitError), (503, UpstreamError)],
 )
 def test_message_names_method_and_path_never_the_host(status: int, cls: type[XippiosError]) -> None:
-    # sdk-cashctrl: a multi-tenant source's host names the tenant.
+    # A multi-tenant source's host names the tenant.
     request = httpx.Request(
-        "POST", "https://acme-holding.cashctrl.test/api/v1/journal/create.json?lang=de"
+        "POST", "https://acme-holding.example.test/api/v1/journal/create.json?lang=de"
     )
     response = httpx.Response(status, text="refused", request=request)
     error = error_from_response(response, source="example")
@@ -79,20 +79,20 @@ def test_message_names_method_and_path_never_the_host(status: int, cls: type[Xip
     said = f". {SENT_ONCE}" if status >= 500 else ""  # a write's 5xx says it was sent once
     assert message == f"{status} from POST /api/v1/journal/create.json: refused{said}"
     assert "acme-holding" not in message
-    assert "cashctrl.test" not in message
+    assert "example.test" not in message
     assert "lang=" not in message
 
 
 def test_request_description_is_the_method_and_path_error_messages_name() -> None:
-    # https://github.com/xippios/sdk-core/issues/62: sdk-eurostat and sdk-x each kept a
-    # copy, `_where`, and sdk-faostat and sdk-google-mail wrote it inline in `classify`.
+    # https://github.com/xippios/sdk-core/issues/62: two sources each kept a copy, `_where`,
+    # and two more wrote it inline in `classify`.
     request = httpx.Request("GET", "https://host.test/v1/x?year=2024&api_key=not-named")
     response = httpx.Response(404, text="no such series", request=request)
     assert errors.request_description(response) == "GET /v1/x"
     assert str(error_from_response(response)) == (
         f"404 from {errors.request_description(response)}: no such series"
     )
-    tenant = httpx.Request("post", "https://acme.cashctrl.test/api/v1/a%20b/list.json?lang=de")
+    tenant = httpx.Request("post", "https://acme.example.test/api/v1/a%20b/list.json?lang=de")
     described = errors.request_description(httpx.Response(200, request=tenant))
     assert described == "POST /api/v1/a b/list.json"
 
@@ -203,10 +203,10 @@ def test_transport_error_from_httpx() -> None:
 
 def test_transport_error_never_names_the_host() -> None:
     # CPython's text for a TLS hostname mismatch quotes the host, here a tenant's.
-    request = httpx.Request("GET", "https://tenant.cashctrl.com/x")
+    request = httpx.Request("GET", "https://tenant.example.org/x")
     exc = httpx.ConnectError(
         "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname mismatch, "
-        "certificate is not valid for 'tenant.cashctrl.com'. (TENANT.CASHCTRL.COM)",
+        "certificate is not valid for 'tenant.example.org'. (TENANT.EXAMPLE.ORG)",
         request=request,
     )
     message = str(error_from_exception(exc, source="example"))
@@ -246,13 +246,13 @@ class RequestRejected(InvalidRequestError):
 
 
 class YearTooLarge(QueryTooLarge):
-    """sdk-usda-nass's shape: core's error, the year that alone is over the limit kept."""
+    """A source's shape: core's error, the year that alone is over the limit kept."""
 
     def __init__(self, count: int | None, *, year: int | None = None) -> None:
         narrow = "Narrow the filters."
         if year is not None:
             narrow = f"Year {year} alone is over it, so split_by_year cannot fetch it. {narrow}"
-        super().__init__(count, limit=50_000, narrow=narrow, source="usda-nass")
+        super().__init__(count, limit=50_000, narrow=narrow, source="example")
         self.year = year
 
 
@@ -331,7 +331,7 @@ UNSENT = "Nothing was sent."
 
 
 def test_unknown_code_says_nothing_was_sent_then_names_the_closest_codes() -> None:
-    # The copies of sdk-usda-psd, sdk-usda-esr and sdk-usda-gats, one message (ADR-0041), which
+    # The copies of three sources, one message (ADR-0041), which
     # says after its first sentence that nothing was sent
     # (https://github.com/xippios/sdk-core/issues/481). Core's tests hold the message here alone.
     closest = [("0410000", "Wheat"), ("0440000", "Corn")]
@@ -341,7 +341,7 @@ def test_unknown_code_says_nothing_was_sent_then_names_the_closest_codes() -> No
         list_name="commodities",
         fetched=FETCHED,
         closest=closest,
-        source="usda-psd",
+        source="example",
     )
     assert isinstance(error, InvalidRequestError)
     assert str(error) == (
@@ -349,7 +349,7 @@ def test_unknown_code_says_nothing_was_sent_then_names_the_closest_codes() -> No
         "2026-10-23). Nothing was sent. Did you mean 0410000 (Wheat), 0440000 (Corn)? " + REFRESH
     )
     assert (error.param, error.value, error.fetched) == ("commodity_code", "0410001", FETCHED)
-    assert (error.list_name, error.source) == ("commodities", "usda-psd")
+    assert (error.list_name, error.source) == ("commodities", "example")
     assert error.closest == tuple(closest)
 
 
@@ -377,7 +377,7 @@ def test_unknown_code_takes_a_hint_over_the_closest_and_a_reason() -> None:
 
 
 def test_unknown_code_of_a_value_that_is_no_code_leaves_out_the_lists_age() -> None:
-    # A value a source's hint table holds, such as an ISO alpha-3 code for UN Comtrade's
+    # A value a source's hint table holds, such as an ISO alpha-3 code for upstream's
     # integers: no refresh makes it a code (https://github.com/xippios/sdk-core/issues/430,
     # ADR-0041, amendment 2026-11-22). The keyword names the sentence it keeps or leaves out,
     # as closest, hint and reason name theirs.
@@ -387,14 +387,14 @@ def test_unknown_code_of_a_value_that_is_no_code_leaves_out_the_lists_age() -> N
         list_name="Reporters",
         fetched=FETCHED,
         hint="CHE is the ISO alpha-3 code of 757 (Switzerland): pass 757.",
-        reason="UN Comtrade answers a code it does not have with count 0.",
-        source="comtrade",
+        reason="Upstream answers a code it does not have with count 0.",
+        source="example",
         outdated=False,
     )
     assert str(error) == (
         "'CHE' is not a reporter_code in the packaged Reporters list (fetched 2026-10-23). "
-        "Nothing was sent. CHE is the ISO alpha-3 code of 757 (Switzerland): pass 757. UN "
-        "Comtrade answers a code it does not have with count 0."
+        "Nothing was sent. CHE is the ISO alpha-3 code of 757 (Switzerland): pass 757. "
+        "Upstream answers a code it does not have with count 0."
     )
     assert (error.param, error.value, error.closest) == ("reporter_code", "CHE", ())
     for clone in [copy.deepcopy(error), *_pickled(error)]:
@@ -408,7 +408,7 @@ def test_unknown_code_of_a_value_that_is_no_code_leaves_out_the_lists_age() -> N
 
 
 def test_unknown_code_names_a_bare_code_once_and_no_command_of_a_maintainer() -> None:
-    # A list of bare values, sdk-usda-nass's state_alpha: each value is its own name
+    # A list of bare values, a source's state_alpha: each value is its own name
     # (https://github.com/xippios/sdk-core/issues/111).
     closest = [("VA", "VA"), ("VT", "Vermont")]
     error = UnknownCode(
@@ -425,15 +425,15 @@ def test_unknown_code_names_a_bare_code_once_and_no_command_of_a_maintainer() ->
 
 
 def test_query_too_large_words_the_count_the_limit_and_what_narrows_the_query() -> None:
-    # sdk-comtrade's gate on its countOnly count (ADR-0053, decision 1).
+    # A source's gate on its countOnly count (ADR-0053, decision 1).
     narrow = "Split by period (max 12 per call), then by reporter."
-    error = QueryTooLarge(5_006_385, limit=100_000, narrow=narrow, source="comtrade")
+    error = QueryTooLarge(5_006_385, limit=100_000, narrow=narrow, source="example")
     assert isinstance(error, InvalidRequestError)
     assert str(error) == (
         "query would return 5,006,385 records; upstream serves at most 100,000 per call. " + narrow
     )
     assert (error.count, error.limit, error.narrow) == (5_006_385, 100_000, narrow)
-    assert error.source == "comtrade"
+    assert error.source == "example"
 
 
 def test_query_too_large_takes_no_size_read_from_the_arguments() -> None:
@@ -447,7 +447,7 @@ def test_query_too_large_takes_no_size_read_from_the_arguments() -> None:
 
 
 def test_query_too_large_without_a_count_says_upstream_refused_the_query() -> None:
-    # sdk-usda-nass's classify, for upstream's HTTP 413 over the record limit.
+    # A source's classify, for upstream's HTTP 413 over the record limit.
     error = QueryTooLarge(None, limit=50_000, narrow="Narrow the filters.")
     assert str(error) == (
         "upstream refused the query as too large; it serves at most 50,000 records per call. "
@@ -467,14 +467,14 @@ def test_query_too_large_names_no_request_unless_given() -> None:
 
 
 def test_query_too_large_from_classify_names_its_request_without_a_count() -> None:
-    # sdk-usda-nass's classify, for upstream's HTTP 413 (conventions §5; ADR-0043).
+    # A source's classify, for upstream's HTTP 413 (conventions §5; ADR-0043).
     response = _response(413, '{"error": ["exceeds limit=50000"]}')
     error = QueryTooLarge(
         None,
         limit=50_000,
         narrow="Narrow the filters.",
         request=errors.request_description(response),
-        source="usda-nass",
+        source="example",
     )
     assert str(error) == (
         "upstream refused GET /v1/thing as too large; it serves at most 50,000 records per "
@@ -486,7 +486,7 @@ def test_query_too_large_from_classify_names_its_request_without_a_count() -> No
 
 
 def test_query_too_large_from_classify_names_its_request_beside_upstream_s_count() -> None:
-    # sdk-eurostat's classify, for upstream's refusal that prints its estimate.
+    # A source's classify, for upstream's refusal that prints its estimate.
     request = errors.request_description(_response(413))
     error = QueryTooLarge(13_344_840, limit=5_000_000, narrow="Name fewer.", request=request)
     assert str(error) == (
