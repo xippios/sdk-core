@@ -133,7 +133,7 @@ what it reverses: its decision 7 takes the place of ADR-0049's decisions 7 and 8
 
 Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/475: in decision 6 the census test
 no longer skips in a worker of pytest-xdist, the one branch of core for pytest-xdist, since no
-source runs its tests under it, by parts 5 and 7 of the answer, so that a worker's census judges
-the tests that ran in that worker as any run's judges its own, and this record takes the amendment
-because it carried the skip from ADR-0049, decision 6, whose other parts it restated unchanged,
-while decisions 1 to 5 and 7 to 9, the rest of decision 6 and the consequences stand as written.
+source runs its tests under it, by part 7 of the answer, so that a worker's census judges the tests
+that ran in that worker as any run's judges its own, and this record takes the amendment because it
+carried the skip from ADR-0049, decision 6, whose other parts it restated unchanged, while
+decisions 1 to 5 and 7 to 9, the rest of decision 6 and the consequences stand as written.
