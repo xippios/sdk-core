@@ -17,6 +17,7 @@ import inspect
 import io
 import subprocess
 import sys
+from collections import OrderedDict
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import redirect_stdout
 from dataclasses import dataclass
@@ -492,8 +493,12 @@ def test_a_fetch_that_answers_an_answer_is_written_as_its_records(source: Source
 
 @pytest.mark.parametrize(
     ("payload", "found"),
-    [({"data": [{"area": "4"}]}, "an Answer of a dict"), ("4", "an Answer of a str")],
-    ids=["body", "text"],
+    [
+        ({"data": [{"area": "4"}]}, "an Answer of a dict"),
+        ("4", "an Answer of a str"),
+        (Answer([{"area": "4"}], datetime(2026, 11, 1, tzinfo=UTC)), "an Answer of an Answer"),
+    ],
+    ids=["body", "text", "answer"],
 )
 def test_an_answer_that_holds_no_records_is_refused(
     source: Source, payload: object, found: str
@@ -543,6 +548,29 @@ def test_a_finished_list_agrees_with_its_declaration(source: Source) -> None:
         error, _ = go_raising(source, [listed])
         assert isinstance(error, SystemExit)
         assert message in str(error), error
+    assert source.files() == before
+
+
+class Item:
+    """A type of a source's own that is no record, its name capitalized."""
+
+
+def test_a_type_is_named_with_its_article_whatever_its_case(source: Source) -> None:
+    """A refusal names a type by its name with its article, the vowel read in either case:
+    "an Item" and "an OrderedDict", never "a Item"."""
+    before = source.files()
+    cases: dict[str, Callable[[], Any]] = {
+        "a's fetch answered an Item: it answers records": Item,
+        "a's fetch answered an OrderedDict: it answers records": lambda: OrderedDict(a=1),
+        "a's fetch answered an Item at position 1: a fetch answers records": lambda: [
+            {"a": "x"},
+            Item(),
+        ],
+    }
+    for message, fetch in cases.items():
+        error, _ = go_raising(source, [Listed("a", fetch, endpoint="GetA")])
+        assert isinstance(error, SystemExit)
+        assert str(error).startswith(message), error
     assert source.files() == before
 
 

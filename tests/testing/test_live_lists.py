@@ -11,6 +11,7 @@ network.
 import importlib
 import json
 import sys
+from collections import OrderedDict
 from collections.abc import Iterable, Mapping
 from datetime import UTC, date, datetime
 from enum import StrEnum
@@ -244,8 +245,13 @@ def test_an_answer_is_compared_as_the_list_it_holds() -> None:
 
 @pytest.mark.parametrize(
     ("payload", "kind"),
-    [({"data": RECORDS}, "a dict"), ("US", "a str"), (None, "a NoneType")],
-    ids=["body", "text", "none"],
+    [
+        ({"data": RECORDS}, "a dict"),
+        ("US", "a str"),
+        (None, "a NoneType"),
+        (Answer(RECORDS, RETRIEVED), "an Answer"),
+    ],
+    ids=["body", "text", "none", "answer"],
 )
 def test_an_answer_that_holds_no_list_fails_naming_its_payloads_type(
     payload: object, kind: str
@@ -266,17 +272,68 @@ def test_an_answer_that_holds_no_list_fails_naming_its_payloads_type(
         assert value not in lines[0]
 
 
-@pytest.mark.parametrize(
-    "current", [{"data": RECORDS}, {"US": RECORDS[0], "BR": RECORDS[1]}], ids=["body", "by-code"]
+BY_CODE = {record["countryCode"]: record for record in RECORDS}
+"""The packaged records keyed by their code: a mapping, whose keys are the codes."""
+
+NO_LISTS = pytest.mark.parametrize(
+    ("given", "kind"),
+    [
+        ({"data": RECORDS}, "a dict"),
+        (BY_CODE, "a dict"),
+        (OrderedDict(BY_CODE), "an OrderedDict"),
+        ("USBRE4", "a str"),
+        (b"US", "a bytes"),
+    ],
+    ids=["body", "by-code", "ordered", "text", "bytes"],
 )
-def test_a_mapping_fails_and_asks_for_the_records(current: dict[str, Any]) -> None:
-    """A mapping handed as the list, the body that holds the records or records by their
-    code, is refused naming its type, never read as bare codes of its keys, and the failure
-    says to hand the records or the wrapper's ``Answer`` of them."""
-    assert failure(TEXT_CODES, current) == [
-        "packaged list countries: the list upstream serves now is a dict: hand its records, "
-        "or the wrapper's Answer of them, not the body that holds them (ADR-0055)"
+"""What is no list of either side: a mapping, whose keys, and a text or bytes, whose
+characters, would read as bare codes."""
+
+
+@NO_LISTS
+def test_a_mapping_or_a_text_as_the_list_fails_and_asks_for_the_records(
+    given: object, kind: str
+) -> None:
+    """A mapping, a text or bytes handed as the list upstream serves now, the body that holds
+    the records or records by their code say, is refused naming its type, never read as bare
+    codes of its keys or characters, and the failure says to hand the records or the
+    wrapper's ``Answer`` of them."""
+    assert failure(TEXT_CODES, given) == [
+        f"packaged list countries: the list upstream serves now is {kind}: hand its records, "
+        "or the wrapper's Answer of them, not the body or the text that holds them (ADR-0055)"
     ]
+
+
+@NO_LISTS
+def test_a_mapping_or_a_text_as_the_packaged_side_fails_and_asks_for_the_records(
+    given: object, kind: str
+) -> None:
+    """``packaged=`` is guarded as the current side is: a mapping of the packaged records by
+    their code, beside a current list with a changed record, fails naming its type where it
+    would pass, its keys read as the codes."""
+    renamed = [RECORDS[0], {**RECORDS[1], "countryName": "Brasil"}, RECORDS[2]]
+    assert failure(TEXT_CODES, renamed, packaged=given) == [
+        f"packaged list countries: the packaged list is {kind}: hand its records, not the body "
+        "or the text that holds them (ADR-0055)"
+    ]
+
+
+class Item:
+    """A type of a source's own that is neither a record nor a code, its name capitalized."""
+
+
+def test_a_type_is_named_with_its_article_whatever_its_case() -> None:
+    """ "an Item" and "an Answer", never "a Item": the vowel is read in either case."""
+    assert failure(TEXT_CODES, [Item()]) == [
+        "packaged list countries: the list upstream serves now: item 0 is an Item, neither a "
+        "record nor a code (ADR-0055)"
+    ]
+    nested: Any = Answer(Answer(RECORDS, RETRIEVED), RETRIEVED)
+    assert failure(TEXT_CODES, nested)[0].startswith(
+        "packaged list countries: the list upstream serves now is an Answer of an Answer: "
+    )
+    with pytest.raises(TypeError, match=r"^codes is an Item; "):
+        assert_list_current(Item(), RECORDS)  # type: ignore[arg-type]
 
 
 def test_a_packaged_side_given_is_read_as_the_current_one() -> None:
