@@ -12,9 +12,6 @@ credential, a productive one the shell holds among them::
     pytest_plugins = ["xippios.core.testing.plugin"]
 
     keep_reserved_tenants(TENANTS)
-
-The demo-only strip of sdk-cashctrl's and sdk-google-mail's ``tests/conftest.py`` until core
-0.4.0 (ADR-0042, decision 1).
 """
 
 import os
@@ -31,9 +28,9 @@ def keep_reserved_tenants(tenants: Tenants) -> None:
     Removes ``tenants.list_var`` and every variable the registry's scheme names for a
     tenant that is not reserved, ``<PREFIX>_<NAME>_<FIELD>`` for each of its ``fields``,
     and keeps the reserved tenants' own variables, which the live tests read. A variable
-    the scheme names for no tenant stays: the rest of a shared prefix, sdk-google-mail's
-    ``GOOGLE_CLIENT_ID`` and ``GOOGLE_CLIENT_SECRET`` say, or a key variable the source
-    reads for no tenant. Names only: no value is read, kept or shown.
+    the scheme names for no tenant stays: the rest of a shared prefix,
+    ``EXAMPLE_CLOUD_CLIENT_ID`` and ``EXAMPLE_CLOUD_CLIENT_SECRET`` say, or a key variable
+    the source reads for no tenant. Names only: no value is read, kept or shown.
 
     Call it at the module level of ``tests/conftest.py``, before any fixture runs; a
     source's own fixture removes ``list_var`` again for every test, with

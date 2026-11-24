@@ -6,15 +6,15 @@ packaged lists, as ``tests/test_family.py`` collects the family check (ADR-0055)
     from xippios.core.testing.live import *  # noqa: F403
 
     LIVE_LISTS = {  # each packaged list compared, by its file reference/<name>.json
-        "commodities": (COMMODITIES, api.get_commodities),
+        "regions": (REGIONS, api.get_regions),
     }
     NO_LIVE_LIST = {  # each packaged list not compared, with the reason
-        "publication": "A fetch takes 101 requests; test_list_publications_live counts it.",
+        "series": "A fetch takes 101 requests; test_list_series_live counts it.",
     }
 
 The star import puts ``test_packaged_list_is_current`` and this module's
 ``pytest_generate_tests`` into that module, which runs the test once per entry of its
-``LIVE_LISTS``, ``test_packaged_list_is_current[commodities]``, at collection, wherever the
+``LIVE_LISTS``, ``test_packaged_list_is_current[regions]``, at collection, wherever the
 module declares it. The test is marked ``live``, so an offline run collects it and sends
 nothing. The family check (``xippios.core.testing.family``) reads the same declaration
 from the file and fails a source whose package holds a packaged list in neither, or an
@@ -198,7 +198,7 @@ def assert_list_current(
             mappings or ``UpstreamModel`` instances, read through ``dump_upstream``, or its
             bare codes, text or integers.
         packaged: The packaged side, read as ``current`` is read, for a list whose records
-            name the release they came from, as sdk-usda-wasde's carry ``report_month``:
+            name the release they came from, as records that carry a ``report_month`` do:
             ``codes.packaged.records`` as the source views them; those records by default.
 
     Raises:

@@ -10,7 +10,7 @@ between ``_``, ``-`` or the ends of the name, in any letter case: ``api_key`` (a
 ``auth``, ``authorization``, ``sig``, ``signature``, ``credential``, ``credentials``.
 ``x-api-key``, ``access_token``, ``client_secret`` and the ``sig`` of a pre-signed
 storage URL (Azure SAS) are credentials; ``keyword``, ``author``, ``tokens_used``,
-``design`` and ``sort_key`` are data. A bare ``key`` is not on the list: Eurostat's
+``design`` and ``sort_key`` are data. A bare ``key`` is not on the list: an
 SDMX series ``key`` is data (ADR-0040, decision 6).
 
 A name a ``KeyAuth`` sends its key under as a query parameter is registered for the
@@ -263,7 +263,7 @@ def scrub_url(url: httpx.URL | str, *, source: str | None = None) -> str:
     """The URL as text, every credential's query value and the userinfo ``REDACTED``.
 
     Args:
-        url: A URL, e.g. ``"https://api.example.test/v1/x?api_key=...&year=2024"``.
+        url: A URL, e.g. ``"https://api.example.org/v1/x?api_key=...&year=2024"``.
         source: The source that sent it, as for ``redact_credentials``.
     """
     parsed = httpx.URL(url)

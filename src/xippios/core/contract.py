@@ -30,13 +30,13 @@ class EnvVar:
     """A variable a package needs: its name or pattern, whether it is secret and required.
 
     A pattern names one variable per tenant of a multi-tenant source by a placeholder in
-    angle brackets, as conventions §1 writes them: ``CASHCTRL_<NAME>_API_KEY``,
-    ``GOOGLE_<NAME>_REFRESH_TOKEN``. ``secret`` and ``required`` are keyword-only and
+    angle brackets, as conventions §1 writes them: ``EXAMPLE_<NAME>_API_KEY``,
+    ``EXAMPLE_<NAME>_REFRESH_TOKEN``. ``secret`` and ``required`` are keyword-only and
     take no default, so each entry says both.
 
     Attributes:
-        name_or_pattern: The variable's name, e.g. ``"NASS_API_KEY"``, or a pattern, e.g.
-            ``"CASHCTRL_<NAME>_API_KEY"``.
+        name_or_pattern: The variable's name, e.g. ``"EXAMPLE_API_KEY"``, or a pattern, e.g.
+            ``"EXAMPLE_<NAME>_API_KEY"``.
         secret: Whether the variable holds a credential, a key or a token say, e.g.
             ``True`` for an API key and ``False`` for a tenant list.
         required: Whether the package needs the variable to serve, e.g. ``False`` for a

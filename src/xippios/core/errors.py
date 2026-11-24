@@ -56,7 +56,7 @@ class XippiosError(Exception):
 
     Attributes:
         message: Human-readable description, safe to show to an agent.
-        source: Source slug such as ``"usda-nass"`` when known.
+        source: Source slug such as ``"example"`` when known.
     """
 
     def __init__(self, message: str, *, source: str | None = None) -> None:
@@ -191,8 +191,8 @@ class UnknownCode(InvalidRequestError):
     finds them with ``xippios.core.closest``, with ``xippios.core.nearest`` for integer
     codes, or with a strategy of its own (ISO codes first) and passes the result. The
     message names the value, the parameter and the list with its fetch date, says that
-    nothing was sent, then names the closest codes (``Did you mean 0410000 (Wheat),
-    0440000 (Corn)?``, and a code whose name is its own text named once, ``Did you mean
+    nothing was sent, then names the closest codes (``Did you mean R01 (North),
+    R02 (South)?``, and a code whose name is its own text named once, ``Did you mean
     VA?``) unless ``hint`` is given, the ``reason`` when given, and, while ``outdated`` is
     true, that the packaged list is out of date if upstream added the value since::
 
@@ -206,22 +206,22 @@ class UnknownCode(InvalidRequestError):
     reads the message over MCP, so it names no command of the package's maintainers.
 
     Args:
-        param: The parameter, as the package names it, e.g. ``"commodity_code"``.
-        value: The value given, e.g. ``"0410001"``, or ``999``.
+        param: The parameter, as the package names it, e.g. ``"region_code"``.
+        value: The value given, e.g. ``"R10"``, or ``999``.
         list_name: The packaged list checked, as upstream names it, e.g.
-            ``"commodities"``.
+            ``"regions"``.
         fetched: When the list was fetched, ``PackagedList.fetched``; the message names
             its day, e.g. ``2026-10-23``.
         closest: Known codes close to ``value`` with their upstream names, best match
-            first, e.g. ``[("0410000", "Wheat")]``, or ``[("VA", "VA")]`` for a list of
+            first, e.g. ``[("R01", "North")]``, or ``[("VA", "VA")]`` for a list of
             bare values; empty when none is close.
         hint: A sentence that explains the value instead of the closest codes, e.g.
             ``"Omit country_code for every country."``; when given, ``closest`` is not
             named in the message.
         reason: Why the package refuses the value rather than asking upstream, e.g.
-            ``"PSD answers unknown codes with an empty result, so the package refuses
+            ``"Upstream answers unknown codes with an empty result, so the package refuses
             them."``.
-        source: Source slug, e.g. ``"usda-psd"``.
+        source: Source slug, e.g. ``"example"``.
         outdated: Whether the message ends with ``If upstream added it since, the packaged
             list is out of date.``, ``True`` by default. ``False`` for a value that is no
             code of upstream's at all, which no refresh of the list would make one: a value of
@@ -305,8 +305,8 @@ class QueryTooLarge(InvalidRequestError):
     names it where the forms say "the query" or "query", ``upstream refused GET /v1/data
     as too large; ...``. The package's own refusal before its data request names none.
 
-    A source subclasses it for an attribute of its own and words it in ``narrow``, as
-    sdk-usda-nass keeps the ``year`` that alone is over the limit.
+    A source subclasses it for an attribute of its own and words it in ``narrow``, e.g.
+    to keep the ``year`` that alone is over the limit.
 
     Args:
         count: The records the query would return, as upstream counted them, e.g.
@@ -314,7 +314,7 @@ class QueryTooLarge(InvalidRequestError):
             without a count.
         limit: The most records upstream serves per call, e.g. ``100_000``.
         narrow: What narrows the query, the sentences that end the message, e.g.
-            ``"Split by period, then by reporter."``.
+            ``"Split by period, then by region."``.
         request: The request upstream refused, as ``request_description(response)`` gives
             it, e.g. ``"GET /v1/data"``, for the error a source's ``classify`` maps;
             ``None``, the default, for a refusal before the data request.
@@ -370,7 +370,7 @@ def _refused_arguments(
 
     Args:
         errors: At least one error, each a mapping with ``loc`` and ``msg``.
-        source: Source slug, e.g. ``"usda-nass"``, which an HTTP problem names.
+        source: Source slug, e.g. ``"example"``, which an HTTP problem names.
     """
     first = errors[0]
     argument = ".".join(str(part) for part in first["loc"]) or "arguments"
@@ -416,7 +416,7 @@ def _body_text(response: httpx.Response) -> str:
 def request_description(response: httpx.Response) -> str:
     """The request ``response`` answers, as error messages name it: its method and path.
 
-    ``GET /v1/x`` for an answer to ``https://host.test/v1/x?year=2024``: never the host,
+    ``GET /v1/x`` for an answer to ``https://api.example.org/v1/x?year=2024``: never the host,
     which can name a tenant, nor the query, which can carry a key (conventions §5,
     ADR-0030). ``error_from_response`` words its messages with it, and so does a source's
     ``classify`` for the errors it maps (ADR-0030, decision 4).

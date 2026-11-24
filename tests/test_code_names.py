@@ -269,7 +269,7 @@ def test_a_code_the_list_lacks_withholds_the_answer_with_the_lists_refusal() -> 
     assert str(refused.value).startswith(
         "'CHN' is not a country_code in the packaged countries list (fetched 2026-10-23)."
     )
-    assert "names the country of each code it is for" in str(refused.value)
+    assert "names each code it is for" in str(refused.value)
     assert "the answer is withheld" in str(refused.value)
     # Checked after the call: upstream was asked, so the check's switch leaves out that nothing
     # was sent (https://github.com/xippios/sdk-core/issues/481, part 1).

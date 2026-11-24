@@ -5,7 +5,7 @@ or the HTTP basic user name. ``KeyAuth``, the one key class (ADR-0059, decision 
 the place and reads the key lazily from the environment (conventions §7), an explicit key
 winning, so a package imports without credentials and fails with ``ConfigError`` on the
 first request instead of at import time. An upstream that exchanges a long-lived
-credential for a short-lived bearer, FAOSTAT's login or Google's refresh token, gets a
+credential for a short-lived bearer, by a login or by a refresh token, gets a
 subclass of ``RenewingBearerAuth`` (ADR-0025, amendment 2026-11-18, point c).
 """
 
@@ -262,9 +262,9 @@ class RenewingBearerAuth(httpx.Auth):
     client only, as core's ``AsyncClient`` is.
 
     Args:
-        source: Source slug for the errors, e.g. ``"faostat"``.
+        source: Source slug for the errors, e.g. ``"example"``.
         credentials: Credentials by variable name, which win over the environment
-            (conventions §7), e.g. ``{"GOOGLE_DEMO_REFRESH_TOKEN": token}``.
+            (conventions §7), e.g. ``{"EXAMPLE_DEMO_REFRESH_TOKEN": token}``.
         clock: Monotonic seconds, replaceable in tests.
 
     Attributes:
@@ -314,7 +314,7 @@ class RenewingBearerAuth(httpx.Auth):
 
         Args:
             name: The variable, named as upstream's documents name the credential, e.g.
-                ``"FAOSTAT_USERNAME"``.
+                ``"EXAMPLE_USERNAME"``.
 
         Raises:
             ConfigError: Neither holds it, an empty variable counting as unset; the
@@ -333,8 +333,8 @@ class RenewingBearerAuth(httpx.Auth):
         """What ``credential``'s ``ConfigError`` for an unset ``name`` tells the user to do.
 
         The text after ``"<name> is not set; "``. A source names what its credentials are,
-        e.g. ``"FAOSTAT needs a FAO account: export FAOSTAT_USERNAME (the account's e-mail)
-        and FAOSTAT_PASSWORD"``.
+        e.g. ``"example needs an account: export EXAMPLE_USERNAME (the account's e-mail)
+        and EXAMPLE_PASSWORD"``.
         """
         return "export it or pass it in credentials="
 

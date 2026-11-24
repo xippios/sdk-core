@@ -74,7 +74,7 @@ def load_json(package: str, name: str) -> Any:
     """Decoded contents of a packaged JSON file.
 
     Args:
-        package: Import path of the source package, e.g. ``"xippios.usda.nass"``.
+        package: Import path of the source package, e.g. ``"xippios.example"``.
         name: File name under ``reference/``, e.g. ``"countries.json"``.
     """
     return json.loads(_read_text(package, name))
@@ -87,28 +87,26 @@ class PackagedList(BaseModel):
     has one, ``"note"``. ``<name>`` is usually ``param``; two lists derived from one
     upstream parameter keep it as ``param`` in files of their own names. A list of
     values is records of one field named by the upstream parameter,
-    ``[{"state_alpha": "AK"}, ...]``; a table is records of its columns. Any other key
+    ``[{"region_code": "R01"}, ...]``; a table is records of its columns. Any other key
     is refused (ADR-0041, decision 5). Instances are frozen.
 
     Attributes:
-        param: The list, as upstream names it, e.g. ``"commodities"`` or
-            ``"state_alpha"``.
+        param: The list, as upstream names it, e.g. ``"regions"`` or
+            ``"region_code"``.
         endpoint: The upstream operation the list was fetched from, an operationId or a
-            URL path, e.g. ``"PSDData_GetCommodities"`` or
-            ``"files/v1/app/reference/Reporters.json"``; never ``"reference"`` or a
+            URL path, e.g. ``"listRegions"`` or
+            ``"v1/reference/regions.json"``; never ``"reference"`` or a
             file of the package (ADR-0041, decision 1).
         fetched: When the refresh script fetched the list, timezone-aware UTC; ``write``
-            writes it to the second (``"2026-10-27T09:15:00Z"``). A bare date, as
-            refresh scripts wrote it before template v0.3.0 (``"2026-10-23"``), reads as
-            00:00 UTC of that day, the start of the day the old scripts truncated the
-            time to; the source's next refresh writes the full time. A time without a
-            zone is refused.
+            writes it to the second (``"2026-10-27T09:15:00Z"``). A bare date
+            (``"2026-10-23"``) reads as 00:00 UTC of that day, and the source's next
+            refresh writes the full time. A time without a zone is refused.
         note: Free-text provenance the source keeps with the list, e.g. what a derived
             list is derived from or how a list was reconciled with upstream's
             documentation; ``None`` when there is none. Core reads nothing from it.
         records: Upstream's records verbatim, under upstream's field names, in
-            upstream order, e.g. ``{"commodityCode": "0410000", "commodityName":
-            "Wheat"}``.
+            upstream order, e.g. ``{"regionCode": "R01", "regionName":
+            "North"}``.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -149,8 +147,8 @@ class PackagedList(BaseModel):
         returns a new instance.
 
         Args:
-            package: Import path of the source package, e.g. ``"xippios.usda.psd"``.
-            name: The file, with or without ``.json``, e.g. ``"commodities"``.
+            package: Import path of the source package, e.g. ``"xippios.example"``.
+            name: The file, with or without ``.json``, e.g. ``"regions"``.
 
         Raises:
             FileNotFoundError: The package ships no such file.
@@ -183,8 +181,8 @@ class PackagedList(BaseModel):
         ``None``, since the list carries no count of upstream's.
 
         Args:
-            source: Source slug, e.g. ``"usda-psd"``.
-            request: The task's parameters, e.g. ``{"search": "wheat"}``; a ``None``
+            source: Source slug, e.g. ``"example"``.
+            request: The task's parameters, e.g. ``{"search": "north"}``; a ``None``
                 is dropped, as for every ``ResultMeta``.
             vintage: Upstream's release identifier of the list, when upstream has one;
                 never the fetch date, which is not a vintage.
@@ -205,8 +203,8 @@ class PackagedList(BaseModel):
         """The records validated into ``model`` instances, in upstream order.
 
         Args:
-            model: The record model, e.g. a ``UpstreamModel`` subclass ``Commodity``.
-            source: Source slug for the error, e.g. ``"usda-psd"``.
+            model: The record model, e.g. a ``UpstreamModel`` subclass ``Region``.
+            source: Source slug for the error, e.g. ``"example"``.
 
         Raises:
             ValidationError: A record does not fit ``model``; the message names the
@@ -230,14 +228,14 @@ class PackagedList(BaseModel):
         of the codes is built here, once, and kept with the declaration.
 
         Args:
-            code: The field that holds the code, e.g. ``"commodityCode"``.
-            name: The field that holds the code's name, e.g. ``"commodityName"``;
+            code: The field that holds the code, e.g. ``"regionCode"``.
+            name: The field that holds the code's name, e.g. ``"regionName"``;
                 ``None`` for a list of values, each its own name.
             fold_case: ``True`` to compare without case, for a list of text codes that
-                upstream compares so, as Quick Stats does; ``False`` compares exactly.
-            list_name: The list as a refusal names it, e.g. ``"element_QCL"`` where the
+                upstream compares so; ``False`` compares exactly.
+            list_name: The list as a refusal names it, e.g. ``"regions_v2"`` where the
                 file's name says more than its ``param``; ``param`` by default.
-            source: Source slug every refusal carries, e.g. ``"usda-psd"``.
+            source: Source slug every refusal carries, e.g. ``"example"``.
 
         Raises:
             ValueError: A record lacks ``code`` or ``name``, a code is neither text nor an
@@ -259,7 +257,7 @@ class PackagedList(BaseModel):
         pass ``datetime.now(UTC)`` as it is. ``PackagedList.load`` reads the file back.
 
         Args:
-            path: The file, e.g. ``REFERENCE / "commodities.json"``.
+            path: The file, e.g. ``REFERENCE / "regions.json"``.
         """
         written = self.model_copy(update={"fetched": self.fetched.replace(microsecond=0)})
         payload = written.model_dump(mode="json", exclude={"note"} if self.note is None else None)
@@ -526,7 +524,7 @@ class PackagedCodes:
         return cast(str | int, plain) if plain in self._names else None
 
     def _shown_names(self) -> Mapping[str | int, str]:
-        """Each code to its name as a refusal shows it, white space collapsed: ESR pads."""
+        """Each code to its name as a refusal shows it, white space collapsed, as upstream pads."""
         if self._shown is None:
             self._shown = MappingProxyType(
                 {code: " ".join(name.split()) or str(code) for code, name in self._names.items()}
@@ -593,8 +591,8 @@ _DECLARED = "_xippios_names_codes"
 """The attribute of a task that ``names_codes`` wraps: its parameters to their lists."""
 
 _WITHHELD = (
-    "Upstream was asked, but an answer names the country of each code it is for, and the "
-    "packaged list holds no name for this one, so the answer is withheld."
+    "Upstream was asked, but an answer names each code it is for, and the packaged list "
+    "holds no name for this one, so the answer is withheld."
 )
 """The reason of a refusal after the call, for a code that reached the answer unchecked."""
 
@@ -813,15 +811,15 @@ def _hint(plain: object, hints: Mapping[str, str] | None) -> str | None:
 
 
 def _named(pairs: Iterable[tuple[Any, str]]) -> str:
-    """Codes as ``UnknownCode`` names them: ``0410000 (Wheat)``, a code named by itself once."""
+    """Codes as ``UnknownCode`` names them: ``R01 (North)``, a code named by itself once."""
     return ", ".join(str(code) if name == str(code) else f"{code} ({name})" for code, name in pairs)
 
 
 def _by_name(text: str, shown: Mapping[str | int, str]) -> list[tuple[str | int, str]]:
     """Up to three codes whose name holds ``text``, then those whose name comes close.
 
-    Case and runs of white space are ignored, so ``"wheat"`` names ``104 (Wheat - White)``,
-    and ``"Flaxsed"`` names ``1001 (Flaxseed)`` by ``difflib``.
+    Case and runs of white space are ignored, so ``"north"`` names ``104 (North - Coast)``,
+    and ``"Highlnds"`` names ``1001 (Highlands)`` by ``difflib``.
     """
     wanted = " ".join(text.split()).casefold()
     if not wanted:
@@ -897,7 +895,7 @@ def matches(search: str | None, *fields: object) -> bool:
     GENC code) matches nothing.
 
     Args:
-        search: The text to look for, e.g. ``"wheat"``; ``None`` matches every record.
+        search: The text to look for, e.g. ``"north"``; ``None`` matches every record.
         *fields: The record's fields to look in, e.g. its code and its name.
     """
     if search is None:
@@ -942,23 +940,22 @@ def nearest[K: (int, str)](
 ) -> list[tuple[K, str]]:
     """Up to ``n`` known integer codes nearest to ``value`` by number, nearest first.
 
-    The strategy sdk-usda-esr and sdk-usda-gats carried for their integer codes, where a
-    code close in number is likelier the one meant than a code close in spelling: ``999``
-    among ``902``, ``1001`` and ``104`` names ``1001``, then ``902``, then ``104``. Of two
-    codes equally near, the lower comes first. A code keyed by its text, as sdk-usda-gats
-    keys its customs districts (``"10"``), is compared as the integer it writes and
-    returned as given. For ``UnknownCode``'s ``closest``, as ``closest`` is for codes
+    For integer codes, where a code close in number is likelier the one meant than a code
+    close in spelling: ``999`` among ``902``, ``1001`` and ``104`` names ``1001``, then
+    ``902``, then ``104``. Of two codes equally near, the lower comes first. A code keyed
+    by its text, such as ``"10"``, is compared as the integer it writes and returned as
+    given. For ``UnknownCode``'s ``closest``, as ``closest`` is for codes
     matched by their text and names.
 
     Args:
         value: The integer given, e.g. ``999``.
         codes: Upstream's integer code to its name, keyed by the integer, e.g.
-            ``{1001: "Flaxseed"}``, or by its text, e.g. ``{"1001": "Flaxseed"}``.
+            ``{1001: "Highlands"}``, or by its text, e.g. ``{"1001": "Highlands"}``.
         n: The most pairs returned.
 
     Returns:
         ``(code, name)`` pairs with the codes as ``codes`` keys them, e.g.
-        ``[(1001, "Flaxseed"), (902, "Soybean Oil")]``; empty when ``codes`` is.
+        ``[(1001, "Highlands"), (902, "Lowlands")]``; empty when ``codes`` is.
 
     Raises:
         ValueError: ``n`` is less than 1, or a code keyed by its text is no integer.

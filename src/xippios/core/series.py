@@ -8,21 +8,21 @@ answer for the task to assemble, its vintage included::
     from xippios.core import Ceiling, fetch_periods
     from xippios.example.errors import NoDataForYear  # a NotFoundError of the source's own
 
-    SERIES = Ceiling(10, unit="market years", source="example")
+    SERIES = Ceiling(10, unit="years", source="example")
 
 
-    async def get_series_async(...) -> Result[list[Week]]:
+    async def get_series_async(...) -> Result[list[Observation]]:
         SERIES.check(end_year - start_year + 1, asked=f"{start_year} to {end_year}")
         ...  # a release list, or a count, may come between the two
         fetched = await fetch_periods(
             range(start_year, end_year + 1),
-            lambda year: api.get_weeks(region_code, year),
+            lambda year: api.get_observations(region_code, year),
             skip=(NoDataForYear,),
         )
         records = [record for _, answer in fetched for record in answer]
         answered = {year for year, _ in fetched}
         passed = [str(year) for year in range(start_year, end_year + 1) if year not in answered]
-        notes = [f"Market years {', '.join(passed)} hold no data."] if passed else []
+        notes = [f"Years {', '.join(passed)} hold no data."] if passed else []
 
 The two stay apart, since a task may send a request between them, and a range over the
 ceiling is still refused before any request. The task says the periods it passed over in a note
@@ -61,7 +61,7 @@ class Ceiling:
             mcp=24,
             option="--series-months",
             help="one request per month, so 60 months take about a minute of calls",
-            source="usda-gats",
+            source="example",
         )
         mcp_add_options = SERIES.add_options  # the tool set's hooks
         mcp_apply_options = SERIES.apply_options
@@ -70,7 +70,7 @@ class Ceiling:
         most: The most periods one call fetches in Python and over HTTP, a whole number
             from 1, e.g. ``60``.
         unit: What the periods are, in the plural, as the refusals name them, e.g.
-            ``"months"``, ``"market years"``.
+            ``"months"``, ``"years"``.
         mcp: The ceiling the MCP server starts with, from 1 to ``most``, e.g. ``24``; given
             with ``option``. ``None``, the default, where the server fetches ``most`` too.
         option: The long option that sets the MCP server's ceiling, e.g.
@@ -78,7 +78,7 @@ class Ceiling:
             ``-``, ``series_months``; given with ``mcp``.
         help: What the option's help says after its range and default, e.g. ``"one request
             per month, so 60 months take about a minute of calls"``; ``None`` for nothing.
-        source: Source slug, which the refusals carry, e.g. ``"usda-gats"``.
+        source: Source slug, which the refusals carry, e.g. ``"example"``.
 
     Attributes:
         most: As given.
@@ -110,16 +110,13 @@ class Ceiling:
             raise ValueError(f"most must be a whole number of {unit} from 1, got {most!r}")
         if (mcp is None) != (option is None):
             raise ValueError(
-                "mcp and option come together: the MCP server's ceiling and the option that "
-                f"sets another, e.g. mcp=24, option='--series-months'; got mcp={mcp!r}, "
-                f"option={option!r}"
+                "mcp and option come together: the MCP server's ceiling and the long option "
+                f"that sets another; got mcp={mcp!r}, option={option!r}"
             )
         if mcp is not None and (not _whole(mcp) or not 1 <= mcp <= most):
             raise ValueError(f"mcp must be a whole number from 1 to most, {most}, got {mcp!r}")
         if option is not None and (not option.startswith("--") or len(option) < 3):
-            raise ValueError(
-                f"option must be a long option, e.g. '--series-months', got {option!r}"
-            )
+            raise ValueError(f"option must be a long option, '--' and its name, got {option!r}")
         if help is not None and option is None:
             raise ValueError("help is the option's: it comes with mcp and option")
         self.most = most
@@ -165,8 +162,8 @@ class Ceiling:
 
         A task calls it before any request of the call, which makes the refusal's
         ``Nothing was sent.`` true: a task that checks a range only after a request of the
-        call, as sdk-usda-nass's split of ``year__GE`` alone after its count of the range,
-        words that refusal itself and says what was sent (ADR-0054, amendment 2026-11-22).
+        call, as one that splits a range after a count of it, words that refusal itself
+        and says what was sent (ADR-0054, amendment 2026-11-22).
 
         The refusal is the caller's ``InvalidRequestError``: the range as the task names it,
         or else the count asked, then the ceiling in force with its unit, and, below
@@ -185,7 +182,7 @@ class Ceiling:
                 ``"2024-08 to 2026-08"``; ``None`` names the count alone, ``25 months
                 asked``.
             advice: The sentence that closes the refusal, after ``Nothing was sent.``, e.g.
-                ``"Give a shorter range, e.g. year__GE=2021 with year__LE=2025."``, written
+                ``"Give a shorter range, e.g. start_year=2021 with end_year=2025."``, written
                 with ``value`` where it names a bound; ``Ask for fewer <unit>.`` by default.
 
         Raises:
@@ -311,7 +308,7 @@ async def fetch_periods[P, T](
     gives it. Answered holds for a pass that fetches and for one that counts, as a task may
     run the loop over its counts before its data::
 
-        503 from GET /api/esr/exports/commodityCode/104/allCountries/marketYear/2023:
+        503 from GET /v1/regions/EX/series/2023:
         Service Unavailable. The series stopped at 2023 after 2 periods answered, 2021 to
         2022, and returns nothing.
 

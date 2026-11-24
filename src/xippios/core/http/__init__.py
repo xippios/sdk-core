@@ -3,9 +3,9 @@
 A source's ``http.py`` is a handful of lines::
 
     from xippios.core.http import router_from_tasks
-    from xippios.usda.nass import tasks
+    from xippios.example import tasks
 
-    router = router_from_tasks("usda-nass", [tasks.get_series, tasks.list_commodities])
+    router = router_from_tasks("example", [tasks.get_series, tasks.list_regions])
 
 The consumer mounts the router and, optionally, calls
 ``xippios.core.http.problems.install_error_handlers`` on its app so errors raised

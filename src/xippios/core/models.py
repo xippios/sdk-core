@@ -46,8 +46,9 @@ __all__ = [
 def parse_decimal(text: str) -> Decimal | None:
     """A published figure as a number, or ``None`` when it is a code rather than a value.
 
-    Thousands separators are removed (``"510,000"`` → ``510000``); anything that is not
-    a finite number, such as a suppression code like ``"(D)"``, an empty string,
+    It reads a comma between thousands and a point before decimals: the commas are
+    removed (``"510,000"`` → ``510000``, ``"1,234.5"`` → ``1234.5``). Anything that is not
+    a finite number, such as a code in place of a withheld value, an empty string,
     ``"NaN"`` or ``"Infinity"``, gives ``None``. Within-source hygiene only: the text is
     never reinterpreted.
     """
@@ -176,7 +177,7 @@ class UpstreamModel(BaseModel):
         ``Field(alias=...)`` or a ``validation_alias``.
 
         Returns:
-            E.g. ``{"seriesId": "CORN_YIELD", "value": 177.3}``.
+            E.g. ``{"seriesId": "RAINFALL", "value": 177.3}``.
         """
         dumped = self.model_dump(mode="json")
         return {
@@ -225,8 +226,8 @@ class NamedBy:
 
         class Row(UpstreamModel):
             region_code: Annotated[str, NamedBy(REGIONS)] = Field(validation_alias="regionCode")
-            item_code: Annotated[int, NamedBy("item")] = Field(validation_alias="itemCode")
-            item: str
+            series_code: Annotated[int, NamedBy("series")] = Field(validation_alias="seriesCode")
+            series: str
 
     With a list, every ``Result`` whose data holds the record names each code of the field in
     ``meta.names`` under the field's name, so every task that returns the model is named, and a
@@ -511,8 +512,8 @@ class ResultMeta(BaseModel):
     silently: a misspelt ``totl=`` is an error, not a lost count.
 
     Attributes:
-        source: Source slug, e.g. ``"usda-nass"``.
-        endpoint: Upstream operation name, e.g. ``"api_GET"``; for a packaged answer the
+        source: Source slug, e.g. ``"example"``.
+        endpoint: Upstream operation name, e.g. ``"getSeries"``; for a packaged answer the
             operation the list came from (ADR-0041), as ``PackagedList.meta`` sets it.
         retrieved_at: When we fetched the data; timezone-aware UTC, defaults to now. A
             cache hit's is the time its entry was stored (``AsyncClient.get_answer``), a
@@ -520,7 +521,7 @@ class ResultMeta(BaseModel):
         published_at: Upstream publication or release time when known, timezone-aware;
             naive only with ``published_at_naive`` set.
         published_at_naive: ``True`` when upstream printed ``published_at`` without a
-            zone (FAS: ``2026-10-06T08:00:00``): the value is stored as given, no zone
+            zone (e.g. ``2026-10-06T08:00:00``): the value is stored as given, no zone
             attached, upstream's text and not comparable across sources (ADR-0041,
             decision 2). Set only with a naive ``published_at``.
         vintage: Upstream release identifier when the source has one, as upstream names
@@ -766,7 +767,7 @@ class ResultCap:
             rows and the preview, and the envelope and the note can add to it (see
             ``cap_result``).
         note: The text after the counts when the cap cuts a result, used verbatim, e.g.
-            ``"filter by period or by reporter to see the rest"`` for a tool that has
+            ``"filter by period or by region to see the rest"`` for a tool that has
             those filters. ``None`` says ``"narrow the query to see the rest"``, which
             promises no filter the tool may lack.
         paged: ``True`` gives the tool the adapter's own argument ``offset``, the rows of

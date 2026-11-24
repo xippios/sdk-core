@@ -34,7 +34,7 @@ def tool_functions(tasks: ModuleType) -> list[Callable[..., Any]]:
     for every entry, a bulk task's included.
 
     Args:
-        tasks: A source's tasks module, e.g. ``xippios.usda.nass.tasks``, or its
+        tasks: A source's tasks module, e.g. ``xippios.example.tasks``, or its
             ``tasks_write`` for the write server.
 
     Raises:

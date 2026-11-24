@@ -19,7 +19,7 @@ are read from pytest's rootdir.
 
 **What is checked**, one test each:
 
-- the namespace levels above the package (``xippios/``, ``xippios/usda/``) hold no
+- the namespace levels above the package (``xippios/`` and any between it and the package) hold no
   ``__init__.py``, and the package ships ``py.typed`` and a ``__version__`` (ADR-0006);
 - ``mcp.py``'s ``server`` registers exactly ``tasks.__all__`` minus
   ``getattr(tasks, "BULK_TASKS", frozenset())``, each tool taking its task's parameters,
@@ -63,8 +63,8 @@ are read from pytest's rootdir.
   ``tasks_write.__all__``, a source's write tasks included (conventions §13), in the format
   of sdk-template's ``README.md.jinja``: the tables under the ``## Status`` heading whose
   header row has a ``Task function`` column; that cell starts with the task's name in
-  backticks, alone, with its call (``get_data(commodity_code, market_year)``) or as
-  ``tasks.get_data(...)``, several tasks of one row as backticked names separated by
+  backticks, alone, with its call (``get_series(region_code, year)``) or as
+  ``tasks.get_series(...)``, several tasks of one row as backticked names separated by
   commas; whatever follows the first non-backticked text is prose;
 - ``.copier-answers.yml`` names a template tag, ``_commit: vX.Y.Z`` (conventions §15);
 - ``pyproject.toml`` bounds ``xippios-core`` and each of its extras to one minor,
@@ -130,8 +130,7 @@ changelog entry, a fragment it adds or changes under ``changelog/`` or a change 
 ``CHANGELOG.md``, a release's and an adoption's included (conventions §12, §15, the
 definition of done); and the fixture files it adds or changes under ``tests/fixtures/``
 stay under 256 KiB, a fixture it only moves being neither, one moved and changed judged
-under its new path (ADR-0040). The cap binds a source from its 0.3.0 adoption
-(conventions, header of 1.14), so the step warns in template v0.2.1 and fails from v0.3.0.
+under its new path (ADR-0040).
 """
 
 import importlib
@@ -212,9 +211,9 @@ class FamilySource:
 
     Attributes:
         root: pytest's rootdir, the repository root.
-        import_path: The package's import path, e.g. ``"xippios.usda.psd"``.
+        import_path: The package's import path, e.g. ``"xippios.example"``.
         package: The package module.
-        source: The source slug, ``_client.SOURCE``, e.g. ``"usda-psd"``.
+        source: The source slug, ``_client.SOURCE``, e.g. ``"example"``.
         tasks: The ``tasks`` module.
         tasks_write: The ``tasks_write`` module, or ``None`` for a read-only source.
         tenants: The ``Tenants`` registry of a multi-tenant source, which its ``_client``,
@@ -1307,7 +1306,7 @@ def _packaged_lists(package_dir: Path) -> dict[str, Path]:
 
     A file is a packaged list when it holds a JSON object with the keys ``PackagedList``
     requires, ``param``, ``endpoint``, ``fetched`` and ``records``; any other file under
-    ``reference/``, a table's CSV or an index of the lists such as sdk-eurostat's
+    ``reference/``, a table's CSV or an index of the lists such as a
     ``lists.json``, is none.
 
     Args:

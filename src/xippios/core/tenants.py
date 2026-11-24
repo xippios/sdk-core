@@ -1,8 +1,8 @@
 """Tenants declared in the environment, and one client per tenant (conventions §7).
 
-Some upstreams serve each tenant from a host of its own or under a key of its own:
-CashCtrl serves every organisation from its own subdomain, and a Gmail refresh token
-reaches one mailbox. A source for such an upstream declares its tenants in the
+Some upstreams serve each tenant from a host of its own or under a key of its own: one
+serves every organisation from its own subdomain, and another reaches one mailbox with
+each refresh token. A source for such an upstream declares its tenants in the
 environment, the contract of conventions §7, and every task takes the tenant's name::
 
     tenants = Tenants(
@@ -25,8 +25,8 @@ environment, the contract of conventions §7, and every task takes the tenant's 
     list_tenants = list_task(tenants, name="list_tenants")  # the tool example_list_tenants
 
 A source whose variables carry a prefix other than its slug names it apart,
-``Tenants("google-mail", var_prefix="GOOGLE", param="account", ...)`` for
-``GOOGLE_<NAME>_REFRESH_TOKEN``, and its errors still name the source. ``field`` returns a
+``Tenants("example", var_prefix="EXAMPLE_CLOUD", param="account", ...)`` for
+``EXAMPLE_CLOUD_<NAME>_REFRESH_TOKEN``, and its errors still name the source. ``field`` returns a
 value stripped, and a source that knows the value's shape checks it itself, its
 ``ConfigError`` naming the variable and never the value.
 
@@ -61,9 +61,7 @@ shares, so a task that takes one tenant and opens another's client passes both
 
 Isolation is by configuration: a deployment reaches exactly the tenants its environment
 declares. Nothing here returns a tenant's value: results and messages name tenants and
-variables, never what a variable holds (ADR-0030). The module left core in 0.3.0 for
-sdk-cashctrl alone and came back in 0.4.0 from its copy and sdk-google-mail's (ADR-0042,
-decision 1).
+variables, never what a variable holds (ADR-0030).
 """
 
 import functools
@@ -123,15 +121,15 @@ class Tenants:
     call; only the clients are cached, one per tenant until ``reset()``.
 
     Args:
-        source: Source slug, e.g. ``"cashctrl"``; names the source in errors and in the
+        source: Source slug, e.g. ``"example"``; names the source in errors and in the
             tenant list's ``meta.source``.
         var_prefix: The prefix of every per-tenant variable, upper-case as it appears in
-            the variable name, e.g. ``"GOOGLE"`` for sdk-google-mail's
-            ``GOOGLE_WORK_REFRESH_TOKEN``, a prefix every Google source shares; that
-            source is its one consumer (ADR-0036, amendment 2026-11-24). ``None``, the
+            the variable name, e.g. ``"EXAMPLE_CLOUD"`` for
+            ``EXAMPLE_CLOUD_ACME_REFRESH_TOKEN``, a prefix that the sources of one publisher
+            share; ADR-0036's amendment of 2026-11-24 names its one consumer. ``None``, the
             default, derives it from ``source``, upper-cased with ``-`` made ``_``:
-            ``"CASHCTRL"``.
-        list_var: The variable listing the tenant names, e.g. ``"CASHCTRL_ORGS"``.
+            ``"EXAMPLE"``.
+        list_var: The variable listing the tenant names, e.g. ``"EXAMPLE_TENANTS"``.
         param: The task parameter that names the tenant, e.g. ``"org"``: the one
             declaration of it, which the family check holds every task to, the serve
             command's ``--org`` names and every ``TenantLock`` on this registry binds
@@ -183,7 +181,7 @@ class Tenants:
         if not list_var:
             raise ValueError("list_var must not be empty")
         if not param.isidentifier():
-            raise ValueError(f"param {param!r} is not a parameter name such as 'org'")
+            raise ValueError(f"param {param!r} is not a parameter name")
         for label, values in (("fields", fields), ("reserved", reserved)):
             if isinstance(values, str):
                 raise TypeError(f"{label} is a sequence of names, e.g. [name], not one string")
@@ -206,7 +204,7 @@ class Tenants:
                     f"reserved name {name!r} is not lower-case letters, digits and underscores"
                 )
         if noun is not None and not noun.strip():
-            raise ValueError("noun must be a word such as 'organisation', or None for param")
+            raise ValueError("noun must be the word for one tenant, or None for param")
         self.source = source
         self.var_prefix = source.upper().replace("-", "_") if var_prefix is None else var_prefix
         self.list_var = list_var
@@ -227,7 +225,7 @@ class Tenants:
         )
 
     def var(self, name: str, field: str) -> str:
-        """The variable holding ``field`` for tenant ``name``, e.g. ``CASHCTRL_ACME_SUBDOMAIN``.
+        """The variable holding ``field`` for tenant ``name``, e.g. ``EXAMPLE_ACME_SUBDOMAIN``.
 
         A name only: nothing is read from the environment, and ``name`` need not be
         declared.
@@ -266,7 +264,7 @@ class Tenants:
                     source=self.source,
                 )
             if not _NAME.fullmatch(name):
-                # By position, never quoted: a pasted subdomain or key would be a value.
+                # By position, never quoted: an entry may be a value pasted by mistake.
                 raise ConfigError(
                     f"entry {position} of {self.list_var} is not a tenant name; names use "
                     "only lower-case letters, digits and underscores",
@@ -406,8 +404,8 @@ def list_task(
 
     Args:
         tenants: The source's registry.
-        name: The task's ``__name__``, e.g. ``"list_organisations"``; the MCP tool is
-            named from it (``cashctrl_list_organisations``).
+        name: The task's ``__name__``, e.g. ``"list_tenants"``; the MCP tool is named
+            from it (``example_list_tenants``).
         doc: The docstring, whose text before ``Args:`` is the tool description;
             ``None`` gives a default written for agents that says "tenants".
 
@@ -433,8 +431,7 @@ def list_task(
 class TenantLock:
     """Bind a server to one tenant: every tool acts on it and none takes ``param``.
 
-    The lock of a server that a source's ``--org`` or ``--account`` binds, sdk-cashctrl's
-    ``OrgLock`` and sdk-google-mail's ``AccountLock`` until core 0.4.0 (ADR-0036,
+    The lock of a server that a source's ``--org`` or ``--account`` binds (ADR-0036,
     decision 7). ``bind_tasks`` binds a server's tasks to it, ``tenant_instructions``
     names it in the server's instructions, and ``xippios.core.mcp.main`` builds it from the
     command line. The parameter it binds is the one its registry declares,
@@ -486,8 +483,8 @@ def tenant_instructions(
     The sentence names the tenant, "This server is bound to org acme; every tool acts on
     that organisation and takes no org.", the noun the registry's. A source whose ``text``
     tells an agent that every tool takes the tenant's argument passes ``bound``, its text
-    without that clause, for the bound server, as sdk-google-mail does; without it the
-    bound server's instructions are ``text`` and the sentence, as sdk-cashctrl's are.
+    without that clause, for the bound server; without it the bound server's instructions
+    are ``text`` and the sentence.
 
     Args:
         text: The unbound server's instructions, e.g. ``"Every tool takes org."``.

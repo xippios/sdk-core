@@ -485,7 +485,7 @@ def replay_fixture(respx_mock: respx.MockRouter, fixtures_dir: Path) -> ReplayFi
     through a task (conventions §10), passed as ``endpoint``, the parameter's name.
     Called as ``replay_fixture(endpoint, case, match_params=None, url=None)``, the last
     two by keyword: ``match_params`` names recorded query parameters a request must carry
-    too, e.g. ``["countOnly"]``, and ``url`` serves the recorded answer at another URL,
+    too, e.g. ``["count"]``, and ``url`` serves the recorded answer at another URL,
     e.g. a recorded empty 404 at the path of another year (see
     ``xippios.core.testing.replay.replay``). A test annotates the fixture as
     ``xippios.core.testing.ReplayFixture``.
