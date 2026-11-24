@@ -49,12 +49,17 @@ SENTENCE = (
     "This server is bound to org demo; every tool acts on that organisation and takes no org."
 )
 TENANTS = Tenants(
-    SOURCE, list_var="FICTIVE_SRC_TENANTS", param="org", fields=("SUBDOMAIN",), reserved=(DEMO,)
+    SOURCE,
+    list_var="FICTIVE_SRC_TENANTS",
+    param="org",
+    fields=("SUBDOMAIN",),
+    reserved=(DEMO,),
+    noun="organisation",
 )
 ACCOUNTS = Tenants(
     "fictive-mail", list_var="FICTIVE_MAIL_ACCOUNTS", param="account", fields=("REFRESH_TOKEN",)
 )
-LOCK = TenantLock(TENANTS, DEMO, noun="organisation")
+LOCK = TenantLock(TENANTS, DEMO)
 list_tenants = list_task(TENANTS, name="list_tenants")
 
 
@@ -106,12 +111,17 @@ def find_things(org: str, query: str | None = None, *, limit: int = 10) -> list[
 # The lock ----------------------------------------------------------------------------
 
 
-def test_a_lock_is_a_frozen_registry_tenant_and_noun() -> None:
-    assert (LOCK.tenants, LOCK.value, LOCK.noun) == (TENANTS, DEMO, "organisation")
-    assert TenantLock(tenants=TENANTS, value=DEMO, noun="organisation") == LOCK
-    assert TenantLock(ACCOUNTS, DEMO).noun is None, "the parameter stands for the noun"
+def test_a_lock_is_a_frozen_registry_and_tenant() -> None:
+    assert (LOCK.tenants, LOCK.value) == (TENANTS, DEMO)
+    assert TenantLock(tenants=TENANTS, value=DEMO) == LOCK
     with pytest.raises(dataclasses.FrozenInstanceError):
         LOCK.value = "other"  # type: ignore[misc]
+
+
+def test_a_lock_takes_no_noun_since_its_registry_holds_it() -> None:
+    # https://github.com/xippios/sdk-core/issues/476, part 4: the noun is the registry's.
+    with pytest.raises(TypeError, match="noun"):
+        TenantLock(TENANTS, DEMO, noun="organisation")  # type: ignore[call-arg]
 
 
 def test_a_lock_binds_the_parameter_its_registry_declares_and_no_other() -> None:
@@ -121,17 +131,9 @@ def test_a_lock_binds_the_parameter_its_registry_declares_and_no_other() -> None
         TenantLock("org", DEMO)  # type: ignore[arg-type]
 
 
-@pytest.mark.parametrize(
-    ("value", "noun", "message"),
-    [
-        ("", None, "value must name the tenant"),
-        ("acme", "", "noun must be a word"),
-        ("acme", " ", "noun must be a word"),
-    ],
-)
-def test_a_lock_needs_a_tenant_and_a_noun(value: str, noun: str | None, message: str) -> None:
-    with pytest.raises(ValueError, match=message):
-        TenantLock(TENANTS, value, noun=noun)
+def test_a_lock_needs_a_tenant() -> None:
+    with pytest.raises(ValueError, match="value must name the tenant"):
+        TenantLock(TENANTS, "")
 
 
 # The wrapper -------------------------------------------------------------------------
@@ -438,7 +440,7 @@ def test_a_bound_server_s_text_ends_with_the_lock_s_sentence() -> None:
     assert tenant_instructions(None, LOCK) == SENTENCE
 
 
-def test_the_sentence_names_the_lock_s_noun_or_else_its_parameter() -> None:
+def test_the_sentence_names_the_registry_s_noun_or_else_its_parameter() -> None:
     assert tenant_instructions(None, TenantLock(ACCOUNTS, "work")) == (
         "This server is bound to account work; every tool acts on that account and takes no "
         "account."

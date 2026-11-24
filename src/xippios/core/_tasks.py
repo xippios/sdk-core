@@ -3,7 +3,10 @@
 ``tool_functions`` and ``tool_name`` are public through ``xippios.core``, since neither
 needs the ``mcp`` extra, and through ``xippios.core.mcp`` (ADR-0063, decision 2).
 ``is_bulk_task`` is not public API: a ``ToolSet`` leaves a task named in ``BULK_TASKS``
-out, and the HTTP router (``router_from_tasks``) skips it.
+out, and the HTTP router (``router_from_tasks``) skips it. What a tasks module declares for
+the MCP server alone, ``MCP_CAPS``, ``MCP_INSTRUCTIONS``, ``MCP_BOUND_INSTRUCTIONS``, the
+two option hooks and ``MCP_LOOPBACK_ONLY``, is read by ``ToolSet.from_tasks`` of
+``xippios.core.mcp`` (ADR-0063, decision 7).
 """
 
 import sys

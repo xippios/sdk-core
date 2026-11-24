@@ -1,35 +1,38 @@
+"""The one entry, ``main(build, *, tenants=None, check=None, argv=None)`` (ADR-0063, decision 7).
+
+``main`` takes a package's ``build``, reads the option hooks from the tool set that it
+returns, builds the server that it runs and binds a tenant where ``tenants`` is given. Every
+package is built here as a rendered ``mcp.py`` builds it, by ``ToolSet.from_tasks`` from a
+tasks module of the invented source. ``MCPServer.run`` is replaced, so nothing is served.
+"""
+
 import argparse
 import json
 import logging
 import os
 import sys
+import types
 from collections.abc import Callable
 from typing import Any
 
 import pytest
 from mcp.server.mcpserver import MCPServer
 
-from xippios.core import (
-    ConfigError,
-    InvalidRequestError,
-    TenantLock,
-    Tenants,
-    XippiosError,
-    bind_tasks,
-    tenant_instructions,
-)
-from xippios.core.mcp import (
-    LOOPBACK_HOSTS,
-    ToolSet,
-    build_parser,
-    build_server,
-    main,
-    serve_tenants,
-)
+import xippios.core.mcp
+from xippios.core import ConfigError, InvalidRequestError, TenantLock, Tenants, XippiosError
+from xippios.core.mcp import LOOPBACK_HOSTS, ToolSet, build_parser, build_server, cli, main
 from xippios.core.testing import mcp_call_text
 
 REQUEST_LOGGERS = ("httpx", "httpcore", "httpx2", "httpcore2")
 ENTRY_POINT = "xippios-example-mcp-read"
+SOURCE = "example"
+ALLOW_REMOTE = (
+    "--allow-remote serve a write server, or a read server held to loopback, beyond "
+    "loopback; it carries no authentication, put it behind a gateway"
+)
+"""The one help of ``--allow-remote``, whatever the server (https://github.com/xippios/sdk-core/issues/485)."""
+
+Served = list[tuple[MCPServer, str, dict[str, Any]]]
 
 
 @pytest.fixture(autouse=True)
@@ -42,6 +45,93 @@ def entry_point(monkeypatch: pytest.MonkeyPatch) -> str:
     monkeypatch.setattr(sys, "argv", [f"/opt/venv/bin/{ENTRY_POINT}"])
     monkeypatch.setattr(sys.modules["__main__"], "__spec__", None)
     return ENTRY_POINT
+
+
+@pytest.fixture
+def served(monkeypatch: pytest.MonkeyPatch) -> Served:
+    """Every server ``main`` would have run, with its transport and options."""
+    calls: Served = []
+
+    def run(self: MCPServer, transport: str = "stdio", **options: Any) -> None:
+        calls.append((self, transport, options))
+
+    monkeypatch.setattr(MCPServer, "run", run)
+    return calls
+
+
+def get_series(series_id: str) -> dict[str, str]:
+    """Fetch one series.
+
+    Args:
+        series_id: Upstream identifier, e.g. ``"CORN_YIELD"``.
+    """
+    return {"series_id": series_id}
+
+
+def create_thing(name: str, confirm: bool = False) -> dict[str, str]:
+    """Create a thing; without confirm, return a preview.
+
+    Args:
+        name: The thing's name, e.g. ``"Corn"``.
+        confirm: ``True`` writes, ``False`` previews.
+    """
+    return {"name": name}
+
+
+def tasks_module(*tasks: Callable[..., Any], **declarations: Any) -> types.ModuleType:
+    """A source's tasks module: ``tasks`` in ``__all__``, and its declarations for core."""
+    module = types.ModuleType("xippios.example.tasks")
+    module.__all__ = [fn.__name__ for fn in tasks]  # type: ignore[attr-defined]
+    for fn in tasks:
+        setattr(module, fn.__name__, fn)
+    for name, value in declarations.items():
+        setattr(module, name, value)
+    return module
+
+
+class Builds:
+    """A package's ``build``, as a rendered ``mcp.py`` writes it, counting its calls.
+
+    Called without a lock it builds the tool set of every declared tenant, as a source
+    without tenants builds its only one.
+    """
+
+    def __init__(self, tasks: types.ModuleType, *, read_only: bool = True) -> None:
+        self.tasks = tasks
+        self.read_only = read_only
+        self.locks: list[TenantLock | None] = []
+
+    def __call__(self, lock: TenantLock | None = None) -> ToolSet:
+        self.locks.append(lock)
+        return ToolSet.from_tasks(
+            SOURCE, self.tasks, version="1.2.0", lock=lock, read_only=self.read_only
+        )
+
+
+def reads() -> Builds:
+    """A read package without options of its own."""
+    return Builds(tasks_module(get_series))
+
+
+def writes() -> Builds:
+    """A write package, whose server is held to loopback."""
+    return Builds(tasks_module(create_thing), read_only=False)
+
+
+def held() -> Builds:
+    """A read package whose tasks module holds its server to loopback."""
+    return Builds(tasks_module(get_series, MCP_LOOPBACK_ONLY=True))
+
+
+def help_of(build: Callable[..., ToolSet], capsys: pytest.CaptureFixture[str], **given: Any) -> str:
+    """The help ``main`` prints for ``build``, its lines joined as argparse wraps them."""
+    with pytest.raises(SystemExit) as info:
+        main(build, argv=["--help"], **given)
+    assert info.value.code == 0
+    return " ".join(capsys.readouterr().out.split())
+
+
+# The entry ----------------------------------------------------------------------------
 
 
 def test_the_loopback_hosts_are_the_mcp_sdks() -> None:
@@ -59,241 +149,216 @@ def test_parser_defaults() -> None:
     )
 
 
-def test_main_dispatches_to_transport(monkeypatch: pytest.MonkeyPatch) -> None:
-    server = build_server(ToolSet("example", []))
-    calls: list[tuple[Any, ...]] = []
-
-    def fake_run(transport: str = "stdio", **kwargs: Any) -> None:
-        calls.append((transport, kwargs))
-
-    monkeypatch.setattr(server, "run", fake_run)
-    main(server, [])
-    main(server, ["--http", "--host", "0.0.0.0", "--port", "9000"])
-    assert calls == [
-        ("stdio", {}),
-        ("streamable-http", {"host": "0.0.0.0", "port": 9000}),
-    ]
-
-
-def test_main_quiets_request_loggers_before_running(monkeypatch: pytest.MonkeyPatch) -> None:
-    server = build_server(ToolSet("example", []))
-    seen: dict[str, int] = {}
-
-    def fake_run(transport: str = "stdio", **kwargs: Any) -> None:
-        seen.update({name: logging.getLogger(name).level for name in REQUEST_LOGGERS})
-
-    monkeypatch.setattr(server, "run", fake_run)
-    # Something between build_server and main puts the request log back on.
-    logging.getLogger("httpx").setLevel(logging.INFO)
-    logging.getLogger("httpcore").setLevel(logging.DEBUG)
-    logging.getLogger("httpx2").setLevel(logging.INFO)
-    logging.getLogger("httpcore2").setLevel(logging.DEBUG)
-    main(server, [])
-    assert seen == dict.fromkeys(REQUEST_LOGGERS, logging.WARNING)
-
-
 def test_parser_has_allow_remote_off_by_default() -> None:
     assert build_parser("x").parse_args([]).allow_remote is False
     assert build_parser("x").parse_args(["--allow-remote"]).allow_remote is True
 
 
-def add_org(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--org", help="serve only this tenant")
+def test_main_builds_the_server_of_the_tool_set_and_runs_it(served: Served) -> None:
+    build = reads()
+    main(build, argv=[])
+    main(build, argv=["--http", "--host", "0.0.0.0", "--port", "9000"])
+    assert [(transport, options) for _, transport, options in served] == [
+        ("stdio", {}),
+        ("streamable-http", {"host": "0.0.0.0", "port": 9000}),
+    ]
+    first, second = (server for server, _, _ in served)
+    assert first is not second, "each run builds the server that it runs"
+    assert (first.name, first.version) == ("xippios-example", "1.2.0")
+    assert build.locks == [None, None], "build is called once, without a lock"
 
 
-class Runs:
-    """Records ``run`` on every server it is attached to, instead of serving."""
+def test_main_takes_the_package_s_build_and_its_arguments_by_keyword(served: Served) -> None:
+    # https://github.com/xippios/sdk-core/issues/476, parts 2 and 7.
+    server = build_server(reads()())
+    with pytest.raises(TypeError, match=r"^main takes the package's build, e.g. main\(build\)"):
+        main(server, argv=[])  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match=r"^build returns the package's ToolSet; it returned "):
+        main(lambda: server, argv=[])  # type: ignore[arg-type, return-value]
+    with pytest.raises(TypeError):
+        main(reads(), [])  # type: ignore[call-arg, arg-type]
+    assert served == []
 
-    def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        self.monkeypatch = monkeypatch
-        self.calls: list[tuple[MCPServer, str, dict[str, Any]]] = []
 
-    def attach(self, server: MCPServer) -> MCPServer:
-        def fake_run(transport: str = "stdio", **kwargs: Any) -> None:
-            self.calls.append((server, transport, kwargs))
+def test_main_quiets_request_loggers_right_before_running(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: dict[str, int] = {}
 
-        self.monkeypatch.setattr(server, "run", fake_run)
+    def run(self: MCPServer, transport: str = "stdio", **options: Any) -> None:
+        seen.update({name: logging.getLogger(name).level for name in REQUEST_LOGGERS})
+
+    def build_and_log(tool_set: ToolSet) -> MCPServer:
+        server = build_server(tool_set)
+        # Something after the server is built puts the request log back on.
+        logging.getLogger("httpx").setLevel(logging.INFO)
+        logging.getLogger("httpcore").setLevel(logging.DEBUG)
+        logging.getLogger("httpx2").setLevel(logging.INFO)
+        logging.getLogger("httpcore2").setLevel(logging.DEBUG)
         return server
 
+    monkeypatch.setattr(MCPServer, "run", run)
+    monkeypatch.setattr(cli, "build_server", build_and_log)
+    main(reads(), argv=[])
+    assert seen == dict.fromkeys(REQUEST_LOGGERS, logging.WARNING)
 
-def test_an_added_option_is_parsed_once_and_applied(monkeypatch: pytest.MonkeyPatch) -> None:
-    runs = Runs(monkeypatch)
-    server = runs.attach(build_server(ToolSet("example", [])))
-    acme = runs.attach(build_server(ToolSet("example", []), name="xippios-example-acme"))
-    seen: list[argparse.Namespace] = []
 
-    def apply(args: argparse.Namespace, given: MCPServer) -> MCPServer:
-        assert given is server
-        seen.append(args)
-        return given if args.org is None else acme
+SPLIT_YEARS: list[int] = []
+"""What the source's ``apply_options`` was handed, run by run."""
 
-    main(
-        server,
-        ["--org", "acme", "--http", "--port", "9001"],
-        add_options=add_org,
-        apply_options=apply,
+
+def add_split_years(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--split-years", type=int, default=5, help="years one call splits")
+
+
+def apply_split_years(namespace: argparse.Namespace) -> None:
+    if namespace.split_years > 20:
+        raise InvalidRequestError("--split-years takes 1 to 20", source=SOURCE)
+    SPLIT_YEARS.append(namespace.split_years)
+
+
+def with_options(*tasks: Callable[..., Any], **declarations: Any) -> types.ModuleType:
+    """A tasks module that declares the two option hooks beside ``declarations``."""
+    return tasks_module(
+        *tasks,
+        mcp_add_options=add_split_years,
+        mcp_apply_options=apply_split_years,
+        **declarations,
     )
-    main(server, ["--http"], add_options=add_org, apply_options=apply)
-    assert [args.org for args in seen] == ["acme", None]
-    assert runs.calls == [
-        (acme, "streamable-http", {"host": "127.0.0.1", "port": 9001}),
-        (server, "streamable-http", {"host": "127.0.0.1", "port": 8000}),
+
+
+def test_the_source_s_options_are_parsed_once_with_core_s_and_applied(
+    monkeypatch: pytest.MonkeyPatch, served: Served
+) -> None:
+    monkeypatch.setattr(sys.modules[__name__], "SPLIT_YEARS", [])
+    build = Builds(with_options(get_series))
+    main(build, argv=["--split-years", "7", "--http", "--port", "9001"])
+    main(build, argv=[])
+    assert SPLIT_YEARS == [7, 5], "the hook takes the parsed options and returns nothing"
+    assert [(transport, options) for _, transport, options in served] == [
+        ("streamable-http", {"host": "127.0.0.1", "port": 9001}),
+        ("stdio", {}),
     ]
 
 
 def test_help_lists_core_and_source_options(capsys: pytest.CaptureFixture[str]) -> None:
-    with pytest.raises(SystemExit) as info:
-        main(build_server(ToolSet("example", [])), ["--help"], add_options=add_org)
-    assert info.value.code == 0
-    out = capsys.readouterr().out
-    for option in ("--http", "--host", "--port", "--allow-remote", "--org"):
-        assert option in out
-    help_text = " ".join(out.split())  # argparse wraps the help lines
-    assert "--allow-remote changes nothing: this read server is not held to loopback" in help_text
-
-
-def help_of(server: MCPServer, capsys: pytest.CaptureFixture[str]) -> str:
-    with pytest.raises(SystemExit) as info:
-        main(server, ["--help"])
-    assert info.value.code == 0
-    return " ".join(capsys.readouterr().out.split())  # argparse wraps the help lines
+    text = help_of(Builds(with_options(get_series)), capsys)
+    for option in ("--http", "--host", "--port", "--allow-remote", "--split-years"):
+        assert option in text
+    assert ALLOW_REMOTE in text
 
 
 def test_the_usage_line_names_the_entry_point(capsys: pytest.CaptureFixture[str]) -> None:
     # https://github.com/xippios/sdk-core/issues/167: server.name is one slug for both servers
-    assert help_of(build_server(ToolSet("example", [])), capsys).startswith(
-        f"usage: {ENTRY_POINT} "
-    )
+    assert help_of(reads(), capsys).startswith(f"usage: {ENTRY_POINT} ")
 
 
-def test_the_help_of_allow_remote_names_the_server_kind(
-    capsys: pytest.CaptureFixture[str],
+@pytest.mark.parametrize("build", [reads, writes, held], ids=["read", "write", "held"])
+def test_the_help_of_allow_remote_is_one_wording_whatever_the_server(
+    capsys: pytest.CaptureFixture[str], build: Callable[[], Builds]
 ) -> None:
-    write = build_server(ToolSet("example", [create_thing], read_only=False))
-    assert (
-        "--allow-remote serve this write server beyond loopback; it carries no "
-        "authentication, put it behind a gateway"
-    ) in help_of(write, capsys)
-    held = build_server(ToolSet("example", [], loopback_only=True))
-    assert (
-        "--allow-remote serve this read server beyond loopback; it carries no "
-        "authentication, put it behind a gateway"
-    ) in help_of(held, capsys)
+    assert ALLOW_REMOTE in help_of(build(), capsys)
 
 
-def test_a_parser_built_without_a_server_names_both_kinds() -> None:
+def test_a_parser_takes_no_server() -> None:
     parser = build_parser("xippios-example-mcp")
     assert parser.prog == "xippios-example-mcp"
-    help_text = " ".join(parser.format_help().split())
-    assert (
-        "--allow-remote serve a write server, or a read server built with loopback_only=True, "
-        "beyond loopback; it carries no authentication, put it behind a gateway"
-    ) in help_text
+    assert ALLOW_REMOTE in " ".join(parser.format_help().split())
     assert build_parser().prog == ENTRY_POINT  # argparse's default: the script's name
+    with pytest.raises(TypeError, match="server"):
+        build_parser(server=build_server(reads()()))  # type: ignore[call-arg]
 
 
-def test_unknown_options_still_fail(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    runs = Runs(monkeypatch)
-    server = runs.attach(build_server(ToolSet("example", [])))
+def test_unknown_options_still_fail(served: Served, capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as info:
-        main(server, ["--org", "acme", "--nope"], add_options=add_org)
+        main(Builds(with_options(get_series)), argv=["--split-years", "3", "--nope"])
     assert info.value.code == 2
     assert "unrecognized arguments: --nope" in capsys.readouterr().err
-    assert runs.calls == []
+    assert served == []
 
 
 @pytest.mark.parametrize(
     ("error", "message"),
     [
-        (InvalidRequestError, "unknown tenant 'nope'; declared tenants: acme"),
+        (InvalidRequestError, "--split-years takes 1 to 20"),
         (ConfigError, "EXAMPLE_ACME_SUBDOMAIN is not set"),
     ],
 )
 def test_an_error_from_apply_options_exits_2_without_a_traceback(
-    monkeypatch: pytest.MonkeyPatch,
+    served: Served,
     capsys: pytest.CaptureFixture[str],
     error: type[XippiosError],
     message: str,
 ) -> None:
-    runs = Runs(monkeypatch)
-    server = runs.attach(build_server(ToolSet("example", []), name="xippios-example"))
+    def refuse(namespace: argparse.Namespace) -> None:
+        raise error(message, source=SOURCE)
 
-    def apply(args: argparse.Namespace, given: MCPServer) -> MCPServer:
-        raise error(message, source="example")
-
+    tasks = tasks_module(get_series, mcp_add_options=add_split_years, mcp_apply_options=refuse)
+    build = Builds(tasks)
     with pytest.raises(SystemExit) as info:
-        main(server, ["--org", "nope"], add_options=add_org, apply_options=apply)
+        main(build, argv=["--split-years", "21"])
     assert info.value.code == 2
     err = capsys.readouterr().err
     assert f"{ENTRY_POINT}: error: {message}" in err
     assert "Traceback" not in err
-    assert runs.calls == []
+    assert served == []
 
 
-def create_thing(name: str, confirm: bool = False) -> dict[str, str]:
-    """Create a thing; without confirm, return a preview.
-
-    Args:
-        name: The thing's name, e.g. ``"Corn"``.
-        confirm: ``True`` writes, ``False`` previews.
-    """
-    return {"name": name}
+# The hold to loopback, read from the tool set (ADR-0063, decision 5) --------------------
 
 
 @pytest.mark.parametrize("host", ["0.0.0.0", "192.0.2.10", "::", "example.test"])
 def test_a_write_server_is_not_served_beyond_loopback(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], host: str
+    served: Served, capsys: pytest.CaptureFixture[str], host: str
 ) -> None:
-    runs = Runs(monkeypatch)
-    server = runs.attach(build_server(ToolSet("example", [create_thing], read_only=False)))
     with pytest.raises(SystemExit) as info:
-        main(server, ["--http", "--host", host])
+        main(writes(), argv=["--http", "--host", host])
     assert info.value.code == 2
     err = capsys.readouterr().err
     assert "xippios-example is a write server and carries no authentication" in err
     assert "--allow-remote" in err
-    assert runs.calls == []
+    assert served == []
 
 
-def test_allow_remote_serves_a_write_server_beyond_loopback(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    runs = Runs(monkeypatch)
-    server = runs.attach(build_server(ToolSet("example", [create_thing], read_only=False)))
-    main(server, ["--http", "--host", "0.0.0.0", "--allow-remote"])
-    assert runs.calls == [(server, "streamable-http", {"host": "0.0.0.0", "port": 8000})]
-
-
-@pytest.mark.parametrize("host", LOOPBACK_HOSTS)
-def test_a_write_server_is_served_on_loopback(monkeypatch: pytest.MonkeyPatch, host: str) -> None:
-    runs = Runs(monkeypatch)
-    server = runs.attach(build_server(ToolSet("example", [create_thing], read_only=False)))
-    main(server, ["--http", "--host", host])
-    main(server, ["--host", "0.0.0.0"])  # stdio: --host is not used
-    assert runs.calls == [
-        (server, "streamable-http", {"host": host, "port": 8000}),
-        (server, "stdio", {}),
+def test_allow_remote_serves_a_write_server_beyond_loopback(served: Served) -> None:
+    main(writes(), argv=["--http", "--host", "0.0.0.0", "--allow-remote"])
+    assert [(transport, options) for _, transport, options in served] == [
+        ("streamable-http", {"host": "0.0.0.0", "port": 8000})
     ]
 
 
-def test_a_read_only_server_is_served_anywhere(monkeypatch: pytest.MonkeyPatch) -> None:
-    runs = Runs(monkeypatch)
-    server = runs.attach(build_server(ToolSet("example", [])))
-    main(server, ["--http", "--host", "0.0.0.0"])
-    assert runs.calls == [(server, "streamable-http", {"host": "0.0.0.0", "port": 8000})]
+@pytest.mark.parametrize("host", LOOPBACK_HOSTS)
+def test_a_write_server_is_served_on_loopback(served: Served, host: str) -> None:
+    main(writes(), argv=["--http", "--host", host])
+    main(writes(), argv=["--host", "0.0.0.0"])  # stdio: --host is not used
+    assert [(transport, options) for _, transport, options in served] == [
+        ("streamable-http", {"host": host, "port": 8000}),
+        ("stdio", {}),
+    ]
+
+
+def test_a_write_server_takes_its_slug_s_name(served: Served) -> None:
+    # https://github.com/xippios/sdk-core/issues/476, part 4: one name for both servers.
+    main(writes(), argv=[])
+    ((server, _, _),) = served
+    assert server.name == "xippios-example"
+
+
+def test_a_read_only_server_is_served_anywhere(served: Served) -> None:
+    main(reads(), argv=["--http", "--host", "0.0.0.0"])
+    assert [(transport, options) for _, transport, options in served] == [
+        ("streamable-http", {"host": "0.0.0.0", "port": 8000})
+    ]
 
 
 @pytest.mark.parametrize("host", ["0.0.0.0", "192.0.2.10", "::", "example.test"])
 def test_a_read_server_held_to_loopback_is_not_served_beyond_it(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], host: str
+    served: Served, capsys: pytest.CaptureFixture[str], host: str
 ) -> None:
-    # ADR-0025, D-a; https://github.com/xippios/sdk-core/issues/167
-    runs = Runs(monkeypatch)
-    server = runs.attach(build_server(ToolSet("example", [], loopback_only=True)))
+    # ADR-0025, D-a; https://github.com/xippios/sdk-core/issues/167; the hold is a
+    # declaration of the tasks module (https://github.com/xippios/sdk-core/issues/476, part 4)
     with pytest.raises(SystemExit) as info:
-        main(server, ["--http", "--host", host])
+        main(held(), argv=["--http", "--host", host])
     assert info.value.code == 2
     err = capsys.readouterr().err
     assert (
@@ -301,76 +366,48 @@ def test_a_read_server_held_to_loopback_is_not_served_beyond_it(
         "no authentication; serve it over --http on a loopback --host (127.0.0.1, localhost, "
         "::1), or pass --allow-remote and put it behind a gateway"
     ) in err
-    assert runs.calls == []
+    assert served == []
 
 
-def test_allow_remote_serves_a_read_server_held_to_loopback_beyond_it(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    runs = Runs(monkeypatch)
-    server = runs.attach(build_server(ToolSet("example", [], loopback_only=True)))
-    main(server, ["--http", "--host", "0.0.0.0", "--allow-remote"])
+def test_allow_remote_serves_a_read_server_held_to_loopback_beyond_it(served: Served) -> None:
+    main(held(), argv=["--http", "--host", "0.0.0.0", "--allow-remote"])
     for host in LOOPBACK_HOSTS:
-        main(server, ["--http", "--host", host])
-    main(server, ["--host", "0.0.0.0"])  # stdio: --host is not used
-    assert runs.calls == [
-        (server, "streamable-http", {"host": "0.0.0.0", "port": 8000}),
-        *[(server, "streamable-http", {"host": host, "port": 8000}) for host in LOOPBACK_HOSTS],
-        (server, "stdio", {}),
+        main(held(), argv=["--http", "--host", host])
+    main(held(), argv=["--host", "0.0.0.0"])  # stdio: --host is not used
+    assert [(transport, options) for _, transport, options in served] == [
+        ("streamable-http", {"host": "0.0.0.0", "port": 8000}),
+        *[("streamable-http", {"host": host, "port": 8000}) for host in LOOPBACK_HOSTS],
+        ("stdio", {}),
     ]
 
 
-def test_the_server_from_apply_options_is_the_one_checked(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    runs = Runs(monkeypatch)
-    server = runs.attach(build_server(ToolSet("example", [])))
-    write = runs.attach(build_server(ToolSet("example", [create_thing], read_only=False)))
-    with pytest.raises(SystemExit) as info:
-        main(server, ["--http", "--host", "0.0.0.0"], apply_options=lambda args, given: write)
-    assert info.value.code == 2
-    assert "is a write server" in capsys.readouterr().err
-    assert runs.calls == []
-
-
-def test_the_request_log_is_quiet_when_the_server_from_apply_options_runs(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    server = build_server(ToolSet("example", []))
-    seen: dict[str, int] = {}
-
-    def fake_run(transport: str = "stdio", **kwargs: Any) -> None:
-        seen.update({name: logging.getLogger(name).level for name in REQUEST_LOGGERS})
-
-    monkeypatch.setattr(server, "run", fake_run)
-
-    def apply(args: argparse.Namespace, given: MCPServer) -> MCPServer:
-        # Something the source does here, building a server another way say, raises it.
-        for name in REQUEST_LOGGERS:
-            logging.getLogger(name).setLevel(logging.INFO)
-        return given
-
-    main(server, [], apply_options=apply)
-    assert seen == dict.fromkeys(REQUEST_LOGGERS, logging.WARNING)
-
-
-# serve_tenants: --<param> binds a multi-tenant source's server to one tenant ----------
-# The tests of the two copies' serve commands, sdk-cashctrl's --org and sdk-google-mail's
-# --account (ADR-0042, decision 1), on a fictitious source whose variables
-# no shell sets.
+# tenants=: --<param> binds a multi-tenant source's server to one tenant ------------------
+# The serve command of the multi-tenant sources (ADR-0036, decision 8; ADR-0063,
+# decision 7), on the invented source, whose variables no shell sets.
 
 TENANTS = Tenants(
-    "fictive-src",
-    list_var="FICTIVE_SRC_TENANTS",
+    SOURCE,
+    list_var="EXAMPLE_ORGS",
     param="org",
     fields=("SUBDOMAIN", "API_KEY"),
     reserved=("demo",),
+    noun="organisation",
 )
-LOCK = TenantLock(TENANTS, "demo", noun="organisation")
-TEXT = "Fictive via xippios."
+TEXT = "Example via xippios. Every tool takes org."
+BOUND = "Example via xippios."
 SENTENCE = (
-    "This server is bound to org demo; every tool acts on that organisation and takes no org."
+    "This server is bound to org acme; every tool acts on that organisation and takes no org."
 )
+
+
+@pytest.fixture
+def acme(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The tenant ``acme`` declared with placeholder values, and no other."""
+    for name in [name for name in os.environ if name.startswith("EXAMPLE_")]:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv(TENANTS.list_var, "acme")
+    monkeypatch.setenv(TENANTS.var("acme", "SUBDOMAIN"), "placeholder")
+    monkeypatch.setenv(TENANTS.var("acme", "API_KEY"), "placeholder")
 
 
 def check_subdomain(name: str) -> str:
@@ -379,39 +416,16 @@ def check_subdomain(name: str) -> str:
     if not subdomain.isalnum():
         variable = TENANTS.var(name, "SUBDOMAIN")
         raise ConfigError(
-            f"{variable} does not hold a valid SUBDOMAIN for tenant {name!r}",
-            source=TENANTS.source,
+            f"{variable} does not hold a valid SUBDOMAIN for tenant {name!r}", source=SOURCE
         )
     return subdomain
 
 
-@pytest.fixture
-def fictive_demo(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The reserved ``demo`` declared with placeholder values, and no other tenant."""
-    for name in [name for name in os.environ if name.startswith("FICTIVE_")]:
-        monkeypatch.delenv(name, raising=False)
-    monkeypatch.setenv(TENANTS.var("demo", "SUBDOMAIN"), "placeholder")
-    monkeypatch.setenv(TENANTS.var("demo", "API_KEY"), "placeholder")
-
-
-@pytest.fixture
-def served(monkeypatch: pytest.MonkeyPatch) -> list[tuple[MCPServer, str, dict[str, Any]]]:
-    """Every server ``main`` would have run, the ones ``serve_tenants`` builds included."""
-    calls: list[tuple[MCPServer, str, dict[str, Any]]] = []
-
-    def run(self: MCPServer, transport: str = "stdio", **options: Any) -> None:
-        calls.append((self, transport, options))
-
-    monkeypatch.setattr(MCPServer, "run", run)
-    return calls
-
-
-async def echo_org(org: str, confirm: bool = False) -> dict[str, str]:
+async def echo_org(org: str) -> dict[str, str]:
     """Return the organisation the tool was called for.
 
     Args:
-        org: A declared organisation, e.g. ``demo``.
-        confirm: Ignored, e.g. ``true``.
+        org: A declared organisation, e.g. ``acme``.
     """
     return {"org": org}
 
@@ -420,7 +434,7 @@ async def echo_account(account: str) -> dict[str, str]:
     """Return the account the tool was called for.
 
     Args:
-        account: A declared account, e.g. ``demo``.
+        account: A declared account, e.g. ``acme``.
     """
     return {"account": account}
 
@@ -429,131 +443,108 @@ async def echo_org_name(org_name: str) -> dict[str, str]:
     """Return the organisation the tool was called for.
 
     Args:
-        org_name: A declared organisation, e.g. ``demo``.
+        org_name: A declared organisation, e.g. ``acme``.
     """
     return {"org_name": org_name}
 
 
-class Builds:
-    """A source's ``build(lock)``: one tool that echoes its tenant, ``echo_org`` by default.
+async def create_note(org: str, text: str, confirm: bool = False) -> dict[str, str]:
+    """Create a note for an organisation; without confirm, return a preview.
 
-    The tool takes the tenant's parameter that the lock binds, since ``bind_tasks`` refuses
-    a task that takes none (https://github.com/xippios/sdk-core/issues/299).
+    Args:
+        org: A declared organisation, e.g. ``acme``.
+        text: The note, e.g. ``"Paid"``.
+        confirm: ``True`` writes, ``False`` previews.
     """
+    return {"org": org, "text": text}
 
-    def __init__(
-        self,
-        *,
-        read_only: bool = True,
-        loopback_only: bool = False,
-        task: Callable[..., Any] = echo_org,
-    ) -> None:
-        self.locks: list[TenantLock | None] = []
-        self.read_only = read_only
-        self.loopback_only = loopback_only
-        self.task = task
 
-    def __call__(self, lock: TenantLock | None = None) -> MCPServer:
-        self.locks.append(lock)
-        return build_server(
-            ToolSet(
-                "fictive-src",
-                bind_tasks([self.task], lock),
-                instructions=tenant_instructions(TEXT, lock),
-                read_only=self.read_only,
-                loopback_only=self.loopback_only,
-            )
-        )
+def orgs(**declarations: Any) -> Builds:
+    """A multi-tenant read package whose one tool echoes its organisation."""
+    return Builds(
+        tasks_module(echo_org, MCP_INSTRUCTIONS=TEXT, MCP_BOUND_INSTRUCTIONS=BOUND, **declarations)
+    )
 
 
 @pytest.mark.anyio
-@pytest.mark.usefixtures("fictive_demo")
-async def test_serve_tenants_binds_the_server_then_hands_over_to_main(
-    served: list[tuple[MCPServer, str, dict[str, Any]]],
-) -> None:
-    build = Builds()
-    unbound = build()
-    argv = ["--host", "127.0.0.1", "--org=demo", "--http", "--port", "9001"]
-    serve_tenants(unbound, build, TENANTS, noun="organisation", argv=argv)
-    assert build.locks == [None, LOCK]
+@pytest.mark.usefixtures("acme")
+async def test_main_binds_a_tenant_then_serves_the_bound_server(served: Served) -> None:
+    build = orgs()
+    argv = ["--host", "127.0.0.1", "--org=acme", "--http", "--port", "9001"]
+    main(build, tenants=TENANTS, argv=argv)
+    assert build.locks == [None, TenantLock(TENANTS, "acme")]
     ((server, transport, options),) = served
-    assert server is not unbound, "the bound server is built anew"
     assert (transport, options) == ("streamable-http", {"host": "127.0.0.1", "port": 9001})
-    assert json.loads(await mcp_call_text(server, "fictive_src_echo_org", {})) == {"org": "demo"}
-    assert server.instructions == f"{TEXT} {SENTENCE}"
+    assert (server.name, server.version) == ("xippios-example", "1.2.0")
+    assert server.instructions == f"{BOUND} {SENTENCE}"
+    tool = {t.name: t for t in await server.list_tools()}["example_echo_org"]
+    assert "org" not in tool.input_schema["properties"]
+    assert json.loads(await mcp_call_text(server, "example_echo_org", {})) == {"org": "acme"}
 
 
-@pytest.mark.usefixtures("fictive_demo")
-def test_serve_tenants_without_the_option_serves_the_server_as_built(
-    served: list[tuple[MCPServer, str, dict[str, Any]]],
-) -> None:
-    build = Builds()
-    unbound = build()
+@pytest.mark.usefixtures("acme")
+def test_without_the_option_main_serves_every_declared_tenant(served: Served) -> None:
+    build = orgs()
     checked: list[str] = []
-    serve_tenants(unbound, build, TENANTS, check=checked.append, argv=[])
-    assert served == [(unbound, "stdio", {})]
+    main(build, tenants=TENANTS, check=checked.append, argv=[])
+    ((server, transport, _),) = served
+    assert (transport, server.instructions) == ("stdio", TEXT)
     assert build.locks == [None]
     assert checked == [], "no tenant, no check"
 
 
-@pytest.mark.usefixtures("fictive_demo")
+@pytest.mark.usefixtures("acme")
 def test_an_undeclared_tenant_stops_the_process_before_anything_is_built(
-    served: list[tuple[MCPServer, str, dict[str, Any]]], capsys: pytest.CaptureFixture[str]
+    served: Served, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    build = Builds()
+    build = orgs()
     checked: list[str] = []
     with pytest.raises(SystemExit) as info:
-        serve_tenants(build(), build, TENANTS, check=checked.append, argv=["--org", "nope"])
+        main(build, tenants=TENANTS, check=checked.append, argv=["--org", "nope"])
     assert info.value.code == 2
     err = capsys.readouterr().err
-    assert f"{ENTRY_POINT}: error: unknown tenant 'nope'; declared tenants: demo" in err
+    assert f"{ENTRY_POINT}: error: unknown tenant 'nope'; declared tenants: acme" in err
     assert "Traceback" not in err
     assert (build.locks, checked, served) == ([None], [], [])
 
 
-@pytest.mark.usefixtures("fictive_demo")
-def test_the_check_is_given_the_declared_tenant_before_the_build(
-    served: list[tuple[MCPServer, str, dict[str, Any]]],
-) -> None:
-    build = Builds()
+@pytest.mark.usefixtures("acme")
+def test_the_check_is_given_the_declared_tenant_before_the_bound_build(served: Served) -> None:
+    build = orgs()
     order: list[str] = []
 
     def check(name: str) -> None:
         order.append(f"check {name}, built {len(build.locks)}")
 
-    serve_tenants(build(), build, TENANTS, check=check, argv=["--org", "demo"])
-    assert order == ["check demo, built 1"], "after the unbound build, before the bound one"
+    main(build, tenants=TENANTS, check=check, argv=["--org", "acme"])
+    assert order == ["check acme, built 1"], "after the unbound build, before the bound one"
     assert len(served) == 1
 
 
 @pytest.mark.parametrize(
     ("value", "message"),
     [
-        (None, "FICTIVE_SRC_XA_SUBDOMAIN is not set; export the SUBDOMAIN of tenant 'xa'"),
-        ("evil.example/x?", "FICTIVE_SRC_XA_SUBDOMAIN does not hold a valid SUBDOMAIN"),
+        (None, "EXAMPLE_ACME_SUBDOMAIN is not set; export the SUBDOMAIN of tenant 'acme'"),
+        ("evil.example/x?", "EXAMPLE_ACME_SUBDOMAIN does not hold a valid SUBDOMAIN"),
     ],
 )
-@pytest.mark.usefixtures("fictive_demo")
+@pytest.mark.usefixtures("acme")
 def test_an_error_of_the_check_stops_the_process_and_names_no_value(
     monkeypatch: pytest.MonkeyPatch,
-    served: list[tuple[MCPServer, str, dict[str, Any]]],
+    served: Served,
     capsys: pytest.CaptureFixture[str],
     value: str | None,
     message: str,
 ) -> None:
-    """sdk-cashctrl's check: the subdomain read as ``client_for`` reads it, at startup."""
-    monkeypatch.setenv(TENANTS.list_var, "xa")
-    if value is not None:
-        monkeypatch.setenv(TENANTS.var("xa", "SUBDOMAIN"), value)
-    build = Builds()
+    """A source's check: the subdomain read as ``client_for`` reads it, at startup."""
+    if value is None:
+        monkeypatch.delenv(TENANTS.var("acme", "SUBDOMAIN"))
+        monkeypatch.setenv(TENANTS.list_var, "acme")
+    else:
+        monkeypatch.setenv(TENANTS.var("acme", "SUBDOMAIN"), value)
+    build = orgs()
     with pytest.raises(SystemExit) as info:
-        serve_tenants(
-            build(),
-            build,
-            TENANTS,
-            check=check_subdomain,
-            argv=["--org", "xa"],
-        )
+        main(build, tenants=TENANTS, check=check_subdomain, argv=["--org", "acme"])
     assert info.value.code == 2
     err = capsys.readouterr().err
     assert f"{ENTRY_POINT}: error: {message}" in err
@@ -562,228 +553,156 @@ def test_an_error_of_the_check_stops_the_process_and_names_no_value(
 
 
 SLUG_AND_PREFIX = Tenants(
-    "fictive-mail",
-    var_prefix="FICTIVE",
-    list_var="FICTIVE_ACCOUNTS",
+    "example-mail",
+    var_prefix="EXAMPLE",
+    list_var="EXAMPLE_ACCOUNTS",
     param="account",
     fields=("REFRESH_TOKEN",),
-    reserved=("demo",),
 )
 PREFIX_AS_SLUG = Tenants(
-    "fictive",
-    list_var="FICTIVE_ACCOUNTS",
-    param="account",
-    fields=("REFRESH_TOKEN",),
-    reserved=("demo",),
+    SOURCE, list_var="EXAMPLE_ACCOUNTS", param="account", fields=("REFRESH_TOKEN",)
 )
 
 
 @pytest.mark.parametrize(
     "registry", [SLUG_AND_PREFIX, PREFIX_AS_SLUG], ids=["slug-and-prefix", "prefix-as-slug"]
 )
-@pytest.mark.usefixtures("fictive_demo")
+@pytest.mark.usefixtures("acme")
 def test_a_registry_under_a_shared_prefix_binds_either_way(
     monkeypatch: pytest.MonkeyPatch,
-    served: list[tuple[MCPServer, str, dict[str, Any]]],
+    served: Served,
     capsys: pytest.CaptureFixture[str],
     registry: Tenants,
 ) -> None:
-    """sdk-google-mail's registry, its prefix apart, binds as the copy's did.
+    """A registry whose prefix is not its slug binds as one whose prefix is.
 
     The command's text names the registry's tenants and variables, never its source, so
     a registry whose slug is its prefix and one that names the prefix apart print the same;
     the registry's name: https://github.com/xippios/sdk-core/issues/279.
     """
-    monkeypatch.setenv("FICTIVE_DEMO_REFRESH_TOKEN", "placeholder")
-    build = Builds(task=echo_account)
-    serve_tenants(build(), build, registry, argv=["--account", "demo"])
-    assert build.locks == [None, TenantLock(registry, "demo")]
+    monkeypatch.setenv("EXAMPLE_ACCOUNTS", "acme")
+    monkeypatch.setenv("EXAMPLE_ACME_REFRESH_TOKEN", "placeholder")
+    build = Builds(tasks_module(echo_account))
+    main(build, tenants=registry, argv=["--account", "acme"])
+    assert build.locks == [None, TenantLock(registry, "acme")]
     with pytest.raises(SystemExit):
-        serve_tenants(build(), build, registry, argv=["--account", "nope"])
-    assert f"{ENTRY_POINT}: error: unknown tenant 'nope'; declared tenants: demo" in (
+        main(build, tenants=registry, argv=["--account", "nope"])
+    assert f"{ENTRY_POINT}: error: unknown tenant 'nope'; declared tenants: acme" in (
         capsys.readouterr().err
     )
     assert len(served) == 1
 
 
-@pytest.mark.usefixtures("fictive_demo")
-def test_the_help_names_the_option_with_its_noun_beside_core_s_options(
+def test_the_help_names_the_option_with_the_registry_s_noun_beside_core_s_options(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    build = Builds()
-    with pytest.raises(SystemExit) as info:
-        serve_tenants(build(), build, TENANTS, noun="organisation", argv=["--help"])
-    assert info.value.code == 0
-    out = " ".join(capsys.readouterr().out.split())  # argparse wraps the help lines
+    # https://github.com/xippios/sdk-core/issues/476, part 4: the noun is the registry's.
+    text = help_of(orgs(), capsys, tenants=TENANTS)
     assert (
         "--org ORG serve only this organisation, e.g. demo; every tool acts on it and takes no org"
-    ) in out
+    ) in text
     for option in ("--http", "--host", "--port", "--allow-remote"):
-        assert option in out
+        assert option in text
 
 
-def test_without_a_reserved_tenant_the_help_gives_no_example(
+def test_without_a_noun_or_a_reserved_tenant_the_help_names_the_parameter(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    registry = Tenants(SOURCE, list_var="EXAMPLE_ACCOUNTS", param="account", fields=("API_KEY",))
+    text = help_of(Builds(tasks_module(echo_account)), capsys, tenants=registry)
+    assert "serve only this account; every tool acts on it and takes no account" in text
+
+
+@pytest.mark.usefixtures("acme")
+def test_an_underscored_parameter_is_a_hyphenated_option(served: Served) -> None:
     registry = Tenants(
-        "fictive-src", list_var="FICTIVE_SRC_TENANTS", param="account", fields=("API_KEY",)
+        SOURCE, list_var="EXAMPLE_ORGS", param="org_name", fields=("SUBDOMAIN", "API_KEY")
     )
-    build = Builds()
-    with pytest.raises(SystemExit):
-        serve_tenants(build(), build, registry, argv=["--help"])
-    out = " ".join(capsys.readouterr().out.split())
-    assert "serve only this account; every tool acts on it and takes no account" in out
+    build = Builds(tasks_module(echo_org_name))
+    main(build, tenants=registry, argv=["--org-name", "acme"])
+    assert build.locks == [None, TenantLock(registry, "acme")]
 
 
-@pytest.mark.usefixtures("fictive_demo")
-def test_an_underscored_parameter_is_a_hyphenated_option(
-    served: list[tuple[MCPServer, str, dict[str, Any]]],
+@pytest.mark.usefixtures("acme")
+def test_unknown_options_still_fail_with_tenants(
+    served: Served, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    registry = Tenants(
-        "fictive-src",
-        list_var="FICTIVE_SRC_TENANTS",
-        param="org_name",
-        fields=("SUBDOMAIN", "API_KEY"),
-        reserved=("demo",),
-    )
-    build = Builds(task=echo_org_name)
-    serve_tenants(build(), build, registry, argv=["--org-name", "demo"])
-    assert build.locks == [None, TenantLock(registry, "demo")]
-
-
-@pytest.mark.usefixtures("fictive_demo")
-def test_unknown_options_still_fail_with_serve_tenants(
-    served: list[tuple[MCPServer, str, dict[str, Any]]], capsys: pytest.CaptureFixture[str]
-) -> None:
-    build = Builds()
+    build = orgs()
     with pytest.raises(SystemExit) as info:
-        serve_tenants(build(), build, TENANTS, argv=["--org", "demo", "--nope"])
+        main(build, tenants=TENANTS, argv=["--org", "acme", "--nope"])
     assert info.value.code == 2
     assert "unrecognized arguments: --nope" in capsys.readouterr().err
     assert (build.locks, served) == ([None], [])
 
 
-@pytest.mark.usefixtures("fictive_demo")
+@pytest.mark.usefixtures("acme")
 def test_the_option_is_the_parameter_the_registry_declares(
-    served: list[tuple[MCPServer, str, dict[str, Any]]], capsys: pytest.CaptureFixture[str]
+    served: Served, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """One declaration, ``Tenants(param=...)``: the command names no parameter of its own."""
-    build = Builds()
+    build = orgs()
     with pytest.raises(SystemExit):
-        serve_tenants(build(), build, TENANTS, argv=["--account", "demo"])
-    assert "unrecognized arguments: --account demo" in capsys.readouterr().err
+        main(build, tenants=TENANTS, argv=["--account", "acme"])
+    assert "unrecognized arguments: --account acme" in capsys.readouterr().err
     assert (build.locks, served) == ([None], [])
 
 
 @pytest.mark.parametrize(
     ("build", "kind"),
     [
-        (Builds(read_only=False), "a write server"),
-        (Builds(loopback_only=True), "a read server held to loopback"),
+        (lambda: Builds(tasks_module(create_note), read_only=False), "a write server"),
+        (lambda: orgs(MCP_LOOPBACK_ONLY=True), "a read server held to loopback"),
     ],
     ids=["write", "loopback-only"],
 )
-@pytest.mark.usefixtures("fictive_demo")
+@pytest.mark.usefixtures("acme")
 def test_a_bound_server_stays_held_to_loopback(
-    served: list[tuple[MCPServer, str, dict[str, Any]]],
+    served: Served,
     capsys: pytest.CaptureFixture[str],
-    build: Builds,
+    build: Callable[[], Builds],
     kind: str,
 ) -> None:
-    """``main`` checks the bound server ``build`` returns, as it checks the unbound one."""
-    remote = ["--org", "demo", "--http", "--host", "0.0.0.0"]
+    """``main`` holds the bound server as it holds the unbound one, by its tool set."""
+    remote = ["--org", "acme", "--http", "--host", "0.0.0.0"]
     with pytest.raises(SystemExit) as info:
-        serve_tenants(build(), build, TENANTS, noun="organisation", argv=remote)
+        main(build(), tenants=TENANTS, argv=remote)
     assert info.value.code == 2
-    assert f"xippios-fictive-src is {kind} and carries no authentication" in (
-        capsys.readouterr().err
-    )
+    assert f"xippios-example is {kind} and carries no authentication" in (capsys.readouterr().err)
     assert served == []
-    for argv in ([*remote, "--allow-remote"], ["--org", "demo", "--http"]):
-        serve_tenants(build(), build, TENANTS, noun="organisation", argv=argv)
+    for argv in ([*remote, "--allow-remote"], ["--org", "acme", "--http"]):
+        main(build(), tenants=TENANTS, argv=argv)
     assert [(options["host"], server.instructions) for server, _, options in served] == [
-        ("0.0.0.0", f"{TEXT} {SENTENCE}"),
-        ("127.0.0.1", f"{TEXT} {SENTENCE}"),
+        ("0.0.0.0", served[0][0].instructions),
+        ("127.0.0.1", served[0][0].instructions),
     ]
+    assert all((server.instructions or "").endswith(SENTENCE) for server, _, _ in served)
 
 
-@pytest.mark.usefixtures("fictive_demo")
-def test_serve_tenants_keeps_request_urls_out_of_the_log(
-    served: list[tuple[MCPServer, str, dict[str, Any]]],
-) -> None:
-    build = Builds()
-    server = build()
+@pytest.mark.usefixtures("acme")
+def test_main_keeps_request_urls_out_of_the_log_when_it_binds(served: Served) -> None:
     for name in REQUEST_LOGGERS:
         logging.getLogger(name).setLevel(logging.NOTSET)
-    serve_tenants(server, build, TENANTS, argv=["--org", "demo"])
+    main(orgs(), tenants=TENANTS, argv=["--org", "acme"])
     assert [logging.getLogger(name).level for name in REQUEST_LOGGERS] == [logging.WARNING] * 4
 
 
-class ToolSetBuilds:
-    """A source's ``build(lock)`` that returns its tool set, as the package contract has it."""
-
-    def __init__(self, *, read_only: bool = True, loopback_only: bool = False) -> None:
-        self.locks: list[TenantLock | None] = []
-        self.read_only = read_only
-        self.loopback_only = loopback_only
-
-    def __call__(self, lock: TenantLock | None = None) -> ToolSet:
-        self.locks.append(lock)
-        return ToolSet(
-            "fictive-src",
-            bind_tasks([echo_org], lock),
-            instructions=tenant_instructions(TEXT, lock),
-            version="0.4.0",
-            read_only=self.read_only,
-            loopback_only=self.loopback_only,
-        )
-
-
-@pytest.mark.anyio
-@pytest.mark.usefixtures("fictive_demo")
-async def test_serve_tenants_builds_the_bound_server_from_the_tool_set_build_returns(
-    served: list[tuple[MCPServer, str, dict[str, Any]]],
+@pytest.mark.usefixtures("acme")
+def test_a_tenant_source_s_own_options_and_its_tenant_are_parsed_together(
+    monkeypatch: pytest.MonkeyPatch, served: Served, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    # Finding 2 of https://github.com/xippios/sdk-core/pull/288: a multi-tenant source's
-    # build(lock) returns its tool set, and its entry point stays serve_tenants(server,
-    # build, TENANTS, ...), as sdk-cashctrl and sdk-google-mail write it.
-    build = ToolSetBuilds()
-    unbound = build_server(build(), name="xippios-fictive-src-write")
-    serve_tenants(unbound, build, TENANTS, noun="organisation", argv=["--org=demo"])
-    assert build.locks == [None, LOCK]
-    ((server, transport, _),) = served
-    assert server is not unbound, "the bound server is built anew"
-    assert (server.name, server.version, transport) == (
-        "xippios-fictive-src-write",
-        "0.4.0",
-        "stdio",
-    )
-    assert server.instructions == f"{TEXT} {SENTENCE}"
-    tool = {t.name: t for t in await server.list_tools()}["fictive_src_echo_org"]
-    assert "org" not in tool.input_schema["properties"]
-    assert json.loads(await mcp_call_text(server, "fictive_src_echo_org", {})) == {"org": "demo"}
+    # The hooks of a multi-tenant source reach its entry too, where serve_tenants dropped them.
+    monkeypatch.setattr(sys.modules[__name__], "SPLIT_YEARS", [])
+    build = Builds(with_options(echo_org, MCP_INSTRUCTIONS=TEXT))
+    main(build, tenants=TENANTS, argv=["--split-years", "9", "--org", "acme"])
+    assert SPLIT_YEARS == [9]
+    assert build.locks == [None, TenantLock(TENANTS, "acme")]
+    assert len(served) == 1
+    text = help_of(build, capsys, tenants=TENANTS)
+    assert "--split-years" in text
+    assert "--org ORG" in text
 
 
-@pytest.mark.parametrize(
-    ("build", "kind"),
-    [
-        (ToolSetBuilds(read_only=False), "a write server"),
-        (ToolSetBuilds(loopback_only=True), "a read server held to loopback"),
-    ],
-    ids=["write", "loopback-only"],
-)
-@pytest.mark.usefixtures("fictive_demo")
-def test_a_server_bound_from_a_tool_set_stays_held_to_loopback(
-    served: list[tuple[MCPServer, str, dict[str, Any]]],
-    capsys: pytest.CaptureFixture[str],
-    build: ToolSetBuilds,
-    kind: str,
-) -> None:
-    remote = ["--org", "demo", "--http", "--host", "0.0.0.0"]
-    with pytest.raises(SystemExit) as info:
-        serve_tenants(build_server(build()), build, TENANTS, argv=remote)
-    assert info.value.code == 2
-    assert f"xippios-fictive-src is {kind} and carries no authentication" in (
-        capsys.readouterr().err
-    )
-    assert served == []
+def test_serve_tenants_is_gone() -> None:
+    # ADR-0063, decision 7: one entry.
+    assert not hasattr(xippios.core.mcp, "serve_tenants")
+    assert not hasattr(cli, "serve_tenants")

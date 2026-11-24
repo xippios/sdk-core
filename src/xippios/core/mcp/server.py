@@ -14,9 +14,9 @@ built (ADR-0063, decisions 1 and 3).
 Every server answers an argument a tool does not declare and arguments its schema
 refuses in conventions §8's form, flagged ``is_error`` and saying that nothing was sent,
 through one middleware ``register_tasks`` installs before the tool runs, instead of the
-SDK's MCP error (ADR-0063, decision 6). A server on which a tool set that writes, or one
-held to loopback (``loopback_only``), is registered is held to loopback: ``main`` serves
-it on a loopback ``--host`` only unless told otherwise.
+SDK's MCP error (ADR-0063, decision 6). Whether a server is held to loopback is its tool
+set's to say, ``read_only`` and ``loopback_only``: ``main`` reads it from the tool set it
+builds the server from, and a host from each tool set it registers (ADR-0063, decision 5).
 
 Building a server also quiets the request log of httpx and httpx2
 (``quiet_request_logging``).
@@ -84,7 +84,7 @@ def quiet_request_logging() -> None:
 
 @dataclass(slots=True)
 class _ServerRecord:
-    """What ``register_tasks`` knows about a server: its tools' arguments and its hold."""
+    """What ``register_tasks`` knows about a server: its tools' arguments."""
 
     arguments: dict[str, FuncMetadata] = field(default_factory=dict)
     """Per tool name, the argument model the SDK validates a call against."""
@@ -92,10 +92,6 @@ class _ServerRecord:
     """Per tool name, the arguments the adapter adds to its task's: ``offset`` when paged."""
     checking: ServerMiddleware[Any] | None = None
     """The argument middleware, installed once per server."""
-    writes: bool = False
-    """True once a tool set that writes, ``read_only=False``, is registered on the server."""
-    held: bool = False
-    """True once a tool set held to loopback, ``loopback_only=True``, is registered on it."""
 
 
 _RECORDS: weakref.WeakKeyDictionary[MCPServer, _ServerRecord] = weakref.WeakKeyDictionary()
@@ -111,22 +107,6 @@ def _adapter_arguments(server: MCPServer, name: str) -> tuple[str, ...]:
     """
     record = _RECORDS.get(server)
     return () if record is None else record.added.get(name, ())
-
-
-def _hold(server: MCPServer) -> str | None:
-    """The kind of ``server`` that holds it to loopback, ``"write"`` or ``"read"``, or ``None``.
-
-    Read from the tool sets registered on it: ``"write"`` once one of them writes, else
-    ``"read"`` once one is ``loopback_only``. ``main`` serves a held server over ``--http``
-    on a loopback ``--host`` only unless ``--allow-remote`` is passed, since it carries no
-    authentication (ADR-0036, decision 9; ADR-0025, D-a; ADR-0063, decision 5).
-    """
-    record = _RECORDS.get(server)
-    if record is None:
-        return None
-    if record.writes:
-        return "write"
-    return "read" if record.held else None
 
 
 _NOTHING_SENT = "Nothing was sent."
@@ -276,9 +256,9 @@ def register_tasks(server: MCPServer, tool_set: ToolSet) -> list[str]:
     own package's caps; a tool without a cap of its own takes the family default, 200
     rows or 64 KB (ADR-0038). The tool set was checked when it was built, so nothing is
     refused here (ADR-0063, decision 3). A tool set that writes, ``read_only=False``,
-    marks its tools read-only false and destructive and makes ``server`` a write server,
-    and one held to loopback, ``loopback_only=True``, holds ``server`` there as a write
-    server is held; once held, a server stays held.
+    marks its tools read-only false and destructive. Whether ``server`` is then held to
+    loopback is the host's to apply from the tool set's ``read_only`` and
+    ``loopback_only``, as ``main`` does (ADR-0063, decision 5).
 
     Arguments a tool's schema refuses are answered as ``error: InvalidRequestError:
     <argument>: <message>. Nothing was sent.`` before the tool runs, by a middleware
@@ -302,8 +282,6 @@ def register_tasks(server: MCPServer, tool_set: ToolSet) -> list[str]:
     if record.checking is None:
         record.checking = _arguments_middleware(record)
         server.middleware.append(record.checking)
-    record.writes = record.writes or not tool_set.read_only
-    record.held = record.held or tool_set.loopback_only
     annotations = ToolAnnotations(
         read_only_hint=tool_set.read_only,
         destructive_hint=not tool_set.read_only,

@@ -25,7 +25,7 @@ from xippios.core import (
     fetch_periods,
 )
 from xippios.core.data_gov import NoDataForYear
-from xippios.core.mcp import ToolSet, build_parser, build_server, main
+from xippios.core.mcp import ToolSet, build_parser, main
 
 SOURCE = "example"
 
@@ -156,9 +156,8 @@ def test_the_mcp_servers_lower_ceiling_comes_through_the_tool_sets_hooks() -> No
     tools = ToolSet(
         SOURCE, [], add_options=ceiling.add_options, apply_options=ceiling.apply_options
     )
-    server = build_server(tools)
     assert tools.apply_options is not None
-    assert tools.apply_options(tools.option_defaults(), server) is server
+    assert tools.apply_options(tools.option_defaults()) is None
     assert ceiling.value == 24
     ceiling.check(24)
     with pytest.raises(InvalidRequestError) as info:
@@ -180,7 +179,7 @@ def test_the_option_raises_the_ceiling_up_to_most(monkeypatch: pytest.MonkeyPatc
     parser = build_parser("xippios-example-mcp", add_options=ceiling.add_options)
     assert parser.parse_args([]).series_months == 24
     namespace = parser.parse_args(["--series-months", "36"])
-    assert ceiling.apply_options(namespace, "server") == "server"
+    ceiling.apply_options(namespace)
     assert ceiling.value == 36
     with pytest.raises(InvalidRequestError) as info:
         ceiling.check(37)
@@ -199,14 +198,11 @@ def test_an_option_past_most_stops_the_entry_point_with_status_2(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     ceiling = months()
-    server = build_server(ToolSet(SOURCE, []))
+    tools = ToolSet(
+        SOURCE, [], add_options=ceiling.add_options, apply_options=ceiling.apply_options
+    )
     with pytest.raises(SystemExit) as info:
-        main(
-            server,
-            ["--series-months", "61"],
-            add_options=ceiling.add_options,
-            apply_options=ceiling.apply_options,
-        )
+        main(lambda: tools, argv=["--series-months", "61"])
     assert info.value.code == 2
     assert (
         "the series ceiling, --series-months on the MCP server, must be a whole number of "
@@ -240,7 +236,7 @@ def test_a_ceiling_without_an_option_adds_none_and_its_hooks_change_nothing() ->
     ceiling = market_years()
     parser = build_parser("xippios-example-mcp", add_options=ceiling.add_options)
     assert vars(parser.parse_args([])) == vars(build_parser("xippios-example-mcp").parse_args([]))
-    assert ceiling.apply_options(parser.parse_args([]), "server") == "server"
+    ceiling.apply_options(parser.parse_args([]))
     assert ceiling.value == 10
 
 
@@ -481,10 +477,13 @@ async def test_a_cancellation_passes_untouched() -> None:
     assert getattr(info.value, "__notes__", []) == []
 
 
-def test_the_hooks_fit_a_tool_set_and_the_server_is_returned_as_given() -> None:
-    """``apply_options`` returns the server it is given, typed as given, so a tool set
-    takes both hooks as they are."""
+def test_the_hooks_fit_a_tool_set_and_take_no_server() -> None:
+    """``apply_options`` takes the parsed options alone and returns nothing, so a tool set
+    takes both hooks as they are (https://github.com/xippios/sdk-core/issues/485, part 1)."""
     ceiling = months()
-    server = build_server(ToolSet(SOURCE, []))
-    assert ceiling.apply_options(argparse.Namespace(series_months=12), server) is server
+    ceiling.apply_options(argparse.Namespace(series_months=12))
     assert ceiling.value == 12
+    tools = ToolSet(SOURCE, [], apply_options=ceiling.apply_options)
+    assert tools.apply_options is not None
+    tools.apply_options(argparse.Namespace(series_months=13))
+    assert ceiling.value == 13

@@ -504,7 +504,8 @@ A task states the ceiling of a period series with core's `Ceiling(most, unit=...
 option=...)`, whose `check` refuses a range over the ceiling in force with
 `InvalidRequestError` before the first request, naming the range, the ceiling and its unit
 and, where the MCP server's ceiling is lower, the option that raises it, which the ceiling's
-`add_options` and `apply_options` give the tool set as its option hooks (ADR-0054). A task
+`add_options` and `apply_options` give the tool set as its option hooks, declared in `tasks.py`
+as `mcp_add_options` and `mcp_apply_options` (ADR-0054; ADR-0063, decision 7). A task
 calls the ceiling's `check` before any request of the call, so that its refusal says that
 nothing was sent, after the ceiling and before its advice, as §5 asks of a refusal of the call
 as given, and a task that checks a range only after a request of the call, as sdk-usda-nass's
@@ -944,9 +945,10 @@ with sdk-template 0.4.0, which renders it (ADR-0063, decision 2).
   carries no authentication, so `--http` serves it on a loopback host only
   (`LOOPBACK_HOSTS`: `127.0.0.1`, `localhost`, `::1`) unless `--allow-remote` is passed,
   with a gateway in front. A read server that reaches what no deployment may serve without
-  authentication, sdk-google-mail's mailboxes, is built from a tool set with
-  `loopback_only=True` and held the same way, and a host reads either kind from the tool
-  set's `read_only` and `loopback_only` (ADR-0025, D-a; ADR-0063, decision 5). A write
+  authentication, sdk-google-mail's mailboxes, declares `MCP_LOOPBACK_ONLY = True` in its
+  `tasks.py`, which its tool set reads as `loopback_only`, and is held the same way, and the
+  entry and a host read either kind from the tool set's `read_only` and `loopback_only`
+  (ADR-0025, D-a; ADR-0063, decision 5, and decision 7, amendment 2026-11-24). A write
   server exposes write tools only; reference tools stay on the read server. A source tests
   its write server with `xippios.core.testing.assert_write_tools(mcp_write.build(),
   write_tasks, ...)`: a write tool set, its tools exactly the write tasks, each taking
@@ -970,9 +972,10 @@ with sdk-template 0.4.0, which renders it (ADR-0063, decision 2).
   default (ADR-0050, decisions 4 and 5).
 - Server names (ADR-0026): a source with a write server names its servers
   `xippios-<source>-mcp-read` and `xippios-<source>-mcp-write`, with no alias for the
-  old name; a read-only source keeps `xippios-<source>-mcp`. `server.name` stays the
-  slug the server is built with (`build_server`'s `xippios-<source>` unless the source
-  names it), whatever its entry point is called. A group of the host xippios-mcp follows
+  old name; a read-only source keeps `xippios-<source>-mcp`. `server.name` is
+  `xippios-<source>` for the read server and the write server alike, the name that `main`
+  builds the server with, whatever its entry point is called (ADR-0063, decision 7). A group
+  of the host xippios-mcp follows
   the rule (`accounting-read`, `accounting-write`) and never mixes read and write tools;
   the host refuses one that does at startup. The rule binds sdk-cashctrl at its own
   0.4.0, a breaking change of an entry point (§12), and sdk-google-mail from its 0.1.0.
@@ -1030,8 +1033,8 @@ with sdk-template 0.4.0, which renders it (ADR-0063, decision 2).
   `offset` of such a paged tool counts from the last row, so a continuation walks to older
   rows (ADR-0047, decision 5).
   Since a cap's note names a task's filters, a source keeps its caps with its tasks, as
-  `MCP_CAPS: Mapping[str, ResultCap]` in `tasks.py` next to `__all__`, and its `mcp.py`
-  passes them to its tool set as `caps=getattr(tasks, "MCP_CAPS", None)`.
+  `MCP_CAPS: Mapping[str, ResultCap]` in `tasks.py` next to `__all__`, where core reads them
+  when it builds the tool set from the module (ADR-0063, decision 7).
 - A task named in `BULK_TASKS` (a frozenset in `tasks.py` beside `MCP_CAPS`) is not a
   tool: a tool set leaves it out (ADR-0040; ADR-0063, decision 3), and
   `tool_functions(tasks)` gives `tasks.__all__` without it. No tool returns a file path to
@@ -1047,11 +1050,15 @@ with sdk-template 0.4.0, which renders it (ADR-0063, decision 2).
   (`cashctrl_list_organisations`, `google_mail_list_accounts`), on the read server
   (ADR-0036, decision 6). Its servers take `--<param>`, sdk-cashctrl's `--org` and
   sdk-google-mail's `--account`, which binds a server to one tenant: the entry point runs
-  `serve_tenants(server, build, TENANTS, check=...)` from `xippios.core.mcp`, its option
-  the registry's `param` (ADR-0036, decision 13), and `build(lock)` passes the tasks through `bind_tasks(tasks, lock)` and the
-  instructions through `tenant_instructions(text, lock, bound=...)` and returns its tool
-  set, from which `serve_tenants` builds the bound server, named as `server` is (ADR-0026,
-  amendment 2026-11-18, point d). No tool of a bound
+  `main(build, tenants=TENANTS, check=...)` from `xippios.core.mcp`, its option the
+  registry's `param` (ADR-0036, decision 13) and its help the registry's `noun`,
+  `Tenants(..., noun="organisation")`, and `build(lock)` returns
+  `ToolSet.from_tasks(SOURCE, tasks, version=..., lock=lock)`, which passes the tasks through
+  `bind_tasks(tasks, lock)` and the instructions through
+  `tenant_instructions(MCP_INSTRUCTIONS, lock, bound=MCP_BOUND_INSTRUCTIONS)`, both read from
+  the tasks module; `main` builds the bound server from that tool set (ADR-0063, decision 7,
+  amendment 2026-11-24).
+  No tool of a bound
   server takes the tenant's argument, so a call that names it is refused as an argument
   the tool does not declare; the tenant list lists the bound tenant alone; and the
   instructions end with a sentence that names the tenant, after `bound`, the bound
@@ -1081,16 +1088,24 @@ with sdk-template 0.4.0, which renders it (ADR-0063, decision 2).
 - An entry point, `xippios-<source>-mcp` or, for a source with a write server,
   `xippios-<source>-mcp-read` and `xippios-<source>-mcp-write`, runs stdio by default;
   `--http` for streamable HTTP.
-  A source's own options reach core's `main` through `add_options` and `apply_options`,
-  parsed once with core's; an error applying them stops the process with exit status 2.
+  A source's own options reach core's `main` through the two hooks of its tasks module,
+  `mcp_add_options(parser)` and `mcp_apply_options(namespace)`, which takes the parsed
+  options alone and returns nothing, parsed once with core's; an error applying them stops
+  the process with exit status 2.
   A source's `mcp.py` defines `build(**options)`, its options keyword arguments with
   defaults, a multi-tenant source's `lock: TenantLock | None = None`, which returns its
   `ToolSet` (`xippios.core.mcp`): its tools as its lock binds them, `caps`, `instructions`,
   `version`, `read_only`, `loopback_only` and the two hooks. Its module-level `server` is
-  `build_server(build())`, and its entry point passes the tool set's hooks to `main`.
-  `build` takes no `transport_security`, which a host passes to `streamable_http_app`. The
-  rule binds a source from its adoption of core 0.4.0 with sdk-template 0.4.0 (ADR-0063,
-  decision 2). `build_server(tool_set, *, name=None)` and `register_tasks(server, tool_set)`
+  `build_server(build())`. `build` takes no `transport_security`, which a host passes to
+  `streamable_http_app`. The rule binds a source from its adoption of core 0.4.0 with
+  sdk-template 0.4.0 (ADR-0063, decision 2). Core builds the tool set from the tasks module,
+  `ToolSet.from_tasks(SOURCE, tasks, version=__version__)`, `tasks_write` with
+  `read_only=False` for the write server: its tools, and `MCP_CAPS`, `MCP_INSTRUCTIONS`, the
+  two hooks, `MCP_LOOPBACK_ONLY` and `MCP_BOUND_INSTRUCTIONS`, each where the module declares
+  it, so `mcp.py` holds no line that a source edits, and the entry point is `main(build)`,
+  which reads the hooks from the tool set and builds the server that it runs (ADR-0063,
+  decision 7, amendment 2026-11-24). The rule binds a source from its adoption of core 0.5.0.
+  `build_server(tool_set, *, name=None)` and `register_tasks(server, tool_set)`
   take a tool set alone, and a tool set is checked when it is built, so a source's own tests
   fail on a declaration that no server could serve (ADR-0063, decisions 1 and 3). A host
   builds one server from the tool sets of several packages with `register_tasks(server,

@@ -1173,7 +1173,12 @@
       "status": "Accepted",
       "date": "2026-11-24",
       "decided_by": "https://github.com/xippios/sdk-core/issues/476",
-      "amended": [],
+      "amended": [
+        {
+          "date": "2026-11-24",
+          "by": "https://github.com/xippios/sdk-core/issues/476"
+        }
+      ],
       "amends": [],
       "supersedes": [],
       "other": [],

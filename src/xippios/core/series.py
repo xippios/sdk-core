@@ -232,15 +232,16 @@ class Ceiling:
             help=text.replace("%", "%%"),  # argparse formats its help with %
         )
 
-    def apply_options[S](self, namespace: argparse.Namespace, server: S) -> S:
-        """Set the ceiling in force from ``option``, a hook of ``main``; return ``server``.
+    def apply_options(self, namespace: argparse.Namespace) -> None:
+        """Set the ceiling in force from ``option``, a hook of ``main``.
 
-        A ceiling without an option changes nothing.
+        It takes the parsed options alone and returns nothing, as a tool set's hook does
+        (https://github.com/xippios/sdk-core/issues/485, part 1). A ceiling without an
+        option changes nothing.
 
         Args:
             namespace: The parsed command line, e.g. ``argparse.Namespace(series_months=24)``,
                 or a tool set's ``option_defaults()``.
-            server: The server to run, returned as it is.
 
         Raises:
             InvalidRequestError: The option's value is outside 1 to ``most`` (``set``), which
@@ -249,7 +250,6 @@ class Ceiling:
         """
         if self._dest is not None:
             self.set(getattr(namespace, self._dest))
-        return server
 
 
 def _named(periods: list[object]) -> str:

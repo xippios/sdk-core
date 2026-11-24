@@ -35,7 +35,7 @@ It gives a source package the things that should be identical across the family:
 - **Tenants** (`xippios.core.tenants`) for a source whose upstream serves each tenant from
   a host or under a key of its own: `Tenants` declares them in the environment, one
   client each, `list_task` gives the tool that names them, and `TenantLock` binds a
-  server to one of them, which `xippios.core.mcp.serve_tenants` starts from `--org`.
+  server to one of them, which `xippios.core.mcp.main` starts from `--org`.
 - **The package contract** by which a host serves a source (ADR-0026, decision 8): `EnvVar`,
   a variable the package needs, and `xippios.core.mcp.ToolSet`, what its `build(**options)`
   returns, from which `build_server` builds its server and a host one server from several.
@@ -737,6 +737,7 @@ TENANTS = Tenants(
     param="org",  # every task takes org, the tenant's name
     fields=("SUBDOMAIN", "API_KEY"),  # EXAMPLE_ACME_SUBDOMAIN, EXAMPLE_ACME_API_KEY
     reserved=("demo",),  # declared by EXAMPLE_DEMO_SUBDOMAIN and _API_KEY alone
+    noun="organisation",  # the word for one tenant in --org's help and a bound server's text
 )
 
 
@@ -772,43 +773,36 @@ nothing in core works across them.
 
 A server bound to one tenant serves that tenant alone, and none of its tools takes the
 tenant's name. `bind_tasks(tasks, lock)` binds them to a `TenantLock(TENANTS, "acme")`,
-whose parameter is the registry's, and `tenant_instructions` ends the server's instructions
-with a sentence that names the tenant; `serve_tenants` builds the bound server from
-`--org`, the registry's `param` as an option, and runs it through `main` (ADR-0036,
-ADR-0042). The source's `build(lock)` returns its tool set, as the package
-contract has it, and `serve_tenants` builds the bound server from the tool set, named as
-`server` is (ADR-0026):
+whose parameter and noun are the registry's, and `tenant_instructions` ends the server's
+instructions with a sentence that names the tenant. `main(build, tenants=TENANTS)` puts
+`--org`, the registry's `param`, on the command line and builds the bound server from
+`build(TenantLock(TENANTS, "acme"))` (ADR-0036; ADR-0063, decision 7). The source's
+`build(lock)` returns its tool set, which core builds from the tasks module, the bound
+server's text included:
+
+```python
+# xippios/example/tasks.py
+MCP_INSTRUCTIONS = "Example via xippios. Every tool but example_list_tenants takes org."
+MCP_BOUND_INSTRUCTIONS = "Example via xippios."  # the bound server's text: no tool takes org
+```
 
 ```python
 # xippios/example/mcp.py
-from xippios.core import TenantLock, bind_tasks, tenant_instructions
-from xippios.core.mcp import ToolSet, build_server, serve_tenants, tool_functions
+from xippios.core import TenantLock
+from xippios.core.mcp import ToolSet, build_server, main
 from xippios.example import tasks
 from xippios.example._client import TENANTS
 
-INSTRUCTIONS = "Example via xippios. Every tool but example_list_tenants takes org."
-BOUND = "Example via xippios."  # the bound server's text: no tool takes org
-
 
 def build(lock: TenantLock | None = None) -> ToolSet:
-    return ToolSet(
-        "example",
-        bind_tasks(tool_functions(tasks), lock),
-        instructions=tenant_instructions(INSTRUCTIONS, lock, bound=BOUND),
-    )
+    return ToolSet.from_tasks("example", tasks, version="1.2.0", lock=lock)
 
 
 server = build_server(build())  # every declared tenant
 
 
 def run() -> None:  # xippios-example-mcp --org acme serves acme alone
-    serve_tenants(
-        server,
-        build,
-        TENANTS,
-        noun="organisation",
-        check=lambda org: TENANTS.field(org, "SUBDOMAIN"),
-    )
+    main(build, tenants=TENANTS, check=lambda org: TENANTS.field(org, "SUBDOMAIN"))
 ```
 
 A bound tool keeps its name and its other parameters' `Annotated` constraints, and its
@@ -1302,14 +1296,19 @@ sdk-usda-wasde's `--keep` and `--from`, reads it before the call and passes the 
 
 ```python
 # xippios/example/mcp.py
-from xippios.core.mcp import ToolSet, build_server, main, tool_functions
+from xippios.core.mcp import ToolSet, build_server, main
 from xippios.example import tasks
 
-server = build_server(ToolSet("example", tool_functions(tasks)))  # __all__ minus BULK_TASKS
+
+def build() -> ToolSet:
+    return ToolSet.from_tasks("example", tasks)  # __all__ minus BULK_TASKS, its MCP_CAPS
+
+
+server = build_server(build())
 
 
 def run() -> None:  # entry point: xippios-example-mcp = "xippios.example.mcp:run"
-    main(server)
+    main(build)
 ```
 
 Tool names are `<source>_<function>` (`example_get_series`), the docstring is the tool
@@ -1339,16 +1338,19 @@ or a table's page, with the rows and bytes it needs and a note that says how to 
 part of it (ADR-0038, decision 4); every other tool keeps 200 rows or
 64 KB. The note says "narrow the query to see the rest" and
 promises no filter; a tool with filters names them in its cap, `ResultCap(note="filter
-by year to see the rest")`. `ResultCap` comes from `xippios.core`, so the `MCP_CAPS` in
-a source's `tasks.py` need no `mcp` extra. A write tool set (`ToolSet(...,
+by year to see the rest")`. `ResultCap` comes from `xippios.core` alone, so the `MCP_CAPS`
+in a source's `tasks.py` need no `mcp` extra. A write tool set (`ToolSet(...,
 read_only=False)`) refuses, with `ValueError` when it is built, a task that does not take
 `confirm: bool = False`, and `--http` serves its server on a loopback `--host` only
 (`LOOPBACK_HOSTS`: `127.0.0.1`, `localhost`, `::1`): it carries no authentication.
 `--allow-remote` serves it beyond loopback, behind a gateway that adds it. A read server
 that reaches what no deployment may serve without authentication, a mailbox say, is held
-the same way, its tool set built with `loopback_only=True` (ADR-0025, D-a); the tool set's
-`read_only` and `loopback_only` tell either kind. The usage line names the entry point that runs, and the help of
-`--allow-remote` and the refusal name the server's kind.
+the same way, its `tasks.py` declaring `MCP_LOOPBACK_ONLY = True`, which its tool set reads
+as `loopback_only` (ADR-0025, D-a; ADR-0063, decision 7); the tool set's `read_only` and
+`loopback_only` tell either kind, and `main` reads them from the tool set it builds the
+server from. The usage line names the entry point that runs, and the refusal names the
+server's kind; the help of `--allow-remote` is one sentence for every server. A source's
+read and write servers are both named `xippios-<source>`.
 
 A tool whose cut answer a caller continues takes a paged cap, `ResultCap(paged=True)`
 (ADR-0047): the adapter gives it its own argument `offset: int = 0`, the rows of the answer
@@ -1434,9 +1436,10 @@ is `dataclasses.replace(tool_set, tasks=..., caps=...)`, checked as a new tool s
 tool set's `read_only` and `loopback_only` say whether to hold its server to loopback as
 `main` does (ADR-0026, decision 5).
 
-A source's own options go through `main`'s hooks, so the command line is parsed once:
-`add_options` puts them on core's parser, so `--help` lists them; `apply_options(namespace,
-server)` returns the server to run; and a `XippiosError` it raises, a missing variable
+A source's own options go through `main`'s hooks, which its `tasks.py` declares as
+`mcp_add_options` and `mcp_apply_options`, so the command line is parsed once: `add_options`
+puts them on core's parser, so `--help` lists them; `apply_options(namespace)` takes the
+parsed options alone and returns nothing; and a `XippiosError` it raises, a missing variable
 say, stops the process with exit status 2 and the message, before anything is served.
 
 A period series whose MCP tool fetches fewer periods than its Python API declares the
@@ -1498,42 +1501,47 @@ ENV_VARS = (EnvVar("EXAMPLE_API_KEY", secret=True, required=True),)
 
 Its `mcp.py` builds its `ToolSet`, its tasks as its lock binds them, its caps, instructions
 and version, its option hooks, and whether it writes (`read_only=False`) and is held to
-loopback (`loopback_only=True`), and its server from it:
+loopback (`loopback_only=True`), and its server from it. Core builds the tool set from the
+tasks module, `ToolSet.from_tasks`, which reads what the module declares beside its tasks,
+each where it is declared, so `mcp.py` holds no line that a source edits (ADR-0063,
+decision 7):
+
+```python
+# xippios/example/tasks.py
+MCP_CAPS: Mapping[str, ResultCap] = {"list_areas": ResultCap(max_rows=400)}
+MCP_INSTRUCTIONS = "Example via xippios. Call example_list_areas first."
+mcp_add_options = SPLIT.add_options  # main's hooks, a --split-years say
+mcp_apply_options = SPLIT.apply_options
+MCP_LOOPBACK_ONLY = True  # a read server held to loopback; absent, it is not
+```
 
 ```python
 # xippios/example/mcp.py
-from xippios.core.mcp import ToolSet, build_server, main, tool_functions
+from xippios.core.mcp import ToolSet, build_server, main
 from xippios.example import tasks
+from xippios.example._version import __version__
 
 
 def build() -> ToolSet:
-    return ToolSet(
-        "example",
-        tool_functions(tasks),
-        caps=tasks.MCP_CAPS,
-        instructions="Example via xippios. Call example_list_areas first.",
-        version="1.2.0",
-        add_options=tasks.mcp_add_options,  # main's hooks, a --split-years say
-        apply_options=tasks.mcp_apply_options,
-    )
+    return ToolSet.from_tasks("example", tasks, version=__version__)
 
 
-TOOLS = build()
-server = build_server(TOOLS)  # xippios-example, with the tool set's version and instructions
+server = build_server(build())  # xippios-example, with the tool set's version and instructions
 
 
 def run() -> None:
-    main(server, add_options=TOOLS.add_options, apply_options=TOOLS.apply_options)
+    main(build)
 ```
 
-`build_server` takes a tool set and `name` alone, and `register_tasks` a server and a tool
-set, which was checked when it was built. A multi-tenant source's
-`build(lock=None)` passes its tasks through `bind_tasks` and its instructions through
-`tenant_instructions`, and `serve_tenants(server, build, ...)` builds the bound server from
-the tool set it returns (see Multi-tenant sources). A host builds one server from the tool
-sets of several packages, each tool with its own package's caps, a write tool set making it
-a write server and a held one holding it to loopback, and applies each package's hooks as
-its entry point does when it runs without options:
+A write server's `mcp_write.py` reads `tasks_write` with `read_only=False`, and a
+multi-tenant source's `build(lock=None)` passes its lock on, so the tasks are bound and the
+instructions are `MCP_BOUND_INSTRUCTIONS` and the lock's sentence (see Multi-tenant sources).
+A declaration of another type, `MCP_LOOPBACK_ONLY = "yes"` say, is refused with `TypeError`
+naming it. `build_server` takes a tool set and `name` alone, and `register_tasks` a server
+and a tool set, which was checked when it was built. A host builds one server from the tool
+sets of several packages, each tool with its own package's caps, holds it to loopback where
+a tool set writes or is `loopback_only`, as `main` does, and applies each package's hooks
+as its entry point does when it runs without options:
 
 ```python
 server = MCPServer("xippios-group")
@@ -1541,7 +1549,7 @@ quiet_request_logging()
 for tools in (example_mcp.build(), other_mcp.build()):
     register_tasks(server, tools)
     if tools.apply_options is not None:
-        tools.apply_options(tools.option_defaults(), server)  # --split-years at its default
+        tools.apply_options(tools.option_defaults())  # --split-years at its default
 ```
 
 `option_defaults()` raises `ValueError`, naming the source, for an option of `add_options`
@@ -2055,7 +2063,7 @@ fragment until the release assembles it.
 | `xippios.core.series` | `Ceiling`, the ceiling of a series over periods with its option on the MCP server, and `fetch_periods`, its requests in order | alpha |
 | `xippios.core.tenants` | `Tenants`, a multi-tenant source's tenants declared in the environment with one client each, `list_task`, the tool that names them, and `TenantLock` with `bind_tasks` and `tenant_instructions`, a server bound to one of them | alpha |
 | `xippios.core.contract` | `EnvVar`, a variable of the package contract | alpha |
-| `xippios.core.mcp` | tool registration with the argument check and the write server's `confirm` rule, `tool_functions`, result caps with the `offset` of a paged cap, error text, CLI with option hooks and the loopback rule for write and `loopback_only` servers, `serve_tenants`, quiet request log, `ToolSet`, the package contract's tool set, built by `build_server` and registered by `register_tasks` | alpha |
+| `xippios.core.mcp` | tool registration with the argument check and the write server's `confirm` rule, `tool_functions`, result caps with the `offset` of a paged cap, error text, the one entry `main(build)` with option hooks, a tenant's option and the loopback rule for write and `loopback_only` servers, quiet request log, `ToolSet`, the package contract's tool set, built from a tasks module by `ToolSet.from_tasks`, built by `build_server` and registered by `register_tasks` | alpha |
 | `xippios.core.http` | router factory, problem details | alpha |
 | `xippios.core.refresh` | the frames of a source's scripts: the snapshot script's (`Snapshot`, `run`) and the reference refresh script's (`Listed`, `Enumeration`) | alpha |
 | `xippios.core.testing` | live gate with the count of the requests that a live run sent, offline run, record (sent once, read up to `max_read_bytes`, with `max_bytes=`, `array_key=`, `keep=` and a source's `rewrite=` step, typed `Rewrite`), `send_once`, `record_task`, the fixture writer and the `sample` mark, replay with `sent_urls`, `sent_query` and `sent_bodies`, scrub of named secrets and of values read from the answer with a plain verify, `mcp_call`, `assert_write_tools` with what a preview reads, `keep_reserved_tenants`, `built_answers`, the check of a built answer's mark, `live` with `assert_list_current`, the nightly comparison of a packaged list, family check | alpha |

@@ -46,7 +46,7 @@ records in `docs/adr/`. A record changes, and this file follows when the script 
 - <a id="0060"></a>[ADR-0060](adr/0060-the-boundary-of-a-source-package-and-the-four-rules-of-a.md): The boundary of a source package and the four rules of a record that a package shapes itself · Accepted · 2026-11-24
 - <a id="0061"></a>[ADR-0061](adr/0061-the-one-way-of-each-feature.md): The one way of each feature · Accepted · 2026-11-24
 - <a id="0062"></a>[ADR-0062](adr/0062-the-two-refresh-frames-one-declaration-one-table-header-the.md): The two refresh frames: one declaration, one table header, the fetch through the client and no check without a request · Accepted · 2026-11-24
-- <a id="0063"></a>[ADR-0063](adr/0063-the-server-from-a-tool-set.md): The server from a tool set · Accepted · 2026-11-24
+- <a id="0063"></a>[ADR-0063](adr/0063-the-server-from-a-tool-set.md): The server from a tool set · Accepted · 2026-11-24 · amended 2026-11-24
 - <a id="0064"></a>[ADR-0064](adr/0064-the-built-answer-check-its-mark-and-its-census-without.md): The built-answer check: its mark and its census, without following a body or the module's declarations · Accepted · 2026-11-24 · amended 2026-11-24
 
 The superseded records follow, kept as written: the record that each status names holds its decision now.

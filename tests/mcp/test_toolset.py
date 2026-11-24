@@ -6,7 +6,9 @@ built (ADR-0063, decisions 1 and 3). The tasks are the invented source's.
 """
 
 import argparse
+import ast
 import dataclasses
+import inspect
 import sys
 import types
 from collections.abc import Callable
@@ -16,8 +18,8 @@ import pytest
 from mcp.server.mcpserver import MCPServer
 from pydantic import Field
 
-from xippios.core import Result, ResultMeta, TenantLock, Tenants, bind_tasks, sync
-from xippios.core.mcp import ResultCap, ToolSet, build_server, main, register_tasks, tool_name
+from xippios.core import Result, ResultCap, ResultMeta, TenantLock, Tenants, bind_tasks, sync
+from xippios.core.mcp import ToolSet, build_server, main, register_tasks, tool_name
 from xippios.core.testing import mcp_call, mcp_call_text
 
 
@@ -81,9 +83,8 @@ def add_split_years(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--split-years", type=int, default=5)
 
 
-def apply_split_years(namespace: argparse.Namespace, server: MCPServer) -> MCPServer:
+def apply_split_years(namespace: argparse.Namespace) -> None:
     CEILING["years"] = namespace.split_years
-    return server
 
 
 AREAS_CAP = ResultCap(max_rows=400)
@@ -168,7 +169,6 @@ async def test_build_server_builds_a_server_from_one_tool_set() -> None:
     assert (len(areas["data"]), "note" in areas) == (310, False), "the tool's own cap"
     series = await mcp_call(server, "example_get_series", {"series_id": "C", "year": 2300})
     assert (len(series["data"]), series["note"][:20]) == (200, "showing 200 of 300 r")
-    assert not held_to_loopback(server)
 
 
 def test_build_server_names_a_server_from_a_tool_set_as_told() -> None:
@@ -176,28 +176,35 @@ def test_build_server_names_a_server_from_a_tool_set_as_told() -> None:
     assert server.name == "xippios-example-write"
 
 
-def held_to_loopback(server: MCPServer) -> bool:
-    """Whether ``main`` refuses ``server`` over ``--http`` on a host beyond loopback.
+def held_to_loopback(tool_set: ToolSet, monkeypatch: pytest.MonkeyPatch) -> bool:
+    """Whether ``main`` refuses the server of ``tool_set`` over ``--http`` beyond loopback.
 
-    The server's ``run`` is replaced, so nothing is served either way.
+    ``MCPServer.run`` is replaced, so nothing is served either way.
     """
     runs: list[str] = []
-    server.run = lambda transport="stdio", **kwargs: runs.append(transport)  # type: ignore[method-assign]
+
+    def run(self: MCPServer, transport: str = "stdio", **options: Any) -> None:
+        runs.append(transport)
+
+    monkeypatch.setattr(MCPServer, "run", run)
     try:
-        main(server, ["--http", "--host", "0.0.0.0"])
+        main(lambda: tool_set, argv=["--http", "--host", "0.0.0.0"])
     except SystemExit as stopped:
         return stopped.code == 2
     assert runs == ["streamable-http"]
     return False
 
 
-def test_a_tool_set_that_writes_or_is_held_builds_a_server_held_to_loopback() -> None:
+def test_a_tool_set_that_writes_or_is_held_is_served_on_loopback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     # ADR-0063, decision 5: the hold is read from the tool set's read_only and loopback_only.
     writes = ToolSet("example", [delete_series], read_only=False)
-    assert held_to_loopback(build_server(writes))
+    assert held_to_loopback(writes, monkeypatch)
     held = ToolSet("example", [get_series], loopback_only=True)
     assert (held.read_only, held.loopback_only) == (True, True)
-    assert held_to_loopback(build_server(held))
+    assert held_to_loopback(held, monkeypatch)
+    assert not held_to_loopback(example_tools(), monkeypatch)
 
 
 def test_the_slug_forms_are_gone() -> None:
@@ -225,20 +232,6 @@ async def test_a_host_builds_one_server_from_two_tool_sets_each_with_its_own_cap
     assert (len(regions["data"]), regions["note"][:20]) == (200, "showing 200 of 310 r")
 
 
-def test_one_held_tool_set_holds_the_host_built_server() -> None:
-    server = MCPServer("xippios-group")
-    register_tasks(server, example_tools())
-    assert not held_to_loopback(server)
-    register_tasks(server, ToolSet("mail", [list_regions], loopback_only=True))
-    assert held_to_loopback(server)
-
-
-def test_a_write_tool_set_makes_the_host_built_server_a_write_server() -> None:
-    server = MCPServer("xippios-group-write")
-    register_tasks(server, ToolSet("example", [delete_series], read_only=False))
-    assert held_to_loopback(server)
-
-
 @pytest.mark.anyio
 async def test_a_server_from_a_tool_set_keeps_the_annotated_constraints() -> None:
     # The blocking finding of step 4: a tool that lost its Annotated metadata.
@@ -257,8 +250,10 @@ async def test_a_server_from_a_tool_set_keeps_the_annotated_constraints() -> Non
 
 @pytest.mark.anyio
 async def test_a_tool_set_of_tasks_a_lock_binds_keeps_their_constraints() -> None:
-    tenants = Tenants("example", list_var="EXAMPLE_ORGS", param="org", fields=("API_KEY",))
-    lock = TenantLock(tenants, "demo", noun="organisation")
+    tenants = Tenants(
+        "example", list_var="EXAMPLE_ORGS", param="org", fields=("API_KEY",), noun="organisation"
+    )
+    lock = TenantLock(tenants, "demo")
     server = build_server(ToolSet("example", bind_tasks([get_rows], lock)))
     tool = {t.name: t for t in await server.list_tools()}["example_get_rows"]
     assert "org" not in tool.input_schema["properties"]
@@ -536,27 +531,146 @@ def test_a_host_applies_the_hooks_with_their_defaults(monkeypatch: pytest.Monkey
     tools = example_tools()
     server = build_server(tools)
     assert tools.apply_options is not None
-    assert tools.apply_options(tools.option_defaults(), server) is server
+    assert tools.apply_options(tools.option_defaults()) is None
     assert CEILING["years"] == 5, "what the entry point run without --split-years holds"
+    assert server.name == "xippios-example", "the hooks take no server"
 
 
 def test_the_entry_point_runs_the_server_with_the_tool_sets_hooks(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # The source's run() of the module docstring: main with the tool set's hooks.
+    # The source's run() of the module docstring: main(build) reads the tool set's hooks.
     monkeypatch.setitem(CEILING, "years", 20)
-    tools = example_tools()
-    server = build_server(tools)
     runs: list[str] = []
 
-    def fake_run(transport: str = "stdio", **kwargs: Any) -> None:
+    def run(self: MCPServer, transport: str = "stdio", **options: Any) -> None:
         runs.append(transport)
 
-    monkeypatch.setattr(server, "run", fake_run)
-    main(
-        server,
-        ["--split-years", "7"],
-        add_options=tools.add_options,
-        apply_options=tools.apply_options,
-    )
+    monkeypatch.setattr(MCPServer, "run", run)
+    main(example_tools, argv=["--split-years", "7"])
     assert (runs, CEILING["years"]) == (["stdio"], 7)
+
+
+# Core builds the tool set from a tasks module (ADR-0063, decision 7) --------------------
+
+INSTRUCTIONS = "Example via xippios. Every tool takes org."
+BOUND_INSTRUCTIONS = "Example via xippios."
+
+
+def download_areas() -> bytes:
+    """Download the areas as a file, a bulk task."""
+    return b""
+
+
+def example_tasks(*tasks: Callable[..., Any], **declarations: Any) -> types.ModuleType:
+    """The invented source's tasks module: ``tasks`` in ``__all__`` and its declarations."""
+    module = types.ModuleType("xippios.example.tasks")
+    module.__all__ = [fn.__name__ for fn in tasks]  # type: ignore[attr-defined]
+    for fn in tasks:
+        setattr(module, fn.__name__, fn)
+    for name, value in declarations.items():
+        setattr(module, name, value)
+    return module
+
+
+def test_core_builds_the_tool_set_from_the_tasks_module() -> None:
+    tasks = example_tasks(
+        get_series,
+        list_areas,
+        download_areas,
+        BULK_TASKS=frozenset({"download_areas"}),
+        MCP_CAPS={"list_areas": AREAS_CAP},
+        MCP_INSTRUCTIONS="Example via xippios. Call example_list_areas first.",
+        mcp_add_options=add_split_years,
+        mcp_apply_options=apply_split_years,
+    )
+    tools = ToolSet.from_tasks("example", tasks, version="1.2.0")
+    assert (tools.source, tools.tasks) == ("example", (get_series, list_areas))
+    assert dict(tools.caps) == {"list_areas": AREAS_CAP}
+    assert tools.instructions == "Example via xippios. Call example_list_areas first."
+    assert tools.version == "1.2.0"
+    assert (tools.add_options, tools.apply_options) == (add_split_years, apply_split_years)
+    assert (tools.read_only, tools.loopback_only) == (True, False)
+
+
+def test_a_tasks_module_without_declarations_gives_a_tool_set_s_defaults() -> None:
+    tools = ToolSet.from_tasks("example", example_tasks(get_series))
+    assert (tools.tasks, dict(tools.caps), tools.instructions, tools.version) == (
+        (get_series,),
+        {},
+        None,
+        "",
+    )
+    assert (tools.add_options, tools.apply_options) == (None, None)
+    assert (tools.read_only, tools.loopback_only) == (True, False)
+
+
+def test_a_read_tool_set_s_hold_to_loopback_is_a_declaration_of_its_tasks_module() -> None:
+    # https://github.com/xippios/sdk-core/issues/476, part 4
+    tools = ToolSet.from_tasks("example", example_tasks(get_series, MCP_LOOPBACK_ONLY=True))
+    assert (tools.read_only, tools.loopback_only) == (True, True)
+
+
+@pytest.mark.anyio
+async def test_a_lock_binds_the_tasks_and_ends_the_bound_text_with_its_sentence() -> None:
+    tenants = Tenants(
+        "example", list_var="EXAMPLE_ORGS", param="org", fields=("API_KEY",), noun="organisation"
+    )
+    sentence = (
+        "This server is bound to org acme; every tool acts on that organisation and takes no org."
+    )
+    tasks = example_tasks(
+        get_rows, MCP_INSTRUCTIONS=INSTRUCTIONS, MCP_BOUND_INSTRUCTIONS=BOUND_INSTRUCTIONS
+    )
+    unbound = ToolSet.from_tasks("example", tasks)
+    assert (unbound.tasks, unbound.instructions) == ((get_rows,), INSTRUCTIONS)
+    bound = ToolSet.from_tasks("example", tasks, lock=TenantLock(tenants, "acme"))
+    assert bound.instructions == f"{BOUND_INSTRUCTIONS} {sentence}"
+    server = build_server(bound)
+    tool = {t.name: t for t in await server.list_tools()}["example_get_rows"]
+    assert "org" not in tool.input_schema["properties"]
+    assert await mcp_call(server, "example_get_rows", {"limit": 5}) == {"org": "acme", "limit": 5}
+    del tasks.MCP_BOUND_INSTRUCTIONS
+    without = ToolSet.from_tasks("example", tasks, lock=TenantLock(tenants, "acme"))
+    assert without.instructions == f"{INSTRUCTIONS} {sentence}", "the unbound text, then"
+
+
+def test_a_write_module_builds_a_write_tool_set_checked_as_one() -> None:
+    tools = ToolSet.from_tasks("example", example_tasks(delete_series), read_only=False)
+    assert (tools.tasks, tools.read_only) == ((delete_series,), False)
+    with pytest.raises(ValueError, match=r"^example_get_series: no parameter confirm"):
+        ToolSet.from_tasks("example", example_tasks(get_series), read_only=False)
+
+
+@pytest.mark.parametrize(
+    ("declaration", "value", "message"),
+    [
+        ("MCP_CAPS", [("list_areas", AREAS_CAP)], "MCP_CAPS is a mapping"),
+        ("MCP_INSTRUCTIONS", 3, "MCP_INSTRUCTIONS is text or None"),
+        ("MCP_BOUND_INSTRUCTIONS", b"x", "MCP_BOUND_INSTRUCTIONS is text or None"),
+        ("MCP_LOOPBACK_ONLY", "yes", "MCP_LOOPBACK_ONLY is True or False"),
+        ("mcp_add_options", "--split-years", "mcp_add_options is a function or None"),
+        ("mcp_apply_options", 1, "mcp_apply_options is a function or None"),
+    ],
+)
+def test_a_declaration_of_another_type_is_refused_by_its_name(
+    declaration: str, value: object, message: str
+) -> None:
+    tasks = example_tasks(get_series, list_areas, **{declaration: value})
+    with pytest.raises(TypeError, match=rf"^xippios\.example\.tasks\.{message}, got "):
+        ToolSet.from_tasks("example", tasks)
+
+
+def test_the_tool_set_imports_no_mcp_sdk() -> None:
+    # https://github.com/xippios/sdk-core/issues/485, part 1, the first trim: the hooks take
+    # the parsed options alone, so the tool set names no server.
+    from xippios.core.mcp import toolset
+
+    tree = ast.parse(inspect.getsource(toolset))
+    imported = [
+        alias.name if isinstance(node, ast.Import) else node.module or ""
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Import | ast.ImportFrom)
+        for alias in (node.names if isinstance(node, ast.Import) else node.names[:1])
+    ]
+    assert [name for name in imported if name.split(".")[0] == "mcp"] == []
