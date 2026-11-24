@@ -1791,7 +1791,11 @@ ORGANIZATION_CHECK = (
     "https://github.com/xippios/.github/blob/main/.github/workflows/conventions.yml"
 )
 """The organization's workflow, whose job tells a release PR by its label or its title."""
-RELEASE_TITLE = "`X.Y.Z Release`"
+GATE = "https://github.com/xippios/.github/pull/124"
+"""The organization's gate, which reviews a title that is `X.Y.Z Release` whole."""
+ANSWER_QUESTION = "https://github.com/xippios/sdk-core/issues/575"
+"""The answer that kept the record, its version before the tag written for 0.5.0 alone."""
+RELEASE_TITLE = "`X.Y.Z Release` whole"
 RELEASE_LABEL = "the `release` label"
 
 
@@ -1807,8 +1811,10 @@ def test_the_review_checklist_tells_a_release_pr_by_its_title() -> None:
 
 
 def test_the_record_of_core_s_version_before_its_tag_states_the_answer() -> None:
-    # Decisions 1 and 2 are the answer on #561 with its fragment (#566), core's alone; decision
-    # 3 is the tell that follows, the organization's workflow's.
+    # Decisions 1 and 2 are the answer on #561 with its fragment (#566), for 0.5.0 alone, as #575
+    # kept them, and a later release stays with §12 as it stands; decision 3 is the tell that
+    # follows, the organization's gate's, which reviews a title that is `X.Y.Z Release` whole
+    # (the findings of the review of https://github.com/xippios/sdk-core/pull/574).
     records = {r["id"]: r for r in json.loads(INDEX.read_text(encoding="utf-8"))["records"]}
     found = records[VERSION_RECORD]
     assert found["decided_by"] == VERSION_QUESTION
@@ -1816,13 +1822,35 @@ def test_the_record_of_core_s_version_before_its_tag_states_the_answer() -> None
     held = decisions(VERSION_RECORD)
     assert sorted(held) == [1, 2, 3], f"{VERSION_RECORD} holds three decisions"
     names = {
-        1: ("core's `pyproject.toml`", "`uv.lock`", "`src/`", "`~=X.Y.0`", FRAGMENT_QUESTION),
-        2: ("Core's release PR raises no version", "`## [X.Y.Z] - `", "`publish.yml`", "§12"),
-        3: (RELEASE_TITLE, RELEASE_LABEL, ORGANIZATION_CHECK, f"{RELEASE_TRAIN}, decision 2"),
+        1: (
+            "core's `pyproject.toml`",
+            "`uv.lock`",
+            "`src/`",
+            "`~=0.5.0`",
+            "https://github.com/xippios/sdk-core/pull/564",
+            FRAGMENT_QUESTION,
+            "A later release of core is left to conventions §12 as it stands",
+        ),
+        2: ("0.5.0 release PR raises no version", "`## [0.5.0] - `", "`v0.5.0`", "§12"),
+        3: (
+            RELEASE_TITLE,
+            RELEASE_LABEL,
+            ORGANIZATION_CHECK,
+            GATE,
+            VERSION_QUESTION,
+            ANSWER_QUESTION,
+            f"{RELEASE_TRAIN}, decision 2",
+        ),
     }
     for number, expected in names.items():
         for name in expected:
             assert name in held[number], f"{VERSION_RECORD}, decision {number}: no {name!r}"
+    for number in (1, 2):
+        assert "X.Y" not in held[number], f"{VERSION_RECORD}, decision {number}, is for 0.5.0"
+    (path,) = (ROOT / "docs" / "adr").glob(f"{VERSION_RECORD.removeprefix('ADR-')}-*.md")
+    text = flat(path.read_text(encoding="utf-8"))
+    assert "ends in" not in text, f"{VERSION_RECORD} tells a release title by its end"
+    assert GATE in text.split("## Decision", 1)[0], f"{VERSION_RECORD}'s Context cites no gate"
 
 
 def test_adr_0039_points_to_the_record_that_tells_a_release_pr_by_its_title() -> None:
@@ -1839,5 +1867,11 @@ def test_adr_0039_points_to_the_record_that_tells_a_release_pr_by_its_title() ->
     assert "a release PR is told by its version" in decisions(RELEASE_TRAIN)[2]
     pointer = amendments(RELEASE_TRAIN, "2026-11-24")[-1]
     assert pointer.startswith(f"{VERSION_RECORD} ({VERSION_QUESTION}), decision 3,"), pointer[:60]
-    for name in ("changes decision 2 in part", RELEASE_TITLE, RELEASE_LABEL, "stand as written"):
+    for name in (
+        "changes decision 2 in part",
+        RELEASE_TITLE,
+        RELEASE_LABEL,
+        "carries 0.5.0 before its tag",
+        "stand as written",
+    ):
         assert name in pointer, f"{RELEASE_TRAIN}'s pointer does not name {name!r}"
