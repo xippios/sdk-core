@@ -11,6 +11,7 @@ environment, the contract of conventions §7, and every task takes the tenant's 
         param="org",  # every task takes org, the tenant's name
         fields=("SUBDOMAIN", "API_KEY"),  # EXAMPLE_ACME_SUBDOMAIN, EXAMPLE_ACME_API_KEY
         reserved=("demo",),  # declared by EXAMPLE_DEMO_SUBDOMAIN and _API_KEY alone
+        noun="organisation",  # the word for one tenant
     )
 
 
@@ -32,19 +33,19 @@ value stripped, and a source that knows the value's shape checks it itself, its
 A server bound to one tenant takes a ``TenantLock``: ``bind_tasks`` gives the source's
 tool set (``xippios.core.mcp.ToolSet``) the tasks with the tenant's argument bound, so no
 tool takes it, and ``tenant_instructions`` ends the server's instructions with a sentence
-naming the tenant::
+naming the tenant. ``ToolSet.from_tasks`` does both for a lock it is given::
 
     def build(lock: TenantLock | None = None) -> ToolSet:
-        return ToolSet(
-            "example",
-            bind_tasks(tool_functions(tasks), lock),
-            instructions=tenant_instructions(INSTRUCTIONS, lock, bound=BOUND_INSTRUCTIONS),
-        )
+        return ToolSet.from_tasks("example", tasks, version=__version__, lock=lock)
 
 
     server = build_server(build())  # every declared tenant; build(TenantLock(tenants, "acme"))
 
-``xippios.core.mcp.serve_tenants`` builds the bound server from ``--org acme`` and runs it.
+
+    def run() -> None:
+        main(build, tenants=tenants)  # --org acme serves build(TenantLock(tenants, "acme"))
+
+``xippios.core.mcp.main`` builds the bound server from ``--org acme`` and runs it.
 
 One tenant per call (conventions §7; ADR-0036, decisions 11 and 13): no task, tool or
 helper in core works across tenants, and the tenant list returns names only. A source's
@@ -139,6 +140,10 @@ class Tenants:
             variable name, e.g. ``("SUBDOMAIN", "API_KEY")``.
         reserved: Tenant names declared by their own field variables alone and never
             listed, e.g. ``("demo",)``; they follow the listed names, in this order.
+        noun: The word for one tenant, e.g. ``"organisation"``, in the help of the serve
+            command's option and the sentence of a bound server's instructions; ``None``,
+            the default, uses ``param``, e.g. ``"account"``. The registry's, so the serve
+            command and every lock read one word (ADR-0063, decision 7).
 
     Attributes:
         source: The source slug.
@@ -147,6 +152,7 @@ class Tenants:
         param: The task parameter that names the tenant.
         fields: The field suffixes, as a tuple.
         reserved: The reserved tenant names, as a tuple.
+        noun: The word for one tenant, or ``None``.
 
     Raises:
         TypeError: ``fields`` or ``reserved`` is one string rather than a sequence.
@@ -154,7 +160,7 @@ class Tenants:
             upper-case letters, digits and underscores; a ``param`` that is not a
             parameter name; no field, a field that is not upper-case letters, digits and
             underscores, or a field given twice; a reserved name that is not a valid
-            tenant name or is given twice.
+            tenant name or is given twice; a ``noun`` that is given but blank.
     """
 
     def __init__(
@@ -166,6 +172,7 @@ class Tenants:
         param: str,
         fields: Sequence[str],
         reserved: Sequence[str] = (),
+        noun: str | None = None,
     ) -> None:
         if not source:
             raise ValueError("source must not be empty")
@@ -198,12 +205,15 @@ class Tenants:
                 raise ValueError(
                     f"reserved name {name!r} is not lower-case letters, digits and underscores"
                 )
+        if noun is not None and not noun.strip():
+            raise ValueError("noun must be a word such as 'organisation', or None for param")
         self.source = source
         self.var_prefix = source.upper().replace("-", "_") if var_prefix is None else var_prefix
         self.list_var = list_var
         self.param = param
         self.fields = fields
         self.reserved = reserved
+        self.noun = noun
         self._clients: dict[str, AsyncClient] = {}
         self._lock = threading.Lock()
         global _declared
@@ -213,7 +223,7 @@ class Tenants:
         return (
             f"Tenants({self.source!r}, var_prefix={self.var_prefix!r}, "
             f"list_var={self.list_var!r}, param={self.param!r}, fields={self.fields!r}, "
-            f"reserved={self.reserved!r})"
+            f"reserved={self.reserved!r}, noun={self.noun!r})"
         )
 
     def var(self, name: str, field: str) -> str:
@@ -421,25 +431,23 @@ class TenantLock:
     The lock of a server that a source's ``--org`` or ``--account`` binds, sdk-cashctrl's
     ``OrgLock`` and sdk-google-mail's ``AccountLock`` until core 0.4.0 (ADR-0036,
     decision 7). ``bind_tasks`` binds a server's tasks to it, ``tenant_instructions``
-    names it in the server's instructions, and ``xippios.core.mcp.serve_tenants`` builds it
-    from the command line. The parameter it binds is the one its registry declares,
-    ``tenants.param``, so no lock binds another (ADR-0036, decision 13).
+    names it in the server's instructions, and ``xippios.core.mcp.main`` builds it from the
+    command line. The parameter it binds is the one its registry declares,
+    ``tenants.param``, so no lock binds another (ADR-0036, decision 13), and the word for
+    one tenant is the registry's ``noun`` too.
 
     Attributes:
         tenants: The source's registry, e.g. ``TENANTS``.
-        value: The tenant the server serves, e.g. ``"demo"``, which the serve command checks
+        value: The tenant the server serves, e.g. ``"acme"``, which the serve command checks
             at startup; a lock on an undeclared name lists no tenant.
-        noun: The word for one tenant in the sentence of the instructions, e.g.
-            ``"organisation"``; ``None``, the default, uses ``param``, e.g. ``"account"``.
 
     Raises:
         TypeError: ``tenants`` is not a ``Tenants`` registry, a parameter's name say.
-        ValueError: ``value`` is empty, or ``noun`` is given but blank.
+        ValueError: ``value`` is empty.
     """
 
     tenants: Tenants
     value: str
-    noun: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.tenants, Tenants):
@@ -449,8 +457,6 @@ class TenantLock:
             )
         if not self.value:
             raise ValueError("value must name the tenant the server serves")
-        if self.noun is not None and not self.noun.strip():
-            raise ValueError("noun must be a word such as 'organisation', or None for param")
 
     @property
     def param(self) -> str:
@@ -460,7 +466,7 @@ class TenantLock:
 
 def _sentence(lock: TenantLock) -> str:
     """The sentence a bound server's instructions end with."""
-    noun = lock.param if lock.noun is None else lock.noun
+    noun = lock.param if lock.tenants.noun is None else lock.tenants.noun
     return (
         f"This server is bound to {lock.param} {lock.value}; every tool acts on that {noun} "
         f"and takes no {lock.param}."
@@ -473,7 +479,7 @@ def tenant_instructions(
     """A server's instructions: ``text`` unbound; bound, ``bound`` and the lock's sentence.
 
     The sentence names the tenant, "This server is bound to org acme; every tool acts on
-    that organisation and takes no org.", the noun the lock's. A source whose ``text``
+    that organisation and takes no org.", the noun the registry's. A source whose ``text``
     tells an agent that every tool takes the tenant's argument passes ``bound``, its text
     without that clause, for the bound server, as sdk-google-mail does; without it the
     bound server's instructions are ``text`` and the sentence, as sdk-cashctrl's are.

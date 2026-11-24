@@ -1,27 +1,30 @@
 """MCP adapter helpers (conventions §8): task functions become tools, nothing else.
 
-A source's ``mcp.py`` builds its ``ToolSet`` and its server from it::
+A source's ``mcp.py`` builds its ``ToolSet`` from its tasks module, its server from the
+tool set, and runs the server through the one entry::
 
-    from xippios.core.mcp import ToolSet, build_server, main, tool_functions
+    from xippios.core.mcp import ToolSet, build_server, main
     from xippios.example import tasks
 
     def build() -> ToolSet:
-        return ToolSet("example", tool_functions(tasks), caps=tasks.MCP_CAPS)
+        return ToolSet.from_tasks("example", tasks, version="1.2.0")
 
     server = build_server(build())
 
     def run() -> None:
-        main(server)
+        main(build)
 
-``tool_functions(tasks)`` is ``tasks.__all__`` minus ``BULK_TASKS``, read from the module
-it is given, each name its function's ``__name__``; it and ``tool_name`` come from
-``xippios.core`` too, since neither needs this extra.
+``ToolSet.from_tasks`` reads the tasks module: ``tool_functions(tasks)``, which is
+``tasks.__all__`` minus ``BULK_TASKS``, and what the module declares for the server,
+``MCP_CAPS``, ``MCP_INSTRUCTIONS``, the two option hooks ``mcp_add_options`` and
+``mcp_apply_options``, and ``MCP_LOOPBACK_ONLY`` (ADR-0063, decision 7). ``tool_functions``
+and ``tool_name`` come from ``xippios.core`` too, since neither needs this extra.
 
-A source's own command-line options reach ``main`` through two hooks, parsed once with
-core's: ``add_options`` puts them on the parser, ``apply_options`` returns the server to
-run, and a ``XippiosError`` it raises stops the process with exit status 2 (ADR-0036).
-A multi-tenant source runs ``serve_tenants`` instead, whose ``--org acme`` serves the
-server bound to one tenant (``xippios.core.TenantLock``).
+``main(build)`` reads the option hooks from the tool set, so a source's options are parsed
+once with core's, and a ``XippiosError`` that ``apply_options`` raises stops the process
+with exit status 2 (ADR-0036). A multi-tenant source passes its registry,
+``main(build, tenants=TENANTS)``, whose ``--org acme`` serves the server bound to one
+tenant (``xippios.core.TenantLock``).
 
 The package contract's tool set, ``ToolSet``, is what a source's ``build(**options)``
 returns: its tools as its lock binds them, its caps, instructions and version, its option
@@ -46,7 +49,7 @@ except ImportError as exc:  # pragma: no cover - exercised only without the extr
     raise ImportError("xippios.core.mcp needs the 'mcp' extra: uv add 'xippios-core[mcp]'") from exc
 
 from xippios.core._tasks import tool_functions, tool_name
-from xippios.core.mcp.cli import LOOPBACK_HOSTS, build_parser, main, serve_tenants
+from xippios.core.mcp.cli import LOOPBACK_HOSTS, build_parser, main
 from xippios.core.mcp.errors import error_to_text
 from xippios.core.mcp.results import cap_result
 from xippios.core.mcp.server import build_server, quiet_request_logging, register_tasks
@@ -64,7 +67,6 @@ __all__ = [
     "main",
     "quiet_request_logging",
     "register_tasks",
-    "serve_tenants",
     "tool_functions",
     "tool_name",
 ]
