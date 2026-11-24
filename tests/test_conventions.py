@@ -883,6 +883,7 @@ def test_adr_0059_admits_a_decided_piece_with_fewer_than_two_consumers_in_one_se
         "decision 8's review",
         "`fetch_pages(stop=, key=)`",
         "`download(headers=)`",
+        "`MemoryCache(max_bytes=)`",
         "the rest of decisions 4, 5 and 8",
     ):
         assert name in amendment, f"ADR-0059's amendment does not name {name!r}"
@@ -891,17 +892,37 @@ def test_adr_0059_admits_a_decided_piece_with_fewer_than_two_consumers_in_one_se
     assert found["amended"] == [{"date": "2026-11-24", "by": DECIDED_QUESTION}]
 
 
-def test_adr_0040_admits_download_s_headers_with_no_consumer_by_the_decided_addition() -> None:
-    # The amendment that https://github.com/xippios/sdk-core/issues/479 opens gave `headers` no
-    # reason (the organization's check on the range, finding 2); the answer on #555 admits it.
+CACHE_QUESTION = "https://github.com/xippios/sdk-core/issues/479"
+
+
+def adr_0040_s_cache_amendment() -> str:
+    """The paragraph of ADR-0040 that the answer on the cache opens, on one line."""
     (path,) = (ROOT / "docs" / "adr").glob("0040-*.md")
-    opening = "Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/479:"
+    opening = f"Amended 2026-11-24 by {CACHE_QUESTION}:"
     (paragraph,) = (
         flat(part) for part in path.read_text(encoding="utf-8").split("\n\n") if opening in part
     )
+    return paragraph
+
+
+def test_adr_0040_admits_download_s_headers_with_no_consumer_by_the_decided_addition() -> None:
+    # The amendment that the answer on the cache opens gave `headers` no reason (the
+    # organization's check on the range, finding 2); the answer on #555 admits it.
+    paragraph = adr_0040_s_cache_amendment()
     for name in ("`headers`", "no consumer", DECIDED_QUESTION, DECIDED):
         assert name in paragraph, f"ADR-0040's amendment does not name {name!r}"
     assert "no caller yet" not in paragraph, "ADR-0040's amendment still gives headers no reason"
+
+
+def test_adr_0040_admits_the_cache_s_max_bytes_with_no_consumer_by_the_decided_addition() -> None:
+    # Part 4 of the answer on the cache decided that the cache bounds the bytes it holds in all,
+    # and no source passes `max_bytes=`, so it enters as a decided addition too.
+    paragraph = adr_0040_s_cache_amendment()
+    words = sentence(paragraph, "`max_bytes=`")
+    clause = words.split("`max_bytes=`", 1)[1].split("whose default of 64 MiB", 1)[0]
+    for name in ("no consumer", "part 4 of the answer on that issue", DECIDED):
+        assert name in clause, f"ADR-0040's amendment does not name {name!r} for max_bytes"
+    assert "no source passes yet" not in paragraph, "ADR-0040 still gives max_bytes no reason"
 
 
 def test_section_4_holds_the_walk_and_its_refusal_in_one_sentence() -> None:
