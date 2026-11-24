@@ -997,6 +997,42 @@ def test_a_repository_without_one_package_with_a_client_sets_no_variable(
     result.assert_outcomes(passed=1)
 
 
+BESIDE_TESTS = """
+import os
+
+from xippios.core.testing.plugin import PLACEHOLDER_KEY
+from xippios.other._client import ENV_VARS  # installed beside the source
+
+SHELL = dict(os.environ)
+
+
+def test_the_source_s_own_variables_alone_hold_the_placeholder():
+    assert [entry.name_or_pattern for entry in ENV_VARS] == ["OTHER_TOKEN"]
+    assert os.environ["EXAMPLE_API_KEY"] == PLACEHOLDER_KEY
+    assert os.environ["OTHER_TOKEN"] == SHELL["OTHER_TOKEN"]
+"""
+
+
+@pytest.mark.usefixtures("shell_keys")
+def test_a_package_installed_beside_the_source_is_not_read(pytester: pytest.Pytester) -> None:
+    # A source that depends on its publisher's shared package (ADR-0065, decision 3) has a
+    # second _client.py in its environment, here xippios.other installed in the repository's
+    # .venv. The plugin reads the repository's own src/xippios/ alone, so the source's ENV_VARS
+    # name each variable that its tests need, the shared key's among them.
+    write_source(pytester, secret_client("EXAMPLE_API_KEY"), BESIDE_TESTS)
+    site = ".venv/lib/site-packages"
+    write_repository(
+        pytester,
+        {
+            f"{site}/xippios/other/__init__.py": "",
+            f"{site}/xippios/other/_client.py": secret_client("OTHER_TOKEN"),
+        },
+    )
+    pytester.syspathinsert(pytester.path / site)
+    result = pytester.runpytest("tests", "--strict-markers", "--strict-config")
+    result.assert_outcomes(passed=1)
+
+
 def test_the_plugin_registers_no_ini_option(
     pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
 ) -> None:
