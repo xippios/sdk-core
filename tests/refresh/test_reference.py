@@ -532,6 +532,12 @@ def test_a_finished_list_agrees_with_its_declaration(source: Source) -> None:
             lambda: "x",  # type: ignore[arg-type,return-value]
             endpoint="GetA",
         ),
+        # The type is named as _described names it, its article with it, never "a int".
+        "a's fetch answered an int: it answers records or a PackagedList": Listed(
+            "a",
+            lambda: 4,  # type: ignore[arg-type,return-value]
+            endpoint="GetA",
+        ),
     }
     for message, listed in cases.items():
         error, _ = go_raising(source, [listed])

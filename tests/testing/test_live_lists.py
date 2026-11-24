@@ -266,6 +266,19 @@ def test_an_answer_that_holds_no_list_fails_naming_its_payloads_type(
         assert value not in lines[0]
 
 
+@pytest.mark.parametrize(
+    "current", [{"data": RECORDS}, {"US": RECORDS[0], "BR": RECORDS[1]}], ids=["body", "by-code"]
+)
+def test_a_mapping_fails_and_asks_for_the_records(current: dict[str, Any]) -> None:
+    """A mapping handed as the list, the body that holds the records or records by their
+    code, is refused naming its type, never read as bare codes of its keys, and the failure
+    says to hand the records or the wrapper's ``Answer`` of them."""
+    assert failure(TEXT_CODES, current) == [
+        "packaged list countries: the list upstream serves now is a dict: hand its records, "
+        "or the wrapper's Answer of them, not the body that holds them (ADR-0055)"
+    ]
+
+
 def test_a_packaged_side_given_is_read_as_the_current_one() -> None:
     assert failure(TEXT_CODES, RECORDS, packaged=[{"countryName": "Brazil"}]) == [
         "packaged list countries: the packaged list: record 0 has no field 'countryCode' (ADR-0055)"
