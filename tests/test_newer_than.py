@@ -1,25 +1,36 @@
 """The filter of a parameter that takes back a vintage (ADR-0052, sdk-core#318).
 
-The two copies' forms each have their test: a release time printed without a zone, read by
-core's ``naive_time`` as sdk-usda-esr reads it (a date alone its midnight, a zone refused),
-and a release month read by a source's own reader into ``(year, month)``, as sdk-usda-psd
-reads it, used as a filter of records and as all or nothing on the newest release.
+Each source hands ``newer_than`` its own reader of its vintage text, since core ships none
+(ADR-0059, decision 4; ADR-0052, amendment 2026-11-24). Two forms each have their test: a
+release time printed without a zone, read by the invented source's reader below (a date alone
+its midnight, a zone refused), and a release month read into ``(year, month)``, used as a
+filter of records and as all or nothing on the newest release.
 """
 
 import re
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime
-from functools import partial
 
 import pytest
 
-from xippios.core import InvalidRequestError, ResultMeta, XippiosError, naive_time, newer_than
+from xippios.core import InvalidRequestError, ResultMeta, XippiosError, newer_than
 
 SOURCE = "example"
 
-read_since = partial(naive_time, source=SOURCE)
-"""A source's reader of its vintage text: core's, bound to the source's slug."""
+
+def read_since(text: str) -> datetime:
+    """The invented source's reader of its vintage text, a release time printed without a zone."""
+    parsed: datetime | None
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        parsed = None
+    if parsed is None or parsed.tzinfo is not None:
+        raise InvalidRequestError(
+            f"since must be a release time without a zone, got {text!r}.", source=SOURCE
+        )
+    return parsed
 
 
 @dataclass(frozen=True)
@@ -46,11 +57,6 @@ RELEASES = [
     Release("0301", "2026-10-08T08:30:00"),
 ]
 """A release list in upstream's order, the newest release not last."""
-
-REFUSED_PREFIX = (
-    "since must be the meta.vintage text of an earlier call, an ISO date and time without a "
-    "time zone such as '2026-10-06T08:00:00'; got "
-)
 
 
 def codes(releases: list[Release]) -> list[str]:
@@ -96,54 +102,25 @@ def test_the_times_are_compared_not_their_texts() -> None:
     assert codes(kept) == ["0402"]
 
 
-def test_a_date_alone_is_its_midnight() -> None:
-    assert naive_time("2026-10-22") == datetime(2026, 10, 22)
+def test_a_date_alone_is_its_midnight_as_the_reader_reads_it() -> None:
     kept = newer_than("2026-10-22", RELEASES, released=released, read=read_since)
     assert codes(kept) == ["0107", "0201"], "released on that day after 00:00"
 
 
-def test_the_naive_time_reader_reads_upstreams_text() -> None:
-    assert naive_time(NEWEST) == datetime(2026, 10, 22, 8, 30, 42, 670000)
-    assert naive_time("2026-10-06T08:00:00").tzinfo is None
-
-
 @pytest.mark.parametrize(
     "since",
-    ["not a time", "", "2026-10-22T25:00:00", "22.10.2026"],
-    ids=["words", "empty", "hour_25", "day_first"],
+    ["not a time", "2026-10-22T25:00:00", "2026-10-22T08:30:42Z"],
+    ids=["words", "hour_25", "zulu"],
 )
-def test_a_text_that_does_not_parse_is_refused(since: str) -> None:
+def test_the_reader_s_refusal_passes_with_its_source(since: str) -> None:
     with pytest.raises(InvalidRequestError) as info:
         newer_than(since, RELEASES, released=released, read=read_since)
-    assert str(info.value) == f"{REFUSED_PREFIX}{since!r}, and it is not an ISO date and time."
+    assert str(info.value) == f"since must be a release time without a zone, got {since!r}."
     assert info.value.source == SOURCE, "the source's slug, which an HTTP problem names"
 
 
-def test_a_value_that_is_no_text_is_refused() -> None:
-    """A Python caller's ``datetime`` is no vintage text: the reader reads text alone."""
-    given = datetime(2026, 10, 22, 8, 30, 42)
-    with pytest.raises(InvalidRequestError, match="it is not an ISO date and time"):
-        naive_time(given, source=SOURCE)  # type: ignore[arg-type]
-
-
-@pytest.mark.parametrize(
-    "since",
-    ["2026-10-22T08:30:42.67+00:00", "2026-10-22T08:30:42Z", "2026-10-22T10:30:42+02:00"],
-    ids=["utc_offset", "zulu", "cest"],
-)
-def test_a_zone_against_a_naive_release_time_is_refused_and_says_why(since: str) -> None:
-    """Core never invents a zone: comparing an aware time with a naive one would need one."""
-    with pytest.raises(InvalidRequestError) as info:
-        newer_than(since, RELEASES, released=released, read=read_since)
-    assert str(info.value) == (
-        f"{REFUSED_PREFIX}{since!r}, and it carries a time zone: the release times it is "
-        "compared with carry none, and comparing the two would invent one."
-    )
-    assert info.value.source == SOURCE
-
-
 def test_an_unreadable_since_is_refused_over_an_empty_answer_too() -> None:
-    with pytest.raises(InvalidRequestError, match="it is not an ISO date and time"):
+    with pytest.raises(InvalidRequestError, match="since must be a release time"):
         newer_than("not a time", [], released=released, read=read_since)
 
 
@@ -237,15 +214,13 @@ def test_a_reader_whose_value_does_not_compare_with_the_release_is_the_sources_f
         "datetime.datetime(2026, 10, 15, 8, 30), a datetime, and read gave (2026, 9), a tuple, "
         "which do not compare ("
     )
-    assert message.endswith(
-        "). Hand it a reader that reads since into the form released gives, naive_time for a "
-        "release time printed without a zone."
-    )
+    hint = "). Hand it a reader that reads since into the form released gives."
+    assert message.endswith(hint), "core ships no reader of a vintage text to name (ADR-0059)"
     assert isinstance(info.value.__cause__, TypeError), "the comparison's own error, chained"
     assert not isinstance(info.value, XippiosError)
 
 
-def test_an_aware_release_against_core_s_naive_reader_is_the_sources_fault() -> None:
+def test_an_aware_release_against_a_naive_reader_is_the_sources_fault() -> None:
     aware = Release("0601", "2026-10-22T08:30:00+00:00")
     with pytest.raises(TypeError, match="which do not compare") as info:
         newer_than("2026-10-15T08:30:00", [aware], released=released, read=read_since)

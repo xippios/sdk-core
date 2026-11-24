@@ -21,7 +21,8 @@ from pydantic import Field
 
 from xippios.core import PackagedCodes, PackagedList, UpstreamModel
 from xippios.core.reference import _read_text
-from xippios.core.testing import assert_list_current, live
+from xippios.core.testing import live
+from xippios.core.testing.live import assert_list_current
 from xippios.core.testing.plugin import LIVE_ENV
 
 FETCHED = "2026-10-23T09:00:00Z"

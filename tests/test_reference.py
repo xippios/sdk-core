@@ -18,9 +18,7 @@ from xippios.core.reference import (
     closest,
     enum_member_name,
     id_name_pairs,
-    load_csv,
     load_json,
-    load_table,
     matches,
     nearest,
     render_enums,
@@ -31,20 +29,11 @@ PYPROJECT = Path(__file__).resolve().parents[1] / "pyproject.toml"
 """The family's ruff configuration, the one sdk-template gives every source."""
 
 
-class Code(UpstreamModel):
-    code: str
-    name: str
-    rank: int
-
-
 @pytest.fixture
 def package(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
     root = tmp_path / PKG
     (root / "reference").mkdir(parents=True)
     (root / "__init__.py").write_text("")
-    (root / "reference" / "codes.csv").write_text(
-        "code,name,rank\nUS,United States,1\nDE,Germany,2\n"
-    )
     (root / "reference" / "codes.json").write_text(
         json.dumps([{"code": "US", "name": "United States", "rank": 1}])
     )
@@ -55,48 +44,19 @@ def package(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
     return PKG
 
 
-def test_load_csv(package: str) -> None:
-    rows = load_csv(package, "codes.csv")
-    assert rows == [
-        {"code": "US", "name": "United States", "rank": "1"},
-        {"code": "DE", "name": "Germany", "rank": "2"},
-    ]
-
-
 def test_load_json(package: str) -> None:
     assert load_json(package, "codes.json")[0]["code"] == "US"
 
 
-def test_load_table_csv_coerces_types(package: str) -> None:
-    rows = load_table(package, "codes.csv", Code)
-    assert rows[1] == Code(code="DE", name="Germany", rank=2)
-
-
-def test_load_table_json(package: str) -> None:
-    assert load_table(package, "codes.json", Code)[0].rank == 1
-
-
-def test_a_row_that_does_not_fit_is_refused_from_none(package: str, tmp_path: Path) -> None:
-    (tmp_path / PKG / "reference" / "bad.csv").write_text("code,name,rank\nUS,MARKER,first\n")
-    with pytest.raises(ValidationError) as info:
-        load_table(package, "bad.csv", Code)
-    assert str(info.value) == (
-        f"{PKG} reference/bad.csv: 1 validation error(s); first at 0.rank (int_parsing): Input "
-        "should be a valid integer, unable to parse string as an integer"
-    )
-    assert info.value.raw == [{"code": "US", "name": "MARKER", "rank": "first"}]
-    assert info.value.__cause__ is None  # row 42: no chained pydantic text quoting the row
-
-
 def test_callers_get_fresh_objects(package: str) -> None:
-    first = load_csv(package, "codes.csv")
+    first = load_json(package, "codes.json")
     first[0]["code"] = "mutated"
-    assert load_csv(package, "codes.csv")[0]["code"] == "US"
+    assert load_json(package, "codes.json")[0]["code"] == "US"
 
 
 def test_missing_file(package: str) -> None:
-    with pytest.raises(FileNotFoundError, match=r"nope\.csv"):
-        load_csv(package, "nope.csv")
+    with pytest.raises(FileNotFoundError, match=r"nope\.json"):
+        load_json(package, "nope.json")
 
 
 class Commodity(UpstreamModel):

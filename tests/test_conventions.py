@@ -602,9 +602,9 @@ def test_the_review_checklist_holds_the_name_the_family_check_reads() -> None:
 
 
 # §12 and the code a core PR adds: the maintainer's answer on
-# https://github.com/xippios/sdk-core/issues/455, ADR-0058. A patch keeps a source's package and
-# its callers compatible while a stricter check may fail a source's own test, and the
-# maintainer's decision on a step's closed design question is a fourth reason for one consumer.
+# https://github.com/xippios/sdk-core/issues/455, ADR-0058, decision 2: a patch keeps a source's
+# package and its callers compatible while a stricter check may fail a source's own test. Its
+# decision 1, a fourth reason for one consumer, left for ADR-0059, decision 4.
 
 PATCH_RECORD = "ADR-0058"
 PATCH_QUESTION = "https://github.com/xippios/sdk-core/issues/455"
@@ -631,34 +631,56 @@ def test_what_a_core_patch_keeps_compatible_is_one_sentence_that_cites_adr_0058(
     assert f"{COMPATIBLE} {phrase}" in text, f"§12: {phrase!r} does not follow {COMPATIBLE!r}"
 
 
-def test_the_one_consumer_reason_names_the_record_that_adds_the_fourth() -> None:
+SCOPE_RECORD = "ADR-0059"
+SCOPE_QUESTION = "https://github.com/xippios/sdk-core/issues/473"
+"""The record of core's scope and the question it states: the two-consumer rule of 0.5.0."""
+
+
+def test_a_core_pr_s_consumers_are_judged_by_the_record_of_core_s_scope() -> None:
     # The definition of done's line on consumers and the review checklist's item 11 judge a core
-    # PR's ADR by the reasons of ADR-0023, decision 3, and by the fourth that ADR-0058 adds, so
-    # an ADR that names the fourth meets both as they read.
+    # PR by ADR-0059: who a consumer is, what the rule binds and the family's contract, the one
+    # reason for one consumer. Neither names a reason that the record ended.
     done = DONE.read_text(encoding="utf-8").splitlines()
-    lines = [flat(line) for line in done if "the two consumers of what it adds" in line]
+    lines = [flat(line) for line in done if "the two consumers of each piece it adds" in line]
     assert len(lines) == 1, "the definition of done has one line on a core PR's consumers"
     for where, rule in (("the definition of done", lines[0]), ("item 11", checklist_item(11))):
-        for name in ("the one-consumer reason of ADR-0023 decision 3", "ADR-0058, decision 1"):
+        for name in ("the family's contract", f"{SCOPE_RECORD}, decisions 1, 2 and 4"):
             assert name in rule, f"{where}: {rule!r} does not name {name!r}"
+        for gone in ("ADR-0023", "ADR-0058", "the maintainer's decision"):
+            assert gone not in rule, f"{where}: {rule!r} still names {gone!r}"
 
 
-def test_the_patch_record_keeps_its_question() -> None:
+@pytest.mark.parametrize(
+    ("phrase", "decision"),
+    [
+        ("code that core removed for its one consumer", "decision 2"),
+        ("a third never: core takes it in that minor", "decision 5"),
+        ("An issue of sdk-core names its consumers", "decision 8"),
+    ],
+)
+def test_the_adoption_s_copies_cite_the_record_of_core_s_scope(phrase: str, decision: str) -> None:
+    rule = sentence(section(15), phrase)
+    assert f"{SCOPE_RECORD}, {decision}" in rule, f"§15: {rule!r} does not cite {decision}"
+    assert "ADR-0023" not in rule, f"§15: {rule!r} cites the superseded record"
+
+
+def test_the_patch_record_keeps_its_question_and_its_second_decision() -> None:
     records = json.loads(INDEX.read_text(encoding="utf-8"))["records"]
     found = next((r for r in records if r["id"] == PATCH_RECORD), None)
     assert found, f"the index holds no {PATCH_RECORD}"
-    assert (found["decided_by"], found["amended"]) == (PATCH_QUESTION, [])
-
-
-def test_adr_0023_points_to_the_record_that_supersedes_its_closed_list() -> None:
-    # A reader of ADR-0023 and of the index finds the fourth reason: its status line names the
-    # question, as ADR-0042's names the one whose record superseded two of its decisions, and
-    # its amendment names ADR-0058, decision 1.
-    records = json.loads(INDEX.read_text(encoding="utf-8"))["records"]
-    found = next(r for r in records if r["id"] == "ADR-0023")
-    assert PATCH_QUESTION in [entry["by"] for entry in found["amended"]], "ADR-0023 is not amended"
+    assert found["decided_by"] == PATCH_QUESTION
+    assert [entry["by"] for entry in found["amended"]] == [SCOPE_QUESTION]
     text = flat((ROOT / found["path"]).read_text(encoding="utf-8"))
-    amendment = text.split("## Amendment 2026-11-22", 1)
-    assert len(amendment) == 2, "ADR-0023 has no amendment of 2026-11-22"
-    for name in ("ADR-0058", "decision 1", "supersedes", "one of three", PATCH_QUESTION):
-        assert name in amendment[1], f"ADR-0023's amendment does not name {name!r}"
+    amendment = text.split(f"Amended 2026-11-24 by {SCOPE_QUESTION}:", 1)
+    assert len(amendment) == 2, f"{PATCH_RECORD} has no amendment of 2026-11-24"
+    for name in ("decision 1 leaves", f"{SCOPE_RECORD}, decision 4", "decision 2", "stands"):
+        assert name in amendment[1], f"{PATCH_RECORD}'s amendment does not name {name!r}"
+
+
+def test_adr_0023_is_superseded_by_the_record_of_core_s_scope() -> None:
+    # A reader of ADR-0023 and of the index finds the rule where it stands now.
+    records = {r["id"]: r for r in json.loads(INDEX.read_text(encoding="utf-8"))["records"]}
+    assert records["ADR-0023"]["superseded_by"] == SCOPE_RECORD
+    scope = records[SCOPE_RECORD]
+    assert (scope["decided_by"], scope["supersedes"]) == (SCOPE_QUESTION, ["ADR-0023"])
+    assert [entry["by"] for entry in records["ADR-0052"]["amended"]][-1] == SCOPE_QUESTION
