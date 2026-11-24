@@ -1232,6 +1232,11 @@ def test_a_keyed_sample_follows_no_redirect_and_is_never_retried(
     assert not out.exists(), "nothing written"
 
 
+BY_AUTH = (
+    "each redirect and retry counted, and each token request and resend of the client's "
+    "auth, a refused login not counted"
+)
+"""What the run's last line says after its count where the client logs in."""
 BEARER = "made-up-bearer"
 """The bearer that the login's token endpoint answers, which nothing the run prints holds."""
 
@@ -1280,19 +1285,40 @@ def test_the_run_counts_each_request_of_a_renewing_auth(
     sent = [(request.method, str(request.url)) for request in site.requests]
     assert sent == [("GET", f"{BASE}/guide.html"), login, sample, login, sample]
     printed = capsys.readouterr().out
-    assert (
-        "5 requests sent, each redirect and retry counted, and each token request and resend "
-        "of the client's auth"
-    ) in printed, printed
+    assert f"5 requests sent, {BY_AUTH}\n" in printed, printed
     assert BEARER not in printed
     assert BEARER not in fetched(out)
     refused = login_snapshot(site, out)
     site.routes[f"{API}/token"] = (401, {}, b"")
-    assert refused.client is not None
-    capture = upstream._Capture(refused, refused.client, keyless=False)
     with pytest.raises(SystemExit, match=r"401 from POST /v1/token: Unauthorized"):
-        capture.fetch(f"{API}/items", (200,), keyed=True)
-    assert capture.sent == 0, "a login whose answer the auth refused is not counted"
+        go(refused)
+    printed = capsys.readouterr().out
+    assert f"1 requests sent, {BY_AUTH}\n" in printed, "the guide alone, the login not"
+
+
+def test_a_failed_run_prints_the_requests_it_sent(
+    site: Site, out: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """ADR-0062, decisions 4 and 14 (https://github.com/xippios/sdk-core/issues/579): the run
+    prints the requests it sent after its last one, a failed run's too, as the reference
+    frame does: a page that fails after its retry, and a check across pages that stops the
+    run after the last request. A run that stops before its first request prints none."""
+    url = site.page("guide.html", "<p>Guide</p>")
+    site.later[url] = [(503, {}, b""), (502, {}, b"")]
+    with pytest.raises(SystemExit, match=r"\(after one retry\)"):
+        go(declare(out, Page(url, "pages/guide.html")))
+    assert "2 requests sent, each redirect and retry counted\n" in capsys.readouterr().out
+
+    def disagree(rows: Sequence[Row]) -> Sequence[Section]:
+        raise refresh.changed(url, "it no longer renders the API document")
+
+    with pytest.raises(SystemExit, match="no longer renders the API document"):
+        go(declare(out, Page(url, "pages/guide.html"), sections=disagree))
+    assert "1 requests sent, each redirect and retry counted\n" in capsys.readouterr().out
+    with pytest.raises(SystemExit, match="Nothing to fetch"):
+        go(declare(out))
+    assert "requests sent" not in capsys.readouterr().out
+    assert not out.exists(), "nothing written"
 
 
 def test_the_variables_are_checked_by_name_before_anything_is_fetched(
