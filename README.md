@@ -8,7 +8,7 @@ It gives a source package the things that should be identical across the family:
 
 - **HTTP client** on `httpx` with retries, a per-source rate limiter, an optional
   response cache (off by default; the in-memory one is bounded by TTL and size),
-  explicit timeouts and one `User-Agent`. Async at the core; `sync` derives the sync
+  one read timeout, 60 s unless a source raises it, and one `User-Agent`. Async at the core; `sync` derives the sync
   task functions from the async ones.
   A 429 is retried for every method, a 5xx or a transport failure only for GET, HEAD
   and OPTIONS unless `RetryPolicy.retry_non_idempotent` is set, because upstream makes a
@@ -21,11 +21,11 @@ It gives a source package the things that should be identical across the family:
   `auth=None` sends one call without the client's key. `get_answer` returns the payload,
   parsed into the type it names, with its `retrieved_at`, a cache hit's stored time, and
   it alone stores an answer in the cache, once the answer decoded. A file is streamed
-  to disk with `download`, never held in memory; `decode_text` and `decode_csv` read
-  text and CSV next to `decode_json`; the cache stores no body over `cache_max_bytes`
-  (8 MiB).
+  to disk with `download`, never held in memory; `decode_csv` reads a CSV file or text
+  stream row by row; the cache stores no body over `cache_max_bytes` (8 MiB).
 - **Auth helpers** that read the key from the environment on the first request:
-  query parameter, header, bearer token or basic auth; and `RenewingBearerAuth`, the base
+  `KeyAuth`, the one key class, sends it as a query parameter, a header, a bearer token
+  or the basic user name; and `RenewingBearerAuth`, the base
   for an upstream that exchanges a login or a refresh token for a short-lived bearer. A
   source's documented error shapes go into `ClientConfig.classify`, consulted on every
   response.
@@ -93,7 +93,7 @@ from pydantic import Field
 from xippios.core import (
     AsyncClient,
     ClientConfig,
-    QueryKeyAuth,
+    KeyAuth,
     RateLimit,
     Result,
     ResultMeta,
@@ -109,7 +109,8 @@ client = AsyncClient(
         base_url="https://api.example.org",
         rate_limit=RateLimit(per_minute=60),
     ),
-    auth=QueryKeyAuth("key", "EXAMPLE_API_KEY", source="example"),  # read on first request
+    # the key as ?key=..., read on the first request
+    auth=KeyAuth("EXAMPLE_API_KEY", location="query", name="key", source="example"),
 )
 
 
@@ -144,7 +145,7 @@ get_series = sync(get_series_async)  # same signature, same docstring, blocks un
 `meta.request` is provenance, not a copy of the call: `ResultMeta` redacts any key that
 names a credential (`api_key`, `token`, `secret`, `sig`, ... as whole words) so an
 envelope is safe to hand to an agent or return over HTTP. A bare `key` is a credential
-only where a `QueryKeyAuth` sends the key under that name, as above, which registers it
+only where a `KeyAuth` sends the key under that name, as above, which registers it
 for the process; elsewhere it is data, as Eurostat's SDMX series `key` is, and so is a
 `sort_key`. A link keeps its path and its other parameters and loses the credentials of
 its query, a signed file link's `sig` or `X-Amz-Signature` say, as `scrub_url` writes
@@ -163,7 +164,7 @@ register_data_name("next_token")  # X's cursor: kept in meta.request, fixtures a
 
 Only a name with the whole word `token` and no other credential word can be declared,
 never `token` alone nor `access_token`, `refresh_token` or `id_token`, and a name a
-`QueryKeyAuth` registers stays a credential.
+query `KeyAuth` registers stays a credential.
 
 A release time upstream prints without a zone (FAS: `2026-10-06T08:00:00`) goes into
 `published_at` as printed, with `published_at_naive=True`, and `vintage` keeps the
@@ -367,13 +368,13 @@ An upstream that reports a longer-window quota in its headers (api.data.gov:
 client's configuration:
 
 ```python
-from xippios.core import AsyncClient, ClientConfig, HeaderKeyAuth, QuotaPolicy
+from xippios.core import AsyncClient, ClientConfig, KeyAuth, QuotaPolicy
 
 quota = QuotaPolicy(window=3600.0, source="example")  # spent for an hour unless told otherwise
 config = quota.install(
     ClientConfig(source="example", version="0.1.0", base_url="https://api.example.org")
 )
-client = AsyncClient(config, auth=HeaderKeyAuth("X-Api-Key", "EXAMPLE_API_KEY"))
+client = AsyncClient(config, auth=KeyAuth("EXAMPLE_API_KEY", location="header", name="X-Api-Key"))
 quota.snapshot()  # None: no response observed yet
 
 
@@ -545,9 +546,8 @@ client = AsyncClient(
 ```
 
 The first request sends the token request ahead of it, with its `User-Agent`, and the
-bearer, kept as a `SecretStr`, goes out as `Authorization: Bearer` until `margin` seconds
-before its `expires_in` runs out (`RENEWAL_MARGIN`, 60 s, by default), when the next
-request exchanges again. An answer whose status is in `renew_on`, `{401}` by default,
+bearer, kept as a `SecretStr`, goes out as `Authorization: Bearer` until 60 seconds before
+its `expires_in` runs out, when the next request exchanges again. An answer whose status is in `renew_on`, `{401}` by default,
 makes one more exchange and sends the request again, once; a source whose upstream
 refuses a bearer with a 403 too sets `renew_on = frozenset({401, 403})` on its class. A
 request that finds an exchange running on its event loop waits for it, so two first
@@ -592,36 +592,35 @@ async def download_crops_async(dest: Path) -> Result[Downloaded]:
     """Download the crops file of the current release.
 
     Args:
-        dest: The file to write, e.g. ``Path("qs.crops.txt")``.
+        dest: The file to write, e.g. ``Path("crops.csv")``.
     """
-    url = "https://files.example.org/bulk/qs.crops.txt"  # a link from the catalog
+    url = "https://files.example.org/bulk/crops.csv"  # a link from the catalog
     got = await client.download(url, dest)  # another host: the client's key stays off it
     # endpoint: the file's name as upstream names it, never its kind (conventions §4)
     # a signed link's signature reads REDACTED in meta.request
-    meta = ResultMeta(source="example", endpoint="qs.crops.txt", request={"url": url})
+    meta = ResultMeta(source="example", endpoint="crops.csv", request={"url": url})
     return Result(data=got, meta=meta)
 
 
-for row in decode_csv(Path("qs.crops.txt"), delimiter="\t"):  # row by row, never whole
+for row in decode_csv(Path("crops.csv")):  # row by row, never whole
     print(row["COMMODITY_DESC"], row["VALUE"])  # headers as upstream prints them
 ```
 
 `Downloaded` carries the path, the size, the content type, the file name from
 `Content-Disposition`, the `ETag`, the `Last-Modified` text and when the file was
-complete. `decode_text(response)` reads a text answer in the charset of its
-`Content-Type` (UTF-8 by default, a byte order mark stripped), and `decode_csv` takes a
-downloaded file, a response or an open text stream. A gzip or zip file is opened with the
-stdlib, and its member read through `decode_csv` row by row:
+complete. `decode_csv` takes a downloaded file or an open text stream of comma-separated
+values, a byte order mark stripped. A gzip or zip file is opened with the stdlib, and its
+member read through `decode_csv` row by row:
 
 ```python
 import gzip
 import io
 
 with (
-    gzip.open("qs.crops.txt.gz") as raw,
+    gzip.open("crops.csv.gz") as raw,
     io.TextIOWrapper(raw, encoding="utf-8-sig", newline="") as text,
 ):
-    for row in decode_csv(text, delimiter="\t"):  # left open: the with closes it
+    for row in decode_csv(text):  # left open: the with closes it
         print(row["COMMODITY_DESC"])
 ```
 
@@ -640,7 +639,7 @@ environment with `Tenants`, one client each, and names them with `list_task`
 (`xippios.core.tenants`; ADR-0036, ADR-0042):
 
 ```python
-from xippios.core import AsyncClient, BasicKeyAuth, ClientConfig, Tenants, list_task
+from xippios.core import AsyncClient, ClientConfig, KeyAuth, Tenants, list_task
 
 TENANTS = Tenants(
     "example",
@@ -654,7 +653,7 @@ TENANTS = Tenants(
 def build(name: str) -> AsyncClient:
     subdomain = TENANTS.field(name, "SUBDOMAIN")  # EXAMPLE_<NAME>_SUBDOMAIN, stripped
     config = ClientConfig(..., base_url=f"https://{subdomain}.example.org/api")
-    return AsyncClient(config, auth=BasicKeyAuth(TENANTS.var(name, "API_KEY")))
+    return AsyncClient(config, auth=KeyAuth(TENANTS.var(name, "API_KEY"), location="basic"))
 
 
 client = TENANTS.client_for("acme", build)  # acme's own client, built on first use
@@ -1989,7 +1988,7 @@ fragment until the release assembles it.
 
 | Module | What | Status |
 | --- | --- | --- |
-| `xippios.core.client` | httpx client, retries, rate limit, cache with a byte bound, quota policy, request hooks, env-key auth, the renewing bearer, `get_answer`, `download`, `decode_text`, `decode_csv` | alpha |
+| `xippios.core.client` | httpx client, retries, rate limit, cache with a byte bound, quota policy, request hooks, the one key class, the renewing bearer, `get_answer`, `download`, `decode_csv` | alpha |
 | `xippios.core.errors` | taxonomy, `UnknownCode`, `QueryTooLarge`, the refusal of a query over upstream's limit, response classification, `request_description` | alpha |
 | `xippios.core.data_gov` | `Gateway`: the api.data.gov key, the gateway's `classify` of its own answers with `NoDataForYear` on a data path, one quota policy per process | alpha |
 | `xippios.core.redaction` | the one credential rule of the envelope, the recorder and replay, `REDACTED`, which a source's package imports from `xippios.core`, `register_data_name`, signed links | alpha |

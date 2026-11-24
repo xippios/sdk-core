@@ -552,8 +552,9 @@ names one, at any depth, to `"REDACTED"` at construction, by the one rule of
 `credential` or `credentials`, between `_`, `-` or the ends of the name), so an envelope
 is safe to hand to an agent, return over HTTP, or write to a store; personal identifiers
 in upstream data stay out of it by §3's rule for projections (ADR-0017). A bare `key` is
-not on the list: it is a credential in a process where a `QueryKeyAuth` sends the key
-under that name (USDA NASS), which registers it when built, and data elsewhere, as
+not on the list: it is a credential in a process where the one key class sends the key
+under that name as a query parameter, `KeyAuth("EXAMPLE_API_KEY", location="query",
+name="key")`, which registers it when built (ADR-0059, decision 7), and data elsewhere, as
 Eurostat's SDMX series `key` is (ADR-0040, decision 6). A source declares a
 name with a whole-word `token` data where its value is data, a paging cursor such as X's
 `next_token` and `pagination_token`, once, with
@@ -741,10 +742,12 @@ without case).
   and never inspect status codes themselves. A wrapper
   whose answer may come from the cache calls `get_answer()`: its `Answer(payload,
   retrieved_at)` carries a hit's stored time, from `xippios_cache_stored_at`, or else
-  the arrival time, for `meta.retrieved_at` (ADR-0037, decision 5); one that
-  needs more of the response calls `get()`, then `decode_json()`. `Answer` is generic
-  over its payload: `get_answer(path, parse=list[Region], endpoint="regions")` parses
-  the payload with `parse` and returns an `Answer[list[Region]]`, and a wrapper that
+  the arrival time, for `meta.retrieved_at` (ADR-0037, decision 5). A wrapper decodes a
+  JSON answer through `get_json` or `get_answer` alone, since `decode_json` is the
+  client's own (ADR-0059, decision 3), and a CSV file through `decode_csv` (below).
+  `Answer` is generic over its payload: `get_answer(path, parse=list[Region],
+  endpoint="regions")` parses the payload with `parse` and returns an
+  `Answer[list[Region]]`, and a wrapper that
   returns a value it derives from the payload returns `Answer(value,
   answer.retrieved_at)`, never a pair of its own (ADR-0037, decision 5).
 - A per-source rate limiter sets a fast pace within the source's documented per-second
@@ -811,11 +814,10 @@ without case).
   before anything is sent, and the file is written with mode `0600` (ADR-0040,
   decision 1). `Downloaded` carries `path`, `bytes`, `content_type`, the file
   name from `Content-Disposition` when sent, `etag`, `last_modified` and `retrieved_at`.
-- `decode_text(response)` (charset from `Content-Type`, UTF-8 by default, a BOM
-  stripped) and `decode_csv(data, *, delimiter=",", source=None)` (a path, a response or
-  an open text stream, such as a gzip or ZIP member the source opens, ADR-0040,
-  decision 2; the stdlib's `csv.DictReader`, headers as upstream
-  prints them) sit beside `decode_json`. The source opens gzip and zip with the stdlib;
+- `decode_csv(data, *, source=None)` reads the rows of a comma-separated file, a path such
+  as `Path("crops.csv")` or an open text stream such as a gzip or ZIP member the source
+  opens (ADR-0040, decision 2), with the stdlib's `csv.DictReader`, a BOM stripped and the
+  headers as upstream prints them. The source opens gzip and zip with the stdlib;
   core ships no XML, spreadsheet or PDF parser (ADR-0040, ADR-0020).
 - Credentials come from the client's `auth`, which goes to the base URL's origin, its
   scheme, host and port, and to no other: a request to another origin, a file link on
@@ -835,8 +837,9 @@ without case).
 
 ## 7. Configuration
 
-The environment is read through the `EnvKeyAuth` helpers (`QueryKeyAuth`,
-`HeaderKeyAuth`, `BearerAuth`, `BasicKeyAuth`), on the first request: keys from
+The environment is read through the one key class, `KeyAuth(env_var, location=...,
+name=...)`, whose `location` is `query`, `header`, `bearer` or `basic` (ADR-0059,
+decision 7), on the first request: keys from
 `<SOURCE>_API_KEY`, or the issuer's variable where ADR-0032 applies, overridable by
 constructor argument (`key=`; ADR-0002, amendment 2026-10-27). An upstream that exchanges a
 long-lived credential for a short-lived bearer, a login or a refresh token, is served by a
@@ -844,8 +847,8 @@ subclass of `RenewingBearerAuth`: the source writes its token request (`token_re
 the reading of the answer (`read_token` for an HTTP 200, `token_refused` for any other
 status, by default the taxonomy error of the status, quoting nothing of the answer), and
 reads each credential through `credential(name)`, from `credentials=` or else from the
-variable, when it builds the request. The base keeps the bearer until `margin` seconds, 60
-by default, before its `expires_in` runs out, and on a status of `renew_on`, 401 by
+variable, when it builds the request. The base keeps the bearer until 60 seconds before
+its `expires_in` runs out, and on a status of `renew_on`, 401 by
 default, exchanges once more and sends the request again, once (ADR-0025, amendment
 2026-11-18, point c). No config files, no dotenv loading inside the package — the
 environment is the contract (direnv in development, secrets in CI). A source behind
@@ -1271,7 +1274,9 @@ standalone from the package. A task named in `BULK_TASKS` gets no route:
   `x-transaction-id` and the others `REQUEST_ID_HEADERS` names), which change with every
   recording and trip the secret scan (ADR-0040, decision 5).
   The scrub redacts credentials by the rule `ResultMeta` applies (§4): a parameter named
-  `key` is data unless a `QueryKeyAuth` sends the key under that name (ADR-0040), and a
+  `key` is data unless the one key class sends the key under that name as a query
+  parameter, `KeyAuth("EXAMPLE_API_KEY", location="query", name="key")` (ADR-0059,
+  decision 7, and ADR-0040), and a
   `token` name its source declared data is written as sent, so replay can match it
   (ADR-0040, decision 6).
 - Live tests are marked `@pytest.mark.live`, skipped unless `XIPPIOS_LIVE_TESTS=1`,

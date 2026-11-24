@@ -1,10 +1,10 @@
 """Authentication helpers: a key read from the environment, or a bearer that a token renews.
 
-Every upstream sends its key differently: USDA NASS as a query parameter, UN Comtrade
-in a header, CashCtrl as the HTTP basic user name. The ``EnvKeyAuth`` classes cover
-those shapes and read the key lazily from the environment (conventions §7), an explicit
-key winning, so a package imports without credentials and fails with ``ConfigError`` on
-the first request instead of at import time. An upstream that exchanges a long-lived
+Every upstream sends its key in one of four places: a query parameter, a header, a bearer
+or the HTTP basic user name. ``KeyAuth``, the one key class (ADR-0059, decision 7), takes
+the place and reads the key lazily from the environment (conventions §7), an explicit key
+winning, so a package imports without credentials and fails with ``ConfigError`` on the
+first request instead of at import time. An upstream that exchanges a long-lived
 credential for a short-lived bearer, FAOSTAT's login or Google's refresh token, gets a
 subclass of ``RenewingBearerAuth`` (ADR-0025, amendment 2026-11-18, point c).
 """
@@ -17,7 +17,7 @@ import time
 import weakref
 from collections.abc import AsyncGenerator, Callable, Generator, Mapping
 from dataclasses import dataclass
-from typing import ClassVar, Final
+from typing import ClassVar, Final, Literal, get_args
 
 import httpx
 from pydantic import SecretStr
@@ -36,12 +36,10 @@ from xippios.core.redaction import register_credential_name
 
 __all__ = [
     "RENEWAL_MARGIN",
-    "BasicKeyAuth",
-    "BearerAuth",
     "BearerToken",
     "EnvKeyAuth",
-    "HeaderKeyAuth",
-    "QueryKeyAuth",
+    "KeyAuth",
+    "KeyLocation",
     "RenewingBearerAuth",
 ]
 
@@ -68,9 +66,9 @@ def _resolve_api_key(
 class EnvKeyAuth(httpx.Auth):
     """Base class: resolve the key once, then let a subclass attach it to each request.
 
-    Subclass and implement ``apply`` for a shape not covered below. ``apply`` reads the
-    key through ``self.key()`` where it attaches it, and keeps it in no local variable,
-    so no traceback frame holds the key as an argument or a local.
+    ``KeyAuth`` is the one subclass core ships. ``apply`` reads the key through
+    ``self.key()`` where it attaches it, and keeps it in no local variable, so no traceback
+    frame holds the key as an argument or a local.
 
     Args:
         env_var: Variable that holds the key, named as the upstream documents it.
@@ -108,98 +106,92 @@ class EnvKeyAuth(httpx.Auth):
         yield request
 
 
-class QueryKeyAuth(EnvKeyAuth):
-    """Send the key as a query parameter, e.g. ``?key=...`` for USDA NASS.
+KeyLocation = Literal["query", "header", "bearer", "basic"]
+"""Where ``KeyAuth`` sends the key: a query parameter, a header, a bearer or basic auth."""
 
-    Building one registers ``param`` as a credential name for the whole process
-    (``xippios.core.redaction``): its value is ``REDACTED`` in every ``ResultMeta.request``,
-    every recorded fixture and every URL ``sent_urls`` gives, also where the name is no
-    credential by itself, as ``key`` is not (ADR-0040, decision 6).
-
-    Args:
-        param: Query parameter name, e.g. ``"key"``.
-        env_var: Variable that holds the key.
-        key: Explicit key; wins over the environment.
-        source: Source slug for error messages.
-    """
-
-    def __init__(
-        self,
-        param: str,
-        env_var: str,
-        *,
-        key: str | SecretStr | None = None,
-        source: str | None = None,
-    ) -> None:
-        super().__init__(env_var, key=key, source=source)
-        self.param = param
-        register_credential_name(param)
-
-    def apply(self, request: httpx.Request) -> None:
-        """Merge the key into the query string."""
-        request.url = request.url.copy_merge_params({self.param: self.key()})
+_LOCATIONS: Final[tuple[KeyLocation, ...]] = get_args(KeyLocation)
+_NAMED: Final = {"query": "query parameter", "header": "header"}
 
 
-class HeaderKeyAuth(EnvKeyAuth):
-    """Send the key in a header, e.g. ``Ocp-Apim-Subscription-Key`` for UN Comtrade.
+class KeyAuth(EnvKeyAuth):
+    """Send the key where upstream documents it: a query parameter, a header, a bearer, basic auth.
+
+    The family's one key class (ADR-0059, decision 7), which a source builds in its
+    ``_client.py``. ``location`` names where the key travels, and ``name`` the query
+    parameter or the header that carries it, as upstream's documentation names it:
+
+    - ``"query"``: the key goes as the query parameter ``name`` of every request,
+      ``?key=<key>`` for ``name="key"``. Building one registers ``name`` as a credential
+      name for the whole process (``xippios.core.redaction``): its value is ``REDACTED`` in
+      every ``ResultMeta.request``, every recorded fixture and every URL ``sent_urls``
+      gives, also where the name is no credential by itself, as ``key`` is not (ADR-0040,
+      decision 6).
+    - ``"header"``: the key goes as the value of the header ``name``,
+      ``X-Api-Key: <key>`` for ``name="X-Api-Key"``.
+    - ``"bearer"``: the key goes as ``Authorization: Bearer <key>``; no ``name``.
+    - ``"basic"``: the key goes as the HTTP basic user name with an empty password,
+      ``Authorization: Basic`` and the two in base64; no ``name``.
+
+    The key is read from ``env_var`` on the first request, an explicit ``key`` winning, as
+    ``EnvKeyAuth`` reads it.
 
     Args:
-        header: Header name.
-        env_var: Variable that holds the key.
+        env_var: Variable that holds the key, e.g. ``"EXAMPLE_API_KEY"``.
+        location: Where the key travels: ``"query"``, ``"header"``, ``"bearer"`` or
+            ``"basic"``.
+        name: The query parameter or the header that carries the key, e.g. ``"key"`` or
+            ``"X-Api-Key"``; given for ``"query"`` and ``"header"`` and only for them.
         key: Explicit key; wins over the environment.
-        source: Source slug for error messages.
-    """
+        source: Source slug for error messages, e.g. ``"example"``.
 
-    def __init__(
-        self,
-        header: str,
-        env_var: str,
-        *,
-        key: str | SecretStr | None = None,
-        source: str | None = None,
-    ) -> None:
-        super().__init__(env_var, key=key, source=source)
-        self.header = header
-
-    def apply(self, request: httpx.Request) -> None:
-        """Set the header."""
-        request.headers[self.header] = self.key()
-
-
-class BearerAuth(EnvKeyAuth):
-    """Send the key as ``Authorization: Bearer <key>``."""
-
-    def apply(self, request: httpx.Request) -> None:
-        """Set the Authorization header."""
-        request.headers["Authorization"] = f"Bearer {self.key()}"
-
-
-class BasicKeyAuth(EnvKeyAuth):
-    """Send the key as the HTTP basic user name, as CashCtrl expects.
-
-    Args:
-        env_var: Variable that holds the key.
-        password: Basic-auth password; empty for key-as-user-name schemes.
-        key: Explicit key; wins over the environment.
-        source: Source slug for error messages.
+    Raises:
+        ValueError: ``location`` is none of the four, or ``name`` is missing or empty for
+            ``"query"`` or ``"header"``, or given for ``"bearer"`` or ``"basic"``; nothing is
+            registered.
     """
 
     def __init__(
         self,
         env_var: str,
         *,
-        password: str = "",
+        location: KeyLocation,
+        name: str | None = None,
         key: str | SecretStr | None = None,
         source: str | None = None,
     ) -> None:
+        if location not in _LOCATIONS:
+            raise ValueError(
+                f"location is one of {', '.join(_LOCATIONS[:-1])} or {_LOCATIONS[-1]}, "
+                f"not {location!r}"
+            )
+        carrier = _NAMED.get(location)
+        if carrier is not None and not name:
+            raise ValueError(
+                f'location="{location}" takes name=, the {carrier} that carries the key'
+            )
+        if carrier is None and name is not None:
+            raise ValueError(
+                f'location="{location}" takes no name=: the key goes in the Authorization header'
+            )
         super().__init__(env_var, key=key, source=source)
-        self.password = password
+        self.location = location
+        self.name = name
+        if location == "query" and name:
+            register_credential_name(name)
 
     def apply(self, request: httpx.Request) -> None:
-        """Set the Authorization header."""
-        request.headers["Authorization"] = "Basic " + base64.b64encode(
-            f"{self.key()}:{self.password}".encode()
-        ).decode("ascii")
+        """Attach the key where ``location`` sends it."""
+        name = self.name or ""  # given for query and header, as the constructor checked
+        if self.location == "query":
+            request.url = request.url.copy_merge_params({name: self.key()})
+        elif self.location == "header":
+            request.headers[name] = self.key()
+        elif self.location == "bearer":
+            request.headers["Authorization"] = f"Bearer {self.key()}"
+        else:  # basic: the key as the user name, the password empty
+            request.headers["Authorization"] = "Basic " + base64.b64encode(
+                f"{self.key()}:".encode()
+            ).decode("ascii")
 
 
 @dataclass(frozen=True, slots=True)
@@ -232,14 +224,15 @@ class RenewingBearerAuth(httpx.Auth):
       upstream's refusals first and names what the user does next, the variables to check
       for a refused login, the consent to run again and its scope set for a revoked grant.
 
-    For a request while no bearer is held, or the one held runs out within ``margin``
-    seconds, the flow sends the token request first, with the request's ``User-Agent``
-    where the token request sets none, and keeps the bearer and when it lapses; then it
-    sends the request with ``Authorization: Bearer <token>``. An answer whose status is in
-    ``renew_on``, 401 by default, makes one more exchange and sends the request again,
-    once, and that answer goes back to the client as it is. A request that finds an
-    exchange running on its event loop waits for it and sends the bearer it brought: two
-    first requests exchange once, and two requests refused with one bearer renew it once.
+    For a request while no bearer is held, or the one held runs out within
+    ``RENEWAL_MARGIN``, 60 seconds, the flow sends the token request first, with the
+    request's ``User-Agent`` where the token request sets none, and keeps the bearer and
+    when it lapses; then it sends the request with ``Authorization: Bearer <token>``. An
+    answer whose status is in ``renew_on``, 401 by default, makes one more exchange and
+    sends the request again, once, and that answer goes back to the client as it is. A
+    request that finds an exchange running on its event loop waits for it and sends the
+    bearer it brought: two first requests exchange once, and two requests refused with one
+    bearer renew it once.
 
     The exchange runs inside httpx's auth flow, below the client's limiter, hooks, cache and
     ``classify``: it is not paced or observed, and a token answer that ``token_refused`` or
@@ -261,8 +254,6 @@ class RenewingBearerAuth(httpx.Auth):
         source: Source slug for the errors, e.g. ``"faostat"``.
         credentials: Credentials by variable name, which win over the environment
             (conventions §7), e.g. ``{"GOOGLE_DEMO_REFRESH_TOKEN": token}``.
-        margin: Seconds before the bearer's ``expires_in`` runs out that it is renewed;
-            ``RENEWAL_MARGIN``, 60, by default.
         clock: Monotonic seconds, replaceable in tests.
 
     Attributes:
@@ -270,7 +261,9 @@ class RenewingBearerAuth(httpx.Auth):
             source whose upstream refuses a bearer with another status too sets its own on
             the class.
         source: As given.
-        margin: As given.
+        margin: Seconds before the bearer's ``expires_in`` runs out that it is renewed,
+            ``RENEWAL_MARGIN``, which no constructor argument changes; two sources' tests
+            read it (ADR-0059, decision 2).
     """
 
     renew_on: ClassVar[frozenset[int]] = frozenset({401})
@@ -284,11 +277,10 @@ class RenewingBearerAuth(httpx.Auth):
         *,
         source: str | None = None,
         credentials: Mapping[str, str | SecretStr] | None = None,
-        margin: float = RENEWAL_MARGIN,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self.source = source
-        self.margin = margin
+        self.margin = RENEWAL_MARGIN
         self._clock = clock
         self._given = {
             name: value if isinstance(value, SecretStr) else SecretStr(value)

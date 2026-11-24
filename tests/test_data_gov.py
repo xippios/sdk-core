@@ -78,7 +78,7 @@ def test_the_gateway_wires_its_key_and_the_one_policy(placeholder_api_key: str) 
     config = gateway.install(ClientConfig(source="usda-psd", version="1", base_url=BASE))
     assert config.observe == Gateway.policy.observe
     assert config.before_request == Gateway.policy.before_request
-    assert gateway.auth.header == "X-Api-Key"
+    assert (gateway.auth.location, gateway.auth.name) == ("header", "X-Api-Key")
     assert gateway.auth.env_var == API_KEY_ENV == "DATA_GOV_API_KEY"  # pragma: allowlist secret
     assert gateway.auth.source == "usda-psd"
     assert gateway.auth.key() == placeholder_api_key

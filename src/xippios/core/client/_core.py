@@ -17,8 +17,7 @@ from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PurePath
-from types import TracebackType
-from typing import IO, Any, Final, Self, cast, final, overload
+from typing import IO, Any, Final, cast, final, overload
 
 import httpx
 
@@ -46,9 +45,12 @@ from xippios.core.errors import (
 )
 from xippios.core.models import parse as parse_payload
 
-__all__ = ["Answer", "AsyncClient", "Params", "decode_csv", "decode_json", "decode_text"]
+__all__ = ["Answer", "AsyncClient", "Params", "decode_csv", "decode_json"]
 
 Params = Mapping[str, Any] | None
+
+_TIMEOUT: Final = 10.0
+"""Seconds to connect, to send a request and to wait for a pooled connection (conventions §6)."""
 
 
 @final
@@ -200,7 +202,7 @@ class AsyncClient:
     recording nothing of this applies.
 
     Args:
-        config: Base URL, timeouts, retry policy, rate limit, cache and headers.
+        config: Base URL, read timeout, retry policy, rate limit, cache and headers.
         auth: An ``httpx.Auth`` adding credentials, e.g. a query key or basic auth.
         transport: Replacement transport, for tests.
         sleep: Async sleep used by retries and the rate limiter, replaceable in tests.
@@ -238,7 +240,7 @@ class AsyncClient:
                 pool = httpx.AsyncClient(
                     base_url=self.config.base_url,
                     headers={"User-Agent": self.config.user_agent, **self.config.headers},
-                    timeout=self.config.timeouts.to_httpx(),
+                    timeout=httpx.Timeout(_TIMEOUT, read=self.config.read_timeout),
                     auth=self._auth,
                     transport=self._transport,
                 )
@@ -856,17 +858,6 @@ class AsyncClient:
         if pool is not None:
             await pool.aclose()
 
-    async def __aenter__(self) -> Self:
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        tb: TracebackType | None,
-    ) -> None:
-        await self.aclose()
-
 
 @dataclass(frozen=True, slots=True)
 class Answer[T]:
@@ -895,9 +886,8 @@ def decode_json(
 ) -> Any:
     """Decode ``response``'s JSON body, raising ``ValidationError`` when it is not JSON.
 
-    What ``get_json`` and ``get_answer`` do after ``get``. A wrapper that needs more of
-    the response than its payload and ``get_answer``'s ``retrieved_at`` (a header, say)
-    calls ``get`` and then this.
+    What ``get_json``, ``get_answer`` and the writes' helpers do after the request: a
+    helper the client calls itself, outside the lists (ADR-0059, decision 3).
 
     Args:
         response: A response with its body read, e.g. from ``AsyncClient.get``.
@@ -958,93 +948,50 @@ def _response_from(response: httpx.Response, path: str | None) -> str:
     return f"response from {path}" if path else "response"
 
 
-def decode_text(
-    response: httpx.Response, *, source: str | None = None, path: str | None = None
-) -> str:
-    """``response``'s body as text, in the charset its ``Content-Type`` names (ADR-0040).
-
-    UTF-8 when the header names none; a leading byte order mark is stripped. For a CSV,
-    TXT or XML answer read through ``get``; a file streamed to disk is read with
-    ``decode_csv(path)`` or by the source.
-
-    Args:
-        response: A response with its body read, e.g. from ``AsyncClient.get``.
-        source: Source slug for the error, e.g. ``"eurostat"``.
-        path: The request path the message names; ``None`` takes the path of the
-            response's request. Never the host or query (conventions §5).
-
-    Raises:
-        ValidationError: The body is not text in that charset, or the charset is
-            unknown; raised ``from None``, the text naming the decoder's reason and the
-            byte, ``raw`` the first ``BODY_LIMIT`` bytes (queue row 42).
-    """
-    charset = response.charset_encoding or "utf-8"
-    try:
-        text = response.content.decode(charset)
-    except (LookupError, UnicodeDecodeError) as exc:
-        reason = _reason(exc) if isinstance(exc, UnicodeDecodeError) else "an unknown charset"
-        _raise(
-            ValidationError(
-                f"{source + ': ' if source else ''}{_response_from(response, path)} is not "
-                f"{charset} text: {reason}",
-                raw=response.content[:BODY_LIMIT],
-                source=source,
-            )
-        )
-    return text.removeprefix("\ufeff")
-
-
 def decode_csv(
-    data: Path | str | httpx.Response | IO[str],
+    data: Path | str | IO[str],
     *,
-    delimiter: str = ",",
     source: str | None = None,
 ) -> Iterator[dict[str, str]]:
-    r"""The rows of a CSV file, answer or text stream, one mapping per row, headers as printed.
+    """The rows of a CSV file or text stream, one mapping per row, headers as printed.
 
     The stdlib's ``csv.DictReader`` reads the first row as the header and each further
-    row as a mapping from header to text; nothing is converted, renamed or stripped
-    (ADR-0028). A row shorter than the header maps the missing columns to ``None``, and
-    a longer one keeps the extra values as a list under ``None``, as ``DictReader``
-    does. A generator: a file of hundreds of MB is read row by row, never whole, and a
-    path is closed when the generator ends or is closed; ``list(decode_csv(path))``
-    reads it all.
+    row as a mapping from header to text, its fields separated by commas; nothing is
+    converted, renamed or stripped (ADR-0028). A row shorter than the header maps the
+    missing columns to ``None``, and a longer one keeps the extra values as a list under
+    ``None``, as ``DictReader`` does. A generator: a file of hundreds of MB is read row by
+    row, never whole, and a path is closed when the generator ends or is closed;
+    ``list(decode_csv(path))`` reads it all.
 
     Args:
         data: A downloaded file, as a path, read as UTF-8 with a byte order mark
-            stripped, e.g. ``downloaded.path``; a response with its body read, decoded
-            by ``decode_text``; or an open text stream, such as a gzip or ZIP member the
-            source opens with the stdlib, e.g. ``io.TextIOWrapper(gzip.open(path),
-            encoding="utf-8-sig", newline="")``. A stream is read from where it stands, a
-            leading byte order mark stripped, and left open, for the caller that opened
-            it to close. A binary stream is refused with ``TypeError`` at the first row:
-            an ``io.RawIOBase`` or ``io.BufferedIOBase`` by its class, before it is read,
-            and any other once its first line reads as ``bytes``.
-        delimiter: The field separator, e.g. ``"\t"`` for a tab-separated file.
-        source: Source slug for the error, e.g. ``"usda-nass"``.
+            stripped, e.g. ``downloaded.path``; or an open text stream, such as a gzip or
+            ZIP member the source opens with the stdlib, e.g.
+            ``io.TextIOWrapper(gzip.open(path), encoding="utf-8-sig", newline="")``. A
+            stream is read from where it stands, a leading byte order mark stripped, and
+            left open, for the caller that opened it to close. A binary stream is refused
+            with ``TypeError`` at the first row: an ``io.RawIOBase`` or
+            ``io.BufferedIOBase`` by its class, before it is read, and any other once its
+            first line reads as ``bytes``.
+        source: Source slug for the error, e.g. ``"example"``.
 
     Raises:
-        ValidationError: The text is not UTF-8 (or not in the response's charset, or
-            the stream's encoding), or not CSV the stdlib can read, e.g. a field over
-            its size limit; raised while iterating, at the row where it is found,
-            ``from None``, naming the file's name (a stream's, ``stream`` for one
-            without a name, ``response`` for a response) and the decoder's or the csv
+        ValidationError: The text is not UTF-8 (or not in the stream's encoding), or not
+            CSV the stdlib can read, e.g. a field over its size limit; raised while
+            iterating, at the row where it is found, ``from None``, naming the file's name
+            (a stream's, ``stream`` for one without a name) and the decoder's or the csv
             module's message, never the text.
     """
-    if isinstance(data, httpx.Response):
-        text = io.StringIO(decode_text(data, source=source), newline="")
-        yield from _rows(text, delimiter, "response", source)
-        return
     given: object = data  # typing's IO is no runtime class: the checks read the object
     if isinstance(given, io.IOBase) or hasattr(given, "read"):
         if isinstance(given, io.RawIOBase | io.BufferedIOBase):
             raise TypeError(_binary_refusal(given))
         stream = cast(IO[str], given)
-        yield from _rows(stream, delimiter, _stream_name(stream), source, from_stream=True)
+        yield from _rows(stream, _stream_name(stream), source, from_stream=True)
         return
     path = Path(cast("str | os.PathLike[str]", data))
     with path.open(encoding="utf-8-sig", newline="") as handle:
-        yield from _rows(handle, delimiter, path.name, source)
+        yield from _rows(handle, path.name, source)
 
 
 def _stream_name(stream: IO[str]) -> str:
@@ -1070,10 +1017,10 @@ def _binary_refusal(stream: object) -> str:
 def _without_bom(handle: IO[str]) -> Iterator[str]:
     """``handle``'s lines, a byte order mark at the start of the first one stripped.
 
-    A stream's: a path is opened as ``utf-8-sig`` and ``decode_text`` strips a
-    response's, so neither passes through here. A stream that is binary by what it reads,
-    not by its class, such as a ``tempfile.SpooledTemporaryFile`` in ``"w+b"``, gives
-    ``bytes`` for its first line and is refused there.
+    A stream's: a path is opened as ``utf-8-sig``, so it does not pass through here. A
+    stream that is binary by what it reads, not by its class, such as a
+    ``tempfile.SpooledTemporaryFile`` in ``"w+b"``, gives ``bytes`` for its first line and
+    is refused there.
     """
     lines = iter(handle)
     first: object = next(lines, None)
@@ -1099,7 +1046,6 @@ def _charset(handle: IO[str]) -> str:
 
 def _rows(
     handle: IO[str],
-    delimiter: str,
     name: str,
     source: str | None,
     *,
@@ -1108,7 +1054,7 @@ def _rows(
     prefix = f"{source}: " if source else ""
     lines: Iterable[str] = _without_bom(handle) if from_stream else handle
     try:
-        yield from csv.DictReader(lines, delimiter=delimiter)
+        yield from csv.DictReader(lines)
     except UnicodeDecodeError as exc:
         _raise(
             ValidationError(
@@ -1161,12 +1107,12 @@ def _from_cache(cached: CachedResponse, request: httpx.Request) -> httpx.Respons
     """The cached entry as a response, marked ``xippios_cache: hit`` with its ``stored_at``.
 
     ``xippios_cache_stored_at`` is the entry's ``stored_at`` in epoch seconds: on a hit,
-    ``get_answer`` reads ``retrieved_at`` from it, not from the clock (conventions §4).
+    ``get_answer`` reads ``retrieved_at`` from it, not from the clock (conventions §4). The
+    headers are the ones ``_store`` kept, without the wire's encoding headers.
     """
-    # Stripped again: a persistent backend may hold entries stored with wire headers (0.1.0).
     response = httpx.Response(
         cached.status,
-        headers=strip_wire_headers(cached.headers),
+        headers=cached.headers,
         content=cached.content,
         request=request,
     )

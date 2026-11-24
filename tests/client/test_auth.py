@@ -1,21 +1,16 @@
 import base64
 import inspect
+from typing import Any
 
 import httpx
 import pytest
 import respx
 from pydantic import SecretStr
 
-from xippios.core.client import (
-    AsyncClient,
-    BasicKeyAuth,
-    BearerAuth,
-    ClientConfig,
-    HeaderKeyAuth,
-    QueryKeyAuth,
-)
+from xippios.core.client import AsyncClient, ClientConfig, KeyAuth
 from xippios.core.client.auth import EnvKeyAuth
 from xippios.core.errors import ConfigError
+from xippios.core.redaction import is_credential_name
 
 BASE = "https://api.example.test"
 ENV = "EXAMPLE_TEST_API_KEY"
@@ -45,27 +40,91 @@ BASIC = "Basic " + base64.b64encode(f"{KEY}:".encode()).decode()
 @pytest.mark.parametrize(
     ("auth", "header", "value"),
     [
-        (QueryKeyAuth("key", ENV, source="example"), None, KEY),
-        (HeaderKeyAuth("Ocp-Apim-Subscription-Key", ENV), "ocp-apim-subscription-key", KEY),
-        (BearerAuth(ENV), "authorization", f"Bearer {KEY}"),
-        (BasicKeyAuth(ENV), "authorization", BASIC),
+        (KeyAuth(ENV, location="query", name="key", source="example"), None, KEY),
+        (KeyAuth(ENV, location="header", name="X-Api-Key"), "x-api-key", KEY),
+        (KeyAuth(ENV, location="bearer"), "authorization", f"Bearer {KEY}"),
+        (KeyAuth(ENV, location="basic"), "authorization", BASIC),
     ],
     ids=["query", "header", "bearer", "basic"],
 )
-async def test_each_shape_sends_the_key_from_the_environment(
+async def test_the_one_key_class_sends_the_key_where_it_travels(
     respx_mock: respx.MockRouter,
     config: ClientConfig,
-    auth: EnvKeyAuth,
+    auth: KeyAuth,
     header: str | None,
     value: str,
 ) -> None:
+    # One class for the four places a key travels (ADR-0059, decision 7).
     route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
     await AsyncClient(config, auth=auth).get("/v1/x", params={"year": 2024})
     sent = route.calls.last.request
-    if header is None:  # the query shape
+    if header is None:  # the query parameter
         assert sent.url.params.multi_items() == [("year", "2024"), ("key", value)]
     else:
         assert sent.headers[header] == value
+        assert "key" not in sent.url.params
+    assert isinstance(auth, EnvKeyAuth), "the plugin's placeholder pin covers it"
+
+
+def test_the_key_class_keeps_where_the_key_travels() -> None:
+    query = KeyAuth(ENV, location="query", name="key", source="example")
+    assert (query.env_var, query.location, query.name, query.source) == (
+        ENV,
+        "query",
+        "key",
+        "example",
+    )
+    bearer = KeyAuth(ENV, location="bearer")
+    assert (bearer.location, bearer.name, bearer.source) == ("bearer", None, None)
+
+
+def test_a_query_key_makes_its_parameter_a_credential_and_a_header_none() -> None:
+    KeyAuth(ENV, location="header", name="key")  # a header registers no name
+    assert not is_credential_name("key")
+    KeyAuth(ENV, location="query", name="key")
+    assert is_credential_name("key")
+
+
+@pytest.mark.parametrize(
+    ("arguments", "message"),
+    [
+        (
+            {"location": "cookie", "name": "key"},
+            "^location is one of query, header, bearer or basic, not 'cookie'$",
+        ),
+        (
+            {"location": "query"},
+            '^location="query" takes name=, the query parameter that carries the key$',
+        ),
+        (
+            {"location": "header", "name": ""},
+            '^location="header" takes name=, the header that carries the key$',
+        ),
+        (
+            {"location": "bearer", "name": "Authorization"},
+            '^location="bearer" takes no name=: the key goes in the Authorization header$',
+        ),
+        (
+            {"location": "basic", "name": "user"},
+            '^location="basic" takes no name=: the key goes in the Authorization header$',
+        ),
+    ],
+    ids=["unknown", "query-unnamed", "header-empty", "bearer-named", "basic-named"],
+)
+def test_a_location_without_its_name_or_with_one_it_takes_none_is_refused(
+    arguments: dict[str, Any], message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        KeyAuth(ENV, **arguments)
+    assert not is_credential_name("key"), "a refused query key registers nothing"
+
+
+def test_basic_sends_the_key_as_the_user_name_with_no_password_to_give() -> None:
+    # The password was never given by a source: it leaves (https://github.com/xippios/sdk-core/issues/475).
+    assert "password" not in inspect.signature(KeyAuth).parameters
+    auth = KeyAuth(ENV, location="basic", key=KEY)
+    sent = next(auth.auth_flow(httpx.Request("GET", f"{BASE}/v1/x")))
+    assert sent.headers["authorization"] == BASIC
 
 
 @pytest.mark.anyio
@@ -74,7 +133,8 @@ async def test_key_is_lazy_and_a_missing_or_empty_key_is_a_config_error(
 ) -> None:
     monkeypatch.delenv(ENV, raising=False)
     route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
-    auth = QueryKeyAuth("key", ENV, source="example")  # constructing never touches the environment
+    # constructing never touches the environment
+    auth = KeyAuth(ENV, location="query", name="key", source="example")
     client = AsyncClient(config, auth=auth)
     with pytest.raises(
         ConfigError, match=f"^{ENV} is not set; export it or pass the key explicitly$"
@@ -94,7 +154,7 @@ async def test_explicit_key_wins_and_is_resolved_once(
 ) -> None:
     monkeypatch.setenv(ENV, "from-environment")
     route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
-    client = AsyncClient(config, auth=BearerAuth(ENV, key=SecretStr("explicit")))
+    client = AsyncClient(config, auth=KeyAuth(ENV, location="bearer", key=SecretStr("explicit")))
     await client.get("/v1/x")
     monkeypatch.setenv(ENV, "changed-later")
     await client.get("/v1/x")
@@ -104,7 +164,7 @@ async def test_explicit_key_wins_and_is_resolved_once(
 def test_apply_reads_the_key_itself() -> None:
     # sdk-usda-nass: apply(request, key) made the key an argument of a traceback frame,
     # which pytest's long tracebacks print.
-    for cls in (EnvKeyAuth, QueryKeyAuth, HeaderKeyAuth, BearerAuth, BasicKeyAuth):
+    for cls in (EnvKeyAuth, KeyAuth):
         assert list(inspect.signature(cls.apply).parameters) == ["self", "request"], cls
 
     class Custom(EnvKeyAuth):

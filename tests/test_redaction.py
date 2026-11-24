@@ -5,7 +5,7 @@ import pytest
 
 import xippios.core.models as models
 import xippios.core.testing as testing
-from xippios.core import QueryKeyAuth, ResultMeta, redaction
+from xippios.core import KeyAuth, ResultMeta, redaction
 from xippios.core.redaction import (
     REDACTED,
     is_credential_name,
@@ -57,7 +57,7 @@ def test_a_name_without_a_credential_word_is_data(name: str) -> None:
 
 def test_a_query_key_auth_makes_its_parameter_a_credential() -> None:
     # USDA NASS sends its key as ?key=...; the name is exact, in any letter case.
-    QueryKeyAuth("key", "EXAMPLE_API_KEY")
+    KeyAuth("EXAMPLE_API_KEY", location="query", name="key")
     assert is_credential_name("key")
     assert is_credential_name("KEY")
     assert not is_credential_name("sort_key")

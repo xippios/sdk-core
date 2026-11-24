@@ -1116,9 +1116,10 @@ TASKS_REPLAYING = '''
 import httpx
 import pytest
 
-from xippios.core.client import QueryKeyAuth
+from xippios.core.client import KeyAuth
 
-QueryKeyAuth("key", "EXAMPLE_API_KEY")  # key is a credential here, as in sdk-usda-nass
+# key is a credential here, as in sdk-usda-nass
+KeyAuth("EXAMPLE_API_KEY", location="query", name="key")
 
 SERIES = "https://api.example.test/v1/series"
 

@@ -17,10 +17,10 @@ import pytest
 
 from xippios.core import (
     AsyncClient,
-    BasicKeyAuth,
     ClientConfig,
     ConfigError,
     InvalidRequestError,
+    KeyAuth,
     RateLimit,
     Result,
     Tenants,
@@ -423,7 +423,9 @@ class Builder:
             base_url=f"https://{subdomain}.example.test/api",
             rate_limit=RATE,
         )
-        auth = BasicKeyAuth(self.tenants.var(name, "API_KEY"), source=self.tenants.source)
+        auth = KeyAuth(
+            self.tenants.var(name, "API_KEY"), location="basic", source=self.tenants.source
+        )
         return AsyncClient(config, auth=auth, transport=self.transport)
 
 

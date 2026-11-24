@@ -12,7 +12,7 @@ import respx
 from xippios.core.client import (
     AsyncClient,
     ClientConfig,
-    HeaderKeyAuth,
+    KeyAuth,
     MemoryCache,
     RateLimit,
     RetryPolicy,
@@ -61,7 +61,9 @@ async def test_before_request_runs_once_per_call_not_per_retry(
     respx_mock.post(f"{BASE}/v1/x").mock(side_effect=answer)
     config = make(before_request=before, retry=RetryPolicy(retry_non_idempotent=True))
     client = AsyncClient(
-        config, auth=HeaderKeyAuth("X-Api-Key", "EXAMPLE_API_KEY"), sleep=events.sleep
+        config,
+        auth=KeyAuth("EXAMPLE_API_KEY", location="header", name="X-Api-Key"),
+        sleep=events.sleep,
     )
     await client.request(
         "POST", "/v1/x", params={"a": 1}, json={"b": 2}, headers={"X-Request": "one"}

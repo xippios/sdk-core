@@ -1,11 +1,20 @@
+import dataclasses
+
 import pytest
 
-from xippios.core.client import ClientConfig, RateLimit, RetryPolicy, Timeouts
+from xippios.core.client import ClientConfig, RateLimit, RetryPolicy
 
 
-def test_timeouts_to_httpx() -> None:
-    t = Timeouts().to_httpx()
-    assert (t.connect, t.read, t.write, t.pool) == (10.0, 60.0, 10.0, 10.0)
+def test_one_read_timeout_of_sixty_seconds_by_default() -> None:
+    # Timeouts became the one timeout that a source sets, the read timeout
+    # (https://github.com/xippios/sdk-core/issues/475).
+    config = ClientConfig(source="example", version="1", base_url="https://h.test")
+    assert config.read_timeout == 60.0
+    assert "timeouts" not in {field.name for field in dataclasses.fields(ClientConfig)}
+    slow = ClientConfig(source="example", version="1", base_url="https://h.test", read_timeout=180)
+    assert slow.read_timeout == 180
+    with pytest.raises(ValueError, match=r"^read_timeout must be above 0 seconds$"):
+        ClientConfig(source="example", version="1", base_url="https://h.test", read_timeout=0)
 
 
 def test_user_agent_format() -> None:

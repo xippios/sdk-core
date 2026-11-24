@@ -198,7 +198,7 @@ class ResultMeta(BaseModel):
             (ADR-0041, decision 3); a ``None`` inside a nested mapping is kept as given. The
             value of every key that names a credential, at any depth, is ``REDACTED``
             by the one rule of ``xippios.core.redaction`` (ADR-0030; ``key`` only where
-            a ``QueryKeyAuth`` sends it, ADR-0040; a ``token`` name a source declares
+            a query ``KeyAuth`` sends it, ADR-0040; a ``token`` name a source declares
             data, ``next_token`` say, kept as sent), and so is each credential in the
             query of a link, a signed file link's signature say, as ``scrub_url``
             writes it; record the variable name, never the value.

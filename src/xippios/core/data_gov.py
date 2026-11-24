@@ -54,7 +54,7 @@ from typing import ClassVar
 
 import httpx
 
-from xippios.core.client.auth import HeaderKeyAuth
+from xippios.core.client.auth import KeyAuth
 from xippios.core.client.config import ClientConfig
 from xippios.core.client.quota import QuotaPolicy
 from xippios.core.errors import AuthError, NotFoundError, RateLimitError, XippiosError
@@ -203,7 +203,7 @@ class Gateway:
     def __init__(self, source: str, *, data_path: re.Pattern[str] | None = None) -> None:
         self.source = source
         self.data_path = data_path
-        self.auth = HeaderKeyAuth(KEY_HEADER, API_KEY_ENV, source=source)
+        self.auth = KeyAuth(API_KEY_ENV, location="header", name=KEY_HEADER, source=source)
 
     def install(self, config: ClientConfig) -> ClientConfig:
         """``config`` with the shared policy's ``before_request`` and ``observe`` hooks.
