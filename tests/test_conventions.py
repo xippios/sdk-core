@@ -1584,9 +1584,10 @@ def test_no_sentence_of_section_8_makes_the_whole_docstring_the_description() ->
 
 # §12, a failed release run: the recovery stood in the handover's part of core 0.2.1 and moved to
 # §12 when the handover kept one part (ADR-0068, decision 5), citing ADR-0039, decision 6, which
-# states none of it. ADR-0069 states the four rules as they stand, and when a release PR merges
-# stays the process of the work (ADR-0039, decision 3): finding 2 of the organization's
-# conventions check on https://github.com/xippios/sdk-core/pull/558#issuecomment-7140020024
+# states none of it. ADR-0069 states the four rules as they stand, among them that a release PR
+# is not merged while another release run waits at `pypi`, the one constraint that the missing
+# `concurrency` group adds to ADR-0039, decision 3: finding 2 of the organization's conventions
+# check on https://github.com/xippios/sdk-core/pull/558#issuecomment-7140020024
 # (https://github.com/xippios/sdk-core/issues/559).
 
 FAILED_RUN = "ADR-0069"
@@ -1594,7 +1595,8 @@ FAILED_RUN = "ADR-0069"
 RELEASE_TRAIN = "ADR-0039"
 """The release train's record, whose decision 6 states none of the four rules."""
 MERGE = "ADR-0039, decision 3"
-"""Who merges a release PR, and when, is the process of the work and binds no repository."""
+"""Who merges a release PR, and when, is the process of the work, but for ADR-0069's one
+constraint."""
 
 
 @pytest.mark.parametrize(
@@ -1615,7 +1617,11 @@ MERGE = "ADR-0039, decision 3"
         pytest.param(
             "`publish.yml` keeps no `concurrency` group",
             3,
-            ("one pending run of a group", "both find the version untagged"),
+            (
+                "one pending run of a group",
+                "both find the version untagged",
+                "not merged while another release run waits at `pypi`",
+            ),
             id="no-concurrency-group",
         ),
         pytest.param(
@@ -1639,21 +1645,18 @@ def test_section_12_says_how_a_failed_release_run_is_finished_by_adr_0069(
         assert name in held, f"{FAILED_RUN}, decision {decision}, does not state {name!r}"
 
 
-def test_section_12_leaves_when_a_release_pr_merges_to_the_process_of_the_work() -> None:
-    # ADR-0039, decision 3: no rule of the family says when a release PR merges, so neither
-    # §12 nor the record makes one of a merge while another release run waits at `pypi`.
-    text = section(12)
-    assert "is not merged while" not in text, "§12 makes a rule of a release PR's merge"
-    rule = sentence(text, "while another release run waits at `pypi`")
-    for name in ("the process of the work", MERGE):
-        assert name in rule, f"§12: {rule!r} does not name {name!r}"
-    for number, body in decisions(FAILED_RUN).items():
-        assert "merged while" not in body, f"{FAILED_RUN}, decision {number}, rules on a merge"
+def test_adr_0069_adds_one_constraint_on_a_release_pr_s_merge_to_adr_0039_decision_3() -> None:
+    # The missing `concurrency` group lets two runs find the version untagged, so the record
+    # adds that one constraint to ADR-0039, decision 3, and leaves the rest of who merges a
+    # release PR, and when, to the process of the work.
+    held = decisions(FAILED_RUN)[3]
+    for name in (MERGE, "the one constraint", "the process of the work"):
+        assert name in held, f"{FAILED_RUN}, decision 3, does not name {name!r}"
 
 
 def test_the_record_of_a_failed_release_run_stands_beside_the_release_train() -> None:
-    # It states rules that no record held and changes no decision of ADR-0039, which keeps its
-    # two amendments and is superseded by nothing.
+    # It states rules that no record held and supersedes nothing: ADR-0039 keeps its two
+    # amendments, and its decision 3 takes the one constraint of ADR-0069, decision 3.
     records = {r["id"]: r for r in json.loads(INDEX.read_text(encoding="utf-8"))["records"]}
     found = records[FAILED_RUN]
     assert found["decided_by"] == DOCUMENTS_QUESTION
