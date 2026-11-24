@@ -115,8 +115,12 @@ what it reverses: its decision 7 takes the place of ADR-0049's decisions 7 and 8
 - What a source loses: the check no longer tells a served answer that is marked as an input,
   and no entry excuses a helper whose places are neither a kind nor an input. A source that
   meets such a helper builds it on `response_from_fixture`, or asks for a rule of §10 in an
-  issue of sdk-core. A suite that passed the check passes it still: the check reads more marks
-  and no new place.
+  issue of sdk-core. A suite that passed the check without an entry of `ALLOWED` passes it
+  still, since the check reads more marks and no new place, and the bodies that it handed to a
+  function of `READERS` are no places any more. A suite that passed by an entry fails at each
+  unmarked call of the helper that the entry covered, as sdk-cashctrl's two calls of
+  `serve_by_start` do, until the helper builds its answer on `response_from_fixture` or each
+  call takes its mark.
 - What the check cannot see stays the review's, as its module states: whether a mark is true,
   whether a value marked as an input is served among it; which of several bodies in its reach a
   mark speaks of; a body built in another module, a fixture of `conftest.py` among them; a call
