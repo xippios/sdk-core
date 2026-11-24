@@ -5,6 +5,8 @@ and before the rate limiter; the observer on every response from the wire, befor
 ``classify`` and the retry decision.
 """
 
+from datetime import UTC, datetime
+
 import httpx
 import pytest
 import respx
@@ -14,6 +16,7 @@ from xippios.core.client import (
     ClientConfig,
     KeyAuth,
     MemoryCache,
+    QuotaPolicy,
     RateLimit,
     RetryPolicy,
 )
@@ -175,6 +178,37 @@ async def test_observe_sees_every_attempt_before_classify(respx_mock: respx.Mock
         "observe 404",
         "classify 404",
     ]
+
+
+@pytest.mark.anyio
+async def test_a_classify_words_a_spent_quota_from_the_policy_s_public_snapshot(
+    respx_mock: respx.MockRouter,
+) -> None:
+    # A package that holds one policy for the sources behind one key words its own refusal of a
+    # 429 from snapshot() and the clock it gave the policy, and needs no private member of the
+    # policy (ADR-0065, decision 2): observe has read the answer before classify runs.
+    now = datetime(2026, 10, 23, 8, 0, tzinfo=UTC)
+    policy = QuotaPolicy(window=3600.0, source="example", clock=lambda: now)
+
+    def classify(response: httpx.Response) -> XippiosError | None:
+        if response.status_code != 429:
+            return None
+        snapshot = policy.snapshot()
+        assert snapshot is not None
+        assert snapshot.resumes_at is not None
+        wait = (snapshot.resumes_at - now).total_seconds()
+        return RateLimitError(
+            f"the example quota is spent until {snapshot.resumes_at:%H:%M} UTC, in {wait:.0f} s",
+            retry_after=wait,
+            source="example",
+        )
+
+    respx_mock.get(f"{BASE}/v1/x").respond(429, headers={"Retry-After": "120"})
+    config = policy.install(make(classify=classify, retry=RetryPolicy(max_attempts=1)))
+    with pytest.raises(RateLimitError) as info:
+        await AsyncClient(config).get("/v1/x")
+    assert info.value.message == "the example quota is spent until 08:02 UTC, in 120 s"
+    assert info.value.retry_after == 120.0
 
 
 @pytest.mark.anyio
