@@ -179,10 +179,10 @@ class _Reach:
 @final
 @dataclass(frozen=True, slots=True)
 class _Slot:
-    """Where the cache keeps one answer: its key and the lifetime its path takes."""
+    """Where the cache may keep one answer: its key, and the path the cache reads."""
 
     key: str
-    lifetime: float | None
+    path: str
 
 
 class AsyncClient:
@@ -265,18 +265,14 @@ class AsyncClient:
         return _Reach("own", auth, self._base)
 
     def _cache_slot(self, probe: httpx.Request) -> _Slot | None:
-        """Where the cache keeps the answer to ``probe``, or ``None`` where it keeps none.
+        """Where the cache may keep the answer to ``probe``: a GET's key and path.
 
-        Only a GET, and only where the cache gives the request's path a lifetime other
-        than ``0``: any other request is neither looked up nor stored.
+        ``None`` for any other method or a client without a cache. Whether the path is
+        kept, and for how long, is the cache's own (``MemoryCache(lifetimes=...)``).
         """
-        cache = self.config.cache
-        if probe.method != "GET" or cache is None:
+        if probe.method != "GET" or self.config.cache is None:
             return None
-        lifetime = cache.lifetime(probe.url.path)
-        if lifetime == 0:
-            return None
-        return _Slot(cache_key(probe.method, probe.url), lifetime)
+        return _Slot(cache_key(probe.method, probe.url), probe.url.path)
 
     async def request(
         self,
@@ -291,8 +287,8 @@ class AsyncClient:
     ) -> httpx.Response:
         """Send one request and return the response.
 
-        Retries, rate limiting and the cache lookup (a GET whose path the cache gives a
-        lifetime) apply as configured. A cache hit returns at once;
+        Retries, rate limiting and the cache lookup (GET only) apply as configured. A
+        cache hit returns at once;
         otherwise ``ClientConfig.before_request`` runs once, before the rate limiter, and
         ``ClientConfig.observe`` sees every response from the wire, retried attempts
         included. The source's ``classify`` hook, if any, is asked before a 429 or 5xx
@@ -429,7 +425,7 @@ class AsyncClient:
                 content=response.content,
                 stored_at=stored_at,
             ),
-            lifetime=slot.lifetime,
+            path=slot.path,
         )
 
     async def _send_once(

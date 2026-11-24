@@ -149,7 +149,8 @@ names a credential (`api_key`, `token`, `secret`, `sig`, ... as whole words) so 
 envelope is safe to hand to an agent or return over HTTP. A bare `key` is a credential
 only where a `KeyAuth` sends the key under that name, as above, which registers it
 for its source; in every other source it is data, also in a host that loads both, and so
-is a `sort_key`. A link keeps its path and its other parameters and loses the credentials of
+is a `sort_key`. Whatever its name, a value that is the key of a `KeyAuth` the process
+holds reads `REDACTED`, whichever source the envelope names. A link keeps its path and its other parameters and loses the credentials of
 its query, a signed file link's `sig` or `X-Amz-Signature` say, as `scrub_url` writes
 them. The fixture recorder and the replay helpers redact by the same rule
 (`xippios.core.redaction`). A parameter the caller left `None` was not sent and is left
@@ -535,7 +536,7 @@ cache = MemoryCache(
         "/v1/files/": None,  # for the life of the process
         "/v1/files/live/": 0,  # never stored
     }
-)  # any other path is neither looked up nor stored
+)  # any other path is never stored
 ```
 
 `MemoryCache()` keeps every path for 300 s. An entry is dropped once its lifetime has

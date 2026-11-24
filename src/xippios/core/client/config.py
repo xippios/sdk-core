@@ -105,10 +105,10 @@ class ClientConfig:
             connection take 10 s each, the family's.
         retry: Retry policy of a read after a 429, a 5xx or a transport failure.
         rate_limit: Client-side limit; ``None`` disables it.
-        cache: Backend for GET responses; ``None`` disables caching. A GET whose path
-            the cache gives a lifetime, ``MemoryCache(lifetimes=...)``, is looked up in
-            it, and ``get_answer`` alone stores in it, a 200 once the body decoded; any
-            other path is neither looked up nor stored (ADR-0040, decision 3).
+        cache: Backend for GET responses; ``None`` disables caching. Every GET looks
+            it up, and ``get_answer`` alone stores in it, a 200 once the body decoded,
+            for as long as the cache keeps its path, ``MemoryCache(lifetimes=...)``; a
+            path the cache keeps for no time is never stored (ADR-0040, decision 3).
         cache_max_bytes: The largest body the cache stores, in bytes as ``httpx``
             decoded them; 8 MiB by default (ADR-0040, decision 3). A larger answer is
             returned as usual and not stored, so the next call fetches it again. A

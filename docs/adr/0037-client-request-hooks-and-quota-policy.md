@@ -198,9 +198,9 @@ gateway's values and both of the policy's direct callers pass `None` and a windo
 the answer on https://github.com/xippios/sdk-core/issues/473, so that the client returns no error
 answer and a recording takes one through `send_once`; in decision 5 `get_answer` is the one reader
 of JSON and the one call that stores, `retrieved_at` is the client's fact for every answer, the
-oldest where a task assembles several, and a GET reads the cache only where the cache gives its
-path a lifetime other than `0`, which takes the place of `cache_filter` (ADR-0040, decision 3,
-amendment 2026-11-24); and in decision 7 `post_json` alone decodes a write's answer and a DELETE
+oldest where a task assembles several, and the cache keeps an answer for as long as it keeps
+the answer's path and a path of lifetime `0` not at all, which takes the place of `cache_filter`
+(ADR-0040, decision 3, amendment 2026-11-24); and in decision 7 `post_json` alone decodes a write's answer and a DELETE
 goes through `request`, while decisions 1 and 6, the rest of decisions 2 to 5 and 7, and the
 consequences, but their clause on `cache_filter`, whose place a path's lifetime of `0` takes,
 stand as written.

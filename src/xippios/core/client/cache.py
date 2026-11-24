@@ -14,7 +14,6 @@ from typing import Final, Protocol
 import httpx
 
 __all__ = [
-    "DEFAULT_LIFETIMES",
     "WIRE_HEADERS",
     "CacheBackend",
     "CachedResponse",
@@ -56,24 +55,17 @@ class CachedResponse:
 class CacheBackend(Protocol):
     """Pluggable storage for GET responses, keyed by ``cache_key``.
 
-    The key is a digest that names no path, so the client asks ``lifetime`` for the
-    request's path first and hands that lifetime to ``set``. Implementations must be safe
-    to call from several threads and event loops.
+    The key is a digest that names no path, so the client hands ``set`` the request's
+    path, from which the backend takes how long it keeps the answer, if at all.
+    Implementations must be safe to call from several threads and event loops.
     """
-
-    def lifetime(self, path: str) -> float | None:
-        """Seconds an answer for ``path`` is kept, ``None`` for the life of the process.
-
-        ``0`` keeps it not at all: the client neither looks such a path up nor stores it.
-        """
-        ...
 
     def get(self, key: str) -> CachedResponse | None:
         """Return the entry for ``key`` or ``None`` when absent or expired."""
         ...
 
-    def set(self, key: str, value: CachedResponse, *, lifetime: float | None) -> None:
-        """Store ``value`` under ``key`` for ``lifetime`` seconds from its ``stored_at``."""
+    def set(self, key: str, value: CachedResponse, *, path: str) -> None:
+        """Store ``value`` under ``key`` for as long as the backend keeps ``path``."""
         ...
 
 
@@ -101,7 +93,7 @@ def _clear_every_cache() -> None:
         cache.clear()
 
 
-DEFAULT_LIFETIMES: Final[Mapping[str, float | None]] = MappingProxyType({"/": 300.0})
+_DEFAULT_LIFETIMES: Final[Mapping[str, float | None]] = MappingProxyType({"/": 300.0})
 """Every path for 300 seconds: what ``MemoryCache()`` keeps without a mapping of its own."""
 
 
@@ -120,7 +112,7 @@ class MemoryCache:
     matched against the path of the request's URL, the base URL's own path included, and
     the longest prefix that the path starts with wins: ``None`` keeps an answer for the
     life of the process, ``0`` stores nothing, and a path that no prefix matches is not
-    cached at all, neither looked up nor stored::
+    stored at all, so no GET to it is answered from the cache::
 
         MemoryCache(lifetimes={"/v1/regions": 86400.0, "/v1/files/": None})
 
@@ -135,8 +127,8 @@ class MemoryCache:
 
     Args:
         lifetimes: Seconds an answer is kept, by path prefix, e.g. ``{"/v1/regions":
-            3600.0}``; each prefix starts with ``/``. By default ``DEFAULT_LIFETIMES``,
-            every path for 300 seconds.
+            3600.0}``; each prefix starts with ``/``. By default every path for 300
+            seconds, ``{"/": 300.0}``.
         maxsize: Maximum number of entries.
         max_bytes: Maximum bytes of the bodies held in all; 64 MiB by default, eight
             answers at the default of ``ClientConfig.cache_max_bytes``.
@@ -155,7 +147,7 @@ class MemoryCache:
     def __init__(
         self,
         *,
-        lifetimes: Mapping[str, float | None] = DEFAULT_LIFETIMES,
+        lifetimes: Mapping[str, float | None] = _DEFAULT_LIFETIMES,
         maxsize: int = 256,
         max_bytes: int = 64 * 1024 * 1024,
         clock: Callable[[], float] = time.time,
@@ -183,7 +175,7 @@ class MemoryCache:
         with _CACHES_LOCK:
             _CACHES.add(self)
 
-    def lifetime(self, path: str) -> float | None:
+    def _lifetime(self, path: str) -> float | None:
         """The lifetime of the longest prefix that ``path`` starts with; ``0`` for none.
 
         Args:
@@ -204,13 +196,19 @@ class MemoryCache:
             self._items.move_to_end(key)
             return entry.value
 
-    def set(self, key: str, value: CachedResponse, *, lifetime: float | None) -> None:
-        """Store ``value`` for ``lifetime`` seconds, evicting beyond either bound.
+    def set(self, key: str, value: CachedResponse, *, path: str) -> None:
+        """Store ``value`` for the lifetime of ``path``, evicting beyond either bound.
 
         The least recently used entries go first, until at most ``maxsize`` entries and
-        ``max_bytes`` bytes are held. A ``lifetime`` of ``0``, or a body larger than
+        ``max_bytes`` bytes are held. A path of lifetime ``0``, or a body larger than
         ``max_bytes``, stores nothing and drops an earlier entry under ``key``.
+
+        Args:
+            key: The request's ``cache_key``.
+            value: The answer to keep.
+            path: The path of the request's URL, e.g. ``"/v1/regions"``.
         """
+        lifetime = self._lifetime(path)
         with self._lock:
             self._drop(key)
             self._drop_expired()
@@ -233,12 +231,6 @@ class MemoryCache:
     def __len__(self) -> int:
         with self._lock:
             return len(self._items)
-
-    @property
-    def size(self) -> int:
-        """The bytes of the bodies held now, which ``max_bytes`` bounds."""
-        with self._lock:
-            return self._bytes
 
     def _drop(self, key: str) -> None:
         """Drop the entry under ``key``, if there is one; the caller holds the lock."""

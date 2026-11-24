@@ -33,6 +33,13 @@ none, the testing helpers that read a recorded or a sent request, reads the name
 every source, a credential of any one winning over a data name of another, so it keeps
 no value that some source sends a key under.
 
+Whatever its name and whatever the source a reader is given, a text value that is the key
+of a ``KeyAuth`` the process holds reads ``REDACTED``, also in a link's query: an
+envelope whose ``source`` names another slug than the key class's never shows the key
+(https://github.com/xippios/sdk-core/issues/485, part 4). A key is held while its auth
+object lives, read as the object reads it, and a key not yet read from its variable is
+read then.
+
 ``redact_credentials`` also reads each text value that is an ``http`` or ``https`` link:
 a credential in its query or its userinfo reads ``REDACTED``, as ``scrub_url`` writes it,
 so a signed file link (an Azure SAS ``sig``, an S3 ``X-Amz-Signature``) keeps its path
@@ -44,8 +51,9 @@ This module sits at the bottom of the package with ``errors`` and imports nothin
 
 import re
 import threading
+import weakref
 from collections.abc import Iterable, Mapping
-from typing import Any, Final
+from typing import Any, Final, Protocol
 
 import httpx
 
@@ -110,6 +118,34 @@ _data_names: Mapping[str, frozenset[str]] = {}
 """Names declared by ``register_data_name``, lower-cased, by source; replaced, never
 changed."""
 _lock = threading.Lock()
+
+
+class _KeyHolder(Protocol):
+    """An auth object of the key class: ``_held_key`` gives its key, ``None`` without one."""
+
+    def _held_key(self) -> str | None: ...
+
+
+_holders: "weakref.WeakSet[_KeyHolder]" = weakref.WeakSet()
+"""Every live auth object whose key no reader keeps, ``_hold_key``'s."""
+
+
+def _hold_key(holder: _KeyHolder) -> None:
+    """Redact ``holder``'s key wherever it stands as a value, for as long as ``holder`` lives.
+
+    ``KeyAuth`` calls it when it is built, so no envelope keeps the key it sends, whatever
+    slug the envelope names.
+    """
+    with _lock:
+        _holders.add(holder)
+
+
+def _held_keys() -> frozenset[str]:
+    """The keys of the live holders, an empty one or one that cannot be read left out."""
+    with _lock:
+        holders = list(_holders)
+    keys = (holder._held_key() for holder in holders)
+    return frozenset(key for key in keys if key)
 
 
 def _with(
@@ -198,17 +234,21 @@ def is_credential_name(name: str, *, source: str | None = None) -> bool:
     return lowered not in _names(_data_names, source) and _CREDENTIAL_WORD.search(name) is not None
 
 
-def _redact_value(value: Any, source: str | None = None) -> Any:
+def _redact_value(value: Any, source: str | None = None, keys: frozenset[str] | None = None) -> Any:
+    """``value`` with every credential ``REDACTED``, at any depth; ``keys`` the held keys."""
+    held = _held_keys() if keys is None else keys
     if isinstance(value, Mapping):
-        return redact_credentials(value, source=source)
+        return _redacted(value, source, held)
     if isinstance(value, list):
-        return [_redact_value(item, source) for item in value]
+        return [_redact_value(item, source, held) for item in value]
+    if isinstance(value, str) and value in held:
+        return REDACTED
     if isinstance(value, str) and _LINK.match(value):
-        return _redact_link(value, source)
+        return _redact_link(value, source, held)
     return value
 
 
-def _redact_link(link: str, source: str | None) -> str:
+def _redact_link(link: str, source: str | None, keys: frozenset[str]) -> str:
     """``link`` as ``scrub_url`` writes it when it carries a credential, else as given.
 
     A link httpx cannot read is ``REDACTED`` whole: its credentials cannot be told apart.
@@ -218,30 +258,40 @@ def _redact_link(link: str, source: str | None) -> str:
     except httpx.InvalidURL:
         return REDACTED
     if url.userinfo or any(
-        is_credential_name(name, source=source) for name, _ in url.params.multi_items()
+        is_credential_name(name, source=source) or value in keys
+        for name, value in url.params.multi_items()
     ):
-        return scrub_url(url, source=source)
+        return _scrubbed_url(url, source, keys)
     return link
+
+
+def _redacted(
+    mapping: Mapping[str, Any], source: str | None, keys: frozenset[str]
+) -> dict[str, Any]:
+    """``redact_credentials``'s work, the held keys read once for the whole mapping."""
+    return {
+        key: REDACTED
+        if isinstance(key, str) and is_credential_name(key, source=source)
+        else _redact_value(value, source, keys)
+        for key, value in mapping.items()
+    }
 
 
 def redact_credentials(mapping: Mapping[str, Any], *, source: str | None = None) -> dict[str, Any]:
     """A copy of ``mapping`` with every credential's value ``REDACTED``, at any depth.
 
     Nested mappings and lists are copied too; ``mapping`` itself is not changed. A text
-    value that is an ``http`` or ``https`` link loses the credentials of its query and its
-    userinfo, as ``scrub_url`` writes them, and is kept as given when it carries none.
+    value that is the key of a ``KeyAuth`` the process holds is ``REDACTED`` whatever its
+    name, and a text value that is an ``http`` or ``https`` link loses the credentials of
+    its query and its userinfo, as ``scrub_url`` writes them, and is kept as given when it
+    carries none.
 
     Args:
         mapping: Request parameters, e.g. ``{"key": "...", "year": 2024}``.
         source: The source that sent them, whose names are read, e.g. ``"example"``;
             ``None`` reads the names of every source (``is_credential_name``).
     """
-    return {
-        key: REDACTED
-        if isinstance(key, str) and is_credential_name(key, source=source)
-        else _redact_value(value, source)
-        for key, value in mapping.items()
-    }
+    return _redacted(mapping, source, _held_keys())
 
 
 def scrub_params(
@@ -249,12 +299,25 @@ def scrub_params(
 ) -> list[tuple[str, str]]:
     """The query parameters ``items`` with every credential's value ``REDACTED``, in order.
 
+    A credential is a name of the rule for ``source``, or a value that is the key of a
+    ``KeyAuth`` the process holds.
+
     Args:
         items: ``(name, value)`` pairs, e.g. ``url.params.multi_items()``.
         source: The source that sent them, as for ``redact_credentials``.
     """
+    return _scrubbed(items, source, _held_keys())
+
+
+def _scrubbed(
+    items: Iterable[tuple[str, str]], source: str | None, keys: frozenset[str]
+) -> list[tuple[str, str]]:
+    """``scrub_params``'s work, with the held keys read once."""
     return [
-        (name, REDACTED if is_credential_name(name, source=source) else value)
+        (
+            name,
+            REDACTED if is_credential_name(name, source=source) or value in keys else value,
+        )
         for name, value in items
     ]
 
@@ -266,8 +329,13 @@ def scrub_url(url: httpx.URL | str, *, source: str | None = None) -> str:
         url: A URL, e.g. ``"https://api.example.test/v1/x?api_key=...&year=2024"``.
         source: The source that sent it, as for ``redact_credentials``.
     """
+    return _scrubbed_url(url, source, _held_keys())
+
+
+def _scrubbed_url(url: httpx.URL | str, source: str | None, keys: frozenset[str]) -> str:
+    """``scrub_url``'s work, with the held keys read once."""
     parsed = httpx.URL(url)
-    params = httpx.QueryParams(tuple(scrub_params(parsed.params.multi_items(), source=source)))
+    params = httpx.QueryParams(tuple(_scrubbed(parsed.params.multi_items(), source, keys)))
     cleaned = parsed.copy_with(params=params)
     if parsed.userinfo:
         cleaned = cleaned.copy_with(username=REDACTED, password=REDACTED)

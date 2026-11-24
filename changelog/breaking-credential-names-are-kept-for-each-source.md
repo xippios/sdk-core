@@ -2,9 +2,10 @@
   a name that a source declares data is data of that source alone, so one source's key name
   no longer turns another source's data into `REDACTED` in a host that loads both.
   `KeyAuth(location="query")` takes `source=`, `register_data_name` and
-  `register_credential_name` take `source=` by keyword, and `ResultMeta` reads its own
-  source's names, while a testing helper that is given no source reads those of every
-  source.
+  `register_credential_name` take `source=` by keyword, `ResultMeta` reads its own source's
+  names, and a testing helper that is given no source reads those of every source. A value
+  that is the key of a `KeyAuth` the process holds reads `REDACTED` wherever it stands,
+  whatever slug an envelope names.
   (ADR-0040, §4, https://github.com/xippios/sdk-core/issues/485)
   - Hand-apply: `src/xippios/x/_client.py` (sdk-x) — at `:59-60`,
     `register_data_name("next_token")` and `register_data_name("pagination_token")` take

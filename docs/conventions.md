@@ -557,7 +557,10 @@ not on the list: it is a credential of a source whose one key class sends the ke
 that name as a query parameter, `KeyAuth("EXAMPLE_API_KEY", location="query", name="key",
 source=SOURCE)`, which registers it for that source when built (ADR-0059, decision 7), and
 data of every other source, a source's own series `key` say, also in a host that loads
-both (ADR-0040, decision 6, amendment 2026-11-24). A source declares a name with a
+both (ADR-0040, decision 6, amendment 2026-11-24). Whatever its name and whatever the
+envelope's `source`, a value that is the key of a `KeyAuth` the process holds reads
+`REDACTED`, so a slug that differs from the key class's never shows the key (the same
+amendment). A source declares a name with a
 whole-word `token` data where its value is data, a paging cursor such as `next_token` and
 `pagination_token`, once, with `xippios.core.redaction.register_data_name(name,
 source=SOURCE)`: the envelope of that source, the recorder and replay keep its value.
@@ -816,8 +819,9 @@ without case).
   all, 64 MiB by default (ADR-0040, decision 3, amendment 2026-11-24). A body larger than
   `ClientConfig.cache_max_bytes` (default 8 MiB) passes through and is not stored. A
   source that wants a larger answer cached raises the bound and says why in its
-  `CLAUDE.md` (ADR-0040). Every GET whose path the cache keeps reads it, and only
-  `get_answer()` stores an answer in it: a 200 once its body decoded and, with `parse=`,
+  `CLAUDE.md` (ADR-0040). Every GET reads the cache, and only `get_answer()` stores an
+  answer in it, for as long as the cache keeps its path: a 200 once its body decoded and,
+  with `parse=`,
   its payload parsed, so a body that fails is requested again on the next call; `get()`
   and `request()` store nothing (ADR-0037, decision 5).
 - A file is downloaded, never held in memory (ADR-0040): `download(url, dest, *,
