@@ -763,6 +763,10 @@
         {
           "date": "2026-11-24",
           "by": "https://github.com/xippios/sdk-core/issues/479"
+        },
+        {
+          "date": "2026-11-24",
+          "by": "https://github.com/xippios/sdk-core/issues/483"
         }
       ],
       "amends": [],
@@ -809,6 +813,10 @@
         {
           "date": "2026-11-21",
           "by": "https://github.com/xippios/sdk-core/issues/364"
+        },
+        {
+          "date": "2026-11-24",
+          "by": "https://github.com/xippios/sdk-core/issues/483"
         }
       ],
       "amends": [],
@@ -921,7 +929,7 @@
       "number": 48,
       "title": "Core's recorder frame around a source's rewrite step",
       "path": "docs/adr/0048-core-s-recorder-frame-around-a-source-s-rewrite-step.md",
-      "status": "Accepted",
+      "status": "Superseded by ADR-0066",
       "date": "2026-11-21",
       "decided_by": "https://github.com/xippios/sdk-core/issues/364",
       "amended": [
@@ -933,7 +941,7 @@
       "amends": [],
       "supersedes": [],
       "other": [],
-      "superseded_by": null
+      "superseded_by": "ADR-0066"
     },
     {
       "id": "ADR-0049",
@@ -1085,7 +1093,7 @@
       "number": 57,
       "title": "The recording of every exchange of a task",
       "path": "docs/adr/0057-the-recording-of-every-exchange-of-a-task.md",
-      "status": "Accepted",
+      "status": "Superseded by ADR-0066",
       "date": "2026-11-22",
       "decided_by": "https://github.com/xippios/sdk-core/issues/376",
       "amended": [
@@ -1097,7 +1105,7 @@
       "amends": [],
       "supersedes": [],
       "other": [],
-      "superseded_by": null
+      "superseded_by": "ADR-0066"
     },
     {
       "id": "ADR-0058",
@@ -1230,6 +1238,23 @@
       "amended": [],
       "amends": [],
       "supersedes": [],
+      "other": [],
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-0066",
+      "number": 66,
+      "title": "The recorder under plain names, without the recording of a task",
+      "path": "docs/adr/0066-the-recorder-under-plain-names-without-the-recording-of-a.md",
+      "status": "Accepted",
+      "date": "2026-11-24",
+      "decided_by": "https://github.com/xippios/sdk-core/issues/483",
+      "amended": [],
+      "amends": [],
+      "supersedes": [
+        "ADR-0048",
+        "ADR-0057"
+      ],
       "other": [],
       "superseded_by": null
     }

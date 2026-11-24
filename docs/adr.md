@@ -28,19 +28,17 @@ records in `docs/adr/`. A record changes, and this file follows when the script 
 - <a id="0039"></a>[ADR-0039](adr/0039-core-versioning-and-source-adoption.md): Core versioning and source adoption · Accepted · 2026-11-18
 - <a id="0040"></a>[ADR-0040](adr/0040-bulk-downloads-and-non-json-payloads.md): Bulk downloads and non-JSON payloads in core · Accepted · 2026-11-18 · amended 2026-11-24
 - <a id="0041"></a>[ADR-0041](adr/0041-packaged-answers-and-release-times.md): Packaged answers and release times in `ResultMeta` · Accepted · 2026-11-18 · amended 2026-11-24
-- <a id="0042"></a>[ADR-0042](adr/0042-the-recorder-extras-stay-the-sources.md): The recorder extras stay the source's, and the multi-tenant kit returns to core · Accepted · 2026-11-18 · amended 2026-11-21
+- <a id="0042"></a>[ADR-0042](adr/0042-the-recorder-extras-stay-the-sources.md): The recorder extras stay the source's, and the multi-tenant kit returns to core · Accepted · 2026-11-18 · amended 2026-11-24
 - <a id="0043"></a>[ADR-0043](adr/0043-the-cases-that-the-reviews-of-the-sources-adoptions-settled.md): The cases that the reviews of the sources' adoptions settled · Accepted · 2026-11-21 · amended 2026-11-21
 - <a id="0044"></a>[ADR-0044](adr/0044-the-family-check-of-the-observed-behavior-file.md): The family check of the observed-behavior file · Accepted · 2026-11-21
 - <a id="0045"></a>[ADR-0045](adr/0045-one-check-of-an-argument-against-a-packaged-list.md): One check of an argument against a packaged list · Accepted · 2026-11-21 · amended 2026-11-22
 - <a id="0047"></a>[ADR-0047](adr/0047-the-adapter-s-offset-for-the-rest-of-a-cut-answer.md): The adapter's offset for the rest of a cut answer · Accepted · 2026-11-21 · amended 2026-11-24
-- <a id="0048"></a>[ADR-0048](adr/0048-core-s-recorder-frame-around-a-source-s-rewrite-step.md): Core's recorder frame around a source's rewrite step · Accepted · 2026-11-21 · amended 2026-11-22
 - <a id="0050"></a>[ADR-0050](adr/0050-what-a-write-task-s-preview-shows.md): What a write task's preview shows · Accepted · 2026-11-21 · amended 2026-11-24
 - <a id="0052"></a>[ADR-0052](adr/0052-one-filter-for-a-vintage-taken-back.md): One filter for a vintage taken back · Accepted · 2026-11-21 · amended 2026-11-24
 - <a id="0053"></a>[ADR-0053](adr/0053-one-count-before-a-query-over-upstream-s-limit.md): One count before a query over upstream's limit · Accepted · 2026-11-22 · amended 2026-11-22
 - <a id="0054"></a>[ADR-0054](adr/0054-one-helper-for-a-series-over-periods.md): One helper for a series over periods · Accepted · 2026-11-22 · amended 2026-11-22
 - <a id="0055"></a>[ADR-0055](adr/0055-one-live-comparison-of-a-packaged-list.md): One live comparison of a packaged list · Accepted · 2026-11-21
 - <a id="0056"></a>[ADR-0056](adr/0056-the-name-of-each-country-code-in-an-answer-s-meta.md): The name of each country code in an answer's meta · Accepted · 2026-11-22
-- <a id="0057"></a>[ADR-0057](adr/0057-the-recording-of-every-exchange-of-a-task.md): The recording of every exchange of a task · Accepted · 2026-11-22 · amended 2026-11-22
 - <a id="0058"></a>[ADR-0058](adr/0058-a-fourth-reason-for-one-consumer-and-what-a-core-patch-keeps.md): A fourth reason for one consumer and what a core patch keeps compatible · Accepted · 2026-11-22 · amended 2026-11-24
 - <a id="0059"></a>[ADR-0059](adr/0059-core-s-scope-what-a-consumer-is-and-how-far-the-two-consumer.md): Core's scope: what a consumer is and how far the two-consumer rule reaches · Accepted · 2026-11-24
 - <a id="0060"></a>[ADR-0060](adr/0060-the-boundary-of-a-source-package-and-the-four-rules-of-a.md): The boundary of a source package and the four rules of a record that a package shapes itself · Accepted · 2026-11-24
@@ -49,6 +47,7 @@ records in `docs/adr/`. A record changes, and this file follows when the script 
 - <a id="0063"></a>[ADR-0063](adr/0063-the-server-from-a-tool-set.md): The server from a tool set · Accepted · 2026-11-24 · amended 2026-11-24
 - <a id="0064"></a>[ADR-0064](adr/0064-the-built-answer-check-its-mark-and-its-census-without.md): The built-answer check: its mark and its census, without following a body or the module's declarations · Accepted · 2026-11-24 · amended 2026-11-24
 - <a id="0065"></a>[ADR-0065](adr/0065-core-names-no-publisher.md): Core names no publisher · Accepted · 2026-11-24
+- <a id="0066"></a>[ADR-0066](adr/0066-the-recorder-under-plain-names-without-the-recording-of-a.md): The recorder under plain names, without the recording of a task · Accepted · 2026-11-24
 
 The superseded records follow, kept as written: the record that each status names holds its decision now.
 
@@ -69,5 +68,7 @@ The superseded records follow, kept as written: the record that each status name
 - <a id="0023"></a>[ADR-0023](adr/0023-core-scope-two-consumers.md): Core scope — code enters `xippios-core` with two consumers · Superseded by ADR-0059 · 2026-10-26 · amended 2026-11-22
 - <a id="0024"></a>[ADR-0024](adr/0024-cashctrl-stands-alone.md): cashctrl stands alone — tenants, the tenant lock and the recorder extras leave core · Superseded by ADR-0042 · 2026-10-27 · amended 2026-11-18
 - <a id="0046"></a>[ADR-0046](adr/0046-the-snapshot-script-s-frame-in-core.md): The snapshot script's frame in core · Superseded by ADR-0062 · 2026-11-21 · amended 2026-11-22
+- <a id="0048"></a>[ADR-0048](adr/0048-core-s-recorder-frame-around-a-source-s-rewrite-step.md): Core's recorder frame around a source's rewrite step · Superseded by ADR-0066 · 2026-11-21 · amended 2026-11-22
 - <a id="0049"></a>[ADR-0049](adr/0049-the-mark-of-a-built-answer-and-its-check.md): The mark of a built answer and its check · Superseded by ADR-0064 · 2026-11-21 · amended 2026-11-22
 - <a id="0051"></a>[ADR-0051](adr/0051-the-reference-refresh-script-s-frame-in-core.md): The reference refresh script's frame in core · Superseded by ADR-0062 · 2026-11-22
+- <a id="0057"></a>[ADR-0057](adr/0057-the-recording-of-every-exchange-of-a-task.md): The recording of every exchange of a task · Superseded by ADR-0066 · 2026-11-22 · amended 2026-11-22

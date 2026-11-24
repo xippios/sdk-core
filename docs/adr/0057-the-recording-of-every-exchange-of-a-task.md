@@ -1,6 +1,6 @@
 # ADR-0057: The recording of every exchange of a task
 
-Status: Accepted · Date: 2026-11-22 · Decided by https://github.com/xippios/sdk-core/issues/376 · Amended 2026-11-22 by https://github.com/xippios/sdk-core/issues/455
+Status: Superseded by ADR-0066 · Date: 2026-11-22 · Decided by https://github.com/xippios/sdk-core/issues/376 · Amended 2026-11-22 by https://github.com/xippios/sdk-core/issues/455
 
 ## Context
 
