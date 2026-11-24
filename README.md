@@ -2041,14 +2041,16 @@ outside xippios.core.testing.plugin: 1 consumer: example (tests)
 ```
 
 A `name` line is each pinned name, with the module's path where a consumer imports its object
-from outside the lists. A `parameter` line is each keyword-only parameter of a pinned function
+from outside the lists. An object that two lists pin, such as a class of `xippios.core.client`
+that `xippios.core` pins too, is one: a consumer of either entry counts for both, by the other
+list's path, and the second entry's line names the first, which it repeats. A `parameter` line is each keyword-only parameter of a pinned function
 or constructor: a dataclass's with `kw_only=True`, a pydantic model's fields, and the keywords
 that a subclass passes by `super().__init__` count too. An `outside` line is each import from
 core outside the lists, a module that `pytest_plugins` names among them. A method's keywords,
 such as `client.get(params=...)`, are not counted, since `ast` does not know an object's class,
 nor is a keyword passed through `**options`, nor a field of a dataclass that a caller may pass
 by position. The last lines tally the names and the parameters with no consumer, one, and two
-or more.
+or more, each object once, and count the entries that repeat one.
 
 ## Documents
 

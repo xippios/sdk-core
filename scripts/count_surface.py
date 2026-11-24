@@ -35,7 +35,7 @@ from collections import defaultdict
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Required, TypedDict
+from typing import NotRequired, Required, TypedDict
 
 ROOT = "xippios.core"
 PACKAGE = Path("src", "xippios", "core")
@@ -93,9 +93,14 @@ class Use(TypedDict):
 
 
 class NameUse(Use):
-    """A pinned name's consumers, and the modules outside the lists that reach its object."""
+    """A pinned name's consumers, and the other paths by which they reach its object.
+
+    An object that two lists pin is one: a consumer of either entry counts for both, by the
+    path of the other list, and the second entry ``repeats`` the first.
+    """
 
     by_other_path: dict[str, list[str]]
+    repeats: str | None
 
 
 class OutsideUse(Use):
@@ -112,11 +117,12 @@ class Seen(TypedDict):
 
 
 class Tally(TypedDict):
-    """How many pieces have no consumer, one, and two or more."""
+    """How many pieces have no consumer, one, and two or more; an object counts once."""
 
     none: int
     one: int
     two_or_more: int
+    repeats: NotRequired[int]  # the entries that repeat an object another list pins first
 
 
 class Report(TypedDict, total=False):
@@ -590,13 +596,22 @@ def report(core: Core, readings: dict[str, Reading]) -> Report:
     other: dict[str, Who] = {key: defaultdict(set) for key in pinned}
     outside: dict[str, Who] = defaultdict(lambda: defaultdict(set))
     calls: dict[Key, dict[str, Who]] = defaultdict(lambda: defaultdict(lambda: defaultdict(set)))
+
+    def take(key: str, consumer: str, kinds: set[str]) -> None:
+        """A consumer takes a pinned entry, and so the object that other lists pin too."""
+        used[key][consumer] |= kinds
+        ident = idents[key]
+        for twin in pins[ident] if ident is not None else []:
+            if twin != key:
+                other[twin][consumer].add(_key(key)[0])
+
     for consumer, reading in readings.items():
         for (module, name), kinds in reading.taken.items():
             if module in LISTS and name in ("", "*"):
                 for each in core.lists[module] if name == "*" else []:
-                    used[f"{module}:{each}"][consumer] |= kinds
+                    take(f"{module}:{each}", consumer, kinds)
             elif module in LISTS and name in core.lists[module]:
-                used[f"{module}:{name}"][consumer] |= kinds
+                take(f"{module}:{name}", consumer, kinds)
             else:
                 outside[f"{module}:{name}" if name else module][consumer] |= kinds
                 for key in pins.get(core.ident(module, name) or ("", ""), []):
@@ -610,10 +625,13 @@ def report(core: Core, readings: dict[str, Reading]) -> Report:
     names: dict[str, NameUse] = {}
     for key in pinned:
         use = _use({c: used[key][c] | other[key][c] for c in order}, order)
+        ident = idents[key]
+        first = pins[ident][0] if ident is not None else key
         names[key] = NameUse(
             count=use["count"],
             consumers=_use(used[key], order)["consumers"],
             by_other_path=_use(other[key], order)["consumers"],
+            repeats=None if first == key else first,
         )
     parameters: dict[str, dict[str, Use]] = {}
     for ident, keys in pins.items():
@@ -633,8 +651,9 @@ def report(core: Core, readings: dict[str, Reading]) -> Report:
         )
         for key, who in sorted(outside.items())
     }
+    objects = [use["count"] for use in names.values() if use["repeats"] is None]
     result["summary"] = {
-        "names": _tally([use["count"] for use in names.values()]),
+        "names": Tally(**_tally(objects), repeats=len(names) - len(objects)),
         "parameters": _tally(
             [use["count"] for words in parameters.values() for use in words.values()]
         ),
@@ -684,7 +703,10 @@ def text(result: Report) -> Iterator[str]:
             f", {len(seen['unread'])} unread" if seen["unread"] else ""
         )
     for key, name in result["names"].items():
-        yield f"name {key}: {_who(name, order, name['by_other_path'])}"
+        if name["repeats"] is None:
+            yield f"name {key}: {_who(name, order, name['by_other_path'])}"
+        else:
+            yield f"name {key}: {_who(name, [], {})}; repeats {name['repeats']}"
     for key, words in result["parameters"].items():
         for word, use in words.items():
             yield f"parameter {key}({word}=): {_who(use, order)}"
@@ -695,10 +717,11 @@ def text(result: Report) -> Iterator[str]:
         for path in seen["unread"]:
             yield f"unread {consumer}: {path}"
     for label, tally in result["summary"].items():
+        repeats = tally.get("repeats")
         yield (
             f"{label} by consumers: {tally['none']} with none, {tally['one']} with one,"
             f" {tally['two_or_more']} with two or more"
-        )
+        ) + (f", and {repeats} that repeat an entry of another list" if repeats else "")
 
 
 def _consumer(value: str) -> tuple[str, Path]:
