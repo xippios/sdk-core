@@ -105,13 +105,10 @@ class ClientConfig:
             connection take 10 s each, the family's.
         retry: Retry policy of a read after a 429, a 5xx or a transport failure.
         rate_limit: Client-side limit; ``None`` disables it.
-        cache: Backend for GET responses; ``None`` disables caching. Every GET looks it
-            up, and ``get_answer`` alone stores in it, a 200 once the body decoded.
-        cache_filter: Which GET requests the cache takes: called with the request as
-            built from the base URL, path and query parameters (``request.url.path``,
-            ``request.url.params``; credentials from ``auth`` are not on it yet); a GET
-            is looked up and stored only when it returns ``True``. ``None`` caches every
-            GET. Lets one client cache a reference endpoint and nothing else.
+        cache: Backend for GET responses; ``None`` disables caching. A GET whose path
+            the cache gives a lifetime, ``MemoryCache(lifetimes=...)``, is looked up in
+            it, and ``get_answer`` alone stores in it, a 200 once the body decoded; any
+            other path is neither looked up nor stored (ADR-0040, decision 3).
         cache_max_bytes: The largest body the cache stores, in bytes as ``httpx``
             decoded them; 8 MiB by default (ADR-0040, decision 3). A larger answer is
             returned as usual and not stored, so the next call fetches it again. A
@@ -122,7 +119,7 @@ class ClientConfig:
             before the default status mapping; return a taxonomy error to raise it, or
             ``None`` to fall through. Where a source states its documented error shapes,
             including errors upstream sends with a 200. It is also asked before a 429 or
-            5xx is retried, ``raise_on_error=False`` or not (ADR-0037): a
+            5xx is retried (ADR-0037): a
             ``RateLimitError`` sets the wait from its ``retry_after``, so one beyond
             ``retry.backoff_max`` is not retried; an ``UpstreamError`` for a 5xx and
             ``None`` leave the decision to the retry policy; any other error stops the
@@ -140,8 +137,8 @@ class ClientConfig:
             it (ADR-0037).
         observe: Called with every response that came from the wire, each retried
             attempt included and a cache hit never, before ``classify`` and before the
-            retry decision, also when the caller asked for the raw response
-            (``raise_on_error=False``); its ``request`` carries the extensions
+            retry decision, also for a recording's answer, which nothing raises
+            (``xippios.core.testing.send_once``); its ``request`` carries the extensions
             ``before_request`` reads. For reading, e.g. quota headers; it returns
             nothing, and an exception it raises propagates as the programming error it
             is, except on a ``download``'s success, whose body goes to the file unread:
@@ -157,7 +154,6 @@ class ClientConfig:
     retry: RetryPolicy = field(default_factory=RetryPolicy)
     rate_limit: RateLimit | None = None
     cache: CacheBackend | None = None
-    cache_filter: Callable[[httpx.Request], bool] | None = None
     cache_max_bytes: int = 8 * 1024 * 1024
     headers: Mapping[str, str] = field(default_factory=dict)
     classify: Callable[[httpx.Response], XippiosError | None] | None = None

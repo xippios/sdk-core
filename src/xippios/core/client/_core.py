@@ -176,6 +176,15 @@ class _Reach:
         return sent
 
 
+@final
+@dataclass(frozen=True, slots=True)
+class _Slot:
+    """Where the cache keeps one answer: its key and the lifetime its path takes."""
+
+    key: str
+    lifetime: float | None
+
+
 class AsyncClient:
     """Async HTTP client for one upstream (conventions §6).
 
@@ -255,18 +264,19 @@ class AsyncClient:
             return _Reach("none", None, self._base)
         return _Reach("own", auth, self._base)
 
-    def _cache_key(self, method: str, url: httpx.URL) -> str | None:
-        if method != "GET" or self.config.cache is None:
-            return None
-        return cache_key(method, url)
+    def _cache_slot(self, probe: httpx.Request) -> _Slot | None:
+        """Where the cache keeps the answer to ``probe``, or ``None`` where it keeps none.
 
-    def _cache_key_for(self, probe: httpx.Request) -> str | None:
-        """The cache key for ``probe``, or ``None`` when the cache or its filter skips it."""
-        key = self._cache_key(probe.method, probe.url)
-        cache_filter = self.config.cache_filter
-        if key is None or cache_filter is None or cache_filter(probe):
-            return key
-        return None
+        Only a GET, and only where the cache gives the request's path a lifetime other
+        than ``0``: any other request is neither looked up nor stored.
+        """
+        cache = self.config.cache
+        if probe.method != "GET" or cache is None:
+            return None
+        lifetime = cache.lifetime(probe.url.path)
+        if lifetime == 0:
+            return None
+        return _Slot(cache_key(probe.method, probe.url), lifetime)
 
     async def request(
         self,
@@ -277,13 +287,12 @@ class AsyncClient:
         json: Any = None,
         data: Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
-        raise_on_error: bool = True,
         auth: httpx.Auth | _ClientAuth | None = _CLIENT_AUTH,
     ) -> httpx.Response:
         """Send one request and return the response.
 
-        Retries, rate limiting and the cache lookup (GET only, narrowed by
-        ``ClientConfig.cache_filter``) apply as configured. A cache hit returns at once;
+        Retries, rate limiting and the cache lookup (a GET whose path the cache gives a
+        lifetime) apply as configured. A cache hit returns at once;
         otherwise ``ClientConfig.before_request`` runs once, before the rate limiter, and
         ``ClientConfig.observe`` sees every response from the wire, retried attempts
         included. The source's ``classify`` hook, if any, is asked before a 429 or 5xx
@@ -306,9 +315,6 @@ class AsyncClient:
                 (``application/x-www-form-urlencoded``), e.g. ``{"id": 4, "name": "Corn"}``.
                 For upstreams whose writes take form fields, not JSON.
             headers: Extra headers for this request only.
-            raise_on_error: ``False`` returns 4xx/5xx responses instead of raising, for
-                callers that record fixtures or inspect error bodies; ``classify``
-                still decides whether a 429 or 5xx is retried.
             auth: Credentials for this request only, every retry included: left at its
                 default it sends the client's ``auth`` to the base URL's origin and none
                 to another, ``None`` sends none, for a keyless endpoint on the same host,
@@ -327,7 +333,6 @@ class AsyncClient:
             json=json,
             data=data,
             headers=headers,
-            raise_on_error=raise_on_error,
             auth=auth,
         )
         return response
@@ -341,13 +346,12 @@ class AsyncClient:
         json: Any = None,
         data: Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
-        raise_on_error: bool = True,
         auth: httpx.Auth | _ClientAuth | None = _CLIENT_AUTH,
-    ) -> tuple[httpx.Response, str | None]:
-        """``request``'s work, and the key that ``get_answer`` stores the answer under.
+    ) -> tuple[httpx.Response, "_Slot | None"]:
+        """``request``'s work, and where ``get_answer`` stores the answer.
 
-        The key is ``None`` for an answer from the cache, which is stored already, and
-        for a request the cache, its filter or an ``auth`` of the call's own leaves out.
+        The slot is ``None`` for an answer from the cache, which is stored already, and
+        for a request that the cache or an ``auth`` of the call's own leaves out.
         """
         if json is not None and data is not None:
             raise ValueError("pass json= or data=, not both: a request has one body")
@@ -360,9 +364,9 @@ class AsyncClient:
         reach = self._reach(auth)
         collector = _collector()
         uncached = reach.auth == "own" or collector is not None
-        key = None if uncached else self._cache_key_for(probe)
-        if key is not None and self.config.cache is not None:
-            cached = self.config.cache.get(key)
+        slot = None if uncached else self._cache_slot(probe)
+        if slot is not None and self.config.cache is not None:
+            cached = self.config.cache.get(slot.key)
             if cached is not None:
                 return _from_cache(cached, probe), None
         before_request = self.config.before_request
@@ -399,16 +403,15 @@ class AsyncClient:
             sleep=self._sleep,
             classify=classify,
         )
-        if raise_on_error:
-            if classify is not None:
-                classified = classify(response)
-                if classified is not None:
-                    raise classified
-            raise_for_status(response, source=self.source)
-        return response, key
+        if classify is not None:
+            classified = classify(response)
+            if classified is not None:
+                raise classified
+        raise_for_status(response, source=self.source)
+        return response, slot
 
-    def _store(self, key: str, response: httpx.Response, stored_at: float) -> None:
-        """Keep a 200 within ``cache_max_bytes`` under ``key``, stored at ``stored_at``."""
+    def _store(self, slot: "_Slot", response: httpx.Response, stored_at: float) -> None:
+        """Keep a 200 within ``cache_max_bytes`` in ``slot``, stored at ``stored_at``."""
         cache = self.config.cache
         if (
             cache is None
@@ -419,13 +422,14 @@ class AsyncClient:
         # The content is already decoded: keeping content-encoding would make the replay
         # decode it a second time (httpx.DecodingError on a gzip answer).
         cache.set(
-            key,
+            slot.key,
             CachedResponse(
                 status=response.status_code,
                 headers=tuple(strip_wire_headers(response.headers.multi_items())),
                 content=response.content,
                 stored_at=stored_at,
             ),
+            lifetime=slot.lifetime,
         )
 
     async def _send_once(
@@ -537,23 +541,6 @@ class AsyncClient:
         """``request("GET", ...)``; ``auth=None`` sends no credentials."""
         return await self.request("GET", path, params=params, headers=headers, auth=auth)
 
-    async def get_json(
-        self,
-        path: str,
-        *,
-        params: Params = None,
-        headers: Mapping[str, str] | None = None,
-        auth: httpx.Auth | _ClientAuth | None = _CLIENT_AUTH,
-    ) -> Any:
-        """GET and decode a JSON body, raising ``ValidationError`` when it is not JSON.
-
-        ``auth`` as for ``request``: ``None`` sends no credentials. A cache hit answers it,
-        but it stores nothing: a wrapper whose answer may come from the cache calls
-        ``get_answer``, which stores it and says when it was retrieved.
-        """
-        response = await self.get(path, params=params, headers=headers, auth=auth)
-        return decode_json(response, source=self.source, path=path)
-
     async def post_json(
         self,
         path: str,
@@ -566,11 +553,11 @@ class AsyncClient:
     ) -> Any:
         """POST and decode a JSON answer, ``None`` for an answer with no body.
 
-        The write counterpart of ``get_json``: ``request("POST", ...)``, so ``classify``,
-        the hooks and the limiter apply as they do there, the request is sent once, after a
-        429 or a 5xx too, its error saying what became of it (ADR-0011), and the cache is
-        neither read nor written. An answer with no body
-        at all, a 204 say, returns ``None``; any other body is decoded as ``get_json``
+        ``request("POST", ...)``, so ``classify``, the hooks and the limiter apply as they
+        do there, the request is sent once, after a 429 or a 5xx too, its error saying what
+        became of it (ADR-0011), and the cache is neither read nor written. An answer with
+        no body at all, a 204 say, returns ``None``; any other body is decoded as
+        ``get_answer``
         decodes it.
 
         Args:
@@ -590,32 +577,6 @@ class AsyncClient:
         response = await self.request(
             "POST", path, params=params, json=json, data=data, headers=headers, auth=auth
         )
-        return _json_or_none(response, source=self.source, path=path)
-
-    async def delete_json(
-        self,
-        path: str,
-        *,
-        params: Params = None,
-        headers: Mapping[str, str] | None = None,
-        auth: httpx.Auth | _ClientAuth | None = _CLIENT_AUTH,
-    ) -> Any:
-        """DELETE and decode a JSON answer, ``None`` for an answer with no body.
-
-        ``post_json`` for a DELETE, which sends no body: ``request("DELETE", ...)``, sent
-        once (ADR-0011), and the cache neither read nor written. An answer with no body at
-        all, a 204 say, returns ``None``.
-
-        Args:
-            path: Path joined onto the base URL, e.g. ``"/drafts/r-1"``.
-            params: Query parameters.
-            headers: Extra headers for this request only.
-            auth: As for ``request``.
-
-        Raises:
-            ValidationError: The answer has a body that is not JSON, naming ``path``.
-        """
-        response = await self.request("DELETE", path, params=params, headers=headers, auth=auth)
         return _json_or_none(response, source=self.source, path=path)
 
     @overload
@@ -652,8 +613,10 @@ class AsyncClient:
     ) -> "Answer[Any]":
         """GET and decode a JSON body with the time it was retrieved (conventions §4).
 
-        ``get_json``'s call and decoding, the parse into ``parse`` when it is given, and
-        the ``retrieved_at`` a task puts into its ``ResultMeta``: on a cache hit the time
+        The client's one reader of JSON (conventions §6): ``get``'s call, the body decoded
+        and refused with ``ValidationError`` where it is not JSON, the parse into
+        ``parse`` when it is given, and the ``retrieved_at`` a task puts into its
+        ``ResultMeta``, the client's fact for every answer: on a cache hit the time
         the entry was stored, read from ``xippios_cache_stored_at`` (ADR-0037, decision
         5), else the time the answer arrived, read before the decode and the parse. A 200
         from the wire is stored in the cache, where the cache takes it, only once its
@@ -662,7 +625,7 @@ class AsyncClient:
         the next call (ADR-0037, decision 5). ``auth`` as for ``request``.
 
         Args:
-            path: Path joined onto the base URL, e.g. ``"/api/gats/regions"``.
+            path: Path joined onto the base URL, e.g. ``"/v1/regions"``.
             params: Query parameters.
             headers: Extra headers for this request only.
             auth: The client's credentials by default, ``None`` for none, an
@@ -682,7 +645,7 @@ class AsyncClient:
         """
         if parse is not None and endpoint is None:
             raise TypeError("get_answer() takes endpoint= with parse=, for the parse's error")
-        response, key = await self._request("GET", path, params=params, headers=headers, auth=auth)
+        response, slot = await self._request("GET", path, params=params, headers=headers, auth=auth)
         stored_at = response.extensions.get("xippios_cache_stored_at")
         if stored_at is None:
             # When the answer arrived: a slow decode or parse must not move it later.
@@ -690,8 +653,8 @@ class AsyncClient:
         payload = decode_json(response, source=self.source, path=path)
         if parse is not None and endpoint is not None:
             payload = parse_payload(parse, payload, source=self.source, endpoint=endpoint)
-        if key is not None:  # from the wire, and the cache takes it
-            self._store(key, response, stored_at)
+        if slot is not None:  # from the wire, and the cache takes it
+            self._store(slot, response, stored_at)
         return Answer(payload, datetime.fromtimestamp(stored_at, UTC))
 
     async def download(
@@ -699,6 +662,8 @@ class AsyncClient:
         url: str,
         dest: str | os.PathLike[str],
         *,
+        params: Params = None,
+        headers: Mapping[str, str] | None = None,
         auth: httpx.Auth | _ClientAuth | None = _CLIENT_AUTH,
     ) -> Downloaded:
         """Stream a file to ``dest`` with a GET, never holding its body in memory (ADR-0040).
@@ -731,6 +696,8 @@ class AsyncClient:
                 the base URL, e.g. ``"/files/qs.crops_20261027.txt.gz"``.
             dest: The file to write, e.g. ``tmp_path / "qs.crops.txt.gz"``, in a directory
                 that exists.
+            params: Query parameters, as for ``get``, e.g. ``{"year": "2025"}``.
+            headers: Extra headers for this request only, as for ``get``.
             auth: Credentials for this download, every retry included, as for
                 ``request``: the client's by default, to the base URL's origin only, so a
                 file link on another host goes without them; ``None`` for none; an
@@ -783,7 +750,7 @@ class AsyncClient:
         try:
             before_request = self.config.before_request
             if before_request is not None:
-                built = pool.build_request("GET", url)
+                built = pool.build_request("GET", url, params=params, headers=headers)
                 reach.mark(built)
                 outcome = before_request(built)
                 if inspect.isawaitable(outcome):
@@ -800,7 +767,7 @@ class AsyncClient:
                 nonlocal written
                 if self._bucket is not None:
                     await self._bucket.acquire(self._sleep)
-                request = pool.build_request("GET", url)
+                request = pool.build_request("GET", url, params=params, headers=headers)
                 streamed = await pool.send(request, auth=reach.mark(request), stream=True)
                 try:
                     response = streamed if streamed.is_success else await head_of(streamed)
@@ -874,7 +841,7 @@ class Answer[T]:
     the value's type, and needs no pair of its own.
 
     Attributes:
-        payload: The body as ``get_json`` decodes it, e.g. ``{"data": [...]}``, or as
+        payload: The body as ``decode_json`` decodes it, e.g. ``{"data": [...]}``, or as
             ``parse`` reads it, e.g. ``[Region(...), ...]``.
         retrieved_at: Timezone-aware UTC: on a cache hit the time the entry was stored,
             else the time the answer arrived, which a miss stores; a task's
@@ -890,8 +857,8 @@ def decode_json(
 ) -> Any:
     """Decode ``response``'s JSON body, raising ``ValidationError`` when it is not JSON.
 
-    What ``get_json``, ``get_answer`` and the writes' helpers do after the request: a
-    helper the client calls itself, outside the lists (ADR-0059, decision 3).
+    What ``get_answer`` and ``post_json`` do after the request: a helper the client calls
+    itself, outside the lists (ADR-0059, decision 3).
 
     Args:
         response: A response with its body read, e.g. from ``AsyncClient.get``.
@@ -919,7 +886,7 @@ def decode_json(
 
 
 def _json_or_none(response: httpx.Response, *, source: str, path: str) -> Any:
-    """``decode_json`` for a write's answer, ``None`` when it has no body at all.
+    """``decode_json`` for ``post_json``'s answer, ``None`` when it has no body at all.
 
     A 204 has none, and an upstream may answer a write with an empty 200 or 202; a body
     of whitespace is a body, and not JSON.

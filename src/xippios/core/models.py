@@ -14,6 +14,7 @@ from pydantic import (
     Field,
     SerializerFunctionWrapHandler,
     TypeAdapter,
+    ValidationInfo,
     field_serializer,
     field_validator,
     model_serializer,
@@ -197,9 +198,10 @@ class ResultMeta(BaseModel):
             value is ``None``, one the caller left out, is dropped at construction
             (ADR-0041, decision 3); a ``None`` inside a nested mapping is kept as given. The
             value of every key that names a credential, at any depth, is ``REDACTED``
-            by the one rule of ``xippios.core.redaction`` (ADR-0030; ``key`` only where
-            a query ``KeyAuth`` sends it, ADR-0040; a ``token`` name a source declares
-            data, ``next_token`` say, kept as sent), and so is each credential in the
+            by the one rule of ``xippios.core.redaction`` for ``source`` (ADR-0030;
+            ``key`` only where the source's query ``KeyAuth`` sends it, ADR-0040; a
+            ``token`` name the source declares data, ``next_token`` say, kept as sent;
+            another source's names change nothing), and so is each credential in the
             query of a link, a signed file link's signature say, as ``scrub_url``
             writes it; record the variable name, never the value.
         total: Upstream's count of the records matching the request, when the source
@@ -269,8 +271,16 @@ class ResultMeta(BaseModel):
 
     @field_validator("request")
     @classmethod
-    def _sent_and_no_credentials(cls, value: dict[str, Any]) -> dict[str, Any]:
-        return redact_credentials({name: item for name, item in value.items() if item is not None})
+    def _sent_and_no_credentials(
+        cls, value: dict[str, Any], info: ValidationInfo
+    ) -> dict[str, Any]:
+        # The source's own names, never another's (ADR-0040, decision 6, amendment
+        # 2026-11-24); ``source`` is validated first, as it is declared first.
+        source = info.data.get("source")
+        return redact_credentials(
+            {name: item for name, item in value.items() if item is not None},
+            source=source if isinstance(source, str) else None,
+        )
 
     @field_validator("total")
     @classmethod

@@ -13,17 +13,25 @@ storage URL (Azure SAS) are credentials; ``keyword``, ``author``, ``tokens_used`
 ``design`` and ``sort_key`` are data. A bare ``key`` is not on the list: Eurostat's
 SDMX series ``key`` is data (ADR-0040, decision 6).
 
-A name a ``KeyAuth`` sends its key under as a query parameter is registered when that auth
-object is built, and is a credential from then on for the whole process, matched exactly in
-any letter case: USDA NASS's ``KeyAuth(..., location="query", name="key")`` makes ``key``
-one wherever NASS's package is imported, and a process that imports a keyless source alone
-keeps ``key`` as data. Nothing unregisters a name.
+A name a ``KeyAuth`` sends its key under as a query parameter is registered for the
+source that the auth object names when it is built, and is a credential of that source
+from then on, matched exactly in any letter case:
+``KeyAuth(..., location="query", name="key", source="example")`` makes ``key`` a
+credential of ``example``, while another source that a host loads beside it keeps its own
+``key`` as data. Nothing unregisters a name.
 
 A source declares a parameter whose name holds ``token`` as a whole word, and no other
-credential word, as data with ``register_data_name``: X's ``next_token`` and
-``pagination_token``, which a caller reads to page on. It is data from then on for the
-whole process, matched exactly in any letter case, and every name nobody declared keeps
-the rule; a name a query ``KeyAuth`` registered stays a credential though declared.
+credential word, as data with ``register_data_name(name, source=...)``: a paging cursor
+such as ``next_token``, which a caller reads to page on. It is data of that source from
+then on, matched exactly in any letter case, and every name nobody declared keeps the
+rule; a name the source's query ``KeyAuth`` registered stays a credential though declared.
+
+The registries are kept for each source, so that no source's names change another
+source's answers (ADR-0040, decision 6, amendment 2026-11-24). A reader that is given a
+``source``, ``ResultMeta`` with its own, reads that source's names alone. A reader given
+none, the testing helpers that read a recorded or a sent request, reads the names of
+every source, a credential of any one winning over a data name of another, so it keeps
+no value that some source sends a key under.
 
 ``redact_credentials`` also reads each text value that is an ``http`` or ``https`` link:
 a credential in its query or its userinfo reads ``REDACTED``, as ``scrub_url`` writes it,
@@ -95,39 +103,59 @@ _NEVER_DATA = frozenset({"token", "access_token", "refresh_token", "id_token"})
 """The token names of OAuth 2.0 (RFC 6749) and OpenID Connect, and the word alone."""
 _LINK = re.compile(r"(?i)https?://")
 
-_registered: frozenset[str] = frozenset()
-"""Names registered by ``register_credential_name``, lower-cased; replaced, never changed."""
-_data_names: frozenset[str] = frozenset()
-"""Names declared by ``register_data_name``, lower-cased; replaced, never changed."""
+_registered: Mapping[str, frozenset[str]] = {}
+"""Names registered by ``register_credential_name``, lower-cased, by source; replaced,
+never changed."""
+_data_names: Mapping[str, frozenset[str]] = {}
+"""Names declared by ``register_data_name``, lower-cased, by source; replaced, never
+changed."""
 _lock = threading.Lock()
 
 
-def register_credential_name(name: str) -> None:
-    """Make ``name`` a credential for the rest of the process, in any letter case.
+def _with(
+    registry: Mapping[str, frozenset[str]], source: str, name: str
+) -> Mapping[str, frozenset[str]]:
+    """A copy of ``registry`` with ``name``, lower-cased, among ``source``'s names."""
+    return {**registry, source: registry.get(source, frozenset()) | {name.lower()}}
 
-    A query ``KeyAuth`` calls it with its ``name`` when it is built (ADR-0040, decision 6).
+
+def _names(registry: Mapping[str, frozenset[str]], source: str | None) -> frozenset[str]:
+    """The names ``registry`` holds for ``source``, or for every source where it is ``None``."""
+    if source is not None:
+        return registry.get(source, frozenset())
+    return frozenset().union(*registry.values())
+
+
+def register_credential_name(name: str, *, source: str) -> None:
+    """Make ``name`` a credential of ``source`` for the rest of the process, in any letter case.
+
+    A query ``KeyAuth`` calls it with its ``name`` and its ``source`` when it is built
+    (ADR-0040, decision 6). Another source's parameter of that name is left as it was.
     Registering a name again changes nothing.
 
     Args:
         name: A query parameter name a key is sent under, e.g. ``"key"``.
+        source: The source that sends its key under it, e.g. ``"example"``.
     """
     global _registered
     with _lock:
-        _registered = _registered | {name.lower()}
+        _registered = _with(_registered, source, name)
 
 
-def register_data_name(name: str) -> None:
-    """Keep the value of a parameter called ``name`` for the rest of the process.
+def register_data_name(name: str, *, source: str) -> None:
+    """Keep the value of ``source``'s parameter called ``name`` for the rest of the process.
 
     For a parameter whose name holds the whole word ``token`` but is data, a paging
-    cursor such as X's ``next_token``: a source calls it in its ``_client.py``, and the
-    value stays as sent in ``ResultMeta.request``, in a recorded fixture and in the
-    replay helpers. Matched exactly, in any letter case; every other name with a
-    whole-word ``token`` stays a credential, and so does a name a query ``KeyAuth``
-    registers. Declaring a name again changes nothing.
+    cursor such as ``next_token``: a source calls it in its ``_client.py`` with its slug,
+    and the value stays as sent in its ``ResultMeta.request``, in a recorded fixture and
+    in the replay helpers. Matched exactly, in any letter case; every other name with a
+    whole-word ``token`` stays a credential, and so does a name a query ``KeyAuth`` of the
+    source registers, and another source's parameter of that name. Declaring a name again
+    changes nothing.
 
     Args:
         name: The parameter name as upstream writes it, e.g. ``"next_token"``.
+        source: The source whose parameter it is, e.g. ``"example"``.
 
     Raises:
         ValueError: ``name`` holds no whole-word ``token``, or holds another credential
@@ -148,36 +176,39 @@ def register_data_name(name: str) -> None:
         )
     global _data_names
     with _lock:
-        _data_names = _data_names | {lowered}
+        _data_names = _with(_data_names, source, name)
 
 
-def is_credential_name(name: str) -> bool:
+def is_credential_name(name: str, *, source: str | None = None) -> bool:
     """True when the value of a parameter called ``name`` must never be kept or shown.
 
     A whole word of the module's list (``api_key``, ``token``, ``secret``, ``sig``, ...),
-    unless a source declared the name data (``register_data_name``), or a name a
-    query ``KeyAuth`` registered (``key`` for USDA NASS), which nothing makes data.
+    unless the source declared the name data (``register_data_name``), or a name the
+    source's query ``KeyAuth`` registered (``key`` for ``example``), which nothing makes
+    data.
 
     Args:
         name: A parameter or mapping key name, e.g. ``"access_token"``.
+        source: The source whose parameter it is, e.g. ``"example"``; ``None`` reads the
+            names of every source, a credential of any one winning.
     """
     lowered = name.lower()
-    if lowered in _registered:
+    if lowered in _names(_registered, source):
         return True
-    return lowered not in _data_names and _CREDENTIAL_WORD.search(name) is not None
+    return lowered not in _names(_data_names, source) and _CREDENTIAL_WORD.search(name) is not None
 
 
-def _redact_value(value: Any) -> Any:
+def _redact_value(value: Any, source: str | None = None) -> Any:
     if isinstance(value, Mapping):
-        return redact_credentials(value)
+        return redact_credentials(value, source=source)
     if isinstance(value, list):
-        return [_redact_value(item) for item in value]
+        return [_redact_value(item, source) for item in value]
     if isinstance(value, str) and _LINK.match(value):
-        return _redact_link(value)
+        return _redact_link(value, source)
     return value
 
 
-def _redact_link(link: str) -> str:
+def _redact_link(link: str, source: str | None) -> str:
     """``link`` as ``scrub_url`` writes it when it carries a credential, else as given.
 
     A link httpx cannot read is ``REDACTED`` whole: its credentials cannot be told apart.
@@ -186,12 +217,14 @@ def _redact_link(link: str) -> str:
         url = httpx.URL(link)
     except httpx.InvalidURL:
         return REDACTED
-    if url.userinfo or any(is_credential_name(name) for name, _ in url.params.multi_items()):
-        return scrub_url(url)
+    if url.userinfo or any(
+        is_credential_name(name, source=source) for name, _ in url.params.multi_items()
+    ):
+        return scrub_url(url, source=source)
     return link
 
 
-def redact_credentials(mapping: Mapping[str, Any]) -> dict[str, Any]:
+def redact_credentials(mapping: Mapping[str, Any], *, source: str | None = None) -> dict[str, Any]:
     """A copy of ``mapping`` with every credential's value ``REDACTED``, at any depth.
 
     Nested mappings and lists are copied too; ``mapping`` itself is not changed. A text
@@ -200,30 +233,41 @@ def redact_credentials(mapping: Mapping[str, Any]) -> dict[str, Any]:
 
     Args:
         mapping: Request parameters, e.g. ``{"key": "...", "year": 2024}``.
+        source: The source that sent them, whose names are read, e.g. ``"example"``;
+            ``None`` reads the names of every source (``is_credential_name``).
     """
     return {
-        key: REDACTED if isinstance(key, str) and is_credential_name(key) else _redact_value(value)
+        key: REDACTED
+        if isinstance(key, str) and is_credential_name(key, source=source)
+        else _redact_value(value, source)
         for key, value in mapping.items()
     }
 
 
-def scrub_params(items: Iterable[tuple[str, str]]) -> list[tuple[str, str]]:
+def scrub_params(
+    items: Iterable[tuple[str, str]], *, source: str | None = None
+) -> list[tuple[str, str]]:
     """The query parameters ``items`` with every credential's value ``REDACTED``, in order.
 
     Args:
         items: ``(name, value)`` pairs, e.g. ``url.params.multi_items()``.
+        source: The source that sent them, as for ``redact_credentials``.
     """
-    return [(name, REDACTED if is_credential_name(name) else value) for name, value in items]
+    return [
+        (name, REDACTED if is_credential_name(name, source=source) else value)
+        for name, value in items
+    ]
 
 
-def scrub_url(url: httpx.URL | str) -> str:
+def scrub_url(url: httpx.URL | str, *, source: str | None = None) -> str:
     """The URL as text, every credential's query value and the userinfo ``REDACTED``.
 
     Args:
         url: A URL, e.g. ``"https://api.example.test/v1/x?api_key=...&year=2024"``.
+        source: The source that sent it, as for ``redact_credentials``.
     """
     parsed = httpx.URL(url)
-    params = httpx.QueryParams(tuple(scrub_params(parsed.params.multi_items())))
+    params = httpx.QueryParams(tuple(scrub_params(parsed.params.multi_items(), source=source)))
     cleaned = parsed.copy_with(params=params)
     if parsed.userinfo:
         cleaned = cleaned.copy_with(username=REDACTED, password=REDACTED)
