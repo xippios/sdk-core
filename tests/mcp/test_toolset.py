@@ -348,13 +348,16 @@ def test_a_cap_for_a_name_that_is_no_task_is_refused() -> None:
         ToolSet("example", [create_thing], caps={"list_nothing": ResultCap()}, read_only=False)
 
 
-def test_a_narrowed_copy_drops_the_cap_of_a_task_it_drops() -> None:
-    # A host's list of tools: dataclasses.replace checks the copy as a new tool set.
+def test_the_caller_of_a_narrowed_copy_drops_the_cap_of_each_task_it_drops() -> None:
+    # A host's list of tools: dataclasses.replace checks the copy as a new tool set, so a copy
+    # that keeps the cap of a task it drops is refused, naming the key, and the caller passes
+    # caps= beside tasks= in the same replace (ADR-0063, decisions 3 and 4).
     tools = example_tools()
     with pytest.raises(ValueError, match=r"^caps names no task among the tasks: list_areas;"):
         dataclasses.replace(tools, tasks=[get_series])
     narrowed = dataclasses.replace(tools, tasks=[get_series], caps={})
     assert [tool_name(narrowed.source, fn) for fn in narrowed.tasks] == ["example_get_series"]
+    assert dict(narrowed.caps) == {}
 
 
 def download_series(series_id: str) -> Result[list[str]]:
