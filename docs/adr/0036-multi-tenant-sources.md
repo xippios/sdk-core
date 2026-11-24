@@ -176,8 +176,8 @@ sdk-google-mail, whose variables carry the prefix `GOOGLE` that its slug does no
 decision 3 the digest of a tenant's variables leaves, so that `client_for` keeps one client per
 tenant until `Tenants.reset()`, the one way to a new client, and closes none, since no code of
 core, of a source or of the host changes a tenant's variables after start; in decision 6
-`list_task` loses `source`, which no source passes, by part 7 of the answer; and in decision 13
-`NO_TENANT_TASKS` leaves with its reads in `bind_tasks`, in the family check and in core's
+`list_task` loses `source`, which no source passes, by part 7 of the answer on
+https://github.com/xippios/sdk-core/issues/475; and in decision 13 `NO_TENANT_TASKS` leaves with its reads in `bind_tasks`, in the family check and in core's
 reader of a tasks module, since no source declares it, so that a bound server serves the
 tenant's tasks and the tenant list and the family check excepts the tenant list alone until a
 source has a task that touches no tenant, while decisions 2, 4, 5 and 7 to 12, the rest of

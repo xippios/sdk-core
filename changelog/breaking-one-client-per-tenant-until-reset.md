@@ -6,8 +6,8 @@
     `test_a_changed_subdomain_builds_a_new_client` and `test_a_changed_key_builds_a_new_client`
     (lines 173 to 185 on its `main`) are deleted — both fail once a changed variable keeps the
     client, which `test_reset_drops_every_cached_client` (line 188) still renews.
-    `src/xippios/cashctrl/_client.py` (sdk-cashctrl) — the docstrings of `_build` (lines 371
-    and 372) and `client_for` (lines 393 to 396) say that the registry keeps one client per
+    `src/xippios/cashctrl/_client.py` (sdk-cashctrl) — the docstrings of `_build` (lines 380
+    and 381) and `client_for` (lines 402 to 405) say that the registry keeps one client per
     organisation until `TENANTS.reset()` — core keeps no digest, and no test breaks.
     `src/xippios/cashctrl/tasks.py` (sdk-cashctrl) — the docstring of `_REPORT_TYPES` (lines
     1310 and 1311) loses "and a changed subdomain or key builds a new one" — no client is
