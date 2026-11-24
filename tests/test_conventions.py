@@ -371,6 +371,278 @@ def test_both_questions_keep_the_record() -> None:
     assert kept == list(QUESTIONS)
 
 
+# The boundary of a source package and the one way of each feature, two records beside ADR-0028
+# (https://github.com/xippios/sdk-core/issues/474): §14 holds the boundary's six sentences word
+# for word, and each rule stands once, in the section of its subject, citing its decision.
+
+BOUNDARY = "ADR-0060"
+WAYS = "ADR-0061"
+WAYS_QUESTION = "https://github.com/xippios/sdk-core/issues/474"
+
+BOUNDARY_RULES = [
+    pytest.param(
+        2,
+        "A task is an upstream operation, a list that orients a caller, or a series over periods",
+        ("a caller can set what upstream documents", "ADR-0060, decision 4", "ADR-0001"),
+        id="s2-a-task",
+    ),
+    pytest.param(
+        2,
+        "A package adds no task that fixes filters, sorts, ranks or cuts for the caller",
+        ("a slice", "a ranking", "ADR-0060, decisions 4 and 8"),
+        id="s2-no-slice",
+    ),
+    pytest.param(
+        2,
+        "A caller can set what upstream documents as a parameter",
+        ("upstream's own", "ADR-0060, decision 8"),
+        id="s2-the-default",
+    ),
+    pytest.param(
+        3,
+        "A package returns each value of upstream's data as upstream states it",
+        ("derives no value", "the text stands beside it", "ADR-0060, decision 1"),
+        id="s3-values",
+    ),
+    pytest.param(
+        3,
+        "reaches a caller twice",
+        ("the text as printed", "ADR-0060, decision 8"),
+        id="s3-the-text-beside-its-number",
+    ),
+    pytest.param(
+        3,
+        "Upstream's own name is the name in its API document",
+        ("`Field(validation_alias=...)`", "never `Field(alias=...)`", "ADR-0028, decision 2"),
+        id="s3-upstream-s-name",
+    ),
+    pytest.param(
+        3,
+        "A record that a package shapes itself",
+        ("four rules", "`<stem>_number`", "`<stem>_label`", "ADR-0060, decision 7"),
+        id="s3-a-shaped-record",
+    ),
+    pytest.param(
+        3,
+        "Where the file names no value that such a record needs",
+        ("says which", "ADR-0060, decision 7"),
+        id="s3-the-one-exception",
+    ),
+    pytest.param(
+        3,
+        "A label names a code in upstream's own words",
+        ("no list, name, grouping or rule of its own", "ADR-0060, decision 3"),
+        id="s3-labels",
+    ),
+    pytest.param(
+        3,
+        "A ranking leaves the source packages",
+        ("groupings and the joins", "ADR-0060, decision 8"),
+        id="s3-rankings",
+    ),
+    pytest.param(
+        4,
+        "`vintage` is set only from a release identifier that upstream states",
+        ("another flow's release list", "ADR-0060, decisions 2 and 8"),
+        id="s4-the-vintage",
+    ),
+    pytest.param(
+        4,
+        "A series compares no values across the releases of its periods",
+        ("ADR-0060, decision 2",),
+        id="s4-a-series",
+    ),
+    pytest.param(
+        4,
+        "its one reading of the release",
+        ("the catalog's release identifier", "ADR-0060, decision 8"),
+        id="s4-a-file-s-reading",
+    ),
+    pytest.param(
+        4,
+        "sums no counts into `total`",
+        ("unless upstream counts the whole request", "ADR-0060, decision 8"),
+        id="s4-the-total",
+    ),
+    pytest.param(
+        8,
+        "The cut of an answer over MCP is the one choice made for the caller",
+        ("changes no value", "ADR-0060, decision 4"),
+        id="s8-the-cut",
+    ),
+    pytest.param(
+        10,
+        "The family check fails a model that a task's `Result[T]` reaches",
+        (
+            "`<stem>_number` or `<stem>_label`",
+            "holds no text",
+            "upstream's own name and no reading",
+            "ADR-0060, decision 9",
+        ),
+        id="s10-the-reading-s-check",
+    ),
+]
+
+WAYS_RULES = [
+    pytest.param(
+        1, "A task's name starts with one of six verbs", ("ADR-0061, decision 3",), id="s1-verbs"
+    ),
+    pytest.param(
+        1,
+        "An argument that upstream does not take is one of five words",
+        ("`dest`", "`confirm` last", "ADR-0061, decision 4"),
+        id="s1-five-words",
+    ),
+    pytest.param(
+        2,
+        "Several values of one upstream filter are one argument that takes a list",
+        ("no argument form", "ADR-0061, decision 1"),
+        id="s2-a-list",
+    ),
+    pytest.param(
+        2,
+        "A package filters after the fetch only where upstream offers no filter of its own",
+        ("by equality or by prefix", "ADR-0061, decision 2"),
+        id="s2-a-filter-of-its-own",
+    ),
+    pytest.param(
+        2,
+        "Within a source one concept stands at one position in every task",
+        ("keyword-only", "ADR-0061, decision 5"),
+        id="s2-one-order",
+    ),
+    pytest.param(
+        5,
+        "No data has one answer per kind of task",
+        ("the empty list", "`NotFoundError`", "ADR-0061, decision 6"),
+        id="s5-no-data",
+    ),
+    pytest.param(
+        5,
+        "A refusal of the call as given names the first problem",
+        ("no list of every problem", "ADR-0061, decision 7"),
+        id="s5-the-first-problem",
+    ),
+    pytest.param(
+        6,
+        "A request that upstream bills and a request that writes are sent once",
+        ("its outcome is unknown", "ADR-0061, decision 10", "ADR-0011, amendment 2026-11-24"),
+        id="s6-sent-once",
+    ),
+    pytest.param(
+        6,
+        "A read-only source of public data gives its client core's response cache",
+        ("says why", "ADR-0061, decision 11"),
+        id="s6-the-cache",
+    ),
+    pytest.param(
+        8,
+        "A task that spends more than one request states",
+        ("retries counted", "about two dozen", "ADR-0061, decision 8"),
+        id="s8-the-bound",
+    ),
+    pytest.param(
+        8,
+        "A source pages a tool only where a second run of its task costs upstream nothing",
+        ("ADR-0061, decision 9", "ADR-0047, decision 2, amendment 2026-11-24"),
+        id="s8-the-paged-cap",
+    ),
+    pytest.param(
+        10,
+        "The family check fails a read task",
+        ("bulk or not", "ADR-0061, decision 3"),
+        id="s10-the-verbs-check",
+    ),
+    pytest.param(
+        10,
+        "A value set that a package writes by hand from upstream's document",
+        ("an offline test", "ADR-0061, decision 12"),
+        id="s10-a-value-set",
+    ),
+]
+
+
+@pytest.mark.parametrize(("number", "phrase", "names"), BOUNDARY_RULES + WAYS_RULES)
+def test_each_rule_of_the_boundary_and_the_ways_is_one_sentence_that_cites_its_decision(
+    number: int, phrase: str, names: tuple[str, ...]
+) -> None:
+    rule = sentence(section(number), phrase)
+    for name in names:
+        assert name in rule, f"§{number}: {rule!r} does not name {name!r}"
+
+
+def decisions(record: str) -> dict[int, str]:
+    """The numbered decisions of a record under `docs/adr/`, each on one line."""
+    (path,) = (ROOT / "docs" / "adr").glob(f"{record.removeprefix('ADR-')}-*.md")
+    text = path.read_text(encoding="utf-8").split("## Decision", 1)[1].split("\n## ", 1)[0]
+    found = re.findall(r"^(\d+)\. (.*?)(?=^\d+\. |\Z)", text, re.MULTILINE | re.DOTALL)
+    return {int(number): flat(body) for number, body in found}
+
+
+def test_section_14_holds_the_six_sentences_word_for_word() -> None:
+    # The organization's check quotes §14, so it holds ADR-0060's decisions 1 to 6 as they are.
+    text = CONVENTIONS.read_text(encoding="utf-8")
+    found = re.search(r"^## 14\. .*?(?=^## |\Z)", text, re.MULTILINE | re.DOTALL)
+    assert found, "the conventions have no section 14"
+    items = re.findall(
+        r"^(\d+)\. (.*?)(?=^\d+\. |^\S|\Z)", found.group(0), re.MULTILINE | re.DOTALL
+    )
+    held = {int(number): flat(body) for number, body in items}
+    stated = decisions(BOUNDARY)
+    assert held == {number: stated[number] for number in range(1, 7)}
+    assert BOUNDARY in flat(found.group(0)).split(" 1. ")[0], "§14 opens citing ADR-0060"
+
+
+def test_the_verbs_stand_in_sections_1_and_10_as_the_family_check_reads_them() -> None:
+    # The two sentences list exactly the verbs the check looks for, in their order.
+    verbs = [f"`{verb}_`" for verb in family._READ_VERBS]
+    listed = ", ".join(verbs[:-1]) + f" or {verbs[-1]}"
+    for number, phrase in (
+        (1, "A task's name starts with one of six verbs"),
+        (10, "The family check fails a read task"),
+    ):
+        rule = sentence(section(number), phrase)
+        assert listed in rule, f"§{number}: {rule!r} does not list {listed!r}"
+
+
+def test_the_review_checklist_judges_the_boundary_and_the_ways_by_their_records() -> None:
+    item = checklist_item(2)
+    for name in ("boundary of conventions §14", "§3's four rules", BOUNDARY, WAYS):
+        assert name in item, f"item 2 does not say {name!r}"
+
+
+AMENDED = {
+    "ADR-0028": BOUNDARY,
+    "ADR-0001": BOUNDARY,
+    "ADR-0020": BOUNDARY,
+    "ADR-0034": BOUNDARY,
+    "ADR-0041": BOUNDARY,
+    "ADR-0047": WAYS,
+    "ADR-0011": WAYS,
+}
+
+
+@pytest.mark.parametrize(("record", "by"), AMENDED.items())
+def test_each_record_the_two_touch_takes_one_sentence_that_points_to_them(
+    record: str, by: str
+) -> None:
+    (path,) = (ROOT / "docs" / "adr").glob(f"{record.removeprefix('ADR-')}-*.md")
+    amendment = flat(path.read_text(encoding="utf-8").split("## Amendment 2026-11-24", 1)[1])
+    assert amendment.startswith(f"Amended by {by}"), f"{record}: {amendment[:60]!r}"
+    assert amendment.endswith("."), f"{record}: the sentence ends the record"
+    assert ". " not in amendment, f"{record}: one sentence"
+    records = json.loads(INDEX.read_text(encoding="utf-8"))["records"]
+    found = next(r for r in records if r["id"] == record)
+    assert found["amended"][-1] == {"date": "2026-11-24", "by": WAYS_QUESTION}
+
+
+def test_both_records_keep_their_question_and_adr_0041_its_last_amendment() -> None:
+    records = {r["id"]: r for r in json.loads(INDEX.read_text(encoding="utf-8"))["records"]}
+    assert records[BOUNDARY]["decided_by"] == records[WAYS]["decided_by"] == WAYS_QUESTION
+    assert len(decisions(WAYS)) == 12, "one decision per way"
+    assert len(records["ADR-0041"]["amended"]) == 2
+
+
 # §8: what a write tool's preview shows, and its check (sdk-core#182, decided by the human in
 # https://github.com/xippios/sdk-core/issues/369). The confirm rule stays ADR-0036's, decision 9.
 
