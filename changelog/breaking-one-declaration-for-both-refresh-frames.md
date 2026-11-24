@@ -14,20 +14,21 @@
     sdk-usda-wasde) — the port to core's frame that the template renders declares the lists
     in one `LISTS = Lists(package=..., lists=(...), packaged=PACKAGED_LISTS, client=client)`,
     with `quota_header` where upstream reports its quota, and ends with
-    `raise SystemExit(run(LISTS))`, and a list of values is fetched as records of one field
+    `raise SystemExit(run(LISTS))`. A list of values is fetched as records of one field
     named by the list, `[{name: value} for value in values]`, as sdk-usda-nass's
     `fetch_param` builds them (`:306`), where sdk-faostat (`:353`), sdk-usda-gats (`:253`)
-    and sdk-usda-psd (`:157`) hand the frame's values today — `run` takes one declaration
-    and a fetch answers records or a finished `PackagedList`.
-    `scripts/refresh_reference.py` (sdk-comtrade, sdk-eurostat, sdk-faostat, sdk-usda-esr,
-    sdk-usda-gats, sdk-usda-nass, sdk-usda-psd) — the import of `render_enums`,
-    `id_name_pairs` or `enum_member_name` from `xippios.core.reference` (sdk-comtrade `:71`,
-    sdk-eurostat `:93`, sdk-faostat `:75`, sdk-usda-esr `:69`, sdk-usda-gats `:62`,
-    sdk-usda-nass `:57`, sdk-usda-psd `:51`) fails, so each enum becomes its list's
-    `Enumeration()`, or `Enumeration(ids=..., names=...)` for an id list, and
-    sdk-usda-nass's `class_names` and `member_names` (`:213`, `:332-337`) become each
-    list's `Enumeration(class_name=..., member_names=...)` — the renderer leaves the
-    run-time module for the frame.
+    and sdk-usda-psd (`:157`) make them from values today. The import of `render_enums`,
+    `id_name_pairs` or `enum_member_name` from `xippios.core.reference` fails in seven of
+    them (sdk-comtrade `:71`, sdk-eurostat `:93`, sdk-faostat `:75`, sdk-usda-esr `:69`,
+    sdk-usda-gats `:62`, sdk-usda-nass `:57`, sdk-usda-psd `:51`), so each enum becomes its
+    list's `Enumeration()`, or `Enumeration(ids=..., names=...)` for an id list. In
+    sdk-usda-nass, `CLASS_NAMES` (`:180`) becomes `Enumeration(class_name=...)` of its two
+    derived lists, and `member_names` (`:216`) becomes `Enumeration(member_names=...)` of
+    `unit_desc`, a function of its values that names each value with `$` by `dollar_name`,
+    and of `domain_desc`, the mapping `_SPELLED_OUT`. `dollar_name` (`:211-213`) keeps its
+    call of `enum_member_name` and imports it from `xippios.core.refresh.reference`, outside
+    core's pinned surface — `run` takes one declaration, a fetch answers records or a
+    finished `PackagedList`, and the renderer leaves the run-time module for the frame.
     `src/xippios/usda/<name>/reference/README.md` (sdk-usda-esr `:21`, sdk-usda-gats `:30`,
     sdk-usda-psd `:24`) — the header `| File | Origin | Fetched (UTC) | Records |` becomes
     the template's `| File | Origin | Fetched |` over `| --- | --- | --- |`, and each row

@@ -1253,7 +1253,7 @@ class AttributeId(IntEnum):
 Each class's docstring is one line naming the list and its fetch date, which an MCP tool's
 input schema shows the agent (conventions §8). The output is plain and ASCII-only: values are
 written as `ascii()` writes them, every character outside ASCII as an escape
-(`'C\xf4te d’Ivoire'`), one member per line, `__all__` in the order of the lists, and a
+(`'C\xf4te d\u2019Ivoire'`), one member per line, `__all__` in the order of the lists, and a
 line over 100 columns carries `# noqa: E501`; ruff chooses the quotes, wraps what fits and
 sorts `__all__`. A key, class name or fetch date that is not printable ASCII is refused, and
 so is an empty list, a repeated id, and a value with nothing to derive a member name from (an
@@ -1265,7 +1265,7 @@ Listed(
     "short_desc",
     short_desc,
     endpoint="get_param_values",
-    enum=Enumeration(member_names={"北京": "BEIJING"}),
+    enum=Enumeration(member_names={"\u5317\u4eac": "BEIJING"}),
 )
 ```
 
