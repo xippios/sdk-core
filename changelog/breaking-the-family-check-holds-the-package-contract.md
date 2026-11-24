@@ -54,15 +54,21 @@
     `test_a_tool_answer_with_data_is_not_flagged` and its helper `call`, sdk-google-mail's
     `test_a_bound_server_refuses_a_call_that_still_names_the_account`,
     `test_an_error_answer_is_flagged` and
-    `test_a_route_answers_a_refused_argument_as_problem_details`, and the assertions that
-    `mcp.ENV_VARS` and `mcp_write.ENV_VARS` are `_client.ENV_VARS` in sdk-cashctrl's
+    `test_a_route_answers_a_refused_argument_as_problem_details`, the assertion that
+    `mcp.ENV_VARS` is `_client.ENV_VARS` in sdk-cashctrl's
     `test_env_vars_name_the_organisations_and_their_pair_secret`, sdk-faostat's
     `test_env_vars_name_the_account_both_secret_and_required`, sdk-google-mail's
     `test_env_vars_name_the_account_list_the_refresh_tokens_and_the_client_pair` and sdk-x's
     `test_env_vars_name_the_bearer_token_secret_and_required`, and those of `mcp.build()`'s
-    source, its `read_only` and `mcp.server` in sdk-faostat's, sdk-google-mail's and sdk-x's
-    `test_build_is_the_tool_set_the_entry_point_serves`, whose other assertions stay — each holds
-    what the family check or core's own tests hold for every source (ADR-0063, decision 8).
+    source, its `read_only` and `mcp.server` in sdk-faostat's and sdk-x's
+    `test_build_is_the_tool_set_the_entry_point_serves` and in its `mcp` case of
+    sdk-google-mail's, with those of `mcp_write.build()`'s source and `read_only` in its
+    `mcp_write` case, whose other assertions stay, sdk-cashctrl's and sdk-google-mail's
+    assertion that `mcp_write.ENV_VARS` is `_client.ENV_VARS` and the `mcp_write` case's
+    comparison of `mcp_write.server` with `build_server(mcp_write.build())` among them — the
+    family check holds `mcp.build()`, `mcp.server` and `mcp.ENV_VARS`, and of the write server
+    `mcp_write.build()` alone, and core's own tests hold what its adapters answer for every
+    source (ADR-0063, decision 8).
     `tests/test_entry_points.py` (sdk-cashctrl) —
     `test_the_servers_are_read_and_write_with_no_alias` leaves — the family check holds the two
     entry points and no third (ADR-0063, decision 8).
@@ -78,10 +84,15 @@
     `test_every_slice_is_exported_as_a_tool` and the assertions of the re-export in
     sdk-usda-esr's `test_every_slice_is_exported` leave — the family check holds the re-export
     and the tools of every task (ADR-0063, decision 8).
-    `tests/test_org_lock.py` and `tests/test_errors.py` (sdk-cashctrl), `tests/test_account_lock.py`
-    (sdk-google-mail) — the assertions of core's answer to a refused argument in
-    `test_the_bound_read_server_reaches_the_bound_organisation_only`,
-    `test_a_rejection_is_an_invalid_request_for_both_adapters` and
-    `test_the_bound_read_server_answers_for_the_bound_account_only` leave, and the assertions of
-    the source's own refusal stay — core's adapters answer the same for every source
+    `tests/test_org_lock.py` (sdk-cashctrl) — the assertions of core's answer to a refused
+    argument in `test_the_bound_read_server_reaches_the_bound_organisation_only` leave, and
+    those of the source's own refusal stay — core's adapters answer the same for every source
+    (ADR-0063, decision 8).
+    `tests/test_errors.py` (sdk-cashctrl) — the assertions of `status_for` and `error_to_text`
+    in `test_a_rejection_is_an_invalid_request_for_both_adapters` leave, and the one that
+    `RequestRejected` is an `InvalidRequestError` stays — core's adapters answer an
+    `InvalidRequestError` the same for every source (ADR-0063, decision 8).
+    `tests/test_account_lock.py` (sdk-google-mail) — the assertions of core's answer to a refused
+    argument in `test_the_bound_read_server_answers_for_the_bound_account_only` leave, and those
+    of the source's own refusal stay — core's adapters answer the same for every source
     (ADR-0063, decision 8).

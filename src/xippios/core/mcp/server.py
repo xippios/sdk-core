@@ -249,21 +249,34 @@ def _argument_texts(fn: Callable[..., Any]) -> dict[str, str]:
     return {name: text for name, text in texts.items() if text}
 
 
+_UNION = type(int | None)
+"""The type of ``X | Y``, which ``typing.get_origin`` gives beside ``typing.Union``."""
+
+
 def _declares_a_description(annotation: Any) -> bool:
-    """Whether ``annotation`` is ``Annotated`` with a ``Field`` that holds a description."""
-    if typing.get_origin(annotation) is not Annotated:
-        return False
-    return any(
-        isinstance(meta, FieldInfo) and meta.description is not None
-        for meta in typing.get_args(annotation)[1:]
-    )
+    """Whether ``annotation`` holds a ``Field`` with a description in its ``Annotated`` metadata.
+
+    The metadata counts at the top and in each member of a union, so that
+    ``Annotated[str, Field(description=...)] | None`` declares one as
+    ``Annotated[str | None, Field(description=...)]`` does
+    (https://github.com/xippios/sdk-core/pull/533, finding 1).
+    """
+    if typing.get_origin(annotation) is Annotated:
+        base, *metadata = typing.get_args(annotation)
+        if any(isinstance(meta, FieldInfo) and meta.description is not None for meta in metadata):
+            return True
+        annotation = base
+    if typing.get_origin(annotation) in (typing.Union, _UNION):
+        return any(_declares_a_description(member) for member in typing.get_args(annotation))
+    return False
 
 
 def _with_text(parameter: inspect.Parameter, text: str | None) -> inspect.Parameter:
     """``parameter`` described by ``text``, its argument's text under ``Args:``.
 
-    A parameter whose ``Annotated`` metadata declares a description keeps it, since it is
-    the parameter's own, and so does a parameter without an annotation or without text.
+    A parameter whose ``Annotated`` metadata declares a description keeps it, at the top or
+    in a member of a union, since it is the parameter's own, and so does a parameter without
+    an annotation or without text.
     """
     annotation = parameter.annotation
     if not text or annotation is inspect.Parameter.empty or _declares_a_description(annotation):
