@@ -1232,10 +1232,7 @@ def test_a_keyed_sample_follows_no_redirect_and_is_never_retried(
     assert not out.exists(), "nothing written"
 
 
-BY_AUTH = (
-    "each redirect and retry counted, and each token request and resend of the client's "
-    "auth, a refused login not counted"
-)
+BY_AUTH = "each redirect and retry counted, and each token request and resend of the client's auth"
 """What the run's last line says after its count where the client logs in."""
 BEARER = "made-up-bearer"
 """The bearer that the login's token endpoint answers, which nothing the run prints holds."""
@@ -1274,8 +1271,8 @@ def test_the_run_counts_each_request_of_a_renewing_auth(
     """https://github.com/xippios/sdk-core/issues/579 (ADR-0062, decision 4; ADR-0025): the
     client's auth logs in before the keyed sample and, its bearer refused with a 401, logs in
     again and sends the sample once more, which is no retry of the frame; the run counts each
-    of those requests, from the history that the client's answer keeps as statuses alone. A
-    login whose answer the auth refuses stops the run, and its request is not counted."""
+    of those requests, which the client counts as it hands each to its transport. A login
+    whose answer the auth refuses stops the run, and its request is counted too."""
     for name in VARIABLES:
         monkeypatch.setenv(name, "someone")
     snapshot = login_snapshot(site, out)
@@ -1293,7 +1290,33 @@ def test_the_run_counts_each_request_of_a_renewing_auth(
     with pytest.raises(SystemExit, match=r"401 from POST /v1/token: Unauthorized"):
         go(refused)
     printed = capsys.readouterr().out
-    assert f"1 requests sent, {BY_AUTH}\n" in printed, "the guide alone, the login not"
+    assert f"2 requests sent, {BY_AUTH}\n" in printed, "the guide and the refused login"
+
+
+def test_a_call_that_an_error_ends_counts_the_auth_s_requests_before_it(
+    site: Site, out: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """https://github.com/xippios/sdk-core/pull/580, finding 2: the client counts each request
+    it hands to its transport, so a call that an error ends counts the auth's requests before
+    it, which no answer carries: a login, the sample refused with a 401 and a second login
+    that the auth refuses are three, and a login and a sample that fails in transit two."""
+    for name in VARIABLES:
+        monkeypatch.setenv(name, "someone")
+    snapshot = login_snapshot(site, out)
+    token = site.routes[f"{API}/token"]
+    site.later[f"{API}/token"] = [token]
+    site.routes[f"{API}/token"] = (401, {}, b"")
+    site.later[f"{API}/items"] = [(401, {}, b"")]
+    capsys.readouterr()
+    with pytest.raises(SystemExit, match=r"401 from POST /v1/token: Unauthorized"):
+        go(snapshot)
+    assert f"4 requests sent, {BY_AUTH}\n" in capsys.readouterr().out, "the guide and three"
+    snapshot = login_snapshot(site, out)
+    del site.routes[f"{API}/items"]
+    with pytest.raises(SystemExit, match="is not served; a keyed request is not retried"):
+        go(snapshot)
+    assert f"3 requests sent, {BY_AUTH}\n" in capsys.readouterr().out, "the guide and two"
+    assert not out.exists(), "nothing written"
 
 
 def test_a_failed_run_prints_the_requests_it_sent(

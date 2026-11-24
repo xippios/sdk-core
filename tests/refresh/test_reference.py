@@ -274,7 +274,7 @@ def test_a_transport_error_is_counted_as_sent(source: Source) -> None:
 
 
 ACCOUNT = "EXAMPLE_ACCOUNT"
-BY_AUTH = "each token request and resend of the client's auth among them, a refused one not"
+BY_AUTH = "each token request and resend of the client's auth among them"
 """What the count says of a client whose auth logs in, after the number."""
 
 
@@ -306,8 +306,9 @@ def test_the_requests_of_a_renewing_auth_are_counted(
     """https://github.com/xippios/sdk-core/issues/579 (ADR-0062, decision 14; ADR-0025): the
     client's auth logs in before the first list and, its bearer refused with a 401, logs in
     again and sends the request once more, which is no retry of the run's one attempt; the run
-    counts each of those requests, from the answer's history, and says so. A login whose
-    answer the auth refuses ends the run, its request not counted."""
+    counts each of those requests, which the client counts as it sends them, and says so. A
+    login whose answer the auth refuses ends the run, its request counted, and so do the
+    requests before it in its call (https://github.com/xippios/sdk-core/pull/580, finding 2)."""
     monkeypatch.setenv(ACCOUNT, "someone")
     token = {"access_token": "made-up-bearer", "expires_in": 3600}
     client, lists = login_lists()
@@ -332,7 +333,16 @@ def test_the_requests_of_a_renewing_auth_are_counted(
         error, printed = go_raising(source, lists, client=client)
     assert isinstance(error, AuthError), error
     assert data.call_count == 0
-    assert f"requests sent: 0, {BY_AUTH}; quota left: not reported" in printed, printed
+    assert f"requests sent: 1, {BY_AUTH}; quota left: not reported" in printed, printed
+    client, lists = login_lists()
+    with respx.mock(base_url=BASE, assert_all_called=False) as upstream:
+        upstream.post("/token").mock(
+            side_effect=[httpx.Response(200, json=token), httpx.Response(401)]
+        )
+        upstream.get("/get_param_values").respond(401)
+        error, printed = go_raising(source, lists, client=client)
+    assert isinstance(error, AuthError), error
+    assert f"requests sent: 3, {BY_AUTH}; quota left: not reported" in printed, "login, 401, login"
     assert source.files() == before, "nothing written"
 
 
