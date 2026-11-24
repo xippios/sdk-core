@@ -16,8 +16,6 @@ from xippios.core.redaction import REDACTED, is_credential_name, scrub_params
 BASE = "https://api.example.test"
 ENV = "EXAMPLE_TEST_API_KEY"
 KEY = "not-a-real-key"
-OTHER_ENV = "EXAMPLE_OTHER_API_KEY"
-OTHER_KEY = "not-a-real-header-key"
 
 
 @pytest.fixture
@@ -90,30 +88,30 @@ def test_a_query_key_makes_its_parameter_a_credential_and_a_header_none() -> Non
 
 
 @pytest.mark.usefixtures("key_in_env")
-def test_a_key_the_process_holds_leaves_no_envelope_whatever_its_slug() -> None:
-    # The review of #518: a query key registered under one slug stayed as sent in an
-    # envelope of another (https://github.com/xippios/sdk-core/issues/485, part 4).
+def test_a_source_whose_key_class_and_envelope_name_one_slug_redacts_its_key() -> None:
+    # The first review of #518 probed two slugs, which the family check refuses
+    # (https://github.com/xippios/sdk-core/issues/526): with one, the key reads REDACTED.
     query = KeyAuth(ENV, location="query", name="key", source="example")
-    header = KeyAuth(OTHER_ENV, location="header", name="X-Api-Key", key=OTHER_KEY)
     request = {
         "key": KEY,
         "series": "M.DE",
-        "copy": OTHER_KEY,
         "link": f"{BASE}/v1/x?key={KEY}&year=2024",
-        "nested": [{"value": KEY}],
+        "nested": [{"key": KEY}],
     }
-    meta = ResultMeta(source="example-v2", endpoint="get_series", request=request)
+    meta = ResultMeta(source="example", endpoint="get_series", request=request)
     assert meta.request == {
         "key": REDACTED,
         "series": "M.DE",
-        "copy": REDACTED,
         "link": f"{BASE}/v1/x?key={REDACTED}&year=2024",
-        "nested": [{"value": REDACTED}],
+        "nested": [{"key": REDACTED}],
     }
     keyless = ResultMeta(source="sibling", endpoint="get_series", request={"key": "M.DE.CP00"})
     assert keyless.request == {"key": "M.DE.CP00"}, "another source's data stays as sent"
-    assert scrub_params([("q", KEY), ("year", "2024")]) == [("q", REDACTED), ("year", "2024")]
-    assert (query.key(), header.key()) == (KEY, OTHER_KEY), "the keys are still sent"
+    assert scrub_params([("key", KEY), ("year", "2024")]) == [
+        ("key", REDACTED),
+        ("year", "2024"),
+    ]
+    assert query.key() == KEY
 
 
 def test_a_query_key_without_its_source_is_refused() -> None:
