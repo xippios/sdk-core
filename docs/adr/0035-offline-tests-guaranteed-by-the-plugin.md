@@ -2,7 +2,8 @@
 
 Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under
 https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0013 ·
-Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/475
+Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/475 ·
+Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/538
 
 ## Context
 
@@ -171,3 +172,13 @@ several fail every test of the family check, by part 7 of the answer; and in the
 consequence a source declares its key variables secret in `_client.ENV_VARS` in place of its
 pytest configuration, where pytest warns on an option that leaves, while decisions 1, 2, 4 to 7
 and 9, the rest of decisions 3 and 8 and the other consequences stand as written.
+
+Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/538: in decision 3 the package
+whose secret variables hold the placeholder is the one with a `_client.py` under the
+repository's own `src/xippios/`, a source or a publisher's shared package that holds a key and
+no `tasks.py` (ADR-0065, decision 3) and declares its variables in a `_client.py` of its own, so
+that a repository with none, a package with a `tasks.py` and no `_client.py` among them, or with
+several names no variable and raises no error, and a package installed beside it, a source's
+shared package in its environment say, is not read, while no ini option comes back, the family
+check still tests the one package with a `tasks.py`, and the rest of the first amendment stands
+as written.

@@ -1823,7 +1823,11 @@ TENANTS = Tenants(
   cache backend of the source's own is the source's to clear), and every `EnvKeyAuth`
   sends `PLACEHOLDER_KEY` while each secret variable of `_client.ENV_VARS` holds it, a
   pattern once for each reserved tenant of the `Tenants` that `_client.py` holds (fixture
-  `placeholder_api_key`), whatever the shell or an earlier live test left behind. A
+  `placeholder_api_key`), whatever the shell or an earlier live test left behind. The
+  plugin reads the one package with a `_client.py` under the repository's own
+  `src/xippios/`, a source or a publisher's shared package that holds a key, and a
+  repository with none, a package with a `tasks.py` and no `_client.py` say, or with several
+  sets no variable and raises no error. A
   fixture of the source's own that sets one of them, a reserved tenant's recorded host
   say, runs after it. Every credential that a `RenewingBearerAuth` reads is the
   placeholder too, and a variable unset or empty is still its `ConfigError`, so
