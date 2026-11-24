@@ -1598,6 +1598,24 @@ def test_a_narrowed_tool_set_s_caller_drops_the_caps_of_the_tasks_it_drops() -> 
             assert words in text, f"{name} does not say {words!r}"
 
 
+def test_adr_0063_and_tool_set_s_docstring_say_what_each_refusal_of_a_tool_set_names() -> None:
+    # The refusal of a key of `caps` names the key, and those of a write task without `confirm`
+    # and of a paged cap name the tool (`_check`), where decision 3 and the docstring's Raises
+    # said of each that it names the tool (the review of
+    # https://github.com/xippios/sdk-core/pull/568, finding 1).
+    from xippios.core.mcp import ToolSet
+
+    rule = sentence(decisions("ADR-0063")[3], "Each refusal is a `ValueError`")
+    raises = flat((ToolSet.__doc__ or "").split("Raises:", 1)[1]).replace("``", "`")
+    for name, text in (("ADR-0063, decision 3", rule), ("ToolSet's Raises", raises)):
+        assert "names the tool and says why" not in text, f"{name} still says so of each"
+        for words in (
+            "the refusal of a key of `caps` names the key",
+            "the refusals of the other two checks name the tool",
+        ):
+            assert words in text, f"{name} does not say {words!r}"
+
+
 def test_no_sentence_of_section_8_makes_the_whole_docstring_the_description() -> None:
     assert "The function docstring is the tool description" not in section(8)
 
