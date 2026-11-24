@@ -2009,6 +2009,49 @@ callers compatible, while a check of `xippios.core.testing` that a record makes 
 may fail a source's own test (conventions §12; ADR-0058, decision 2). A source depends on
 one minor (`xippios-core~=0.4.1`) and adopts the next through conventions §15 (ADR-0039).
 
+## Counting the surface and its consumers
+
+`scripts/count_surface.py` counts core's surface in two parts and, given the trees of its
+consumers, reports who consumes each piece (https://github.com/xippios/sdk-core/issues/485).
+It is a report: it fails nothing, it exits 0 on any tree it can read, and no name and no
+parameter leaves core by its count alone. It reads by `ast` and imports nothing, so the
+standard library runs it:
+
+```bash
+python3 -I scripts/count_surface.py                                # the surface alone
+python3 -I scripts/count_surface.py example=../sdk-example host=../example-host
+python3 -I scripts/count_surface.py --json example=../sdk-example  # the report as JSON
+```
+
+The surface is the six pinned lists, counted in two parts while the package stays one. The
+workbench is `xippios.core.testing` and `xippios.core.refresh` with the modules under
+`testing/` and `refresh/`, and the run-time part is the rest. Each part counts its names, a
+name that two of its lists pin once, and the lines of its modules: one line per list, one per
+part, and one for the package, which names what both parts pin.
+
+A consumer is the tree of a source or of the host, named as `name=<path>`. Its code is of four
+kinds, as the answer on https://github.com/xippios/sdk-core/issues/473 counts it: `package`
+under `src/`, `scripts`, `tests`, and `commands`, the code blocks of `.claude/commands/*.md`.
+A `fixtures` folder is recorded data and is not read. The report gives one line per item:
+
+```text
+name xippios.core:closest: 2 consumers: example (package; by xippios.core.models), host (package)
+parameter xippios.core:closest(cutoff=): 1 consumer: example (package)
+outside xippios.core.testing.plugin: 1 consumer: example (tests)
+```
+
+A `name` line is each pinned name, with the module's path where a consumer imports its object
+from outside the lists. An object that two lists pin, such as a class of `xippios.core.client`
+that `xippios.core` pins too, is one: a consumer of either entry counts for both, by the other
+list's path, and the second entry's line names the first, which it repeats. A `parameter` line is each keyword-only parameter of a pinned function
+or constructor: a dataclass's with `kw_only=True`, a pydantic model's fields, and the keywords
+that a subclass passes by `super().__init__` count too. An `outside` line is each import from
+core outside the lists, a module that `pytest_plugins` names among them. A method's keywords,
+such as `client.get(params=...)`, are not counted, since `ast` does not know an object's class,
+nor is a keyword passed through `**options`, nor a field of a dataclass that a caller may pass
+by position. The last lines tally the names and the parameters with no consumer, one, and two
+or more, each object once, and count the entries that repeat one.
+
 ## Documents
 
 - sdk-core: [docs/conventions.md](https://github.com/xippios/sdk-core/blob/main/docs/conventions.md) — the rules of the family, which this package implements and every `sdk-*` repository follows; a change to one comes with an ADR.
