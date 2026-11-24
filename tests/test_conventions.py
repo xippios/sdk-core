@@ -378,6 +378,8 @@ def test_both_questions_keep_the_record() -> None:
 BOUNDARY = "ADR-0060"
 WAYS = "ADR-0061"
 WAYS_QUESTION = "https://github.com/xippios/sdk-core/issues/474"
+READINGS = "https://github.com/xippios/sdk-usda-esr/issues/60"
+"""The maintainer's answer that read two rules for the family: the order and a printed time."""
 
 BOUNDARY_RULES = [
     pytest.param(
@@ -412,6 +414,12 @@ BOUNDARY_RULES = [
     ),
     pytest.param(
         3,
+        "A time that upstream prints is read into the type that keeps everything upstream sends",
+        ("naive", "no text stands beside it", "ADR-0060, decision 8", f"{READINGS}, part 3"),
+        id="s3-a-printed-time",
+    ),
+    pytest.param(
+        3,
         "Upstream's own name is the name in its API document",
         ("`Field(validation_alias=...)`", "never `Field(alias=...)`", "ADR-0028, decision 2"),
         id="s3-upstream-s-name",
@@ -419,7 +427,13 @@ BOUNDARY_RULES = [
     pytest.param(
         3,
         "A record that a package shapes itself",
-        ("four rules", "`<stem>_number`", "`<stem>_label`", "ADR-0060, decision 7"),
+        (
+            "four rules",
+            "the one suffix of a reading, `<stem>_number`",
+            "the label as `<stem>_label` beside the code `<stem>`",
+            "ADR-0060, decision 7",
+            f"{READINGS}, part 3",
+        ),
         id="s3-a-shaped-record",
     ),
     pytest.param(
@@ -474,9 +488,10 @@ BOUNDARY_RULES = [
         10,
         "The family check fails a model that a task's `Result[T]` reaches",
         (
-            "`<stem>_number` or `<stem>_label`",
+            "`<stem>_number` stands beside",
             "holds no text",
             "upstream's own name and no reading",
+            "a code's label `<stem>_label`, which is no reading",
             "ADR-0060, decision 9",
         ),
         id="s10-the-reading-s-check",
@@ -508,7 +523,13 @@ WAYS_RULES = [
     pytest.param(
         2,
         "Within a source one concept stands at one position in every task",
-        ("keyword-only", "ADR-0061, decision 5"),
+        (
+            "positional, in the order of upstream's path",
+            "every optional filter and every argument of the package's own is keyword-only",
+            "`get_series(region_code, year, *, unit=None)`",
+            "ADR-0061, decision 5",
+            f"{READINGS}, part 1",
+        ),
         id="s2-one-order",
     ),
     pytest.param(
