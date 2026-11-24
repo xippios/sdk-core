@@ -644,18 +644,77 @@ AMENDED = {
 }
 
 
+def amendments(record: str, date: str) -> list[str]:
+    """The paragraphs of a record's `## Amendment <date>` section, its last, each on one line."""
+    (path,) = (ROOT / "docs" / "adr").glob(f"{record.removeprefix('ADR-')}-*.md")
+    text = path.read_text(encoding="utf-8").split(f"## Amendment {date}", 1)[1]
+    return [flat(paragraph) for paragraph in text.split("\n\n") if paragraph.strip()]
+
+
 @pytest.mark.parametrize(("record", "by"), AMENDED.items())
 def test_each_record_the_two_touch_takes_one_sentence_that_points_to_them(
     record: str, by: str
 ) -> None:
-    (path,) = (ROOT / "docs" / "adr").glob(f"{record.removeprefix('ADR-')}-*.md")
-    amendment = flat(path.read_text(encoding="utf-8").split("## Amendment 2026-11-24", 1)[1])
+    # A later amendment of the same day stands in the section as a paragraph of its own.
+    paragraphs = amendments(record, "2026-11-24")
+    amendment = next((p for p in paragraphs if p.startswith(f"Amended by {by}")), paragraphs[0])
     assert amendment.startswith(f"Amended by {by}"), f"{record}: {amendment[:60]!r}"
-    assert amendment.endswith("."), f"{record}: the sentence ends the record"
+    assert amendment.endswith("."), f"{record}: the sentence ends its paragraph"
     assert ". " not in amendment, f"{record}: one sentence"
     records = json.loads(INDEX.read_text(encoding="utf-8"))["records"]
     found = next(r for r in records if r["id"] == record)
-    assert found["amended"][-1] == {"date": "2026-11-24", "by": WAYS_QUESTION}
+    assert {"date": "2026-11-24", "by": WAYS_QUESTION} in found["amended"]
+
+
+# §4 and ADR-0034: the one walk of pages, which refuses at its bound (decided by the human in
+# https://github.com/xippios/sdk-core/issues/480).
+
+WALK_QUESTION = "https://github.com/xippios/sdk-core/issues/480"
+
+
+def test_adr_0034_names_the_one_walk_in_one_sentence_after_the_ways() -> None:
+    first, walk = amendments("ADR-0034", "2026-11-24")
+    assert first.startswith(f"Amended by {BOUNDARY}"), "step 2's sentence stands first"
+    assert walk.startswith(f"Amended by {WALK_QUESTION}"), walk[:60]
+    assert walk.endswith("."), "the sentence ends the record"
+    assert ". " not in walk, "one sentence"
+    for name in (
+        "decision 2",
+        "`paginate_offset` with `collect`",
+        "`fetch_pages`",
+        "at or past upstream's count",
+        "returns nothing",
+        "stop rule",
+        "sdk-usda-esmis",
+        "key",
+        "no consumer",
+        "ADR-0061, decision 8",
+        "ADR-0059, decision 6",
+    ):
+        assert name in walk, f"ADR-0034's amendment does not name {name!r}"
+    records = json.loads(INDEX.read_text(encoding="utf-8"))["records"]
+    found = next(r for r in records if r["id"] == "ADR-0034")
+    assert found["amended"][-2:] == [
+        {"date": "2026-11-24", "by": WAYS_QUESTION},
+        {"date": "2026-11-24", "by": WALK_QUESTION},
+    ]
+
+
+def test_section_4_holds_the_walk_and_its_refusal_in_one_sentence() -> None:
+    rule = sentence(section(4), "collects every page of an offset-paged list with core's")
+    for name in (
+        "`fetch_pages(fetch, *, page_size, most, paging)`",
+        "retries counted",
+        "no request at or past upstream's count",
+        "returns nothing",
+        "the task's stop rule",
+        "the count, the bound, the paging argument, the requests sent, the page reached and the "
+        "total of pages",
+        "ADR-0061, decision 8",
+        "ADR-0034, decision 2, amendment 2026-11-24",
+    ):
+        assert name in rule, f"§4: {rule!r} does not name {name!r}"
+    assert "caps what it collects" not in section(4), "the walk caps nothing: it refuses"
 
 
 def test_both_records_keep_their_question_and_adr_0041_its_last_amendment() -> None:
