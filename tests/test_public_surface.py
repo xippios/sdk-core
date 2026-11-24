@@ -57,17 +57,16 @@ EXPORTS = {
     "xippios.core.testing": {
         "CLOCK_SLACK", "REDACTED", "Fixture", "FixtureResponse", "ReplayFixture", "Scrub",
         "assert_projection", "assert_time_between", "fixture_from_response", "fixture_path",
-        "fixture_text", "load_fixture", "mcp_call", "mcp_call_text", "record", "record_sync",
+        "fixture_text", "load_fixture", "mcp_call", "mcp_call_text", "record",
         "recorded_query", "response_from_fixture", "sent_query", "sent_urls", "write_fixture",
         # the bodies a route received (https://github.com/xippios/sdk-core/issues/183)
         "sent_bodies",
         # the write server's check and the demo-only strip (ADR-0042, decision 1)
         "assert_write_tools", "keep_reserved_tenants",
-        # the recorder's one send, without the write (ADR-0048, decision 3)
-        "send_once", "send_once_sync",
-        # the recording of every exchange of a task (ADR-0057)
-        "record_task", "record_task_sync",
-        # the type of a recorder's rewrite step (ADR-0048, decision 1)
+        # the recorder's one send, without the write, sync under its plain name (ADR-0066,
+        # decisions 3 and 8); the recording of a task went back to its source (decision 9)
+        "send_once",
+        # the type of a recorder's rewrite step (ADR-0066, decision 1)
         "Rewrite",
     },
     "xippios.core.mcp": {

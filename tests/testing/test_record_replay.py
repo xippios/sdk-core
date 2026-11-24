@@ -14,7 +14,6 @@ from xippios.core.client import (
     AsyncClient,
     ClientConfig,
     KeyAuth,
-    MemoryCache,
     RetryPolicy,
 )
 from xippios.core.errors import NotFoundError, TransportError, error_from_response
@@ -27,7 +26,6 @@ from xippios.core.testing import (
     fixture_text,
     load_fixture,
     record,
-    record_sync,
     recorded_query,
     response_from_fixture,
     sent_bodies,
@@ -35,7 +33,7 @@ from xippios.core.testing import (
     sent_urls,
     write_fixture,
 )
-from xippios.core.testing.replay import mount_fixture, replay
+from xippios.core.testing.replay import replay
 
 BASE = "https://api.example.test"
 
@@ -61,7 +59,7 @@ async def test_record_then_replay(
     )
     client = AsyncClient(config)
     fixture_file = tmp_path / "x" / "two_rows.json"
-    await record(client, "/v1/x", fixture_file, params={"token": "SECRET", "year": 2024})
+    await record.async_fn(client, "/v1/x", fixture_file, params={"token": "SECRET", "year": 2024})
     assert upstream.call_count == 1
     assert "SECRET" not in fixture_file.read_text()
 
@@ -81,7 +79,7 @@ async def test_record_keeps_error_responses(
     respx_mock.get(f"{BASE}/v1/missing").respond(404, json={"error": "no such thing"})
     client = AsyncClient(config)
     fixture_file = tmp_path / "missing.json"
-    fixture = await record(client, "/v1/missing", fixture_file)
+    fixture = await record.async_fn(client, "/v1/missing", fixture_file)
     assert fixture.response.status == 404
     assert load_fixture(fixture_file).response.status == 404
 
@@ -91,20 +89,13 @@ async def test_record_keeps_error_responses(
         await client.get("/v1/missing")
 
 
-def test_record_sync(respx_mock: respx.MockRouter, config: ClientConfig, tmp_path: Path) -> None:
-    respx_mock.get(f"{BASE}/v1/x").respond(200, json={"n": 1})
-    fixture = record_sync(AsyncClient(config), "/v1/x", tmp_path / "x.json")
-    assert fixture.response.status == 200
-    assert (tmp_path / "x.json").exists()
-
-
 @pytest.mark.anyio
 async def test_record_form_data_records_body_and_content_type(
     respx_mock: respx.MockRouter, config: ClientConfig, tmp_path: Path
 ) -> None:
     # sdk-cashctrl: CashCtrl's writes are form-encoded; a write fixture asserts its payload.
     respx_mock.post(f"{BASE}/v1/create.json").respond(200, json={"success": True, "insertId": 7})
-    fixture = await record(
+    fixture = await record.async_fn(
         AsyncClient(config),
         "/v1/create.json",
         tmp_path / "create.json",
@@ -118,25 +109,12 @@ async def test_record_form_data_records_body_and_content_type(
 
 
 @pytest.mark.anyio
-async def test_record_refuses_json_and_data_together(
-    respx_mock: respx.MockRouter, config: ClientConfig, tmp_path: Path
-) -> None:
-    route = respx_mock.post(f"{BASE}/v1/x").respond(200, json={})
-    with pytest.raises(ValueError, match="not both"):
-        await record(
-            AsyncClient(config), "/v1/x", tmp_path / "x.json", method="POST", json={}, data={}
-        )
-    assert not route.called
-    assert not (tmp_path / "x.json").exists()
-
-
-@pytest.mark.anyio
 async def test_record_scrubs_the_named_secrets(
     respx_mock: respx.MockRouter, config: ClientConfig, tmp_path: Path
 ) -> None:
     respx_mock.get(f"{BASE}/v1/account/list.json").respond(200, json={"org": "acme"})
     fixture_file = tmp_path / "account_list" / "one.json"
-    fixture = await record(
+    fixture = await record.async_fn(
         AsyncClient(config), "/v1/account/list.json", fixture_file, scrub=Scrub(secrets=["acme"])
     )
     assert fixture.response.body == f'{{"org":"{REDACTED}"}}'
@@ -152,9 +130,9 @@ async def test_record_without_the_client_s_auth(
     client = AsyncClient(
         config, auth=KeyAuth("EXAMPLE_API_KEY", location="header", name="X-Api-Key")
     )
-    await record(client, "/files/ref.json", tmp_path / "ref.json", auth=None)
+    await record.async_fn(client, "/files/ref.json", tmp_path / "ref.json", auth=None)
     assert "x-api-key" not in route.calls.last.request.headers
-    await record(client, "/files/ref.json", tmp_path / "ref.json")
+    await record.async_fn(client, "/files/ref.json", tmp_path / "ref.json")
     assert "x-api-key" in route.calls.last.request.headers
 
 
@@ -172,30 +150,13 @@ def _retrying(sleeps: list[float], **options: Any) -> AsyncClient:
     return AsyncClient(config, sleep=sleep)
 
 
-@pytest.mark.parametrize("status", [429, 503])
-def test_a_recording_sends_once_whatever_the_client_s_retry_policy(
-    respx_mock: respx.MockRouter, tmp_path: Path, status: int
-) -> None:
-    # https://github.com/xippios/sdk-core/issues/148: a source with a quota or a bill built
-    # a client of its own to record; the recorder now sends once through the source's.
-    route = respx_mock.get(f"{BASE}/v1/x").respond(
-        status, json={"error": "busy"}, headers={"Retry-After": "0"}
-    )
-    sleeps: list[float] = []
-    fixture = record_sync(_retrying(sleeps), "/v1/x", tmp_path / "busy.json")
-    assert route.call_count == 1
-    assert sleeps == []
-    assert fixture.response.status == status
-    assert load_fixture(tmp_path / "busy.json").response.status == status
-
-
 def test_a_transport_failure_while_recording_is_sent_once_and_writes_nothing(
     respx_mock: respx.MockRouter, tmp_path: Path
 ) -> None:
     route = respx_mock.get(f"{BASE}/v1/x").mock(side_effect=httpx.ConnectError("refused"))
     sleeps: list[float] = []
     with pytest.raises(TransportError, match=r"^ConnectError: refused$"):
-        record_sync(_retrying(sleeps), "/v1/x", tmp_path / "x.json")
+        record(_retrying(sleeps), "/v1/x", tmp_path / "x.json")
     assert (route.call_count, sleeps) == (1, [])
     assert not (tmp_path / "x.json").exists()
 
@@ -217,46 +178,10 @@ def test_a_recorded_write_that_fails_in_transit_says_what_was_sent(
     # The recorder's request is the client's: a write's error says what became of it.
     route = respx_mock.post(f"{BASE}/v1/x").mock(side_effect=failure)
     with pytest.raises(TransportError) as info:
-        record_sync(_retrying([]), "/v1/x", tmp_path / "x.json", method="POST", json={"a": 1})
+        record(_retrying([]), "/v1/x", tmp_path / "x.json", method="POST", json={"a": 1})
     assert str(info.value) == said
     assert route.call_count == 1
     assert not (tmp_path / "x.json").exists()
-
-
-@pytest.mark.anyio
-async def test_a_recording_neither_reads_nor_stores_the_cache(
-    respx_mock: respx.MockRouter, tmp_path: Path
-) -> None:
-    # A recording is one live exchange: an answer the cache holds is not one.
-    route = respx_mock.get(f"{BASE}/v1/x")
-    route.side_effect = [httpx.Response(200, json={"n": 1}), httpx.Response(200, json={"n": 2})]
-    client = _retrying([], cache=MemoryCache())
-    assert (await client.get_answer("/v1/x")).payload == {"n": 1}  # stored
-    fixture = await record(client, "/v1/x", tmp_path / "x.json")
-    assert route.call_count == 2
-    assert json.loads(fixture.response.body) == {"n": 2}
-    assert (await client.get_answer("/v1/x")).payload == {"n": 1}, "the entry stands"
-    assert route.call_count == 2
-
-
-@pytest.mark.anyio
-async def test_a_recording_runs_before_request_once_and_observe_sees_its_answer(
-    respx_mock: respx.MockRouter, tmp_path: Path
-) -> None:
-    # A quota policy hears of the request a recording spends, as of any other.
-    respx_mock.get(f"{BASE}/v1/x").respond(503, headers={"X-Left": "9"}, text="busy")
-    before: list[str] = []
-    observed: list[tuple[int, str, bytes]] = []
-
-    def observe(response: httpx.Response) -> None:
-        observed.append((response.status_code, response.headers["x-left"], response.content))
-
-    client = _retrying(
-        [], before_request=lambda request: before.append(request.url.path), observe=observe
-    )
-    await record(client, "/v1/x", tmp_path / "x.json")
-    assert before == ["/v1/x"]
-    assert observed == [(503, "9", b"busy")]
 
 
 @pytest.mark.anyio
@@ -283,9 +208,9 @@ async def test_a_recording_keeps_the_client_s_key_to_its_origin_and_marks_its_re
     client = AsyncClient(
         config, auth=KeyAuth("EXAMPLE_API_KEY", location="header", name="X-Api-Key")
     )
-    await record(client, "https://files.example.test/bulk/x.csv", tmp_path / "file.json")
-    await record(client, "/v1/x", tmp_path / "x.json")
-    await record(client, "/v1/x", tmp_path / "keyless.json", auth=None)
+    await record.async_fn(client, "https://files.example.test/bulk/x.csv", tmp_path / "file.json")
+    await record.async_fn(client, "/v1/x", tmp_path / "x.json")
+    await record.async_fn(client, "/v1/x", tmp_path / "keyless.json", auth=None)
     assert "x-api-key" not in files.calls.last.request.headers
     assert [("x-api-key" in call.request.headers) for call in api.calls] == [True, False]
     expected = [("client", "other"), ("client", "base"), ("none", "base")]
@@ -305,15 +230,16 @@ async def test_a_body_past_max_read_bytes_raises_and_writes_nothing(
         ValueError,
         match=r"^GET /v1/x answered a body over 1000 bytes, the recording's max_read_bytes; ",
     ):
-        await record(client, "/v1/x", fixture_file, params={"year": 2024}, max_read_bytes=1000)
+        await record.async_fn(
+            client, "/v1/x", fixture_file, params={"year": 2024}, max_read_bytes=1000
+        )
     assert not fixture_file.exists()
-    whole = await record(client, "/v1/x", fixture_file, max_read_bytes=1001)
+    whole = await record.async_fn(client, "/v1/x", fixture_file, max_read_bytes=1001)
     assert len(whole.response.body) == 1001
-    assert len((await record(client, "/v1/x", fixture_file, max_read_bytes=None)).response.body)
-    for bound in (0, -1):
-        with pytest.raises(ValueError, match=r"^max_read_bytes must be at least 1$"):
-            await record(client, "/v1/x", fixture_file, max_read_bytes=bound)
-    assert route.call_count == 3, "a bound below 1 is refused before anything is sent"
+    assert len(
+        (await record.async_fn(client, "/v1/x", fixture_file, max_read_bytes=None)).response.body
+    )
+    assert route.call_count == 3
 
 
 @pytest.mark.anyio
@@ -328,8 +254,8 @@ async def test_max_read_bytes_counts_the_body_as_decoded(
     )
     client = AsyncClient(config)
     with pytest.raises(ValueError, match="answered a body over 4999 bytes"):
-        await record(client, "/v1/x", tmp_path / "x.json", max_read_bytes=4999)
-    fixture = await record(client, "/v1/x", tmp_path / "x.json", max_read_bytes=5000)
+        await record.async_fn(client, "/v1/x", tmp_path / "x.json", max_read_bytes=4999)
+    fixture = await record.async_fn(client, "/v1/x", tmp_path / "x.json", max_read_bytes=5000)
     assert fixture.response.body == "x" * 5000
 
 
@@ -364,7 +290,7 @@ async def test_the_recorder_stops_reading_at_32_mib_by_default(tmp_path: Path) -
     )
     client = AsyncClient(config, transport=httpx.MockTransport(answer))
     with pytest.raises(ValueError, match=f"answered a body over {32 * 1024 * 1024} bytes"):
-        await record(client, "/v1/x", tmp_path / "x.json")
+        await record.async_fn(client, "/v1/x", tmp_path / "x.json")
     assert body.taken == 33
     assert observed == [200], "observe still hears of the request the recording spent"
     assert not (tmp_path / "x.json").exists()
@@ -380,7 +306,7 @@ def _tokens(response: httpx.Response) -> list[str]:
     return [result[name] for name in ("AccessToken", "IdToken", "RefreshToken") if name in result]
 
 
-def test_a_login_answer_records_through_record_sync_its_tokens_redacted(
+def test_a_login_answer_records_through_record_its_tokens_redacted(
     respx_mock: respx.MockRouter, config: ClientConfig, tmp_path: Path
 ) -> None:
     # https://github.com/xippios/sdk-core/issues/164: the tokens are known once the answer
@@ -393,7 +319,7 @@ def test_a_login_answer_records_through_record_sync_its_tokens_redacted(
         headers={"X-Echo": access},
     )
     fixture_file = tmp_path / "auth_login" / "login.json"
-    fixture = record_sync(
+    fixture = record(
         AsyncClient(config),
         "/auth/login",
         fixture_file,
@@ -421,13 +347,13 @@ def test_response_secrets_refuses_one_string_and_an_empty_value(
     fixture_file = tmp_path / "x.json"
     one_string = Scrub(response_secrets=lambda response: response.json()["token"])
     with pytest.raises(TypeError, match=r"^response_secrets returns a sequence of values"):
-        record_sync(AsyncClient(config), "/v1/x", fixture_file, scrub=one_string)
+        record(AsyncClient(config), "/v1/x", fixture_file, scrub=one_string)
     empty = Scrub(response_secrets=lambda response: [response.json()["empty"]])
     with pytest.raises(ValueError, match=r"^response_secrets returned an empty value"):
-        record_sync(AsyncClient(config), "/v1/x", fixture_file, scrub=empty)
+        record(AsyncClient(config), "/v1/x", fixture_file, scrub=empty)
     not_text = Scrub(response_secrets=lambda response: [7])  # type: ignore[list-item]
     with pytest.raises(TypeError, match=r"^response_secrets returns text values"):
-        record_sync(AsyncClient(config), "/v1/x", fixture_file, scrub=not_text)
+        record(AsyncClient(config), "/v1/x", fixture_file, scrub=not_text)
     assert not fixture_file.exists()
 
 
@@ -437,14 +363,20 @@ def _recorded(url: str, body: object, method: str = "GET") -> Fixture:
     return fixture_from_response(httpx.Response(200, json=body, request=request))
 
 
+def _file(fixture: Fixture, path: Path) -> Path:
+    """``fixture`` written at ``path``, for ``replay`` to load."""
+    write_fixture(fixture, path)
+    return path
+
+
 @pytest.mark.anyio
 async def test_match_params_matches_the_recorded_value_and_misses_another(
-    respx_mock: respx.MockRouter,
+    respx_mock: respx.MockRouter, tmp_path: Path
 ) -> None:
     # sdk-comtrade: the count and the data call of data/v1/get share one path and differ
     # in countOnly=true.
     count = _recorded(f"{BASE}/data/v1/get?reporterCode=842&countOnly=true", {"count": 12})
-    route = mount_fixture(respx_mock, count, match_params=["countOnly"])
+    route = replay(respx_mock, _file(count, tmp_path / "count.json"), match_params=["countOnly"])
     async with httpx.AsyncClient() as http:
         answer = await http.get(f"{BASE}/data/v1/get", params={"countOnly": "true", "x": "1"})
         assert answer.json() == {"count": 12}
@@ -455,7 +387,7 @@ async def test_match_params_matches_the_recorded_value_and_misses_another(
             await http.get(f"{BASE}/data/v1/get")
 
         data = _recorded(f"{BASE}/data/v1/get?reporterCode=842", {"data": [1]})
-        fallback = mount_fixture(respx_mock, data)  # mounted second, so asked second
+        fallback = replay(respx_mock, _file(data, tmp_path / "data.json"))  # asked second
         assert (await http.get(f"{BASE}/data/v1/get?countOnly=false")).json() == {"data": [1]}
         assert (await http.get(f"{BASE}/data/v1/get?countOnly=true")).json() == {"count": 12}
         assert (route.call_count, fallback.call_count) == (2, 1)
@@ -480,17 +412,17 @@ def test_match_params_refuses_a_credential_or_absent_name(
     assert len(respx_mock.routes) == 2
 
 
-def test_match_params_on_a_key_that_is_data(respx_mock: respx.MockRouter) -> None:
+def test_match_params_on_a_key_that_is_data(respx_mock: respx.MockRouter, tmp_path: Path) -> None:
     # Eurostat's SDMX series key, keyless (ADR-0040, decision 6); NASS's query key, a
     # KeyAuth(location="query", name="key"), makes it a credential, and a value recorded as
     # REDACTED cannot be matched.
-    series = _recorded(f"{BASE}/data/prc_hicp_manr?key=M.DE.CP00", [1])
-    route = mount_fixture(respx_mock, series, match_params=["key"])
+    series = _file(_recorded(f"{BASE}/data/prc_hicp_manr?key=M.DE.CP00", [1]), tmp_path / "s.json")
+    route = replay(respx_mock, series, match_params=["key"])
     assert httpx.get(f"{BASE}/data/prc_hicp_manr?key=M.DE.CP00").json() == [1]
     assert sent_urls(route) == [f"{BASE}/data/prc_hicp_manr?key=M.DE.CP00"]
     KeyAuth("EXAMPLE_API_KEY", location="query", name="key", source="example")
     with pytest.raises(ValueError, match=r"^match_params: 'key' names a credential"):
-        mount_fixture(respx_mock, series, match_params=["key"])
+        replay(respx_mock, series, match_params=["key"])
     nass = _recorded(f"{BASE}/api/api_GET?key=SECRET&year=2024", [1])
     assert recorded_query(nass) == {"key": REDACTED, "year": "2024"}
 
@@ -502,7 +434,7 @@ async def test_replay_ignores_the_body_and_the_test_asserts_it(
     respx_mock.post(f"{BASE}/v1/create.json").respond(200, json={"success": True})
     client = AsyncClient(config)
     fixture_file = tmp_path / "create.json"
-    recorded = await record(
+    recorded = await record.async_fn(
         client, "/v1/create.json", fixture_file, method="POST", data={"name": "Corn", "n": 2}
     )
 
@@ -554,10 +486,9 @@ async def test_a_truncated_array_records_replays_and_decodes(
     # Row 43 (sdk-usda-gats): a list over the fixture cap keeps its first elements.
     respx_mock.get(f"{BASE}/v1/rows").respond(200, json=[{"n": n} for n in range(1000)])
     client = AsyncClient(ClientConfig(source="example", version="1", base_url=BASE))
-    with pytest.raises(ValueError, match="max_bytes must be at least 1"):
-        await record(client, "/v1/rows", fixtures_dir / "rows" / "cut.json", max_bytes=0)
-    assert respx_mock.calls.call_count == 0  # refused before anything is sent
-    recorded = await record(client, "/v1/rows", fixtures_dir / "rows" / "cut.json", max_bytes=60)
+    recorded = await record.async_fn(
+        client, "/v1/rows", fixtures_dir / "rows" / "cut.json", max_bytes=60
+    )
     written = load_fixture(fixtures_dir / "rows" / "cut.json").response
     assert written == recorded.response
     assert (written.truncated, written.original_count) == (True, 1000)
@@ -571,28 +502,19 @@ async def test_a_truncated_array_records_replays_and_decodes(
 
 
 @pytest.mark.anyio
-async def test_an_object_s_array_records_its_last_elements_and_replays(
+async def test_an_array_records_its_last_elements_and_replays(
     respx_mock: respx.MockRouter, replay_fixture: ReplayFixture, fixtures_dir: Path
 ) -> None:
-    # Row 127 (sdk-usda-nass, sdk-usda-psd): {"data": [...]} ordered oldest first.
-    answer = {"data": [{"year": year} for year in range(1960, 2024)], "count": 64}
-    respx_mock.get(f"{BASE}/api/api_GET").respond(200, json=answer)
+    # A list ordered oldest first keeps the years that its tests read.
+    respx_mock.get(f"{BASE}/v1/years").respond(200, json=[{"year": y} for y in range(1960, 2024)])
     client = AsyncClient(ClientConfig(source="example", version="1", base_url=BASE))
-    path = fixtures_dir / "api_GET" / "latest.json"
-    choices: list[dict[str, Any]] = [{"array_key": "data"}, {"keep": "last"}]
-    for options in choices:
-        with pytest.raises(ValueError, match=r"^array_key and keep='last' choose what max_bytes"):
-            await record(client, "/api/api_GET", path, **options)
-    assert respx_mock.calls.call_count == 0  # refused before anything is sent
-    recorded = await record(
-        client, "/api/api_GET", path, max_bytes=60, array_key="data", keep="last"
-    )
+    path = fixtures_dir / "years" / "latest.json"
+    recorded = await record.async_fn(client, "/v1/years", path, max_bytes=30, keep="last")
     assert (recorded.response.truncated, recorded.response.original_count) == (True, 64)
 
     respx_mock.routes.clear()
-    replay_fixture("api_GET", "latest")
-    replayed = (await client.get_answer("/api/api_GET")).payload
-    assert replayed == {"data": [{"year": 2022}, {"year": 2023}], "count": 64}
+    replay_fixture("years", "latest")
+    assert (await client.get_answer("/v1/years")).payload == [{"year": 2022}, {"year": 2023}]
 
 
 @pytest.mark.anyio

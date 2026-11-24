@@ -223,7 +223,7 @@ async def test_observe_sees_a_recording_s_answer_too(respx_mock: respx.MockRoute
             retry=RetryPolicy(max_attempts=1),
         )
     )
-    response = await send_once(client, "/v1/x")
+    response = await send_once.async_fn(client, "/v1/x")
     assert response.status_code == 500
     assert seen == [500]
 

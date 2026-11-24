@@ -140,14 +140,6 @@ PLACES = [
         "url=",
         id="a-replay-of-a-path-at-another-url",
     ),
-    pytest.param(
-        """
-        def test_one(respx_mock, fixture):
-            mount_fixture(respx_mock, fixture, url="https://api.example.test/v1/other")
-        """,
-        "url=",
-        id="a-mounted-fixture-at-another-url",
-    ),
 ]
 
 
