@@ -753,7 +753,8 @@
         "ADR-0018"
       ],
       "other": [
-        "Decision 3 constrained by ADR-0069 (2026-11-24)"
+        "Decision 3 constrained by ADR-0069 (2026-11-24)",
+        "Decision 2 changed in part by ADR-0070 (2026-11-24)"
       ],
       "superseded_by": null
     },
@@ -1315,6 +1316,20 @@
       "status": "Accepted",
       "date": "2026-11-24",
       "decided_by": "https://github.com/xippios/sdk-core/issues/484",
+      "amended": [],
+      "amends": [],
+      "supersedes": [],
+      "other": [],
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-0070",
+      "number": 70,
+      "title": "Core's version before its tag, and a release PR told by its title",
+      "path": "docs/adr/0070-core-s-version-before-its-tag-and-a-release-pr-told-by-its.md",
+      "status": "Accepted",
+      "date": "2026-11-24",
+      "decided_by": "https://github.com/xippios/sdk-core/issues/561",
       "amended": [],
       "amends": [],
       "supersedes": [],

@@ -11,7 +11,8 @@ handover's section for the release, to which the review checklist and the defini
 point, ADR-0058's decision 2, what a core patch keeps compatible, ADR-0059's rule for code with
 one consumer, as the definition of done, the review checklist and §15 name it, the publisher's
 shared package of ADR-0065 in §7 and §12, ADR-0068's documents: one case per rule, no
-history and the adoption's items once, and ADR-0069's failed release run in §12.
+history and the adoption's items once, ADR-0069's failed release run in §12, and ADR-0070's
+release PR, told by its title once core's version leads its tag.
 
 The organization's release check quotes the conventions from sdk-core's `main`, and a finding
 blocks only where it quotes the sentence that a change breaks
@@ -1743,7 +1744,7 @@ def test_the_record_of_a_failed_release_run_stands_beside_the_release_train() ->
     train = records[RELEASE_TRAIN]
     assert train["superseded_by"] is None
     assert len(train["amended"]) == 2, "the release train keeps its two amendments"
-    assert train["other"] == [f"Decision 3 constrained by {FAILED_RUN} (2026-11-24)"]
+    assert f"Decision 3 constrained by {FAILED_RUN} (2026-11-24)" in train["other"]
     paragraphs = amendments(RELEASE_TRAIN, "2026-11-24")
     pointer = next((p for p in paragraphs if p.startswith(FAILED_RUN)), paragraphs[-1])
     assert pointer.startswith(f"{FAILED_RUN} ({DOCUMENTS_QUESTION}), decision 3,"), pointer[:60]
@@ -1773,3 +1774,104 @@ def test_section_13_s_rule_on_a_workflow_s_comments_cites_its_record() -> None:
         "https://github.com/xippios/.github/issues/111",
     ):
         assert name in rule, f"§13: {rule!r} does not name {name!r}"
+
+
+# A release PR told by its title: by the answer on https://github.com/xippios/sdk-core/issues/561
+# core's `main` carries the coming version before its tag and the release PR raises none, so the
+# review checklist's item 13, which told a release PR by the version in `pyproject.toml`
+# changed, and ADR-0039, decision 2, which tells it by its version, no longer held for core:
+# finding 2 of the organization's conventions check on
+# https://github.com/xippios/sdk-core/pull/572#issuecomment-7142719021.
+
+VERSION_RECORD = "ADR-0070"
+"""The record of core's version before its tag and of a release PR told by its title."""
+VERSION_QUESTION = "https://github.com/xippios/sdk-core/issues/561"
+FRAGMENT_QUESTION = "https://github.com/xippios/sdk-core/issues/566"
+ORGANIZATION_CHECK = (
+    "https://github.com/xippios/.github/blob/main/.github/workflows/conventions.yml"
+)
+"""The organization's workflow, whose job tells a release PR by its label or its title."""
+GATE = "https://github.com/xippios/.github/pull/124"
+"""The organization's gate, which reviews a title that is `X.Y.Z Release` whole."""
+ANSWER_QUESTION = "https://github.com/xippios/sdk-core/issues/575"
+"""The answer that kept the record, its version before the tag written for 0.5.0 alone."""
+RELEASE_TITLE = "`X.Y.Z Release` whole"
+RELEASE_LABEL = "the `release` label"
+
+
+def test_the_review_checklist_tells_a_release_pr_by_its_title() -> None:
+    # The item's parenthesis tells a release PR; the files and the refresh it judges stay.
+    item = checklist_item(13)
+    tell = item.split("):", 1)[0]
+    for name in (RELEASE_TITLE, RELEASE_LABEL, f"{VERSION_RECORD}, decision 3"):
+        assert name in tell, f"item 13 does not tell a release PR by {name!r}"
+    assert "`pyproject.toml` changed" not in item, "item 13 tells a release PR by its version"
+    for name in ("it changes only the files of conventions §12", "the reference-data refresh"):
+        assert name in item, f"item 13 no longer says {name!r}"
+
+
+def test_the_record_of_core_s_version_before_its_tag_states_the_answer() -> None:
+    # Decisions 1 and 2 are the answer on #561 with its fragment (#566), for 0.5.0 alone, as #575
+    # kept them, and a later release stays with §12 as it stands; decision 3 is the tell that
+    # follows, the organization's gate's, which reviews a title that is `X.Y.Z Release` whole
+    # (the findings of the review of https://github.com/xippios/sdk-core/pull/574).
+    records = {r["id"]: r for r in json.loads(INDEX.read_text(encoding="utf-8"))["records"]}
+    found = records[VERSION_RECORD]
+    assert found["decided_by"] == VERSION_QUESTION
+    assert (found["supersedes"], found["amends"], found["amended"]) == ([], [], [])
+    held = decisions(VERSION_RECORD)
+    assert sorted(held) == [1, 2, 3], f"{VERSION_RECORD} holds three decisions"
+    names = {
+        1: (
+            "core's `pyproject.toml`",
+            "`uv.lock`",
+            "`src/`",
+            "`~=0.5.0`",
+            "https://github.com/xippios/sdk-core/pull/564",
+            FRAGMENT_QUESTION,
+            "A later release of core is left to conventions §12 as it stands",
+        ),
+        2: ("0.5.0 release PR raises no version", "`## [0.5.0] - `", "`v0.5.0`", "§12"),
+        3: (
+            RELEASE_TITLE,
+            RELEASE_LABEL,
+            ORGANIZATION_CHECK,
+            GATE,
+            VERSION_QUESTION,
+            ANSWER_QUESTION,
+            f"{RELEASE_TRAIN}, decision 2",
+        ),
+    }
+    for number, expected in names.items():
+        for name in expected:
+            assert name in held[number], f"{VERSION_RECORD}, decision {number}: no {name!r}"
+    for number in (1, 2):
+        assert "X.Y" not in held[number], f"{VERSION_RECORD}, decision {number}, is for 0.5.0"
+    (path,) = (ROOT / "docs" / "adr").glob(f"{VERSION_RECORD.removeprefix('ADR-')}-*.md")
+    text = flat(path.read_text(encoding="utf-8"))
+    assert "ends in" not in text, f"{VERSION_RECORD} tells a release title by its end"
+    assert GATE in text.split("## Decision", 1)[0], f"{VERSION_RECORD}'s Context cites no gate"
+
+
+def test_adr_0039_points_to_the_record_that_tells_a_release_pr_by_its_title() -> None:
+    # ADR-0039 holds two amendments, so it names the record in a status field that the index
+    # keeps under `other`, as it names ADR-0069, and points to it in one paragraph of its
+    # section of the day; its decision 2 stands as written.
+    records = {r["id"]: r for r in json.loads(INDEX.read_text(encoding="utf-8"))["records"]}
+    train = records[RELEASE_TRAIN]
+    assert len(train["amended"]) == 2, "the release train keeps its two amendments"
+    assert train["other"] == [
+        f"Decision 3 constrained by {FAILED_RUN} (2026-11-24)",
+        f"Decision 2 changed in part by {VERSION_RECORD} (2026-11-24)",
+    ]
+    assert "a release PR is told by its version" in decisions(RELEASE_TRAIN)[2]
+    pointer = amendments(RELEASE_TRAIN, "2026-11-24")[-1]
+    assert pointer.startswith(f"{VERSION_RECORD} ({VERSION_QUESTION}), decision 3,"), pointer[:60]
+    for name in (
+        "changes decision 2 in part",
+        RELEASE_TITLE,
+        RELEASE_LABEL,
+        "carries 0.5.0 before its tag",
+        "stand as written",
+    ):
+        assert name in pointer, f"{RELEASE_TRAIN}'s pointer does not name {name!r}"

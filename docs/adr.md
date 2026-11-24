@@ -49,6 +49,7 @@ records in `docs/adr/`. A record changes, and this file follows when the script 
 - <a id="0067"></a>[ADR-0067](adr/0067-what-the-envelope-carries-notes-the-names-of-codes-and.md): What the envelope carries: notes, the names of codes and integers · Accepted · 2026-11-24
 - <a id="0068"></a>[ADR-0068](adr/0068-which-document-holds-what-the-handover-s-one-part-and-the.md): Which document holds what, the handover's one part and the surface in two counts · Accepted · 2026-11-24
 - <a id="0069"></a>[ADR-0069](adr/0069-how-a-release-run-that-fails-is-finished.md): How a release run that fails is finished · Accepted · 2026-11-24
+- <a id="0070"></a>[ADR-0070](adr/0070-core-s-version-before-its-tag-and-a-release-pr-told-by-its.md): Core's version before its tag, and a release PR told by its title · Accepted · 2026-11-24
 
 The superseded records follow, kept as written: the record that each status names holds its decision now.
 
