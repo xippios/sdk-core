@@ -92,20 +92,45 @@ mcp = ["xippios-core[mcp]~=0.2.1"]
 http = ["xippios-core[http]~=0.2.1"]
 testing = ["xippios-core[testing]~=0.2.1", "pytest>=8"]
 
+[project.scripts]
+xippios-example-mcp = "xippios.example.mcp:run"
+example-refresh = "xippios.example.refresh:main"
+
 [tool.pytest.ini_options]
 addopts = "-p no:cacheprovider"
 """
 
+INIT = '''"""The example package: its version and its tasks, re-exported (ADR-0063, decision 8)."""
+
+from xippios.example.tasks import *  # noqa: F403
+
+try:
+    from xippios.example.tasks_write import *  # noqa: F403
+except ModuleNotFoundError:  # a read-only source
+    pass
+
+__version__ = "0.1.0"
+'''
+"""The package's ``__init__.py``: its star imports re-export each variant's tasks."""
+
+READ_SCRIPT = 'xippios-example-mcp = "xippios.example.mcp:run"\n'
+"""The entry point of a source without a write server (conventions §8)."""
+
 SOURCE: dict[str, str] = {
-    "src/xippios/example/__init__.py": '__version__ = "0.1.0"\n',
+    "src/xippios/example/__init__.py": INIT,
     "src/xippios/example/py.typed": "",
-    "src/xippios/example/_client.py": 'SOURCE = "example"\n',
+    "src/xippios/example/_client.py": 'SOURCE = "example"\nENV_VARS = ()\n',
     "src/xippios/example/tasks.py": TASKS,
     "src/xippios/example/mcp.py": (
-        "from xippios.core.mcp import ToolSet, build_server\n"
+        "from xippios.core.mcp import ToolSet, build_server, main\n"
         "from xippios.example import tasks\n"
-        "from xippios.example._client import SOURCE\n\n"
-        f"server = build_server(ToolSet(SOURCE, {SERVED}))\n"
+        "from xippios.example._client import ENV_VARS, SOURCE\n\n"
+        '__all__ = ["ENV_VARS", "SOURCE", "build", "run", "server"]\n\n\n'
+        "def build() -> ToolSet:\n"
+        f"    return ToolSet(SOURCE, {SERVED})\n\n\n"
+        "server = build_server(build())\n\n\n"
+        "def run() -> None:\n"
+        "    main(build)\n"
     ),
     "src/xippios/example/http.py": (
         "from xippios.core.http import router_from_tasks\n"
@@ -125,7 +150,36 @@ SOURCE: dict[str, str] = {
     "tests/test_family.py": "from xippios.core.testing.family import *  # noqa: F403\n",
 }
 
-FAMILY_TESTS = 19
+FAMILY_TESTS = 23
+
+WRITE_MCP = """from xippios.core.mcp import ToolSet, build_server, main
+from xippios.example import tasks_write
+from xippios.example._client import SOURCE
+
+
+def build() -> ToolSet:
+    return ToolSet.from_tasks(SOURCE, tasks_write, read_only=False)
+
+
+server = build_server(build())
+
+
+def run() -> None:
+    main(build)
+"""
+"""A write server's ``mcp_write.py``, built from ``tasks_write`` (conventions §8)."""
+
+WRITE_SCRIPTS = (
+    'xippios-example-mcp-read = "xippios.example.mcp:run"\n'
+    'xippios-example-mcp-write = "xippios.example.mcp_write:run"\n'
+)
+"""The entry points of a source with a write server, read and write (conventions §8)."""
+
+WRITE_SERVER: dict[str, str | None] = {
+    "src/xippios/example/mcp_write.py": WRITE_MCP,
+    "pyproject.toml": PYPROJECT.replace(READ_SCRIPT, WRITE_SCRIPTS),
+}
+"""What a source with ``tasks_write.py`` adds: its write server and its two entry points."""
 
 
 def run_family(
@@ -134,9 +188,10 @@ def run_family(
     """Write the source with ``changes`` (path to content; ``None`` deletes) and run it."""
     files = {**SOURCE, **(changes or {})}
     for path, content in files.items():
-        if content is None:
-            continue
         target = pytester.path / path
+        if content is None:
+            target.unlink(missing_ok=True)
+            continue
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
     pytester.syspathinsert(pytester.path / "src")
@@ -151,10 +206,229 @@ def test_a_conforming_source_passes_every_family_check(pytester: pytest.Pytester
     result.assert_outcomes(passed=FAMILY_TESTS)
 
 
-KEYED_CLIENT = """from xippios.core.client import AsyncClient, ClientConfig, KeyAuth
+# The package contract, the entry points, the re-export and a description's bound, which
+# every source tested again for itself (ADR-0063, decisions 8 and 9) ---------------------
+
+CONTRACT_INTRO = (
+    "*mcp.py and mcp_write.py hold the package contract (conventions §8, ADR-0063, decision 8):*"
+)
+
+
+def test_a_server_or_env_vars_that_the_tool_set_does_not_give_fail_the_contract(
+    pytester: pytest.Pytester,
+) -> None:
+    # A paged cap that build() lacks lists the tool with an offset, so the server serves
+    # another tool than a host that serves build() would; a copy of ENV_VARS can drift.
+    mcp = SOURCE["src/xippios/example/mcp.py"]
+    key = 'EnvVar("EXAMPLE_API_KEY", secret=True, required=True)'
+    client = f'from xippios.core import EnvVar\n\nSOURCE = "example"\nENV_VARS = ({key},)\n'
+    paged = f"ToolSet(SOURCE, {SERVED}, caps={{'get_series': ResultCap(paged=True)}})"
+    drifted = (
+        mcp.replace(
+            "from xippios.example._client import ENV_VARS, SOURCE",
+            "from xippios.core import EnvVar, ResultCap\n"
+            "from xippios.example._client import SOURCE",
+        )
+        .replace("__all__ = [", f"ENV_VARS = ({key},)\n__all__ = [")
+        .replace("server = build_server(build())", f"server = build_server({paged})")
+    )
+    changes: dict[str, str | None] = {
+        "src/xippios/example/_client.py": client,
+        "src/xippios/example/mcp.py": drifted,
+    }
+    result = run_family(pytester, changes)
+    result.assert_outcomes(passed=FAMILY_TESTS - 1, failed=1)
+    result.stdout.fnmatch_lines(
+        [
+            "*test_family_mcp_build_holds_the_package_contract*",
+            CONTRACT_INTRO,
+            "*- mcp.server lists other tools than build_server(mcp.build()): example_get_series*",
+            "*- mcp.ENV_VARS is not _client.ENV_VARS: import it from _client*",
+        ]
+    )
+    # A tool set of another source names its tools after that source.
+    other = mcp.replace("ToolSet(SOURCE, ", 'ToolSet("example-v2", ')
+    result = run_family(pytester, {"src/xippios/example/mcp.py": other})
+    result.assert_outcomes(passed=FAMILY_TESTS - 2, failed=2)
+    result.stdout.fnmatch_lines(
+        ["*- mcp.build() returns the tool set of 'example-v2', not of _client.SOURCE, 'example'*"]
+    )
+    bare = mcp.replace("server = build_server(build())", "").replace(
+        "import ENV_VARS, SOURCE", "import SOURCE"
+    )
+    result = run_family(pytester, {"src/xippios/example/mcp.py": bare})
+    result.stdout.fnmatch_lines(
+        ["*- mcp.py has no server: server = build_server(build())*", "*- mcp.py has no ENV_VARS*"]
+    )
+
+
+def test_a_write_source_without_its_write_tool_set_fails_the_contract(
+    pytester: pytest.Pytester,
+) -> None:
+    table = README.replace(
+        "| `regions` |",
+        "| `create` | `create_series(name, confirm)` | write server | alpha |\n| `regions` |",
+    )
+    write: dict[str, str | None] = {
+        "src/xippios/example/tasks_write.py": WRITE_TASKS,
+        "README.md": table,
+    }
+    result = run_family(pytester, write)
+    result.assert_outcomes(passed=FAMILY_TESTS - 2, failed=2)
+    result.stdout.fnmatch_lines(
+        [CONTRACT_INTRO, "*- tasks_write.py has no write server: mcp_write.py is missing*"]
+    )
+    read_only = WRITE_MCP.replace(", read_only=False", "")
+    changes = {**write, **WRITE_SERVER, "src/xippios/example/mcp_write.py": read_only}
+    result = run_family(pytester, changes)
+    result.assert_outcomes(passed=FAMILY_TESTS - 1, failed=1)
+    result.stdout.fnmatch_lines(["*- mcp_write.build() returns a tool set that does not write*"])
+
+
+SCRIPTS_INTRO = (
+    "*[[]project.scripts[]] names the entry points of conventions §8, each at its module's run "
+    "(ADR-0063, decision 8):*"
+)
+
+
+def test_the_entry_points_are_the_conventions_at_each_module_s_run(
+    pytester: pytest.Pytester,
+) -> None:
+    # A script of the package's own, example-refresh, stands beside them (SOURCE's pyproject).
+    moved = PYPROJECT.replace(READ_SCRIPT, 'xippios-example-mcp = "xippios.example.server:main"\n')
+    result = run_family(pytester, {"pyproject.toml": moved})
+    result.assert_outcomes(passed=FAMILY_TESTS - 1, failed=1)
+    result.stdout.fnmatch_lines(
+        [
+            SCRIPTS_INTRO,
+            "*- xippios-example-mcp runs xippios.example.server:main, not xippios.example.mcp:run*",
+        ]
+    )
+    result = run_family(pytester, {"pyproject.toml": PYPROJECT.replace(READ_SCRIPT, "")})
+    result.assert_outcomes(passed=FAMILY_TESTS - 1, failed=1)
+    result.stdout.fnmatch_lines(['*- no xippios-example-mcp = "xippios.example.mcp:run"*'])
+    # A read-only source names no write server's entry points.
+    split = PYPROJECT.replace(READ_SCRIPT, WRITE_SCRIPTS)
+    result = run_family(pytester, {"pyproject.toml": split})
+    result.assert_outcomes(passed=FAMILY_TESTS - 1, failed=1)
+    result.stdout.fnmatch_lines(
+        [
+            '*- no xippios-example-mcp = "xippios.example.mcp:run"*',
+            "*- xippios-example-mcp-read is no entry point of a source without a write server*",
+            "*- xippios-example-mcp-write is no entry point of a source without a write server*",
+        ]
+    )
+    # A source with a write server names the two and keeps no alias of the old name.
+    aliased = WRITE_SERVER["pyproject.toml"] or ""
+    aliased = aliased.replace(WRITE_SCRIPTS, WRITE_SCRIPTS + READ_SCRIPT)
+    table = README.replace(
+        "| `regions` |",
+        "| `create` | `create_series(name, confirm)` | write server | alpha |\n| `regions` |",
+    )
+    changes: dict[str, str | None] = {
+        "src/xippios/example/tasks_write.py": WRITE_TASKS,
+        **WRITE_SERVER,
+        "README.md": table,
+        "pyproject.toml": aliased,
+    }
+    result = run_family(pytester, changes)
+    result.assert_outcomes(passed=FAMILY_TESTS - 1, failed=1)
+    result.stdout.fnmatch_lines(
+        ["*- xippios-example-mcp is no entry point of a source with a write server*"]
+    )
+    result = run_family(pytester, {**changes, "pyproject.toml": PYPROJECT})
+    result.assert_outcomes(passed=FAMILY_TESTS - 1, failed=1)
+    result.stdout.fnmatch_lines(
+        [
+            '*- no xippios-example-mcp-read = "xippios.example.mcp:run"*',
+            '*- no xippios-example-mcp-write = "xippios.example.mcp_write:run"*',
+            "*- xippios-example-mcp is no entry point of a source with a write server*",
+        ]
+    )
+
+
+def test_a_task_that_the_package_does_not_re_export_fails_naming_it(
+    pytester: pytest.Pytester,
+) -> None:
+    init = (
+        "from xippios.example.tasks import get_series, search_series\n\n"
+        "list_regions = search_series\n"
+        '__version__ = "0.1.0"\n'
+    )
+    write: dict[str, str | None] = {
+        "src/xippios/example/tasks_write.py": WRITE_TASKS,
+        **WRITE_SERVER,
+        "README.md": README.replace(
+            "| `regions` |",
+            "| `create` | `create_series(name, confirm)` | write server | alpha |\n| `regions` |",
+        ),
+    }
+    result = run_family(pytester, {**write, "src/xippios/example/__init__.py": init})
+    result.assert_outcomes(passed=FAMILY_TESTS - 1, failed=1)
+    result.stdout.fnmatch_lines(
+        [
+            "*the package re-exports every task of tasks.__all__ and tasks_write.__all__*",
+            "*- tasks.list_regions: xippios.example.list_regions is another object*",
+            "*- tasks_write.create_series: xippios.example has no create_series*",
+        ]
+    )
+    assert "- tasks.get_series" not in result.stdout.str()
+
+
+DESCRIPTION_INTRO = (
+    "*every tool's description, the text of its task's docstring before Args:, is under 1,000 "
+    "characters (conventions §8, ADR-0063, decision 9):*"
+)
+
+
+def _described(text: str, first: str, length: int) -> str:
+    """``text`` with the task whose docstring opens with ``first`` described in ``length``.
+
+    The description is the docstring's text before ``Args:``: its first line, a blank line and
+    a paragraph that brings it to ``length`` characters.
+    """
+    rest = "x" * (length - len(first) - 2)
+    return text.replace(f'"""{first}\n', f'"""{first}\n\n    {rest}\n', 1)
+
+
+def test_a_description_of_1000_characters_fails_naming_its_tool(
+    pytester: pytest.Pytester,
+) -> None:
+    # The text under Args: is no part of the description: it goes to the input schema.
+    first = "Fetch one series for a year."
+    long_args = TASKS.replace('e.g. ``"CORN"``.', 'e.g. ``"CORN"``. ' + "y" * 2000, 1)
+    under = _described(long_args, first, 999)
+    result = run_family(pytester, {"src/xippios/example/tasks.py": under})
+    result.assert_outcomes(passed=FAMILY_TESTS)
+    at = _described(TASKS, first, 1000)
+    write = _described(WRITE_TASKS, "Create a series, or preview it unless confirmed.", 1204)
+    changes: dict[str, str | None] = {
+        "src/xippios/example/tasks.py": at,
+        "src/xippios/example/tasks_write.py": write,
+        **WRITE_SERVER,
+        "README.md": README.replace(
+            "| `regions` |",
+            "| `create` | `create_series(name, confirm)` | write server | alpha |\n| `regions` |",
+        ),
+    }
+    result = run_family(pytester, changes)
+    result.assert_outcomes(passed=FAMILY_TESTS - 1, failed=1)
+    result.stdout.fnmatch_lines(
+        [
+            "*test_family_tool_descriptions_stay_under_the_bound*",
+            DESCRIPTION_INTRO,
+            "*- example_create_series: 1,204 characters*",
+            "*- example_get_series: 1,000 characters*",
+        ]
+    )
+
+
+KEYED_CLIENT = """from xippios.core import EnvVar
+from xippios.core.client import AsyncClient, ClientConfig, KeyAuth
 
 SOURCE = "example"
 BASE_URL = "https://api.example.org/v1"
+ENV_VARS = (EnvVar("EXAMPLE_API_KEY", secret=True, required=True),)
 
 
 class Shared:
@@ -293,12 +567,13 @@ def test_a_paged_tool_takes_its_tasks_parameters_and_the_adapters_offset(
     paged = "from xippios.core import ResultCap\n" + paged
     result = run_family(pytester, {"src/xippios/example/mcp.py": paged})
     result.assert_outcomes(passed=FAMILY_TESTS)
-    # A task that takes offset itself cannot be paged: the tool set refuses it as it is built.
+    # A task that takes offset itself cannot be paged: the tool set refuses it as it is built,
+    # so mcp.py does not import, which the tools' test and the package contract's both meet.
     own = TASKS.replace("(series_id: str, year: int = 2024)", "(series_id: str, offset: int = 0)")
     result = run_family(
         pytester, {"src/xippios/example/mcp.py": paged, "src/xippios/example/tasks.py": own}
     )
-    result.assert_outcomes(passed=FAMILY_TESTS - 1, failed=1)
+    result.assert_outcomes(passed=FAMILY_TESTS - 2, failed=2)
     result.stdout.fnmatch_lines(
         ["*example_get_series: the task takes a parameter offset, which a paged cap adds*"]
     )
@@ -556,11 +831,16 @@ __all__ = ["create_series"]
 '''
 
 
-def test_write_tasks_are_checked_and_listed_and_the_write_server_is_not(
+def test_write_tasks_are_checked_and_listed_and_the_write_server_built(
     pytester: pytest.Pytester,
 ) -> None:
-    # The write server is its source's to test (ADR-0042); none is written here.
-    write: dict[str, str | None] = {"src/xippios/example/tasks_write.py": WRITE_TASKS}
+    # The tools of the write server are its source's to test with assert_write_tools
+    # (ADR-0042, decision 1); the family check holds mcp_write.build() and the entry points
+    # alone (ADR-0063, decision 8).
+    write: dict[str, str | None] = {
+        "src/xippios/example/tasks_write.py": WRITE_TASKS,
+        **WRITE_SERVER,
+    }
     table = README.replace(
         "| `regions` |",
         "| `create` | `create_series(name, confirm)` | write server | alpha |\n| `regions` |",
@@ -616,6 +896,7 @@ def test_the_status_tables_are_read_under_the_status_heading_only() -> None:
 TENANT_CLIENT = """from xippios.core import Tenants
 
 SOURCE = "example"
+ENV_VARS = ()
 TENANTS = Tenants(
     SOURCE, list_var="EXAMPLE_ORGS", param="org", fields=("API_KEY",), reserved=("demo",)
 )
@@ -710,7 +991,7 @@ TENANT_SOURCE: dict[str, str | None] = {
 
 def test_a_multi_tenant_source_passes_with_its_tenant_list(pytester: pytest.Pytester) -> None:
     """Every task takes ``org`` but the tenant list, read and write alike."""
-    write = {"src/xippios/example/tasks_write.py": TENANT_WRITE_TASKS}
+    write = {"src/xippios/example/tasks_write.py": TENANT_WRITE_TASKS, **WRITE_SERVER}
     result = run_family(pytester, {**TENANT_SOURCE, **write})
     result.assert_outcomes(passed=FAMILY_TESTS)
 
@@ -739,6 +1020,7 @@ def test_a_task_of_a_multi_tenant_source_that_takes_no_tenant_fails_naming_it(
     rename = _untenanted(TENANT_WRITE_TASKS, "rename_series", "rename")
     changes = {
         **TENANT_SOURCE,
+        **WRITE_SERVER,
         "src/xippios/example/tasks.py": declared,
         "src/xippios/example/tasks_write.py": rename,
     }

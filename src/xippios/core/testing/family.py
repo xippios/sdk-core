@@ -23,8 +23,24 @@ are read from pytest's rootdir.
   ``__init__.py``, and the package ships ``py.typed`` and a ``__version__`` (ADR-0006);
 - ``mcp.py``'s ``server`` registers exactly ``tasks.__all__`` minus
   ``getattr(tasks, "BULK_TASKS", frozenset())``, each tool taking its task's parameters,
-  a paged tool the adapter's ``offset`` beside them (ADR-0047), and described by its
-  docstring (conventions §8, ADR-0040);
+  a paged tool the adapter's ``offset`` beside them (ADR-0047), and described by the text
+  of its docstring before ``Args:`` (conventions §8, ADR-0040);
+- the package contract (conventions §8, ADR-0063, decision 8): ``mcp.build()`` returns a
+  ``ToolSet`` of ``_client.SOURCE``, ``mcp.server`` lists the tools of
+  ``build_server(mcp.build())``, and ``mcp.ENV_VARS`` is ``_client.ENV_VARS``, imported
+  rather than copied; a source with ``tasks_write.py`` has ``mcp_write.py``, whose
+  ``build()`` returns a tool set of the source that writes, while the tools of its write
+  server are its own to test with ``assert_write_tools`` (ADR-0042, decision 1);
+- ``pyproject.toml``'s ``[project.scripts]`` names the entry points of conventions §8,
+  each at its module's ``run``: ``xippios-<source>-mcp = "<import path>.mcp:run"``, or for a
+  source with ``tasks_write.py`` ``xippios-<source>-mcp-read`` at ``mcp:run`` and
+  ``xippios-<source>-mcp-write`` at ``mcp_write:run``, with no alias of the other form; a
+  script of the package's own stands beside them (ADR-0063, decision 8);
+- the package re-exports every task of ``tasks.__all__`` and ``tasks_write.__all__``, the
+  same object, from its ``__init__.py`` (ADR-0063, decision 8);
+- every tool's description, the text of its task's docstring before ``Args:``, is under
+  1,000 characters, read and write tools alike, since each argument's text reaches the
+  tool's input schema instead (conventions §8, ADR-0063, decision 9);
 - ``http.py``'s ``router`` routes the same tasks at ``/<source>/<task>``, ``GET`` when
   every parameter is a scalar and ``POST`` otherwise (conventions §9, ADR-0007);
 - every task, read and write, is a synchronous function returning ``Result[T]``
@@ -102,8 +118,10 @@ are read from pytest's rootdir.
   exemption does not pass. The check reads signatures: a country inside a free-form mapping
   is the review's.
 
-A write server is its source's to test: the family check reads ``tasks_write`` for the
-task checks and the status table only (ADR-0042).
+A write server's tools are its source's to test: the family check reads ``tasks_write`` for
+the task checks, the status table, the package contract and the entry points (ADR-0042,
+decision 1; ADR-0063, decision 8). A source tests again neither what these tests hold nor
+what core's adapters answer for every source (conventions §10).
 
 **Two family checks are CI steps, not tests**, since they read the pull request rather
 than the package; sdk-template's ``ci.yml`` carries them, on ``pull_request`` with the
@@ -154,18 +172,22 @@ __all__ = [
     "test_family_fetched_md_lists_observed_md_in_a_row_of_its_own",
     "test_family_http_router_routes_the_tasks",
     "test_family_key_class_names_the_package_s_own_slug",
+    "test_family_mcp_build_holds_the_package_contract",
     "test_family_mcp_server_registers_the_tasks",
     "test_family_namespace_levels_are_empty",
     "test_family_observed_md_cites_files_that_exist",
     "test_family_observed_notes_end_with_their_probe_and_date",
     "test_family_package_has_a_version",
+    "test_family_package_re_exports_its_tasks",
     "test_family_package_ships_py_typed",
+    "test_family_project_scripts_name_the_entry_points",
     "test_family_read_tasks_start_with_a_read_verb",
     "test_family_readings_stand_beside_their_text",
     "test_family_readme_status_table_lists_the_tasks",
     "test_family_tasks_carry_agent_docstrings",
     "test_family_tasks_return_results",
     "test_family_tasks_take_one_tenant",
+    "test_family_tool_descriptions_stay_under_the_bound",
 ]
 
 _TAG = re.compile(r"v\d+\.\d+\.\d+")
@@ -323,7 +345,8 @@ def test_family_mcp_server_registers_the_tasks(family_source: FamilySource) -> N
     """``mcp.server`` has exactly one tool per task in ``tasks.__all__`` minus ``BULK_TASKS``.
 
     Each tool takes its task's parameters, and a paged tool the adapter's ``offset`` beside
-    them (ADR-0047), and carries its docstring (conventions §8, ADR-0040).
+    them (ADR-0047), and carries the text of its docstring before ``Args:`` (conventions §8,
+    ADR-0040, ADR-0063, decision 9).
     """
     from xippios.core._loop import run
     from xippios.core.mcp import tool_name
@@ -387,6 +410,148 @@ def test_family_http_router_routes_the_tasks(family_source: FamilySource) -> Non
     _fail(problems, "http.py must route exactly tasks.__all__ minus BULK_TASKS:")
 
 
+_CONTRACT_INTRO = (
+    "mcp.py and mcp_write.py hold the package contract (conventions §8, ADR-0063, decision 8):"
+)
+
+
+def _tool_set(module: ModuleType, name: str, source: str, problems: list[str]) -> Any:
+    """What ``<name>.build()`` returns where it is a ``ToolSet`` of ``source``, else ``None``.
+
+    Each way it fails adds its problem: no ``build``, a ``build`` that raises, a value that
+    is no ``ToolSet`` and a tool set of another source.
+
+    Args:
+        module: The source's ``mcp`` or ``mcp_write`` module.
+        name: Its name in the package, ``"mcp"`` or ``"mcp_write"``.
+        source: The source's slug, ``_client.SOURCE``.
+        problems: The check's problems, which this adds to.
+    """
+    from xippios.core.mcp import ToolSet
+
+    build = getattr(module, "build", None)
+    if not callable(build):
+        problems.append(f"{name}.py has no build(): def build() -> ToolSet")
+        return None
+    try:
+        tool_set = build()
+    except Exception as exc:  # the source's own error, named as the check meets it
+        problems.append(f"{name}.build() raises {type(exc).__name__}: {exc}")
+        return None
+    if not isinstance(tool_set, ToolSet):
+        problems.append(f"{name}.build() returns {_a(type(tool_set).__name__)}, not a ToolSet")
+        return None
+    if tool_set.source != source:
+        problems.append(
+            f"{name}.build() returns the tool set of {tool_set.source!r}, not of _client.SOURCE, "
+            f"{source!r}"
+        )
+        return None
+    return tool_set
+
+
+def _listing(server: Any) -> dict[str, dict[str, Any]]:
+    """The tools that ``server`` lists, each by its name as a client reads it."""
+    from xippios.core._loop import run
+
+    return {tool.name: tool.model_dump() for tool in run(server.list_tools())}
+
+
+def test_family_mcp_build_holds_the_package_contract(family_source: FamilySource) -> None:
+    """``mcp.build()``, ``mcp.server`` and ``mcp.ENV_VARS`` hold the package contract (§8).
+
+    A host serves a source by its ``build()``, so ``mcp.build()`` returns a ``ToolSet`` of
+    ``_client.SOURCE``, the entry point's ``mcp.server`` lists the tools that
+    ``build_server(mcp.build())`` lists, name, description and input schema alike, and
+    ``mcp.ENV_VARS`` is ``_client.ENV_VARS`` itself, imported rather than copied. A source
+    with ``tasks_write.py`` serves it from ``mcp_write.py``, whose ``build()`` returns a tool
+    set of the source that writes, ``read_only=False``; the write server's tools are the
+    source's to test with ``assert_write_tools`` (conventions §8, ADR-0042, decision 1,
+    ADR-0063, decision 8).
+    """
+    from xippios.core.mcp import build_server
+
+    path = family_source.import_path
+    client = importlib.import_module(f"{path}._client")
+    mcp = importlib.import_module(f"{path}.mcp")
+    problems: list[str] = []
+    tool_set = _tool_set(mcp, "mcp", family_source.source, problems)
+    server = getattr(mcp, "server", None)
+    if server is None:
+        problems.append("mcp.py has no server: server = build_server(build())")
+    elif tool_set is not None:
+        served, built = _listing(server), _listing(build_server(tool_set))
+        differ = sorted(
+            name for name in served.keys() | built.keys() if served.get(name) != built.get(name)
+        )
+        if differ:
+            problems.append(
+                f"mcp.server lists other tools than build_server(mcp.build()): {', '.join(differ)}"
+            )
+    if not hasattr(mcp, "ENV_VARS"):
+        problems.append("mcp.py has no ENV_VARS: import it from _client")
+    elif mcp.ENV_VARS is not getattr(client, "ENV_VARS", None):
+        problems.append("mcp.ENV_VARS is not _client.ENV_VARS: import it from _client")
+    if family_source.tasks_write is not None:
+        if importlib.util.find_spec(f"{path}.mcp_write") is None:
+            problems.append("tasks_write.py has no write server: mcp_write.py is missing")
+        else:
+            write = importlib.import_module(f"{path}.mcp_write")
+            writes = _tool_set(write, "mcp_write", family_source.source, problems)
+            if writes is not None and writes.read_only:
+                problems.append(
+                    "mcp_write.build() returns a tool set that does not write: build it with "
+                    "read_only=False"
+                )
+    _fail(problems, _CONTRACT_INTRO)
+
+
+_SCRIPTS_INTRO = (
+    "[project.scripts] names the entry points of conventions §8, each at its module's run "
+    "(ADR-0063, decision 8):"
+)
+
+
+def _entry_points(family: FamilySource) -> tuple[dict[str, str], tuple[str, ...]]:
+    """The entry points that conventions §8 name for the source, and those it names not.
+
+    ``xippios-<source>-mcp`` at ``mcp:run``, or for a source with ``tasks_write.py``
+    ``xippios-<source>-mcp-read`` at ``mcp:run`` and ``xippios-<source>-mcp-write`` at
+    ``mcp_write:run``, with no alias of the other form (ADR-0026).
+    """
+    stem, path = f"xippios-{family.source}-mcp", family.import_path
+    if family.tasks_write is None:
+        return {stem: f"{path}.mcp:run"}, (f"{stem}-read", f"{stem}-write")
+    return {f"{stem}-read": f"{path}.mcp:run", f"{stem}-write": f"{path}.mcp_write:run"}, (stem,)
+
+
+def test_family_project_scripts_name_the_entry_points(family_source: FamilySource) -> None:
+    """``[project.scripts]`` names the servers' entry points of conventions §8.
+
+    Each at its module's ``run``: ``xippios-<source>-mcp = "<import path>.mcp:run"``, or for
+    a source with ``tasks_write.py`` ``xippios-<source>-mcp-read`` at ``mcp:run`` and
+    ``xippios-<source>-mcp-write`` at ``mcp_write:run``, with no alias of the other form. A
+    script of the package's own stands beside them (ADR-0063, decision 8).
+    """
+    pyproject = tomllib.loads((family_source.root / "pyproject.toml").read_text(encoding="utf-8"))
+    scripts = pyproject.get("project", {}).get("scripts", {})
+    expected, refused = _entry_points(family_source)
+    problems: list[str] = []
+    for name, target in expected.items():
+        given = scripts.get(name)
+        if given is None:
+            problems.append(f'no {name} = "{target}"')
+        elif str(given).strip() != target:
+            problems.append(f"{name} runs {given}, not {target}")
+    kind = "without" if family_source.tasks_write is None else "with"
+    problems += [
+        f"{name} is no entry point of a source {kind} a write server"
+        for name in refused
+        if name in scripts
+    ]
+    _fail(problems, _SCRIPTS_INTRO)
+
+
 def _every_task(family: FamilySource) -> dict[str, Callable[..., Any]]:
     tasks = {f"tasks.{name}": fn for name, fn in family.read_tasks().items()}
     tasks.update({f"tasks_write.{name}": fn for name, fn in family.write_tasks().items()})
@@ -420,8 +585,9 @@ def test_family_tasks_return_results(family_source: FamilySource) -> None:
 def test_family_tasks_carry_agent_docstrings(family_source: FamilySource) -> None:
     """Every task's docstring opens with one sentence and explains its parameters.
 
-    The docstring is the tool description agents read: a first line that ends with a full
-    stop, and an ``Args:`` block when the task takes parameters (conventions §8).
+    Agents read the docstring, its text before ``Args:`` as the tool's description and each
+    argument's text in the input schema: a first line that ends with a full stop, and an
+    ``Args:`` block when the task takes parameters (conventions §8, ADR-0063, decision 9).
     """
     problems = []
     for name, fn in _every_task(family_source).items():
@@ -434,6 +600,64 @@ def test_family_tasks_carry_agent_docstrings(family_source: FamilySource) -> Non
         if inspect.signature(fn).parameters and "Args:" not in doc:
             problems.append(f"{name}: explain every parameter under Args: with valid values")
     _fail(problems, "task docstrings are written for agents:")
+
+
+_RE_EXPORT_INTRO = (
+    "the package re-exports every task of tasks.__all__ and tasks_write.__all__, the same "
+    "object, from its __init__.py (ADR-0063, decision 8):"
+)
+
+
+def test_family_package_re_exports_its_tasks(family_source: FamilySource) -> None:
+    """Every task of ``tasks.__all__`` and ``tasks_write.__all__`` is the package's own.
+
+    ``xippios.example.get_series`` is ``xippios.example.tasks.get_series``, the object
+    itself, as the package's ``__init__.py`` imports it (ADR-0063, decision 8).
+    """
+    package, path = family_source.package, family_source.import_path
+    problems: list[str] = []
+    for name, fn in sorted(_every_task(family_source).items()):
+        attribute = name.partition(".")[2]
+        if not hasattr(package, attribute):
+            problems.append(f"{name}: {path} has no {attribute}")
+        elif getattr(package, attribute) is not fn:
+            problems.append(f"{name}: {path}.{attribute} is another object")
+    _fail(problems, _RE_EXPORT_INTRO)
+
+
+_DESCRIPTION_BOUND = 1_000
+"""The characters a tool's description stays under (ADR-0063, decision 9)."""
+_DESCRIPTION_INTRO = (
+    "every tool's description, the text of its task's docstring before Args:, is under "
+    f"{_DESCRIPTION_BOUND:,} characters (conventions §8, ADR-0063, decision 9):"
+)
+
+
+def test_family_tool_descriptions_stay_under_the_bound(family_source: FamilySource) -> None:
+    """Every tool's description is under 1,000 characters (conventions §8).
+
+    The description is the text of the task's docstring before ``Args:``, as the MCP adapter
+    gives it, and each argument's text under ``Args:`` reaches the tool's input schema
+    instead, so what one argument needs goes to its line there. The test holds the tools of
+    the read server, ``tasks.__all__`` minus ``BULK_TASKS``, and of the write server,
+    ``tasks_write.__all__`` (ADR-0063, decision 9).
+    """
+    from xippios.core.mcp import tool_name
+    from xippios.core.mcp.server import _description
+
+    tools = [*_served(family_source).values(), *family_source.write_tasks().values()]
+    over = sorted(
+        (tool_name(family_source.source, fn), len(_description(fn)))
+        for fn in tools
+        if len(_description(fn)) >= _DESCRIPTION_BOUND
+    )
+    _fail(
+        [
+            f"{tool}: {length:,} characters; move what one argument needs to its line under Args:"
+            for tool, length in over
+        ],
+        _DESCRIPTION_INTRO,
+    )
 
 
 _READ_VERBS = ("list", "get", "search", "count", "download")
