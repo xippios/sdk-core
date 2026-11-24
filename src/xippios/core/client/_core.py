@@ -482,8 +482,11 @@ class AsyncClient:
         async def read(streamed: httpx.Response) -> httpx.Response | None:
             nonlocal over
             body = await _read_within(streamed, max_read_bytes)
-            if body is None:  # past the bound: observed by its status and headers alone
+            if body is None:
+                # Past the bound: closed before observe sees its status and headers, so a
+                # hook finds it closed and its elapsed time set, as for a whole answer.
                 over = True
+                await streamed.aclose()
                 return None
             return httpx.Response(
                 streamed.status_code,
