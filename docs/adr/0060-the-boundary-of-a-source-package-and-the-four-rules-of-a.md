@@ -22,6 +22,11 @@ that can be quoted alone with its record, so each sentence takes a decision here
 conventions take the six sentences word for word in §14 and each rule once, in the section of its
 subject.
 
+The maintainer's answer on https://github.com/xippios/sdk-usda-esr/issues/60, part 3, the interview of
+sdk-usda-esr's adoption, read decision 1 for the family on the same day: a time that upstream
+prints is read into the type that keeps all of it, and no text stands beside it. Decisions 7 to
+9 state that reading.
+
 ## Decision
 
 1. **Values.** A package returns each value of upstream's data as upstream states it, under
@@ -32,8 +37,8 @@ subject.
    answered, and may filter its own items by it. Where an answer holds several releases it reports
    the newest. It compares no values across releases and reconciles none.
 3. **Labels and lists.** A label names a code in upstream's own words, from upstream's own list of
-   the same source. A shared rule of the family names a domain concept only to find where such a
-   label is owed. A package builds no list, name, grouping or rule of its own.
+   the same source. A shared rule of the workspace names a domain concept only to find where such
+   a label is owed. A package builds no list, name, grouping or rule of its own.
 4. **What an answer holds.** A task is an upstream operation, a list that orients a caller, or a
    series over periods. It returns what its operation returns for the arguments given, and a caller
    can set what upstream documents. A package adds no task that fixes filters, sorts, ranks or cuts
@@ -47,8 +52,11 @@ subject.
    tenant's name. What a package withholds by the identifier rule, it withholds on purpose.
 7. **A record that a package shapes itself** follows four rules, as sdk-usda-wasde's record of a
    release's tables will: one value per record; a field under upstream's name holds upstream's
-   text; a reading of that text stands beside it under a fixed suffix, `<stem>_number` for a number
-   and `<stem>_label` for a label; and a code and its label stand side by side. The one exception
+   text; a reading of that text stands beside it under the one suffix of a reading,
+   `<stem>_number`; and a code and its label stand side by side, the label as `<stem>_label`
+   beside the code `<stem>`. A text stands beside a reading only where no type keeps what upstream
+   sends, so the family has no suffix for a time, `<stem>_number` is the one twin of a reading and
+   `<stem>_label` stays the name of a code's label (https://github.com/xippios/sdk-usda-esr/issues/60, part 3). The one exception
    is ADR-0020's, decision 2, as amended on this date: where the file names no value that the
    record needs, as sdk-usda-wasde's XML names no commodity on some pages, the record reads it from
    the table's title or from the same release's XLS and says which.
@@ -69,6 +77,10 @@ subject.
    - A value that upstream prints as text and that can carry a mark reaches a caller twice: the
      text as printed, and beside it the parsed number, or nothing where the text holds none
      (decision 1).
+   - A time that upstream prints is read into the type that keeps everything upstream sends,
+     naive where upstream states no zone, and no text stands beside it: sdk-usda-esr's
+     `releaseTimeStamp` reads as a time that keeps upstream's fraction of a second, and the
+     private attribute that kept its text goes (decision 1; https://github.com/xippios/sdk-usda-esr/issues/60, part 3).
    - A caller can set what upstream documents as a parameter, and a package's default is upstream's
      own (decision 4).
    - `meta.total` is upstream's count and is summed no more than it is computed: a task that
@@ -76,11 +88,13 @@ subject.
      request (decision 1; ADR-0034, decision 4, as amended on this date).
 9. **The family check holds the form of a reading.** `test_family_readings_stand_beside_their_text`
    reads every model that a task's `Result[T]` reaches, read and write tasks alike, through its
-   fields and computed fields, and fails a field `<stem>_number` or `<stem>_label` whose stem is a
-   field of the same model that holds no text, `str` or a subclass, optional or not. The stem is the
-   name before the suffix where the model holds a field of that name. A name whose part before the
-   suffix names no field of its model is upstream's own name and no reading, as sdk-cashctrl's
-   `street_number`, `row_label` and `field_label` are, and the check passes it. The check therefore
+   fields and computed fields, and fails a field `<stem>_number` whose stem is a field of the same
+   model that holds no text, `str` or a subclass, optional or not. The stem is the name before the
+   suffix where the model holds a field of that name. A name whose part before the suffix names no
+   field of its model is upstream's own name and no reading, as sdk-cashctrl's `street_number` is,
+   and the check passes it. A field `<stem>_label` is the label of a code, no reading, beside a code
+   that may be an integer (ADR-0056), so the check does not read it, and sdk-cashctrl's
+   `row_label` and `field_label` are upstream's own names as well (https://github.com/xippios/sdk-usda-esr/issues/60, part 3). The check therefore
    holds a reading's form and not that a reading which can lose something has one: that is the
    review's, by decision 1. One pair stands in the family today, sdk-usda-nass's `value` and its
    computed `value_number`, and no model of the twelve sources holds a suffixed field beside a stem

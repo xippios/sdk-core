@@ -18,7 +18,9 @@ https://github.com/xippios/sdk-core/issues/474 decided that a second record, bes
 of ADR-0060, holds the twelve ways, one decision each, and that the conventions state each in the
 section of its subject, so that a rule can be quoted alone with its decision. Of the twelve, the
 conventions held only the two meanings of `since` (ADR-0052). The family check takes the one way
-that a test can hold whole, the verbs of decision 3; the others are the review's.
+that a test can hold whole, the verbs of decision 3; the others are the review's. The
+maintainer's answer on https://github.com/xippios/sdk-usda-esr/issues/60, part 1, the interview of
+sdk-usda-esr's adoption, read decision 5 for the family on the same day.
 
 ## Decision
 
@@ -45,9 +47,13 @@ that a test can hold whole, the verbs of decision 3; the others are the review's
    tenant comes first and `confirm` last. An argument that upstream takes keeps upstream's name
    (ADR-0028, decision 2).
 5. **One order of arguments within a source.** Within a source one concept stands at one
-   position in every task: upstream's path order first, then the filters, keyword-only after the
-   arguments that identify the record. No test holds it, since it would fail positional
-   signatures in six sources before each has chosen its order.
+   position in every task. The arguments that identify a record are positional, in the order of
+   upstream's path, and every optional filter and every argument of the package's own is
+   keyword-only, as the invented source `example` takes `get_series(region_code, year, *,
+   unit=None)` and sdk-usda-esr will take `get_exports(commodity_code, market_year, *,
+   country_code=None)` (https://github.com/xippios/sdk-usda-esr/issues/60, part 1). Over MCP and HTTP nothing changes, since a tool and a route
+   take their arguments by name, and a Python caller by position rewrites its call. No test holds
+   it, since it would fail positional signatures in the sources before each has its order.
 6. **One answer for "no data" per kind of task.** A task that returns a list answers no data
    with the empty list, and a task that returns one record raises `NotFoundError`. A period that
    upstream has not released is `NotFoundError` where the package knows the latest release
@@ -83,8 +89,9 @@ that a test can hold whole, the verbs of decision 3; the others are the review's
 - The ways bind a source from its adoption of core 0.5.0, which takes what the source does not
   meet yet, named by source and file in the release's changelog. By the alignment of the twelve
   sources that this record answers: decision 1 changes sdk-comtrade's comma-separated texts;
-  decision 2 sdk-usda-gats and sdk-eurostat; decision 3 the six tasks above; decision 5 a
-  positional call in sdk-usda-psd, sdk-usda-esr, sdk-comtrade, sdk-x, sdk-eurostat and
+  decision 2 sdk-usda-gats and sdk-eurostat; decision 3 the six tasks above; decision 5 a call
+  by position of an optional filter or an argument of the package's own in every source, and a
+  concept at two positions in sdk-usda-psd, sdk-usda-esr, sdk-comtrade, sdk-x, sdk-eurostat and
   sdk-usda-gats; decision 6 sdk-usda-nass, sdk-usda-esmis and sdk-usda-esr; decision 7
   sdk-cashctrl and sdk-comtrade; decision 8 sdk-usda-psd, sdk-usda-esmis, sdk-usda-nass and
   sdk-cashctrl; decision 9 each source whose paged tools send a request on a second run;

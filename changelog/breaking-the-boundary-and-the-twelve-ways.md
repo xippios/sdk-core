@@ -5,7 +5,7 @@
   family check gains two tests that hold a source from its adoption of 0.5.0,
   `test_family_read_tasks_start_with_a_read_verb`, a read task named `list_`, `get_`, `search_`,
   `count_` or `download_`, and `test_family_readings_stand_beside_their_text`, a reading
-  `<stem>_number` or `<stem>_label` beside the text field of its stem. ADR-0028, ADR-0001,
+  `<stem>_number` beside the text field of its stem. ADR-0028, ADR-0001,
   ADR-0020, ADR-0034, ADR-0041, ADR-0047 and ADR-0011 each take one sentence that points to them.
   (ADR-0060, ADR-0061, §1, §2, §3, §4, §5, §6, §8, §10, §14,
   https://github.com/xippios/sdk-core/issues/474)
@@ -104,6 +104,14 @@
     the `tests/test_slices.py` tests of the two tasks leave, and
     `test_vintage_is_none_for_empty_answers` and the tests of `get_exports` assert the computed
     week (ADR-0060, decisions 2 and 8).
+    `src/xippios/usda/esr/models.py` (sdk-usda-esr) — the private attribute
+    `_release_time_stamp_text` and its validator go, `releaseTimeStamp` reads as a time that
+    keeps upstream's fraction of a second with no text beside it, and `meta.vintage` of the
+    release list stays upstream's text for the answer's newest record —
+    `test_the_release_text_round_trips_and_is_not_serialised` and
+    `test_the_release_text_through_a_copy_a_dump_and_a_revalidation` of `tests/test_api.py`
+    leave, and `tests/test_tasks.py` and `tests/test_live.py` read the property
+    `release_time_stamp_text` (ADR-0060, decisions 1 and 8, https://github.com/xippios/sdk-usda-esr/issues/60, part 3).
     `src/xippios/usda/gats/tasks.py` (sdk-usda-gats) — the six tasks that take their release
     time from another flow's list, `get_census_reexports`, `get_customs_district_exports`,
     `get_customs_district_imports`, `get_customs_district_reexports`,
@@ -112,10 +120,19 @@
     `test_get_census_reexports`, `test_customs_district_tasks`, `test_un_data_tasks`,
     `test_the_un_vintages_are_the_recorded_release_times` and `test_census_series_tasks` assert
     the borrowed release (ADR-0060, decisions 2 and 8).
-    `src/xippios/<package>/tasks.py` (sdk-usda-psd, sdk-usda-esr, sdk-comtrade, sdk-x,
-    sdk-eurostat, sdk-usda-gats) — one concept at one position in every task, keyword-only after
-    the arguments that identify the record — a test that calls a task by position breaks
-    (ADR-0061, decision 5).
+    `src/xippios/usda/esr/tasks.py` (sdk-usda-esr) — the five call forms
+    `get_exports(commodity_code, market_year, *, country_code=None)`,
+    `get_weekly_series(commodity_code, country_code, *, start_year, end_year)`,
+    `get_release_dates(*, commodity_code=None, since=None)`,
+    `list_countries(*, region_id=None, search=None)` and `list_commodities(*, search=None)` —
+    a test that passes the country or a filter by position breaks (ADR-0061, decision 5,
+    https://github.com/xippios/sdk-usda-esr/issues/60, part 1).
+    `src/xippios/<package>/tasks.py` and `tasks_write.py` (every other source) — the arguments
+    that identify a record positional, in the order of upstream's path, and every optional
+    filter and every argument of the package's own, `confirm` among them, keyword-only, with one
+    concept at one position in every task, which sdk-usda-psd, sdk-comtrade, sdk-x, sdk-eurostat
+    and sdk-usda-gats do not meet today — a test that passes a filter by position breaks
+    (ADR-0061, decision 5, https://github.com/xippios/sdk-usda-esr/issues/60, part 1).
     `src/xippios/<package>/tasks.py` (sdk-usda-nass, sdk-usda-esmis, sdk-usda-esr) — no data is
     the empty list for a task that returns a list and `NotFoundError` for one that returns a
     record — a test that asserts the other answer breaks (ADR-0061, decision 6).

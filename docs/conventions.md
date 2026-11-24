@@ -111,8 +111,9 @@ Every source package has three layers, top to bottom, and nothing skips a layer.
 2. **Task-shaped functions** — `xippios/<pkg>/tasks.py`. A task is an upstream operation, a
    list that orients a caller, or a series over periods: it returns what its operation returns
    for the arguments given, and a caller can set what upstream documents, as the invented
-   source `example`'s `get_series(series_id, year)` returns its operation's series for a year
-   that the caller names (ADR-0060, decision 4; ADR-0001, amendment 2026-11-24). A package adds
+   source `example`'s `get_series(region_code, year, *, unit=None)` returns its operation's
+   series for the region and the year that the caller names (ADR-0060, decision 4; ADR-0001,
+   amendment 2026-11-24). A package adds
    no task that fixes filters, sorts, ranks or cuts for the caller, so a slice of one operation
    with filters that the caller cannot change and a ranking are tasks of what is built on the
    packages (ADR-0060, decisions 4 and 8). Tasks
@@ -139,9 +140,10 @@ decision 1).
 A package filters after the fetch only where upstream offers no filter of its own: the filter is
 named after upstream's field that it reads, compares by equality or by prefix, and its task's
 docstring says that the package filters after the fetch (ADR-0061, decision 2).
-Within a source one concept stands at one position in every task, upstream's path order first,
-then the filters, keyword-only after the arguments that identify the record (ADR-0061,
-decision 5).
+Within a source one concept stands at one position in every task: the arguments that identify a
+record are positional, in the order of upstream's path, and every optional filter and every
+argument of the package's own is keyword-only, as the invented source `example` takes
+`get_series(region_code, year, *, unit=None)` (ADR-0061, decision 5; https://github.com/xippios/sdk-usda-esr/issues/60, part 1).
 
 Task code may send, beside its base URL, to a second base URL on the host of the first,
 from which upstream serves part of its data, and to an origin or mirror that the publisher
@@ -298,6 +300,11 @@ skip it (§8, §9; ADR-0040).
   A value that upstream prints as text and that can carry a mark reaches a caller twice, the text
   as printed and beside it the parsed number or nothing, as the invented source `example`'s
   `value` holds `"1,204 (P)"` beside its `value_number` of `1204` (ADR-0060, decision 8).
+  A time that upstream prints is read into the type that keeps everything upstream sends, naive
+  where upstream states no zone, and no text stands beside it, since a text stands beside a
+  reading only where no type keeps what upstream sends, as the invented source `example`'s
+  `released` reads `2026-10-06T08:00:00.250` into a `datetime` with no zone and no second field
+  (ADR-0060, decision 8; https://github.com/xippios/sdk-usda-esr/issues/60, part 3).
   Upstream's own name is the name in its API document, spelled as the language allows: a field
   takes it in snake case, and where upstream spells it otherwise the model accepts upstream's
   spelling with `Field(validation_alias=...)`, never `Field(alias=...)`, since the adapters
@@ -324,9 +331,9 @@ skip it (§8, §9; ADR-0040).
   documentation.
 - A record that a package shapes itself, from a file or a printed table, follows four rules: one
   value per record; a field under upstream's name holds upstream's text; a reading of that text
-  stands beside it under a fixed suffix, `<stem>_number` for a number and `<stem>_label` for a
-  label; and a code and its label stand side by side (ADR-0060, decision 7; ADR-0020, amendment
-  2026-11-24).
+  stands beside it under the one suffix of a reading, `<stem>_number`; and a code and its label
+  stand side by side, the label as `<stem>_label` beside the code `<stem>` (ADR-0060, decision 7;
+  ADR-0020, amendment 2026-11-24; https://github.com/xippios/sdk-usda-esr/issues/60, part 3).
   Where the file names no value that such a record needs, the commodity of a table say, the
   record reads it from the table's title or from another file of the same release and says which
   (ADR-0060, decision 7; ADR-0020, amendment 2026-11-24).
@@ -971,7 +978,7 @@ with sdk-template 0.4.0, which renders it (ADR-0026, amendment 2026-11-18, point
   return whole, a cursor-paged page with the `next_token` the caller needs for the next
   page or a bounded lookup, which a cut at the default would turn into a preview or cut
   by its rows, its cursor then past the rows the cut left out: a byte bound of its own,
-  the row bound unchanged (sdk-x's post tools and `lookup_users`; ADR-0038,
+  the row bound unchanged (sdk-x's post tools; ADR-0038,
   decision 4). So does a tool whose result is one upstream document or table that an
   agent reads whole, a report or a statement (sdk-cashctrl's `get_report_data`, 131,072
   bytes) or a table's page (sdk-usda-wasde's `get_table`, 400 rows and 131,072 bytes): the
@@ -1365,9 +1372,10 @@ standalone from the package. A task named in `BULK_TASKS` gets no route:
   none of the five read verbs of §1, `list_`, `get_`, `search_`, `count_` or `download_`
   (ADR-0061, decision 3).
   The family check fails a model that a task's `Result[T]` reaches where a field or computed
-  field `<stem>_number` or `<stem>_label` stands beside a field `<stem>` of the same model that
-  holds no text, and it passes a name whose part before the suffix names no field of its model,
-  which is upstream's own name and no reading (ADR-0060, decision 9).
+  field `<stem>_number` stands beside a field `<stem>` of the same model that holds no text, and
+  it passes a name whose part before the suffix names no field of its model, which is upstream's
+  own name and no reading, and a code's label `<stem>_label`, which is no reading
+  (ADR-0060, decision 9).
 - A value set that a package writes by hand from upstream's document, an enumeration or a table
   of allowed values, is held by an offline test that reads it against the document under
   `docs/upstream/` (ADR-0061, decision 12).
@@ -1487,8 +1495,8 @@ decisions 1 to 6, states them, and each section above holds the rule of its subj
    answered, and may filter its own items by it. Where an answer holds several releases it reports
    the newest. It compares no values across releases and reconciles none.
 3. **Labels and lists.** A label names a code in upstream's own words, from upstream's own list of
-   the same source. A shared rule of the family names a domain concept only to find where such a
-   label is owed. A package builds no list, name, grouping or rule of its own.
+   the same source. A shared rule of the workspace names a domain concept only to find where such
+   a label is owed. A package builds no list, name, grouping or rule of its own.
 4. **What an answer holds.** A task is an upstream operation, a list that orients a caller, or a
    series over periods. It returns what its operation returns for the arguments given, and a caller
    can set what upstream documents. A package adds no task that fixes filters, sorts, ranks or cuts

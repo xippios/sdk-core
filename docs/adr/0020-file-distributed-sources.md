@@ -157,8 +157,8 @@ on.
 
 Amended by ADR-0060, decisions 7 and 8 (https://github.com/xippios/sdk-core/issues/474):
 decision 2 takes the four rules of a record that a package shapes itself, one value per record,
-upstream's text under upstream's name, a reading of it beside it as `<stem>_number` or
-`<stem>_label` and a code beside its label, with their one exception that a record whose file
-names no commodity, as sdk-usda-wasde's XML names none on some pages, reads it from the table's
-title or the same release's XLS and says which, and decision 5's `meta.vintage` has one reading,
-the catalog's release identifier, where it named a report date as printed beside it.
+upstream's text under upstream's name, a reading of it beside it as `<stem>_number` and a code
+beside its label `<stem>_label`, with their one exception that a record whose file names no
+commodity, as sdk-usda-wasde's XML names none on some pages, reads it from the table's title or
+the same release's XLS and says which, and decision 5's `meta.vintage` has one reading, the
+catalog's release identifier, where it named a report date as printed beside it.
