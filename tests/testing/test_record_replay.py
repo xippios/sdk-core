@@ -488,7 +488,7 @@ def test_match_params_on_a_key_that_is_data(respx_mock: respx.MockRouter) -> Non
     route = mount_fixture(respx_mock, series, match_params=["key"])
     assert httpx.get(f"{BASE}/data/prc_hicp_manr?key=M.DE.CP00").json() == [1]
     assert sent_urls(route) == [f"{BASE}/data/prc_hicp_manr?key=M.DE.CP00"]
-    KeyAuth("EXAMPLE_API_KEY", location="query", name="key")
+    KeyAuth("EXAMPLE_API_KEY", location="query", name="key", source="example")
     with pytest.raises(ValueError, match=r"^match_params: 'key' names a credential"):
         mount_fixture(respx_mock, series, match_params=["key"])
     nass = _recorded(f"{BASE}/api/api_GET?key=SECRET&year=2024", [1])
@@ -567,7 +567,7 @@ async def test_a_truncated_array_records_replays_and_decodes(
 
     respx_mock.routes.clear()
     replay_fixture("rows", "cut")
-    assert await client.get_json("/v1/rows") == [{"n": n} for n in range(7)]
+    assert (await client.get_answer("/v1/rows")).payload == [{"n": n} for n in range(7)]
 
 
 @pytest.mark.anyio
@@ -591,7 +591,7 @@ async def test_an_object_s_array_records_its_last_elements_and_replays(
 
     respx_mock.routes.clear()
     replay_fixture("api_GET", "latest")
-    replayed = await client.get_json("/api/api_GET")
+    replayed = (await client.get_answer("/api/api_GET")).payload
     assert replayed == {"data": [{"year": 2022}, {"year": 2023}], "count": 64}
 
 

@@ -297,7 +297,7 @@ async def test_replayed_requests_do_not_wait(replay_fixture):
     sleeper = Sleeper()
     client = AsyncClient(CONFIG, sleep=sleeper)
     for _ in range(2):
-        assert (await client.get_json("/p")) == {"a": 1}
+        assert (await client.get_answer("/p")).payload == {"a": 1}
     assert route.call_count == 2
     assert sleeper.calls == []
     assert TokenBucket.acquire is not ACQUIRE
@@ -382,7 +382,7 @@ async def test_a_replayed_429_spends_the_quota(respx_mock):
 async def test_the_next_test_is_neither_refused_nor_paused(respx_mock):
     assert POLICY.snapshot() is None
     route = respx_mock.get("https://h.test/p").respond(200, json={"a": 1})
-    assert (await CLIENT.get_json("/p")) == {"a": 1}
+    assert (await CLIENT.get_answer("/p")).payload == {"a": 1}
     assert route.call_count == 1
     assert SLEPT == []
 
@@ -443,7 +443,7 @@ ENTRY = CachedResponse(status=200, headers=(), content=b"{}", stored_at=0.0)
 
 
 def test_an_offline_test_stores_an_entry():
-    CACHE.set("k", ENTRY)
+    CACHE.set("k", ENTRY, lifetime=None)
     assert len(CACHE) == 1
 
 
@@ -453,7 +453,7 @@ def test_the_next_test_starts_without_it():
 
 @pytest.mark.live
 def test_a_live_test_keeps_what_it_stores():
-    CACHE.set("k", ENTRY)
+    CACHE.set("k", ENTRY, lifetime=None)
 
 
 @pytest.mark.live
@@ -482,8 +482,13 @@ import pytest
 
 from xippios.core import QuotaPolicy
 
-POLICY = QuotaPolicy(source="example")
-QUIET = QuotaPolicy(source="unused")  # no reading: no line
+POLICY = QuotaPolicy(
+    limit_header="x-ratelimit-limit",
+    remaining_header="x-ratelimit-remaining",
+    window=3600.0,
+    source="example",
+)
+QUIET = QuotaPolicy(window=3600.0, source="unused")  # no reading: no line
 
 
 @pytest.mark.live
@@ -730,7 +735,8 @@ def test_every_auth_object_sends_the_placeholder(respx_mock):
         httpx.get("https://h.test/h", auth=auth)
     assert header.call_count == 2
     query = respx_mock.get("https://h.test/q", params={"key": PLACEHOLDER_KEY}).respond(200)
-    httpx.get("https://h.test/q", auth=KeyAuth("EXAMPLE_API_KEY", location="query", name="key"))
+    auth = KeyAuth("EXAMPLE_API_KEY", location="query", name="key", source="example")
+    httpx.get("https://h.test/q", auth=auth)
     assert query.called
 
 
@@ -945,7 +951,7 @@ from xippios.core.client import KeyAuth
 pytest_plugins = ["xippios.core.testing.plugin"]
 
 VARIABLE = "EXAMPLE_API_KEY"
-auth = KeyAuth(VARIABLE, location="query", name="key")
+auth = KeyAuth(VARIABLE, location="query", name="key", source="example")
 PLACEHOLDER_KEY = "placeholder-for-fixture-replay"  # pragma: allowlist secret
 
 

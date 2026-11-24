@@ -1,4 +1,4 @@
-"""``post_json`` and ``delete_json``, the write counterparts of ``get_json`` (#178)."""
+"""``post_json``, and a DELETE through ``request`` (#178, #473)."""
 
 import json
 
@@ -75,19 +75,20 @@ async def test_post_json_sends_a_form_with_its_headers(respx_mock: respx.MockRou
 @pytest.mark.anyio
 @pytest.mark.parametrize("status", [200, 202, 204])
 async def test_a_bodiless_answer_returns_none(respx_mock: respx.MockRouter, status: int) -> None:
-    # sdk-google-mail: drafts.delete answers no body.
-    respx_mock.delete(f"{BASE}/v1/drafts/r-1").respond(status)
     respx_mock.post(f"{BASE}/v1/messages/m1/trash").respond(status)
     client = make_client()
-    assert await client.delete_json("/v1/drafts/r-1") is None
     assert await client.post_json("/v1/messages/m1/trash") is None
 
 
 @pytest.mark.anyio
-async def test_delete_json_decodes_an_answer_with_a_body(respx_mock: respx.MockRouter) -> None:
-    route = respx_mock.delete(f"{BASE}/v1/items/7").respond(200, json={"deleted": 7})
+async def test_a_delete_goes_through_request_and_sends_no_body(
+    respx_mock: respx.MockRouter,
+) -> None:
+    # delete_json leaves for request (https://github.com/xippios/sdk-core/issues/473).
+    route = respx_mock.delete(f"{BASE}/v1/items/7").respond(204)
     client = make_client()
-    assert await client.delete_json("/v1/items/7", params={"force": "true"}) == {"deleted": 7}
+    response = await client.request("DELETE", "/v1/items/7", params={"force": "true"})
+    assert response.status_code == 204
     sent = route.calls.last.request
     assert sent.url.params["force"] == "true"
     assert sent.content == b""
@@ -98,7 +99,7 @@ async def test_a_body_that_is_not_json_raises_naming_the_path(
     respx_mock: respx.MockRouter,
 ) -> None:
     respx_mock.post(f"{BASE}/v1/drafts").respond(200, text="<html>oops</html>")
-    respx_mock.delete(f"{BASE}/v1/drafts/r-1").respond(200, text=" ")
+    respx_mock.post(f"{BASE}/v1/drafts/r-1/send").respond(200, text=" ")
     client = make_client()
     with pytest.raises(ValidationError) as info:
         await client.post_json("/v1/drafts", json={})
@@ -106,16 +107,16 @@ async def test_a_body_that_is_not_json_raises_naming_the_path(
         "example: response from /v1/drafts is not JSON: Expecting value at line 1 column 1 (char 0)"
     )
     assert info.value.raw == "<html>oops</html>"
-    with pytest.raises(ValidationError, match=r"^example: response from /v1/drafts/r-1 is not"):
-        await client.delete_json("/v1/drafts/r-1")  # a blank body is a body
+    with pytest.raises(ValidationError, match=r"^example: response from /v1/drafts/r-1/send "):
+        await client.post_json("/v1/drafts/r-1/send")  # a blank body is a body
 
 
 @pytest.mark.anyio
-async def test_get_json_still_refuses_an_empty_body(respx_mock: respx.MockRouter) -> None:
-    """``None`` for a bodiless answer is the write calls' alone: ``get_json`` is unchanged."""
+async def test_get_answer_refuses_an_empty_body(respx_mock: respx.MockRouter) -> None:
+    """``None`` for a bodiless answer is ``post_json``'s alone, never the reader's."""
     respx_mock.get(f"{BASE}/v1/x").respond(204)
     with pytest.raises(ValidationError, match=r"^example: response from /v1/x is not JSON: "):
-        await make_client().get_json("/v1/x")
+        await make_client().get_answer("/v1/x")
 
 
 @pytest.mark.anyio
@@ -149,10 +150,10 @@ async def test_a_write_call_goes_through_classify_and_the_write_retry_rule(
 
 
 async def write(client: AsyncClient, method: str, path: str) -> object:
-    """``post_json(path)`` or ``delete_json(path)``, by ``method``."""
+    """``post_json(path)`` or ``request("DELETE", path)``, by ``method``."""
     if method == "POST":
         return await client.post_json(path)
-    return await client.delete_json(path)
+    return await client.request("DELETE", path)
 
 
 @pytest.mark.anyio
@@ -164,11 +165,11 @@ async def test_a_write_call_takes_auth_and_never_touches_the_cache(
     client = make_client(auth=httpx.BasicAuth("user", "pw"), cache=MemoryCache())
     for _ in range(2):
         await client.post_json("/v1/x", json={})
-        await client.delete_json("/v1/x")
+        await client.request("DELETE", "/v1/x")
     assert (post.call_count, delete.call_count) == (2, 2)
     assert "authorization" in post.calls.last.request.headers
     await client.post_json("/v1/x", json={}, auth=None)
-    await client.delete_json("/v1/x", auth=None)
+    await client.request("DELETE", "/v1/x", auth=None)
     assert "authorization" not in post.calls.last.request.headers
     assert "authorization" not in delete.calls.last.request.headers
 

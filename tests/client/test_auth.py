@@ -79,10 +79,18 @@ def test_the_key_class_keeps_where_the_key_travels() -> None:
 
 
 def test_a_query_key_makes_its_parameter_a_credential_and_a_header_none() -> None:
-    KeyAuth(ENV, location="header", name="key")  # a header registers no name
+    KeyAuth(ENV, location="header", name="key", source="example")  # a header registers none
     assert not is_credential_name("key")
-    KeyAuth(ENV, location="query", name="key")
-    assert is_credential_name("key")
+    KeyAuth(ENV, location="query", name="key", source="example")
+    assert is_credential_name("key", source="example")
+    assert not is_credential_name("key", source="sibling"), "another source's key stays data"
+
+
+def test_a_query_key_without_its_source_is_refused() -> None:
+    # Its name is a credential of the source it names, and of no other (ADR-0040, decision 6).
+    with pytest.raises(ValueError, match=r'^location="query" takes source=, the source whose'):
+        KeyAuth(ENV, location="query", name="key")
+    assert not is_credential_name("key"), "a refused query key registers nothing"
 
 
 @pytest.mark.parametrize(

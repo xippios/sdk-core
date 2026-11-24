@@ -48,7 +48,7 @@ async def test_every_client_hands_each_answer_read_whole_in_the_order_it_arrived
     respx_mock.post(f"{BASE}/v1/notes").respond(201, json={"id": 7})
     source, files = make_client(), make_client(OTHER)
     with _collecting() as collector:
-        assert (await source.get_json("/v1/series")) == {"ids": ["a"]}
+        assert (await source.get_answer("/v1/series")).payload == {"ids": ["a"]}
         assert (await files.get_answer("/v2/meta")).payload == {"unit": "t"}
         assert (await source.post_json("/v1/notes", json={"n": 1})) == {"id": 7}
     assert [(r.request.method, str(r.request.url)) for r in collector.answers] == [

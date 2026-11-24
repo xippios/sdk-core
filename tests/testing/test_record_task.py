@@ -16,7 +16,7 @@ import respx
 
 from xippios.core import sync
 from xippios.core.client import AsyncClient, ClientConfig, MemoryCache, RetryPolicy
-from xippios.core.errors import NotFoundError, ValidationError
+from xippios.core.errors import NotFoundError, UpstreamError, ValidationError
 from xippios.core.testing import (
     REDACTED,
     Fixture,
@@ -48,9 +48,9 @@ CACHED = AsyncClient(_config(cache=MemoryCache()), sleep=no_sleep)
 
 async def three_series_async(series: str) -> dict[str, Any]:
     """Three calls on three paths: the series' entry, its metadata and its data."""
-    listed = await CLIENT.get_json("/v1/series", params={"id": series})
-    meta = await CLIENT.get_json(f"/v1/series/{series}/meta")
-    data = await CLIENT.get_json(f"/v1/series/{series}/data", params={"year": "2025"})
+    listed = (await CLIENT.get_answer("/v1/series", params={"id": series})).payload
+    meta = (await CLIENT.get_answer(f"/v1/series/{series}/meta")).payload
+    data = (await CLIENT.get_answer(f"/v1/series/{series}/data", params={"year": "2025"})).payload
     return {"listed": listed, "meta": meta, "data": data}
 
 
@@ -59,12 +59,12 @@ three_series = sync(three_series_async)
 
 async def four_calls_async(series: str) -> None:
     await three_series_async(series)
-    await CLIENT.get_json(f"/v1/series/{series}/notes")
+    await CLIENT.get_answer(f"/v1/series/{series}/notes")
 
 
 async def calls_async(count: int) -> None:
     for number in range(count):
-        await CLIENT.get_json(f"/v1/calls/{number}")
+        await CLIENT.get_answer(f"/v1/calls/{number}")
 
 
 PATHS = ["/v1/series", "/v1/series/corn/meta", "/v1/series/corn/data"]
@@ -200,7 +200,8 @@ async def test_a_task_that_raises_writes_nothing_and_the_collector_is_off_after(
 
 async def cached_and_busy_async() -> None:
     await CACHED.get_answer("/v1/regions")
-    await CACHED.request("GET", "/v1/busy", raise_on_error=False)
+    with contextlib.suppress(UpstreamError):  # the 503 is recorded before it is raised
+        await CACHED.get("/v1/busy")
 
 
 @pytest.mark.anyio
@@ -238,21 +239,21 @@ async def test_a_3xx_among_the_exchanges_refuses_the_recording(
 
 
 async def decodes_a_redirect_async() -> None:
-    await CLIENT.get_json("/v1/series")
-    await CLIENT.get_json("/v1/moved")  # a 302 has no JSON body: the task raises
+    await CLIENT.get_answer("/v1/series")
+    await CLIENT.get_answer("/v1/moved")  # a 302 has no JSON body: the task raises
 
 
 async def swallows_a_redirect_async() -> None:
-    await CLIENT.get_json("/v1/series")
+    await CLIENT.get_answer("/v1/series")
     with contextlib.suppress(ValidationError):
-        await CLIENT.get_json("/v1/moved")
-    await CLIENT.get_json("/v1/series/corn/meta")
+        await CLIENT.get_answer("/v1/moved")
+    await CLIENT.get_answer("/v1/series/corn/meta")
 
 
 async def raises_after_a_redirect_async() -> None:
     await CLIENT.get("/v1/moved")
-    await CLIENT.get_json("/v1/series")
-    await CLIENT.get_json("/v1/series/corn/meta")  # answers 404: the task raises
+    await CLIENT.get_answer("/v1/series")
+    await CLIENT.get_answer("/v1/series/corn/meta")  # answers 404: the task raises
 
 
 @pytest.mark.anyio
@@ -310,7 +311,7 @@ async def test_a_write_answered_with_a_3xx_says_once_that_it_may_have_been_appli
 
 
 async def downloads_async(dest: str) -> None:
-    await CLIENT.get_json("/v1/series")
+    await CLIENT.get_answer("/v1/series")
     await CLIENT.download("/files/qs.csv", dest)
 
 
@@ -367,7 +368,7 @@ async def test_a_task_that_takes_a_keyword_of_the_helper_is_refused_before_it_ru
 
 
 async def takes_task_async(task: str) -> None:
-    await CLIENT.get_json(f"/v1/tasks/{task}")
+    await CLIENT.get_answer(f"/v1/tasks/{task}")
 
 
 @pytest.mark.anyio
@@ -411,8 +412,8 @@ async def test_a_task_that_sends_no_request_is_refused(fixtures_dir: Path) -> No
 
 
 async def at_once_async(series: str) -> None:
-    meta = CLIENT.get_json(f"/v1/series/{series}/meta")
-    data = CLIENT.get_json(f"/v1/series/{series}/data")
+    meta = CLIENT.get_answer(f"/v1/series/{series}/meta")
+    data = CLIENT.get_answer(f"/v1/series/{series}/data")
     await asyncio.gather(meta, data)
 
 
