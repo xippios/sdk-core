@@ -167,7 +167,7 @@ def test_the_header_names_are_the_policy_s() -> None:
 
 
 def test_header_reading_can_be_turned_off() -> None:
-    # An upstream's x-ratelimit-* headers that describe its per-second pace, not its daily quota.
+    # An upstream's x-ratelimit-* headers may describe its per-second pace, not its daily quota.
     policy = hourly(limit_header=None, remaining_header=None, clock=Clock())
     policy.observe(answer(headers=SPENT))
     assert policy.snapshot() is None, "a 200 leaving remaining 0 is not read"

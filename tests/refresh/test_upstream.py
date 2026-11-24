@@ -188,7 +188,8 @@ def test_the_frame_fetches_writes_and_checks(site: Site, out: Path) -> None:
 def test_a_statement_the_attribution_lacks_stops_the_run(site: Site, out: Path) -> None:
     """As sdk-template's tests had it: every run checks the attribution and stops before writing
     on a copyright, licence or terms it does not record; a recorded one is quoted under
-    Attribution with no second period after its own (#123)."""
+    Attribution with no second period after its own
+    (https://github.com/xippios/sdk-template/issues/123)."""
     url = site.page("guide.html", "<p>Guide</p><footer>&copy; 2026 Example Ltd.</footer>\n")
     with pytest.raises(SystemExit, match="attribution does not record"):
         go(declare(out, Page(url, "pages/guide.html")))
@@ -429,7 +430,7 @@ def linked_terms(url: str) -> Statement:
 def test_a_linked_statement_s_words_on_another_page_stop_the_run(
     site: Site, out: Path, words: str
 ) -> None:
-    """Misfit 1 of a source's trial: the words of a statement recorded with a link stop the
+    """A source's trial met it: the words of a statement recorded with a link stop the
     run on another page, in prose or as the text of a link to another target, as its script had
     it, the stop naming the link that the words pass as, and nothing is written."""
     index = site.page("index.html", f"<p>Index</p>{FOOTER}")
@@ -545,7 +546,7 @@ def test_an_api_document_s_licence_recorded_with_its_link_passes(site: Site, out
 def test_a_statement_in_an_image_s_alternative_text_is_checked_on_its_page(
     site: Site, out: Path
 ) -> None:
-    """Misfit 6 of a source's trial: a notice that stands in the alternative text of the
+    """A source's trial met it: a notice that stands in the alternative text of the
     footer's logo is read where the image stands, so the statement names its page, which must
     print it, and FETCHED.md quotes it as printed there."""
     statement = "\N{COPYRIGHT SIGN} 2026 Example Ltd. All rights reserved."

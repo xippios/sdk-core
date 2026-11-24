@@ -135,7 +135,7 @@ async def test_record_scrubs_then_rewrites_then_checks_then_writes_once(
 
 
 @pytest.mark.anyio
-async def test_sdk_x_s_rule_records_through_record_the_fixture_its_own_flow_writes(
+async def test_a_source_s_rule_records_through_record_the_fixture_its_own_flow_writes(
     respx_mock: respx.MockRouter, client: AsyncClient, tmp_path: Path
 ) -> None:
     # https://github.com/xippios/sdk-core/issues/322, the first proof: the reduced recorder
