@@ -199,7 +199,7 @@ def test_an_option_past_most_stops_the_entry_point_with_status_2(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     ceiling = months()
-    server = build_server(SOURCE, [])
+    server = build_server(ToolSet(SOURCE, []))
     with pytest.raises(SystemExit) as info:
         main(
             server,
@@ -485,6 +485,6 @@ def test_the_hooks_fit_a_tool_set_and_the_server_is_returned_as_given() -> None:
     """``apply_options`` returns the server it is given, typed as given, so a tool set
     takes both hooks as they are."""
     ceiling = months()
-    server = build_server(SOURCE, [])
+    server = build_server(ToolSet(SOURCE, []))
     assert ceiling.apply_options(argparse.Namespace(series_months=12), server) is server
     assert ceiling.value == 12

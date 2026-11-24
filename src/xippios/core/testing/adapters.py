@@ -87,10 +87,9 @@ async def mcp_call(server: Any, name: str, arguments: dict[str, Any]) -> Any:
 
 
 async def assert_write_tools(
-    write_server: Any,
+    write_tools: Any,
     write_tasks: Iterable[Callable[..., Any]],
     *,
-    source: str,
     read_server: Any = None,
     router: Any = None,
     preview_reads: bool = False,
@@ -98,14 +97,16 @@ async def assert_write_tools(
     sent: respx.Router | None = None,
     is_read: Callable[[httpx.Request], bool] | None = None,
 ) -> None:
-    """Check a write server against its write tasks, and their previews (conventions §8).
+    """Check a write tool set's server against its write tasks, and their previews (§8).
 
-    Fails the test, naming the offending tool, unless all of these hold:
+    The write server is the one ``build_server(write_tools)`` builds, as the source's
+    ``mcp_write.server`` is built. Fails the test, naming the offending tool, unless all
+    of these hold:
 
-    - the write server was registered with ``read_only=False`` (``is_write_server``),
-      which ``main``'s loopback rule for ``--http`` depends on;
-    - the write server's tools are exactly ``tool_name(source, fn)`` for the write
-      tasks, no more and no fewer;
+    - the write tool set is built with ``read_only=False``, which ``main``'s loopback rule
+      for ``--http`` reads (ADR-0063, decision 5);
+    - the write server's tools are exactly ``tool_name(write_tools.source, fn)`` for the
+      write tasks, no more and no fewer;
     - every write task takes ``confirm: bool = False`` as its last parameter, so a call
       without it is a dry run;
     - no write tool is on ``read_server``, and no route of ``router`` serves a write
@@ -131,11 +132,11 @@ async def assert_write_tools(
     ``respx``'s error.
 
     Args:
-        write_server: The ``MCPServer`` behind ``xippios-<source>-mcp-write``, built
-            with ``read_only=False``.
+        write_tools: The ``ToolSet`` behind ``xippios-<source>-mcp-write``,
+            ``mcp_write.build()``, built with ``read_only=False``; its source names the
+            tools.
         write_tasks: The task functions it must expose, e.g.
             ``[getattr(tasks_write, name) for name in tasks_write.__all__]``.
-        source: Source slug, e.g. ``"cashctrl"``.
         read_server: The source's read server, ``xippios-<source>-mcp-read``, if any.
         router: The source's FastAPI router from ``router_from_tasks``, if any.
         preview_reads: Hold each write task's annotations to one preview that declares
@@ -153,11 +154,18 @@ async def assert_write_tools(
             retry rule repeats (``IDEMPOTENT_METHODS``, ADR-0011).
 
     Raises:
-        TypeError: ``dry_run`` without ``sent``, or ``sent`` or ``is_read`` without
-            ``dry_run``.
+        TypeError: ``write_tools`` is no ``ToolSet``; or ``dry_run`` without ``sent``, or
+            ``sent`` or ``is_read`` without ``dry_run``.
     """
-    from xippios.core.mcp.server import _confirm_problem, is_write_server, tool_name
+    from xippios.core._tasks import tool_name
+    from xippios.core.mcp import ToolSet, build_server
+    from xippios.core.mcp.toolset import _confirm_problem
 
+    if not isinstance(write_tools, ToolSet):
+        raise TypeError(
+            "write_tools takes the write server's ToolSet, e.g. mcp_write.build(), not "
+            f"{type(write_tools).__name__}"
+        )
     if dry_run is not None and sent is None:
         raise TypeError(
             "dry_run needs sent=, the respx router the test's routes are mounted on, "
@@ -165,9 +173,12 @@ async def assert_write_tools(
         )
     if dry_run is None and (sent is not None or is_read is not None):
         raise TypeError("sent= and is_read= serve the dry run; pass dry_run= with them")
-    assert is_write_server(write_server), (
-        "the write server was not registered with read_only=False; the loopback rule depends on it"
+    assert not write_tools.read_only, (
+        "the write tool set is read-only: build it with read_only=False, which the loopback "
+        "rule reads"
     )
+    source = write_tools.source
+    write_server = build_server(write_tools)
     expected = {tool_name(source, fn): fn for fn in write_tasks}
     listed = await _tool_names(write_server)
     unexpected = sorted(listed - expected.keys())

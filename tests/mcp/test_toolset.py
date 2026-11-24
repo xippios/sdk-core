@@ -1,12 +1,15 @@
 """ToolSet: what a package's ``build(**options)`` returns, and the servers built from it.
 
 ``build_server`` builds a server from one tool set and a host one server from several
-with ``register_tasks`` (https://github.com/xippios/sdk-core/issues/245; ADR-0026,
-decision 8). The tasks are a fictitious source's.
+with ``register_tasks``, both from a tool set alone, and a tool set is checked when it is
+built (ADR-0063, decisions 1 and 3). The tasks are the invented source's.
 """
 
 import argparse
 import dataclasses
+import sys
+import types
+from collections.abc import Callable
 from typing import Annotated, Any
 
 import pytest
@@ -14,15 +17,7 @@ from mcp.server.mcpserver import MCPServer
 from pydantic import Field
 
 from xippios.core import Result, ResultMeta, TenantLock, Tenants, bind_tasks, sync
-from xippios.core.mcp import (
-    ResultCap,
-    ToolSet,
-    build_server,
-    is_loopback_only,
-    is_write_server,
-    main,
-    register_tasks,
-)
+from xippios.core.mcp import ResultCap, ToolSet, build_server, main, register_tasks, tool_name
 from xippios.core.testing import mcp_call, mcp_call_text
 
 
@@ -92,8 +87,6 @@ def apply_split_years(namespace: argparse.Namespace, server: MCPServer) -> MCPSe
 
 
 AREAS_CAP = ResultCap(max_rows=400)
-BUILD_ALONE = "build_server takes name alone beside a tool set, which carries the rest"
-REGISTER_ALONE = "register_tasks takes a tool set alone, which carries what it registers"
 
 
 def example_tools() -> ToolSet:
@@ -175,8 +168,7 @@ async def test_build_server_builds_a_server_from_one_tool_set() -> None:
     assert (len(areas["data"]), "note" in areas) == (310, False), "the tool's own cap"
     series = await mcp_call(server, "example_get_series", {"series_id": "C", "year": 2300})
     assert (len(series["data"]), series["note"][:20]) == (200, "showing 200 of 300 r")
-    assert not is_write_server(server)
-    assert not is_loopback_only(server)
+    assert not held_to_loopback(server)
 
 
 def test_build_server_names_a_server_from_a_tool_set_as_told() -> None:
@@ -184,47 +176,40 @@ def test_build_server_names_a_server_from_a_tool_set_as_told() -> None:
     assert server.name == "xippios-example-write"
 
 
+def held_to_loopback(server: MCPServer) -> bool:
+    """Whether ``main`` refuses ``server`` over ``--http`` on a host beyond loopback.
+
+    The server's ``run`` is replaced, so nothing is served either way.
+    """
+    runs: list[str] = []
+    server.run = lambda transport="stdio", **kwargs: runs.append(transport)  # type: ignore[method-assign]
+    try:
+        main(server, ["--http", "--host", "0.0.0.0"])
+    except SystemExit as stopped:
+        return stopped.code == 2
+    assert runs == ["streamable-http"]
+    return False
+
+
 def test_a_tool_set_that_writes_or_is_held_builds_a_server_held_to_loopback() -> None:
-    writes = build_server(ToolSet("example", [delete_series], read_only=False))
-    assert (is_write_server(writes), is_loopback_only(writes)) == (True, True)
-    held = build_server(ToolSet("example", [get_series], loopback_only=True))
-    assert (is_write_server(held), is_loopback_only(held)) == (False, True)
+    # ADR-0063, decision 5: the hold is read from the tool set's read_only and loopback_only.
+    writes = ToolSet("example", [delete_series], read_only=False)
+    assert held_to_loopback(build_server(writes))
+    held = ToolSet("example", [get_series], loopback_only=True)
+    assert (held.read_only, held.loopback_only) == (True, True)
+    assert held_to_loopback(build_server(held))
 
 
-def test_a_server_from_a_tool_set_is_checked_as_build_server_checks_it() -> None:
-    with pytest.raises(ValueError, match="example_get_series: no parameter confirm"):
-        build_server(ToolSet("example", [get_series], read_only=False))
-    with pytest.raises(ValueError, match="caps names no task among the tasks: list_rows"):
-        build_server(ToolSet("example", [get_series], caps={"list_rows": AREAS_CAP}))
-
-
-@pytest.mark.parametrize(
-    "given",
-    [
-        {"version": "2.0.0"},
-        {"instructions": "Other text."},
-        {"cap": ResultCap(max_rows=5)},
-        {"caps": {"list_areas": AREAS_CAP}},
-        {"read_only": False},
-        {"loopback_only": True},
-    ],
-)
-def test_build_server_takes_name_alone_beside_a_tool_set(given: dict[str, Any]) -> None:
-    (keyword,) = given
-    with pytest.raises(TypeError) as refused:
-        build_server(example_tools(), **given)
-    assert str(refused.value) == f"{BUILD_ALONE}; drop {keyword}"
-
-
-def test_build_server_takes_no_tasks_beside_a_tool_set() -> None:
-    with pytest.raises(TypeError) as refused:
-        build_server(example_tools(), [list_areas], version="2.0.0")  # type: ignore[call-overload]
-    assert str(refused.value) == f"{BUILD_ALONE}; drop tasks, version"
-
-
-def test_build_server_with_a_slug_still_needs_its_tasks() -> None:
-    with pytest.raises(TypeError, match="tasks"):
-        build_server("example")  # type: ignore[call-overload]
+def test_the_slug_forms_are_gone() -> None:
+    # ADR-0063, decision 1: a tool set alone, which carries every argument but the name.
+    with pytest.raises(TypeError):
+        build_server("example", [get_series])  # type: ignore[arg-type, call-arg]
+    with pytest.raises(TypeError):
+        build_server(example_tools(), version="2.0.0")  # type: ignore[call-arg]
+    with pytest.raises(TypeError):
+        register_tasks(MCPServer("x"), "example", [get_series])  # type: ignore[arg-type, call-arg]
+    with pytest.raises(TypeError):
+        register_tasks(MCPServer("x"), example_tools(), cap=ResultCap(max_rows=5))  # type: ignore[call-arg]
 
 
 @pytest.mark.anyio
@@ -243,47 +228,15 @@ async def test_a_host_builds_one_server_from_two_tool_sets_each_with_its_own_cap
 def test_one_held_tool_set_holds_the_host_built_server() -> None:
     server = MCPServer("xippios-group")
     register_tasks(server, example_tools())
-    assert not is_loopback_only(server)
+    assert not held_to_loopback(server)
     register_tasks(server, ToolSet("mail", [list_regions], loopback_only=True))
-    assert (is_write_server(server), is_loopback_only(server)) == (False, True)
+    assert held_to_loopback(server)
 
 
 def test_a_write_tool_set_makes_the_host_built_server_a_write_server() -> None:
     server = MCPServer("xippios-group-write")
     register_tasks(server, ToolSet("example", [delete_series], read_only=False))
-    assert (is_write_server(server), is_loopback_only(server)) == (True, True)
-
-
-@pytest.mark.parametrize(
-    "given",
-    [
-        {"cap": ResultCap(max_rows=5)},
-        {"caps": {"list_areas": AREAS_CAP}},
-        {"read_only": False},
-        {"loopback_only": True},
-    ],
-)
-def test_register_tasks_takes_a_tool_set_alone(given: dict[str, Any]) -> None:
-    (keyword,) = given
-    server = MCPServer("xippios-group")
-    middleware = list(server.middleware)
-    with pytest.raises(TypeError) as refused:
-        register_tasks(server, example_tools(), **given)
-    assert str(refused.value) == f"{REGISTER_ALONE}; drop {keyword}"
-    assert server.middleware == middleware, "nothing installed"
-    assert not is_write_server(server)
-    assert not is_loopback_only(server)
-
-
-def test_register_tasks_takes_no_tasks_beside_a_tool_set() -> None:
-    with pytest.raises(TypeError) as refused:
-        register_tasks(MCPServer("x"), example_tools(), [list_areas])  # type: ignore[call-overload]
-    assert str(refused.value) == f"{REGISTER_ALONE}; drop tasks"
-
-
-def test_register_tasks_with_a_slug_still_needs_its_tasks() -> None:
-    with pytest.raises(TypeError, match="tasks"):
-        register_tasks(MCPServer("x"), "example")  # type: ignore[call-overload]
+    assert held_to_loopback(server)
 
 
 @pytest.mark.anyio
@@ -297,7 +250,8 @@ async def test_a_server_from_a_tool_set_keeps_the_annotated_constraints() -> Non
         assert (year["minimum"], year["description"]) == (2000, "A year from 2000.")
         text = await mcp_call_text(server, "example_get_series", {"series_id": "C", "year": 1999})
         assert text == (
-            "error: InvalidRequestError: year: Input should be greater than or equal to 2000"
+            "error: InvalidRequestError: year: Input should be greater than or equal to 2000. "
+            "Nothing was sent."
         )
 
 
@@ -311,7 +265,220 @@ async def test_a_tool_set_of_tasks_a_lock_binds_keeps_their_constraints() -> Non
     assert tool.input_schema["properties"]["limit"]["maximum"] == 100
     assert await mcp_call(server, "example_get_rows", {"limit": 5}) == {"org": "demo", "limit": 5}
     text = await mcp_call_text(server, "example_get_rows", {"limit": 101})
-    assert text == "error: InvalidRequestError: limit: Input should be less than or equal to 100"
+    assert text == (
+        "error: InvalidRequestError: limit: Input should be less than or equal to 100. "
+        "Nothing was sent."
+    )
+
+
+# The checks of a declaration run when a tool set is built, so a source's own tests fail
+# on it before any server is built (ADR-0063, decision 3).
+
+
+def create_thing(name: str, confirm: bool = False) -> dict[str, str]:
+    """Create a thing; without confirm, return a preview.
+
+    Args:
+        name: The thing's name, e.g. ``"Corn"``.
+        confirm: ``True`` writes, ``False`` previews.
+    """
+    return {"name": name, "written": str(confirm)}
+
+
+def delete_thing(thing_id: int, confirm: "Annotated[bool, 'write']" = False) -> None:
+    """Delete a thing; the annotation is a string, resolved to bool."""
+
+
+def no_confirm(name: str) -> None:
+    """No confirm at all."""
+
+
+def confirm_wrong_type(confirm: bool | None = False) -> None:
+    """Optional, not bool."""
+
+
+def confirm_true(confirm: bool = True) -> None:
+    """Writes unless told not to."""
+
+
+def confirm_required(confirm: bool) -> None:
+    """Must be told."""
+
+
+def confirm_zero(confirm: int = 0) -> None:
+    """An int."""
+
+
+@pytest.mark.parametrize(
+    ("task", "problem"),
+    [
+        (no_confirm, "no parameter confirm"),
+        (confirm_wrong_type, r"confirm is annotated bool \| None, not bool"),
+        (confirm_zero, "confirm is annotated <class 'int'>, not bool"),
+        (confirm_true, "confirm defaults to True, not False"),
+        (confirm_required, "confirm has no default"),
+    ],
+)
+def test_a_write_tool_set_refuses_a_task_without_confirm_false(
+    task: Callable[..., Any], problem: str
+) -> None:
+    rule = r"every task of a write server takes confirm: bool = False .*\(conventions §8\)"
+    with pytest.raises(ValueError, match=f"^example_{task.__name__}: {problem}; {rule}$"):
+        ToolSet("example", [create_thing, task], read_only=False)
+    read = ToolSet("example", iter([create_thing, task]))
+    with pytest.raises(ValueError, match=f"^example_{task.__name__}: {problem}; "):
+        dataclasses.replace(read, read_only=False)  # a copy is checked as a new tool set
+
+
+def test_a_write_tool_set_takes_confirm_false_however_it_is_annotated() -> None:
+    tools = ToolSet("example", [create_thing, delete_thing], read_only=False)
+    assert tools.tasks == (create_thing, delete_thing)
+
+
+def test_a_read_tool_set_ignores_the_confirm_rule() -> None:
+    tools = ToolSet("example", [no_confirm, confirm_true, confirm_zero, confirm_required])
+    assert len(tools.tasks) == 4
+
+
+def test_a_cap_for_a_name_that_is_no_task_is_refused() -> None:
+    caps = {"example_list_areas": ResultCap(max_rows=400), "list_nothing": ResultCap()}
+    rule = (
+        "^caps names no task among the tasks: example_list_areas, list_nothing; a key is the "
+        "task function's __name__, not the tool name with the source prefix, and a task in "
+        "BULK_TASKS is no tool$"
+    )
+    with pytest.raises(ValueError, match=rule):
+        ToolSet("example", [get_series, list_areas], caps=caps)
+    with pytest.raises(ValueError, match=r"^caps names no task among the tasks: list_nothing;"):
+        ToolSet("example", [create_thing], caps={"list_nothing": ResultCap()}, read_only=False)
+
+
+def test_a_narrowed_copy_drops_the_cap_of_a_task_it_drops() -> None:
+    # A host's list of tools: dataclasses.replace checks the copy as a new tool set.
+    tools = example_tools()
+    with pytest.raises(ValueError, match=r"^caps names no task among the tasks: list_areas;"):
+        dataclasses.replace(tools, tasks=[get_series])
+    narrowed = dataclasses.replace(tools, tasks=[get_series], caps={})
+    assert [tool_name(narrowed.source, fn) for fn in narrowed.tasks] == ["example_get_series"]
+
+
+def download_series(series_id: str) -> Result[list[str]]:
+    """Download every year of one series to a file.
+
+    Args:
+        series_id: Upstream identifier, e.g. ``"CORN_YIELD"``.
+    """
+    raise NotImplementedError
+
+
+download_series.__module__ = "example_bulk_tasks"
+
+
+@pytest.mark.anyio
+async def test_a_tool_set_holds_tools_alone(monkeypatch: pytest.MonkeyPatch) -> None:
+    # ADR-0063, decisions 3 and 4: a host names a source's tools from tool_set.tasks, and
+    # needs no is_bulk_task of core's.
+    tasks = types.ModuleType("example_bulk_tasks")
+    tasks.BULK_TASKS = frozenset({"download_series"})  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, tasks.__name__, tasks)
+    tools = ToolSet("example", [get_series, download_series, list_areas])
+    names = [tool_name(tools.source, task) for task in tools.tasks]
+    assert names == [tool.name for tool in await build_server(tools).list_tools()]
+    assert tools.tasks == (get_series, list_areas)
+
+
+def list_weeks(year: int = 2024) -> Result[list[int]]:
+    """List the 500 weeks of a series, oldest first, from a packaged table.
+
+    Args:
+        year: Marketing year, e.g. ``2024``.
+    """
+    return Result[list[int]](data=list(range(500)), meta=ResultMeta(source="example", endpoint="w"))
+
+
+def list_pages(offset: int = 0) -> Result[list[int]]:
+    """List rows from an upstream offset of the task's own.
+
+    Args:
+        offset: Upstream's offset, e.g. ``100``.
+    """
+    return Result[list[int]](data=[offset], meta=ResultMeta(source="example", endpoint="pages"))
+
+
+def list_entries(start: int = 0, limit: int = 100) -> Result[list[int]]:
+    """List the entries from upstream's offset ``start``, one page of upstream's.
+
+    Args:
+        start: The offset of the first entry, e.g. ``100``.
+        limit: Entries on the page, e.g. ``100``.
+    """
+    rows = list(range(start, start + limit))
+    meta = ResultMeta(source="example", endpoint="entries", request={"start": start})
+    return Result[list[int]](data=rows, meta=meta)
+
+
+def create_rows(count: int, confirm: bool = False) -> Result[list[int]]:
+    """Create rows, or preview them unless confirm is true.
+
+    Args:
+        count: How many rows, e.g. ``300``.
+        confirm: ``True`` creates them, ``False`` previews them.
+    """
+    return Result[list[int]](
+        data=list(range(count)), meta=ResultMeta(source="example", endpoint="r")
+    )
+
+
+def test_a_task_that_takes_offset_itself_is_refused_a_paged_cap() -> None:
+    caps = {"list_pages": ResultCap(paged=True)}
+    why = (
+        r"^example_list_pages: the task takes a parameter offset, which a paged cap adds as "
+        r"the adapter's own argument for the rest of a cut answer; rename the task's "
+        r"parameter or leave the tool unpaged$"
+    )
+    with pytest.raises(ValueError, match=why):
+        ToolSet("example", [list_weeks, list_pages], caps=caps)
+
+
+def test_a_task_that_takes_start_is_refused_a_paged_cap() -> None:
+    # https://github.com/xippios/sdk-core/issues/479, part 3: the task pages upstream itself,
+    # its cut answer resumes with its own start, and a continuation would send a request.
+    why = (
+        r"^example_list_entries: the task takes a parameter start and pages upstream itself, "
+        r"so its cut answer resumes with start and a continuation would send upstream a "
+        r"request; leave the tool unpaged$"
+    )
+    with pytest.raises(ValueError, match=why):
+        ToolSet("example", [list_weeks, list_entries], caps={"list_entries": ResultCap(paged=True)})
+    kept = ToolSet("example", [list_entries], caps={"list_entries": ResultCap(keep="last")})
+    assert kept.tasks == (list_entries,), "a cap without paged is no continuation"
+    paged = ToolSet(
+        "example", [list_weeks, list_entries], caps={"list_weeks": ResultCap(paged=True)}
+    )
+    assert len(paged.tasks) == 2, "the refusal names the task that takes start alone"
+
+
+@pytest.mark.anyio
+async def test_an_unpaged_task_that_takes_start_resumes_with_it() -> None:
+    server = build_server(ToolSet("example", [list_entries]))
+    payload = await mcp_call(server, "example_list_entries", {"start": 100, "limit": 300})
+    assert payload["note"].endswith("; resume with start=300"), "ADR-0038, decision 3"
+
+
+def test_a_write_task_is_refused_a_paged_cap_since_a_continuation_writes_again() -> None:
+    # https://github.com/xippios/sdk-core/pull/388#pullrequestreview-6008310538, finding 1:
+    # following "continue with offset=200" ran a confirmed write a second time.
+    why = (
+        r"^example_create_rows: a paged cap runs the task again for the next rows, so a write "
+        r"task is never paged: following its note would repeat a confirmed write; leave the "
+        r"tool unpaged$"
+    )
+    caps = {"create_rows": ResultCap(paged=True)}
+    with pytest.raises(ValueError, match=why):
+        ToolSet("example", [create_rows], caps=caps, read_only=False)
+    read = ToolSet("example", [create_rows], caps=caps)
+    with pytest.raises(ValueError, match=why):
+        dataclasses.replace(read, read_only=False)
 
 
 def test_option_defaults_are_core_options_and_the_sources_at_their_defaults() -> None:

@@ -22,7 +22,7 @@ from xippios.core import (
     sync,
 )
 from xippios.core.http import router_from_tasks
-from xippios.core.mcp import build_server, register_tasks
+from xippios.core.mcp import ToolSet, build_server
 from xippios.core.testing import assert_projection, assert_write_tools, mcp_call, mcp_call_text
 
 
@@ -70,7 +70,7 @@ get_thing = sync(get_thing_async)
 
 @pytest.mark.anyio
 async def test_mcp_call_returns_decoded_json_with_numbers() -> None:
-    server = build_server("example", [get_thing])
+    server = build_server(ToolSet("example", [get_thing]))
     payload = await mcp_call(server, "example_get_thing", {"name": "a"})
     assert payload["data"] == [{"name": "a", "value": 2.5}]
     assert payload["meta"]["source"] == "example"
@@ -78,7 +78,7 @@ async def test_mcp_call_returns_decoded_json_with_numbers() -> None:
 
 @pytest.mark.anyio
 async def test_mcp_call_fails_on_error_text() -> None:
-    server = build_server("example", [get_thing])
+    server = build_server(ToolSet("example", [get_thing]))
     with pytest.raises(AssertionError, match="error: NotFoundError: no such thing"):
         await mcp_call(server, "example_get_thing", {"name": "missing"})
 
@@ -87,7 +87,7 @@ async def test_mcp_call_fails_on_error_text() -> None:
 async def test_mcp_call_text_returns_the_text_error_text_included() -> None:
     # https://github.com/xippios/sdk-core/issues/168: the error answer is flagged
     # is_error, and mcp_call_text still returns its text for the test to assert.
-    server = build_server("example", [get_thing])
+    server = build_server(ToolSet("example", [get_thing]))
     async with Client(server) as client:
         flagged = await client.call_tool("example_get_thing", {"name": "missing"})
     assert flagged.is_error is True
@@ -107,9 +107,9 @@ def crash(name: str) -> None:
 
 @pytest.mark.anyio
 async def test_mcp_call_fails_when_the_server_reports_an_error() -> None:
-    server = build_server("example", [get_thing, crash])
+    server = build_server(ToolSet("example", [get_thing, crash]))
     # The argument middleware answers in §8's form, flagged, so the middleware ran.
-    refused = "error: InvalidRequestError: name: Field required"
+    refused = "error: InvalidRequestError: name: Field required. Nothing was sent."
     assert await mcp_call_text(server, "example_get_thing", {}) == refused
     with pytest.raises(AssertionError, match=refused):
         await mcp_call(server, "example_get_thing", {})
@@ -160,15 +160,12 @@ READ: list[Callable[..., Any]] = [list_things]
 @pytest.mark.anyio
 async def test_assert_write_tools_accepts_a_separate_write_server() -> None:
     await assert_write_tools(
-        build_server("example", WRITE, read_only=False),
+        ToolSet("example", WRITE, read_only=False),
         WRITE,
-        source="example",
-        read_server=build_server("example", READ),
+        read_server=build_server(ToolSet("example", READ)),
         router=router_from_tasks("example", READ),
     )
-    await assert_write_tools(
-        build_server("example", WRITE, read_only=False), iter(WRITE), source="example"
-    )
+    await assert_write_tools(ToolSet("example", WRITE, read_only=False), iter(WRITE))
 
 
 @pytest.mark.anyio
@@ -185,36 +182,33 @@ async def test_assert_write_tools_accepts_a_server_a_lock_binds() -> None:
 
     tenants = Tenants("fictive-src", list_var="FICTIVE_SRC_TENANTS", param="org", fields=("KEY",))
     bound = bind_tasks([rename_thing], TenantLock(tenants, "demo"))
-    await assert_write_tools(
-        build_server("example", bound, read_only=False), bound, source="example"
-    )
+    await assert_write_tools(ToolSet("example", bound, read_only=False), bound)
 
 
 @pytest.mark.anyio
-async def test_assert_write_tools_wants_a_server_registered_as_a_write_server() -> None:
-    read_only = build_server("example", [])
-    register_tasks(read_only, "example", WRITE)  # the write tasks, registered read-only
+async def test_assert_write_tools_wants_a_write_tool_set() -> None:
+    # ADR-0063, decision 5: the loopback rule reads the tool set's read_only, where it
+    # read is_write_server's registry.
     with pytest.raises(
         AssertionError,
         match=(
-            r"^the write server was not registered with read_only=False; "
-            r"the loopback rule depends on it"
+            r"^the write tool set is read-only: build it with read_only=False, which the "
+            r"loopback rule reads"
         ),
     ):
-        await assert_write_tools(read_only, WRITE, source="example")
+        await assert_write_tools(ToolSet("example", WRITE), WRITE)
+    server = build_server(ToolSet("example", WRITE, read_only=False))
+    with pytest.raises(TypeError, match=r"^write_tools takes the write server's ToolSet, "):
+        await assert_write_tools(server, WRITE)
 
 
 @pytest.mark.anyio
 async def test_assert_write_tools_wants_exactly_the_write_tasks() -> None:
-    # build_server refuses a write task without confirm (conventions §8); a read-only
-    # registration on the write server is how a stray tool would get there.
-    write = build_server("example", WRITE, read_only=False)
-    register_tasks(write, "example", [list_things])
-    with pytest.raises(AssertionError, match=r"not write tasks: \['example_list_things'\]"):
-        await assert_write_tools(write, WRITE, source="example")
-    write = build_server("example", [create_thing], read_only=False)
+    with pytest.raises(AssertionError, match=r"not write tasks: \['example_delete_thing'\]"):
+        await assert_write_tools(ToolSet("example", WRITE, read_only=False), [create_thing])
+    write = ToolSet("example", [create_thing], read_only=False)
     with pytest.raises(AssertionError, match=r"missing .*: \['example_delete_thing'\]"):
-        await assert_write_tools(write, WRITE, source="example")
+        await assert_write_tools(write, WRITE)
 
 
 def no_confirm(name: str) -> None:
@@ -245,7 +239,6 @@ def confirm_first(confirm: bool = False, name: str = "") -> None:
     """Confirm before the other parameters."""
 
 
-@pytest.mark.anyio
 @pytest.mark.parametrize(
     ("task", "problem"),
     [
@@ -255,44 +248,49 @@ def confirm_first(confirm: bool = False, name: str = "") -> None:
         (confirm_unannotated, "confirm is not annotated"),
         (confirm_optional, r"confirm is annotated bool \| None, not bool"),
         (confirm_zero, "confirm is annotated <class 'int'>, not bool"),
-        (confirm_first, "confirm is not the last parameter"),
     ],
 )
-async def test_assert_write_tools_wants_confirm_false_last(
+def test_a_write_task_without_confirm_false_never_reaches_the_check(
     task: Callable[..., Any], problem: str
 ) -> None:
-    write = build_server("example", [create_thing], read_only=False)
-    register_tasks(write, "example", [task])  # build_server(read_only=False) refuses most
-    with pytest.raises(AssertionError, match=f"^example_{task.__name__}: {problem}; "):
-        await assert_write_tools(write, [create_thing, task], source="example")
+    # The write tool set refuses it when it is built (ADR-0063, decision 3).
+    with pytest.raises(ValueError, match=f"^example_{task.__name__}: {problem}; "):
+        ToolSet("example", [create_thing, task], read_only=False)
+
+
+@pytest.mark.anyio
+async def test_assert_write_tools_wants_confirm_last() -> None:
+    write = ToolSet("example", [create_thing, confirm_first], read_only=False)
+    with pytest.raises(
+        AssertionError, match=r"^example_confirm_first: confirm is not the last parameter; "
+    ):
+        await assert_write_tools(write, [create_thing, confirm_first])
 
 
 @pytest.mark.anyio
 async def test_assert_write_tools_keeps_write_tools_off_the_read_adapters() -> None:
-    write = build_server("example", WRITE, read_only=False)
-    read = build_server("example", [list_things, delete_thing])
+    write = ToolSet("example", WRITE, read_only=False)
+    read = build_server(ToolSet("example", [list_things, delete_thing]))
     with pytest.raises(AssertionError, match=r"on the read server: \['example_delete_thing'\]"):
-        await assert_write_tools(write, WRITE, source="example", read_server=read)
+        await assert_write_tools(write, WRITE, read_server=read)
     with_write = router_from_tasks("example", [list_things, create_thing])
     with pytest.raises(
         AssertionError,
         match=r"^example_create_thing: a write task has an HTTP route, GET /example/create_thing",
     ):
-        await assert_write_tools(write, WRITE, source="example", router=with_write)
+        await assert_write_tools(write, WRITE, router=with_write)
     prefixed = router_from_tasks("example", [delete_thing], prefix="/v1")
     with pytest.raises(AssertionError, match=r"^example_delete_thing: .* GET /v1/delete_thing"):
-        await assert_write_tools(write, WRITE, source="example", router=prefixed)
+        await assert_write_tools(write, WRITE, router=prefixed)
 
 
 @pytest.mark.anyio
 async def test_assert_write_tools_names_tools_with_the_underscored_source() -> None:
-    write = build_server("usda-nass", WRITE, read_only=False)
-    await assert_write_tools(
-        write, WRITE, source="usda-nass", router=router_from_tasks("usda-nass", READ)
-    )
+    write = ToolSet("usda-nass", WRITE, read_only=False)
+    await assert_write_tools(write, WRITE, router=router_from_tasks("usda-nass", READ))
     with_write = router_from_tasks("usda-nass", WRITE)
     with pytest.raises(AssertionError, match=r"^usda_nass_create_thing: "):
-        await assert_write_tools(write, WRITE, source="usda-nass", router=with_write)
+        await assert_write_tools(write, WRITE, router=with_write)
 
 
 # What a write tool's preview shows (conventions §8; ADR-0050) ------------------------
@@ -511,10 +509,10 @@ async def add_item_unshown(name: str, confirm: bool = False) -> Result[UnshownPr
 async def test_preview_reads_holds_one_preview_that_declares_reads() -> None:
     # Both previews pass, the generic one through the sync facade's annotations too, and so
     # does a Result whose data is a type alias of the union.
-    write = build_server("example", PREVIEWED, read_only=False)
-    await assert_write_tools(write, PREVIEWED, source="example", preview_reads=True)
-    tagging = build_server("example", [tag_items], read_only=False)
-    await assert_write_tools(tagging, [tag_items], source="example", preview_reads=True)
+    write = ToolSet("example", PREVIEWED, read_only=False)
+    await assert_write_tools(write, PREVIEWED, preview_reads=True)
+    tagging = ToolSet("example", [tag_items], read_only=False)
+    await assert_write_tools(tagging, [tag_items], preview_reads=True)
 
 
 @pytest.mark.anyio
@@ -552,11 +550,11 @@ async def test_preview_reads_holds_one_preview_that_declares_reads() -> None:
 async def test_preview_reads_fails_a_write_task_without_its_preview(
     task: Callable[..., Any], problem: str
 ) -> None:
-    write = build_server("example", [task], read_only=False)
+    write = ToolSet("example", [task], read_only=False)
     # Off by default: a source that calls the check as on core 0.4.0 passes.
-    await assert_write_tools(write, [task], source="example")
+    await assert_write_tools(write, [task])
     with pytest.raises(AssertionError, match=f"^example_{task.__name__}: {problem}$"):
-        await assert_write_tools(write, [task], source="example", preview_reads=True)
+        await assert_write_tools(write, [task], preview_reads=True)
 
 
 @pytest.mark.anyio
@@ -564,11 +562,10 @@ async def test_a_dry_run_passes_a_preview_that_reads_and_one_that_does_not(
     respx_mock: respx.MockRouter,
 ) -> None:
     read = respx_mock.get(f"{ITEMS}/item/read.json").respond(200, json={"id": 4, "name": "Corn"})
-    write = build_server("example", PREVIEWED, read_only=False)
+    write = ToolSet("example", PREVIEWED, read_only=False)
     await assert_write_tools(
         write,
         PREVIEWED,
-        source="example",
         dry_run={
             "add_item": {"name": "Corn"},
             "rename_item": [{"item_id": 4, "name": "Wheat"}, {"item_id": 4, "name": "Rye"}],
@@ -581,7 +578,7 @@ async def test_a_dry_run_passes_a_preview_that_reads_and_one_that_does_not(
 @pytest.mark.anyio
 async def test_a_dry_run_fails_a_preview_that_writes(respx_mock: respx.MockRouter) -> None:
     created = respx_mock.post(f"{ITEMS}/item/create.json").respond(200, json={"id": 5})
-    write = build_server("example", [add_item_posting], read_only=False)
+    write = ToolSet("example", [add_item_posting], read_only=False)
     with pytest.raises(
         AssertionError,
         match=(
@@ -592,7 +589,6 @@ async def test_a_dry_run_fails_a_preview_that_writes(respx_mock: respx.MockRoute
         await assert_write_tools(
             write,
             [add_item_posting],
-            source="example",
             dry_run={"add_item_posting": {"name": "Corn"}},
             sent=respx_mock,
         )
@@ -604,7 +600,7 @@ async def test_a_dry_run_fails_a_preview_that_read_and_says_it_did_not(
     respx_mock: respx.MockRouter,
 ) -> None:
     respx_mock.get(f"{ITEMS}/item/read.json").respond(200, json={"id": 4, "name": "Corn"})
-    write = build_server("example", [rename_item_quietly], read_only=False)
+    write = ToolSet("example", [rename_item_quietly], read_only=False)
     with pytest.raises(
         AssertionError,
         match=(
@@ -615,7 +611,6 @@ async def test_a_dry_run_fails_a_preview_that_read_and_says_it_did_not(
         await assert_write_tools(
             write,
             [rename_item_quietly],
-            source="example",
             dry_run={"rename_item_quietly": {"item_id": 4}},
             sent=respx_mock,
         )
@@ -625,7 +620,7 @@ async def test_a_dry_run_fails_a_preview_that_read_and_says_it_did_not(
 async def test_a_dry_run_fails_a_preview_that_says_it_read_and_sent_nothing(
     respx_mock: respx.MockRouter,
 ) -> None:
-    write = build_server("example", [rename_item_claiming], read_only=False)
+    write = ToolSet("example", [rename_item_claiming], read_only=False)
     with pytest.raises(
         AssertionError,
         match=(
@@ -636,7 +631,6 @@ async def test_a_dry_run_fails_a_preview_that_says_it_read_and_sent_nothing(
         await assert_write_tools(
             write,
             [rename_item_claiming],
-            source="example",
             dry_run={"rename_item_claiming": {"item_id": 4}},
             sent=respx_mock,
         )
@@ -645,12 +639,11 @@ async def test_a_dry_run_fails_a_preview_that_says_it_read_and_sent_nothing(
 @pytest.mark.anyio
 async def test_a_dry_run_fails_a_write_task_without_a_preview_member() -> None:
     # The dry run reads reads, so it holds the preview's annotation first.
-    write = build_server("example", [add_item_unpreviewed], read_only=False)
+    write = ToolSet("example", [add_item_unpreviewed], read_only=False)
     with pytest.raises(AssertionError, match=r"^example_add_item_unpreviewed: no member "):
         await assert_write_tools(
             write,
             [add_item_unpreviewed],
-            source="example",
             dry_run={"add_item_unpreviewed": {"name": "Corn"}},
             sent=respx.MockRouter(),
         )
@@ -660,7 +653,7 @@ async def test_a_dry_run_fails_a_write_task_without_a_preview_member() -> None:
 async def test_a_dry_run_fails_an_answer_that_is_no_preview(
     respx_mock: respx.MockRouter,
 ) -> None:
-    write = build_server("example", [add_item_at_once], read_only=False)
+    write = ToolSet("example", [add_item_at_once], read_only=False)
     with pytest.raises(
         AssertionError,
         match=r"^example_add_item_at_once: the dry run's answer is no preview, performed is True$",
@@ -668,7 +661,6 @@ async def test_a_dry_run_fails_an_answer_that_is_no_preview(
         await assert_write_tools(
             write,
             [add_item_at_once],
-            source="example",
             dry_run={"add_item_at_once": {"name": "Corn"}},
             sent=respx_mock,
         )
@@ -678,7 +670,7 @@ async def test_a_dry_run_fails_an_answer_that_is_no_preview(
 async def test_a_dry_run_fails_a_refused_call_with_its_answer(
     respx_mock: respx.MockRouter,
 ) -> None:
-    write = build_server("example", [add_item], read_only=False)
+    write = ToolSet("example", [add_item], read_only=False)
     with pytest.raises(
         AssertionError,
         match=(
@@ -689,7 +681,6 @@ async def test_a_dry_run_fails_a_refused_call_with_its_answer(
         await assert_write_tools(
             write,
             [add_item],
-            source="example",
             dry_run={"add_item": {"name": " "}},
             sent=respx_mock,
         )
@@ -716,12 +707,11 @@ async def test_a_dry_run_judges_the_answer_the_tool_gives(
     respx_mock: respx.MockRouter, task: Callable[..., Any], problem: str
 ) -> None:
     # The dry run reads the tool's text, as an agent does, not the task's model.
-    write = build_server("example", [task], read_only=False)
+    write = ToolSet("example", [task], read_only=False)
     with pytest.raises(AssertionError, match=f"^example_{task.__name__}: {problem}$"):
         await assert_write_tools(
             write,
             [task],
-            source="example",
             dry_run={task.__name__: {"name": "Corn"}},
             sent=respx_mock,
         )
@@ -732,15 +722,15 @@ async def test_a_source_declares_a_read_that_upstream_takes_by_post(
     respx_mock: respx.MockRouter,
 ) -> None:
     respx_mock.post(f"{ITEMS}/item/search.json").respond(200, json=[])
-    write = build_server("example", [tag_items], read_only=False)
+    write = ToolSet("example", [tag_items], read_only=False)
     arguments: dict[str, Any] = {"dry_run": {"tag_items": {"tag": "grain"}}, "sent": respx_mock}
     with pytest.raises(AssertionError, match=r"no read, POST /item/search\.json; "):
-        await assert_write_tools(write, [tag_items], source="example", **arguments)
+        await assert_write_tools(write, [tag_items], **arguments)
 
     def is_read(request: httpx.Request) -> bool:
         return request.method == "GET" or request.url.path == "/item/search.json"
 
-    await assert_write_tools(write, [tag_items], source="example", is_read=is_read, **arguments)
+    await assert_write_tools(write, [tag_items], is_read=is_read, **arguments)
 
 
 @pytest.mark.anyio
@@ -773,20 +763,18 @@ async def test_a_source_declares_a_read_that_upstream_takes_by_post(
 async def test_a_dry_run_wants_arguments_for_each_write_task_and_no_confirm(
     respx_mock: respx.MockRouter, dry_run: dict[str, Any], problem: str
 ) -> None:
-    write = build_server("example", PREVIEWED, read_only=False)
+    write = ToolSet("example", PREVIEWED, read_only=False)
     with pytest.raises(AssertionError, match=problem):
-        await assert_write_tools(
-            write, PREVIEWED, source="example", dry_run=dry_run, sent=respx_mock
-        )
+        await assert_write_tools(write, PREVIEWED, dry_run=dry_run, sent=respx_mock)
     assert not respx_mock.calls, "the arguments are checked before any tool is called"
 
 
 @pytest.mark.anyio
 async def test_the_dry_run_s_keywords_go_together() -> None:
-    write = build_server("example", PREVIEWED, read_only=False)
+    write = ToolSet("example", PREVIEWED, read_only=False)
     with pytest.raises(TypeError, match=r"^dry_run needs sent=, the respx router"):
-        await assert_write_tools(write, PREVIEWED, source="example", dry_run={})
+        await assert_write_tools(write, PREVIEWED, dry_run={})
     with pytest.raises(TypeError, match=r"^sent= and is_read= serve the dry run; pass dry_run="):
-        await assert_write_tools(write, PREVIEWED, source="example", sent=respx.MockRouter())
+        await assert_write_tools(write, PREVIEWED, sent=respx.MockRouter())
     with pytest.raises(TypeError, match=r"^sent= and is_read= serve the dry run; pass dry_run="):
-        await assert_write_tools(write, PREVIEWED, source="example", is_read=bool)
+        await assert_write_tools(write, PREVIEWED, is_read=bool)

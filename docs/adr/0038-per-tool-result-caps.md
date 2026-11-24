@@ -1,7 +1,8 @@
 # ADR-0038: Per-tool result caps
 
 Status: Accepted · Date: 2026-11-18 · Decided by the record it supersedes, restated under
-https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0016
+https://github.com/xippios/coordinate-core/issues/757 · Supersedes ADR-0016 ·
+Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/476
 
 ## Context
 
@@ -94,3 +95,10 @@ and 2026-11-18 as they stand, and changes no decision; their history stays in AD
 
 Conventions §8, the README and the docstrings of `xippios.core.mcp.server` and `ResultCap`
 state its decisions from 1.28 on.
+
+Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/476: decision 1 is replaced by
+ADR-0063, decision 1, by which `build_server` and `register_tasks` take a tool set alone, the
+default `cap` of every tool leaves so that a tool without a cap of its own takes the family
+default, and a key of `caps` stays the task function's `__name__`, refused when the tool set is
+built where it names none of its tasks, and decision 5's `mcp.py` passes `MCP_CAPS` to its tool
+set, while decisions 2 to 5 and the consequences stand as written.

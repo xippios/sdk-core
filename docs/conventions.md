@@ -908,7 +908,7 @@ A source's `_client.py` declares the variables it needs as `EnvVar` entries,
 with a placeholder such as `<NAME>` for one variable per tenant (`CASHCTRL_<NAME>_API_KEY`),
 with whether it is a secret and whether it is required, which each entry states. An `EnvVar`
 names a variable and never reads one. The rule binds a source from its adoption of core 0.4.0
-with sdk-template 0.4.0, which renders it (ADR-0026, amendment 2026-11-18, point c).
+with sdk-template 0.4.0, which renders it (ADR-0063, decision 2).
 
 ## 8. MCP conventions
 
@@ -922,18 +922,20 @@ with sdk-template 0.4.0, which renders it (ADR-0026, amendment 2026-11-18, point
   comments, never into the docstring (ADR-0031, decision 6).
 - Read-only by default. A tool that writes to the upstream (CashCtrl) lives in a
   separate server entry point (`xippios-<source>-mcp-write`), takes `confirm: bool`
-  and returns a dry-run preview when `confirm=False`. `register_tasks(read_only=False)`
-  enforces it: a task without `confirm: bool = False` is refused before anything is
-  registered (ADR-0036). A write server carries no authentication, so `--http` serves
-  it on a loopback host only (`LOOPBACK_HOSTS`: `127.0.0.1`, `localhost`, `::1`) unless
-  `--allow-remote` is passed, with a gateway in front. A read server that reaches what
-  no deployment may serve without authentication, sdk-google-mail's mailboxes, is built
-  with `build_server(..., loopback_only=True)` and held the same way; `is_loopback_only`
-  tells a host either kind (ADR-0025, D-a, and amendment 2026-11-18, point a). A write server exposes write tools only; reference tools
-  stay on the read server. A source tests its write server with
-  `xippios.core.testing.assert_write_tools`: a write server, its tools exactly the write
-  tasks, each taking `confirm: bool = False` as its last parameter, and none of them a
-  tool of the read server or a route of the router (ADR-0042, decision 1).
+  and returns a dry-run preview when `confirm=False`. A write tool set,
+  `ToolSet(..., read_only=False)`, enforces it: a task without `confirm: bool = False` is
+  refused when the tool set is built (ADR-0036; ADR-0063, decision 3). A write server
+  carries no authentication, so `--http` serves it on a loopback host only
+  (`LOOPBACK_HOSTS`: `127.0.0.1`, `localhost`, `::1`) unless `--allow-remote` is passed,
+  with a gateway in front. A read server that reaches what no deployment may serve without
+  authentication, sdk-google-mail's mailboxes, is built from a tool set with
+  `loopback_only=True` and held the same way, and a host reads either kind from the tool
+  set's `read_only` and `loopback_only` (ADR-0025, D-a; ADR-0063, decision 5). A write
+  server exposes write tools only; reference tools stay on the read server. A source tests
+  its write server with `xippios.core.testing.assert_write_tools(mcp_write.build(),
+  write_tasks, ...)`: a write tool set, its tools exactly the write tasks, each taking
+  `confirm: bool = False` as its last parameter, and none of them a tool of the read
+  server or a route of the router (ADR-0042, decision 1; ADR-0063, decision 5).
   A write task's preview sends no write and shows the action as the confirmed call would
   send it, by upstream's names, such as the form fields of a create (ADR-0036, decision 9;
   ADR-0050, decision 1). Whether a preview reads first, the record an update would change
@@ -972,7 +974,7 @@ with sdk-template 0.4.0, which renders it (ADR-0026, amendment 2026-11-18, point
   byte bound is the note and a preview of its first bytes (ADR-0038, decision 4). A
   reference tool whose whole list an agent needs gets a cap of its
   own, keyed by the task function's name, with the rows and bytes the source judges it
-  needs (`register_tasks(..., caps={"list_partners": ResultCap(max_rows=400,
+  needs (`ToolSet(..., caps={"list_partners": ResultCap(max_rows=400,
   max_bytes=100_000)})`). So does a tool whose result is one upstream page that must
   return whole, a cursor-paged page with the `next_token` the caller needs for the next
   page or a bounded lookup, which a cut at the default would turn into a preview or cut
@@ -1002,24 +1004,25 @@ with sdk-template 0.4.0, which renders it (ADR-0026, amendment 2026-11-18, point
   of a packaged table or one that the response cache holds, and leaves a tool unpaged where a
   second run sends upstream any request (ADR-0061, decision 9; ADR-0047, decision 2, amendment
   2026-11-24). A
-  task that records its own `start` stays unpaged and keeps its note, and a task that takes
-  a parameter named `offset` is refused a paged cap at registration (ADR-0047, decision 2).
-  A write task is never paged: a continuation runs the task again and would repeat a
-  confirmed write, so `register_tasks(read_only=False)` refuses a paged cap for every task
-  of a write server (ADR-0047, decision 2). Where one row alone passes the byte bound, the note of a paged tool says to continue past
+  tool set refuses a paged cap when it is built for a task that takes `start`, which pages
+  upstream itself and keeps its `resume with start=` note, and for a task that takes a
+  parameter named `offset`, which the adapter's would shadow. A write task is never paged: a
+  continuation runs the task again and would repeat a confirmed write, so a write tool set
+  refuses a paged cap for every task (ADR-0047, decision 2; ADR-0063, decision 3). Where one
+  row alone passes the byte bound, the note of a paged tool says to continue past
   that row with `offset=<offset + 1>` (ADR-0047, decision 3). A tool whose answer is a
   series ordered oldest first keeps its newest rows with `ResultCap(keep="last")`, and the
   `offset` of such a paged tool counts from the last row, so a continuation walks to older
   rows (ADR-0047, decision 5).
   Since a cap's note names a task's filters, a source keeps its caps with its tasks, as
   `MCP_CAPS: Mapping[str, ResultCap]` in `tasks.py` next to `__all__`, and its `mcp.py`
-  passes them through as `caps=getattr(tasks, "MCP_CAPS", None)`.
+  passes them to its tool set as `caps=getattr(tasks, "MCP_CAPS", None)`.
 - A task named in `BULK_TASKS` (a frozenset in `tasks.py` beside `MCP_CAPS`) is not a
-  tool: `register_tasks` skips it (ADR-0040), and `tool_functions(tasks)` gives
-  `tasks.__all__` without it. No tool returns a file path to an agent. A task's name is
-  its entry in `__all__`, and its function's `__name__` is the same, which
-  `tool_functions` checks: a tool's name, an `MCP_CAPS` key and a `BULK_TASKS` entry read
-  that `__name__` (ADR-0026, amendment 2026-11-18).
+  tool: a tool set leaves it out (ADR-0040; ADR-0063, decision 3), and
+  `tool_functions(tasks)` gives `tasks.__all__` without it. No tool returns a file path to
+  an agent. A task's name is its entry in `__all__`, and its function's `__name__` is the
+  same, which `tool_functions` checks: a tool's name, an `MCP_CAPS` key and a `BULK_TASKS`
+  entry read that `__name__` (ADR-0063, decision 2).
   The MCP surface of a bulk source is its catalog tasks (which files exist, with sizes
   and release identifiers) and, where the slice fits the result cap, a filtered read of
   the file.
@@ -1043,12 +1046,13 @@ with sdk-template 0.4.0, which renders it (ADR-0026, amendment 2026-11-18, point
 - Errors return as text starting with `error: <ErrorClass>: <message>`; never raise
   through the MCP boundary. Arguments a tool's schema refuses are answered the same way,
   before the tool runs, by a middleware `register_tasks` installs once per server:
-  `error: InvalidRequestError: <argument>: <message>`, the first error with the count
-  when there are several, never pydantic's rendered error (its URL, input type or input
-  value) (ADR-0036, decision 12). So is an argument the tool does not declare,
-  named with the ones it declares (`error: InvalidRequestError: yaer: Not an argument of
-  this tool; it takes series_id, year`), and a constraint that an `Annotated` parameter
-  declares holds in the tool's schema and in the check (ADR-0036, decision 12).
+  `error: InvalidRequestError: <argument>: <message>. Nothing was sent.`, the first error
+  with the count when there are several, never pydantic's rendered error (its URL, input
+  type or input value) (ADR-0036, decision 12; ADR-0063, decision 6). So is an argument
+  the tool does not declare, named with the ones it declares (`error: InvalidRequestError:
+  yaer: Not an argument of this tool; it takes series_id, year. Nothing was sent.`), and a
+  constraint that an `Annotated` parameter declares holds in the tool's schema and in the
+  check (ADR-0036, decision 12).
   An error answer also sets `isError` on its tool result, which core 0.4.0 carries and
   which binds a source from its adoption of that release
   (https://github.com/xippios/sdk-core/issues/168; ADR-0026, decision 6, and amendment
@@ -1066,15 +1070,19 @@ with sdk-template 0.4.0, which renders it (ADR-0026, amendment 2026-11-18, point
   parsed once with core's; an error applying them stops the process with exit status 2.
   A source's `mcp.py` defines `build(**options)`, its options keyword arguments with
   defaults, a multi-tenant source's `lock: TenantLock | None = None`, which returns its
-  `ToolSet` (`xippios.core.mcp`): its tasks as its lock binds them, `caps`, `instructions`,
+  `ToolSet` (`xippios.core.mcp`): its tools as its lock binds them, `caps`, `instructions`,
   `version`, `read_only`, `loopback_only` and the two hooks. Its module-level `server` is
   `build_server(build())`, and its entry point passes the tool set's hooks to `main`.
   `build` takes no `transport_security`, which a host passes to `streamable_http_app`. The
-  rule binds a source from its adoption of core 0.4.0 with sdk-template 0.4.0 (ADR-0026,
-  amendment 2026-11-18, point c). A host builds one server from the tool sets of several
-  packages with `register_tasks(server, tool_set)`, each tool with its own package's caps,
-  and applies a package's hooks as its entry point does without options, with
-  `tool_set.option_defaults()` (ADR-0026, amendment 2026-11-18, point d).
+  rule binds a source from its adoption of core 0.4.0 with sdk-template 0.4.0 (ADR-0063,
+  decision 2). `build_server(tool_set, *, name=None)` and `register_tasks(server, tool_set)`
+  take a tool set alone, and a tool set is checked when it is built, so a source's own tests
+  fail on a declaration that no server could serve (ADR-0063, decisions 1 and 3). A host
+  builds one server from the tool sets of several packages with `register_tasks(server,
+  tool_set)`, each tool with its own package's caps, names a source's tools
+  `tool_name(tool_set.source, fn)` for each `fn` of `tool_set.tasks`, and applies a
+  package's hooks as its entry point does without options, with `tool_set.option_defaults()`
+  (ADR-0063, decision 4).
 
 ## 9. HTTP adapter conventions
 

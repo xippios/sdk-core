@@ -1,6 +1,6 @@
 # ADR-0047: The adapter's offset for the rest of a cut answer
 
-Status: Accepted · Date: 2026-11-21 · Decided by https://github.com/xippios/sdk-core/issues/362 · Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/474
+Status: Accepted · Date: 2026-11-21 · Decided by https://github.com/xippios/sdk-core/issues/362 · Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/474 · Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/476
 
 ## Context
 
@@ -105,3 +105,9 @@ tool whose second run costs little becomes one whose second run costs upstream n
 answer of a packaged table or one that the response cache holds, so that a tool whose
 continuation sends upstream any request stays unpaged, while the other decisions stand as
 written.
+
+Amended by ADR-0063, decision 3 (https://github.com/xippios/sdk-core/issues/476): decision 2's
+refusals of a paged cap, for a task that takes `offset` and for every task of a write server, run
+when a tool set is built rather than when a server registers it, and a task that records its own
+`start`, which decision 2 left unpaged with its note, is refused a paged cap there too, since its
+continuation would send upstream a request, while the other decisions stand as written.

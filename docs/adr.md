@@ -12,7 +12,7 @@ records in `docs/adr/`. A record changes, and this file follows when the script 
 - <a id="0020"></a>[ADR-0020](adr/0020-file-distributed-sources.md): File-distributed sources · Accepted · 2026-10-26 · amended 2026-11-24
 - <a id="0021"></a>[ADR-0021](adr/0021-dependencies-between-source-packages.md): Dependencies between source packages · Accepted · 2026-10-26
 - <a id="0025"></a>[ADR-0025](adr/0025-google-mail.md): Google Mail — loopback, the renewing bearer, scopes, the kit's return and the decoded view · Accepted · 2026-10-29 · amended 2026-11-18
-- <a id="0026"></a>[ADR-0026](adr/0026-the-host-xippios-mcp.md): The host xippios-mcp · Accepted · 2026-10-29 · amended 2026-11-18
+- <a id="0026"></a>[ADR-0026](adr/0026-the-host-xippios-mcp.md): The host xippios-mcp · Accepted · 2026-10-29 · amended 2026-11-24
 - <a id="0027"></a>[ADR-0027](adr/0027-x-metered-content-source.md): X as a metered, content-bearing source · Accepted · 2026-10-30
 - <a id="0028"></a>[ADR-0028](adr/0028-upstream-fidelity.md): Upstream fidelity — no cross-source normalization in SDK packages · Accepted · 2026-11-18 · amended 2026-11-24
 - <a id="0029"></a>[ADR-0029](adr/0029-core-layout-and-mcp-sdk.md): Core internal layout, dependency direction and MCP SDK choice · Accepted · 2026-11-18
@@ -24,7 +24,7 @@ records in `docs/adr/`. A record changes, and this file follows when the script 
 - <a id="0035"></a>[ADR-0035](adr/0035-offline-tests-guaranteed-by-the-plugin.md): Offline tests guaranteed by the plugin · Accepted · 2026-11-18
 - <a id="0036"></a>[ADR-0036](adr/0036-multi-tenant-sources.md): Multi-tenant sources · Accepted · 2026-11-18 · amended 2026-11-24
 - <a id="0037"></a>[ADR-0037](adr/0037-client-request-hooks-and-quota-policy.md): Client request hooks and a quota policy · Accepted · 2026-11-18 · amended 2026-11-21
-- <a id="0038"></a>[ADR-0038](adr/0038-per-tool-result-caps.md): Per-tool result caps · Accepted · 2026-11-18
+- <a id="0038"></a>[ADR-0038](adr/0038-per-tool-result-caps.md): Per-tool result caps · Accepted · 2026-11-18 · amended 2026-11-24
 - <a id="0039"></a>[ADR-0039](adr/0039-core-versioning-and-source-adoption.md): Core versioning and source adoption · Accepted · 2026-11-18
 - <a id="0040"></a>[ADR-0040](adr/0040-bulk-downloads-and-non-json-payloads.md): Bulk downloads and non-JSON payloads in core · Accepted · 2026-11-18
 - <a id="0041"></a>[ADR-0041](adr/0041-packaged-answers-and-release-times.md): Packaged answers and release times in `ResultMeta` · Accepted · 2026-11-18 · amended 2026-11-24
@@ -46,6 +46,7 @@ records in `docs/adr/`. A record changes, and this file follows when the script 
 - <a id="0060"></a>[ADR-0060](adr/0060-the-boundary-of-a-source-package-and-the-four-rules-of-a.md): The boundary of a source package and the four rules of a record that a package shapes itself · Accepted · 2026-11-24
 - <a id="0061"></a>[ADR-0061](adr/0061-the-one-way-of-each-feature.md): The one way of each feature · Accepted · 2026-11-24
 - <a id="0062"></a>[ADR-0062](adr/0062-the-two-refresh-frames-one-declaration-one-table-header-the.md): The two refresh frames: one declaration, one table header, the fetch through the client and no check without a request · Accepted · 2026-11-24
+- <a id="0063"></a>[ADR-0063](adr/0063-the-server-from-a-tool-set.md): The server from a tool set · Accepted · 2026-11-24
 - <a id="0064"></a>[ADR-0064](adr/0064-the-built-answer-check-its-mark-and-its-census-without.md): The built-answer check: its mark and its census, without following a body or the module's declarations · Accepted · 2026-11-24
 
 The superseded records follow, kept as written: the record that each status names holds its decision now.

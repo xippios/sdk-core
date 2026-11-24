@@ -1,8 +1,9 @@
-"""What core reads from a source's ``tasks.py``: its tool functions and its bulk tasks.
+"""What core reads from a source's ``tasks.py``: its tool functions, their names, its bulk tasks.
 
-The adapters ask ``is_bulk_task`` before they register a task (``register_tasks``,
-``router_from_tasks``), a task named in ``BULK_TASKS``. ``tool_functions`` is public
-through ``xippios.core.mcp``; ``is_bulk_task`` is not public API.
+``tool_functions`` and ``tool_name`` are public through ``xippios.core``, since neither
+needs the ``mcp`` extra, and through ``xippios.core.mcp`` (ADR-0063, decision 2).
+``is_bulk_task`` is not public API: a ``ToolSet`` leaves a task named in ``BULK_TASKS``
+out, and the HTTP router (``router_from_tasks``) skips it.
 """
 
 import sys
@@ -10,7 +11,7 @@ from collections.abc import Callable
 from types import ModuleType
 from typing import Any
 
-__all__ = ["is_bulk_task", "tool_functions"]
+__all__ = ["is_bulk_task", "tool_functions", "tool_name"]
 
 _MISSING = object()
 
@@ -22,7 +23,7 @@ def tool_functions(tasks: ModuleType) -> list[Callable[..., Any]]:
     read from one, and is Python-only (ADR-0040, decision 4). ``BULK_TASKS`` is read from
     ``tasks`` itself, so a function whose ``__module__`` names another module, a tenant
     lock's wrapper say, is judged by the module it is listed in. So a source's ``mcp.py``
-    passes ``tool_functions(tasks)`` to ``build_server``, and a host checks a tool list
+    passes ``tool_functions(tasks)`` to its ``ToolSet``, and a host checks a tool list
     against the names of what it returns.
 
     A task's name is its entry in ``__all__``: a tool's name, a key of ``MCP_CAPS`` and an
@@ -62,11 +63,29 @@ def tool_functions(tasks: ModuleType) -> list[Callable[..., Any]]:
     return functions
 
 
+def tool_name(source: str, task: Callable[..., Any] | str) -> str:
+    """A task's tool name, ``<source>_<task>``, the slug underscored and never doubled.
+
+    ``task`` is the task function, read by its ``__name__``, or its name as text, so a
+    refusal that names a tool needs no function: ``tool_name("example", "get_series")``
+    is ``example_get_series``, and so is ``tool_name("example", "example_get_series")``.
+    A host names a source's tools with it, ``tool_name(tool_set.source, fn)`` for each
+    ``fn`` of ``tool_set.tasks`` (ADR-0063, decision 4).
+
+    Args:
+        source: Source slug, e.g. ``"example"``; each ``-`` becomes ``_``.
+        task: The task function, e.g. ``tasks.get_series``, or its name, ``"get_series"``.
+    """
+    prefix = source.replace("-", "_")
+    name = task if isinstance(task, str) else task.__name__
+    return name if name.startswith(f"{prefix}_") else f"{prefix}_{name}"
+
+
 def is_bulk_task(fn: Callable[..., Any]) -> bool:
     """True when ``fn``, or a function it wraps, is named in its module's ``BULK_TASKS``.
 
     A bulk task returns a file or a list read from one and is Python-only:
-    ``register_tasks`` and ``router_from_tasks`` skip it (ADR-0040, decision 4). The
+    a ``ToolSet`` leaves it out and ``router_from_tasks`` skips it (ADR-0040, decision 4). The
     module of each layer is ``sys.modules[layer.__module__]``, the source's ``tasks.py``
     for the task itself; a sync facade made by ``sync`` keeps its async twin's module
     and its name minus ``_async``, the name ``tasks.__all__`` and ``BULK_TASKS`` use. The

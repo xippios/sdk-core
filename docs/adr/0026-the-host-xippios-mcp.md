@@ -3,7 +3,8 @@
 Status: Accepted · Date: 2026-10-29 · Decided by Johannes on 2026-10-29 (D109, D110 (4);
 panel B's decisions 2 to 4 as amended; drafted by the family; decision 5's loopback rule
 the session's recommendation, queue row 296) · Amended 2026-11-18 by
-https://github.com/xippios/sdk-core/issues/240
+https://github.com/xippios/sdk-core/issues/240 ·
+Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/476
 
 ## Context
 
@@ -297,3 +298,11 @@ Conventions §8 and the README state points (a) and (b) from 1.28 on; convention
 §8, the README and the docstrings of `xippios.core.contract`, `xippios.core.mcp` and
 `xippios.core.mcp.server` points (c) and (d); and conventions §15, the review checklist's
 scope and its items 1 to 4, 12 and 16, and the definition of done point (e).
+
+Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/476: points (a), (c) and (d) of
+the amendment of 2026-11-18 are replaced by ADR-0063, which states the server from a tool set
+whole, so that the host reads a source's tool set, names its tools from `tool_set.tasks`,
+imports nothing private of core and reads decision 5's write rule and hold to loopback from the
+tool set's `read_only` and `loopback_only` once `is_write_server` and `is_loopback_only` leave,
+while the other decisions, points (b) and (e) and the amendment of 2026-10-30 stand as written,
+this amendment being the record's last, since a third one would be a new record.

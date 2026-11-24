@@ -901,14 +901,14 @@ import logging
 
 import pytest
 
-from xippios.core.mcp import build_server
+from xippios.core.mcp import ToolSet, build_server
 
 NAMES = ("httpx", "httpcore", "httpx2", "httpcore2")
 BEFORE = [logging.getLogger(name).level for name in NAMES]
 
 
 def test_building_a_server_quiets_the_request_loggers():
-    build_server("example", [])
+    build_server(ToolSet("example", []))
     assert [logging.getLogger(name).level for name in NAMES] == [logging.WARNING] * 4
 
 
@@ -918,7 +918,7 @@ def test_the_next_test_gets_the_levels_back():
 
 @pytest.mark.live
 def test_a_live_test_quiets_them_too():
-    build_server("example", [])
+    build_server(ToolSet("example", []))
 
 
 def test_and_the_next_test_gets_them_back_again():

@@ -474,6 +474,10 @@
         {
           "date": "2026-11-18",
           "by": "https://github.com/xippios/sdk-core/issues/240"
+        },
+        {
+          "date": "2026-11-24",
+          "by": "https://github.com/xippios/sdk-core/issues/476"
         }
       ],
       "amends": [],
@@ -649,6 +653,10 @@
         {
           "date": "2026-11-24",
           "by": "https://github.com/xippios/sdk-core/issues/475"
+        },
+        {
+          "date": "2026-11-24",
+          "by": "https://github.com/xippios/sdk-core/issues/476"
         }
       ],
       "amends": [],
@@ -687,7 +695,12 @@
       "status": "Accepted",
       "date": "2026-11-18",
       "decided_by": "the record it supersedes, restated under https://github.com/xippios/coordinate-core/issues/757",
-      "amended": [],
+      "amended": [
+        {
+          "date": "2026-11-24",
+          "by": "https://github.com/xippios/sdk-core/issues/476"
+        }
+      ],
       "amends": [],
       "supersedes": [
         "ADR-0016"
@@ -860,6 +873,10 @@
         {
           "date": "2026-11-24",
           "by": "https://github.com/xippios/sdk-core/issues/474"
+        },
+        {
+          "date": "2026-11-24",
+          "by": "https://github.com/xippios/sdk-core/issues/476"
         }
       ],
       "amends": [],
@@ -1122,6 +1139,20 @@
         "ADR-0046",
         "ADR-0051"
       ],
+      "other": [],
+      "superseded_by": null
+    },
+    {
+      "id": "ADR-0063",
+      "number": 63,
+      "title": "The server from a tool set",
+      "path": "docs/adr/0063-the-server-from-a-tool-set.md",
+      "status": "Accepted",
+      "date": "2026-11-24",
+      "decided_by": "https://github.com/xippios/sdk-core/issues/476",
+      "amended": [],
+      "amends": [],
+      "supersedes": [],
       "other": [],
       "superseded_by": null
     },
