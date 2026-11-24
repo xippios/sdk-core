@@ -1,3 +1,4 @@
+import inspect
 import typing
 from collections.abc import Callable
 from decimal import Decimal
@@ -125,27 +126,43 @@ async def test_mcp_call_fails_when_the_server_reports_an_error() -> None:
 # assert_write_tools: a write server against its write tasks (conventions §8) ---------
 # The tests of the two copies, sdk-cashctrl's and sdk-google-mail's
 # tests/test_tasks_write.py, which core removed in 0.3.0 and takes back in 0.4.0 with the
-# check that confirm is the last parameter (ADR-0042, decision 1).
+# check that confirm is the last parameter (ADR-0042, decision 1). Every write task holds
+# its preview, which the check reads in every call (ADR-0050, decision 4).
 
 
-def create_thing(name: str, confirm: bool = False) -> dict[str, str]:
+class ThingPreview(UpstreamModel):
+    """What a thing's write would send; nothing was written."""
+
+    performed: Literal[False] = False
+    reads: list[str]
+
+
+def previewed(endpoint: str) -> Result[ThingPreview]:
+    """The preview of a write that reads nothing first."""
+    meta = ResultMeta(source="example", endpoint=endpoint)
+    return Result[ThingPreview](data=ThingPreview(reads=[]), meta=meta)
+
+
+def create_thing(name: str, confirm: bool = False) -> Result[ThingPreview]:
     """Create a thing; without confirm, return a preview.
 
     Args:
         name: The thing's name, e.g. ``"Corn"``.
         confirm: ``True`` writes, ``False`` previews.
     """
-    return {"name": name, "written": str(confirm)}
+    return previewed("thing/create")
 
 
-def delete_thing(thing_id: int, confirm: typing.Annotated[bool, "write"] = False) -> dict[str, int]:
+def delete_thing(
+    thing_id: int, confirm: typing.Annotated[bool, "write"] = False
+) -> Result[ThingPreview]:
     """Delete a thing; without confirm, return a preview.
 
     Args:
         thing_id: The thing's id, e.g. ``4``.
         confirm: ``True`` deletes, ``False`` previews.
     """
-    return {"id": thing_id}
+    return previewed("thing/delete")
 
 
 def list_things() -> list[str]:
@@ -170,7 +187,7 @@ async def test_assert_write_tools_accepts_a_separate_write_server() -> None:
 
 @pytest.mark.anyio
 async def test_assert_write_tools_accepts_a_server_a_lock_binds() -> None:
-    def rename_thing(org: str, name: str, confirm: bool = False) -> dict[str, str]:
+    def rename_thing(org: str, name: str, confirm: bool = False) -> Result[ThingPreview]:
         """Rename a thing; without confirm, return a preview.
 
         Args:
@@ -178,7 +195,7 @@ async def test_assert_write_tools_accepts_a_server_a_lock_binds() -> None:
             name: The new name, e.g. ``"Corn"``.
             confirm: ``True`` writes, ``False`` previews.
         """
-        return {"org": org, "name": name}
+        return previewed("thing/rename")
 
     tenants = Tenants("fictive-src", list_var="FICTIVE_SRC_TENANTS", param="org", fields=("KEY",))
     bound = bind_tasks([rename_thing], TenantLock(tenants, "demo"))
@@ -295,7 +312,7 @@ async def test_assert_write_tools_names_tools_with_the_underscored_source() -> N
 
 # What a write tool's preview shows (conventions §8; ADR-0050) ------------------------
 # A write task's answer holds one member tagged performed: Literal[False], the preview,
-# which declares reads, the operations it read. preview_reads=True holds the annotations;
+# which declares reads, the operations it read. Every call holds the annotations, and
 # the dry run calls each tool without confirm and compares reads with what the router saw.
 # sdk-cashctrl's previews read with GET, as rename_item's does, and sdk-google-mail's read
 # nothing but a reply's, as add_item's reads nothing.
@@ -472,6 +489,11 @@ async def add_item_twice(name: str, confirm: bool = False) -> Result[ItemPreview
     return Result[ItemPreview | BarePreview](data=preview, meta=_meta("item/create.json"))
 
 
+def add_item_unwrapped(name: str, confirm: bool = False) -> dict[str, str]:
+    """A write task that returns its preview outside a ``Result``."""
+    return {"name": name}
+
+
 async def add_item_unannotated(name: str, confirm: bool = False):  # type: ignore[no-untyped-def]
     """A write task whose return is not annotated."""
     return _shown(ItemPreview(endpoint="item/create.json", payload={}, reads=[]))
@@ -506,13 +528,13 @@ async def add_item_unshown(name: str, confirm: bool = False) -> Result[UnshownPr
 
 
 @pytest.mark.anyio
-async def test_preview_reads_holds_one_preview_that_declares_reads() -> None:
+async def test_the_check_holds_one_preview_that_declares_reads() -> None:
     # Both previews pass, the generic one through the sync facade's annotations too, and so
     # does a Result whose data is a type alias of the union.
     write = ToolSet("example", PREVIEWED, read_only=False)
-    await assert_write_tools(write, PREVIEWED, preview_reads=True)
+    await assert_write_tools(write, PREVIEWED)
     tagging = ToolSet("example", [tag_items], read_only=False)
-    await assert_write_tools(tagging, [tag_items], preview_reads=True)
+    await assert_write_tools(tagging, [tag_items])
 
 
 @pytest.mark.anyio
@@ -536,7 +558,7 @@ async def test_preview_reads_holds_one_preview_that_declares_reads() -> None:
             id="two-previews",
         ),
         pytest.param(
-            create_thing,
+            add_item_unwrapped,
             r"returns dict\[str, str\], not a Result whose data holds the preview",
             id="no-result",
         ),
@@ -547,14 +569,18 @@ async def test_preview_reads_holds_one_preview_that_declares_reads() -> None:
         ),
     ],
 )
-async def test_preview_reads_fails_a_write_task_without_its_preview(
+async def test_the_check_fails_a_write_task_without_its_preview(
     task: Callable[..., Any], problem: str
 ) -> None:
+    # No switch: preview_reads, which no source passed, left in 0.5.0, so every call holds
+    # the write tasks' previews (https://github.com/xippios/sdk-core/issues/475, part 7).
     write = ToolSet("example", [task], read_only=False)
-    # Off by default: a source that calls the check as on core 0.4.0 passes.
-    await assert_write_tools(write, [task])
     with pytest.raises(AssertionError, match=f"^example_{task.__name__}: {problem}$"):
-        await assert_write_tools(write, [task], preview_reads=True)
+        await assert_write_tools(write, [task])
+
+
+def test_the_check_takes_no_switch_for_the_preview() -> None:
+    assert "preview_reads" not in inspect.signature(assert_write_tools).parameters
 
 
 @pytest.mark.anyio
