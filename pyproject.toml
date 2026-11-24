@@ -1,6 +1,6 @@
 [project]
 name = "xippios-core"
-version = "0.4.1"
+version = "0.5.0"
 description = "Shared core for the xippios Python SDK family: HTTP client, models, errors, MCP/HTTP adapters"
 readme = "README.md"
 license = "Apache-2.0"
