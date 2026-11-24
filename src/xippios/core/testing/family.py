@@ -61,6 +61,15 @@ are read from pytest's rootdir.
   ``Tenants`` registry passes. The check reads
   signatures: what a task reaches inside is the review's
   (https://github.com/xippios/sdk-core/issues/302);
+- every key class that ``_client.py`` holds by a name names the package's own slug,
+  ``_client.SOURCE``: a ``KeyAuth`` of the module, the ``auth`` of its ``AsyncClient`` and
+  the ``auth`` of another object of it, the gateway that a publisher's shared package
+  builds with the slug it is given, ``Gateway(SOURCE)`` say. A key that a ``KeyAuth``
+  registers under one slug stays as sent in an envelope of another, since the registries are
+  kept for each source (conventions §10, ADR-0040, decision 6, amendment 2026-11-24;
+  https://github.com/xippios/sdk-core/issues/526). A ``KeyAuth`` that names no source, a
+  ``QuotaPolicy`` whose ``source`` speaks for a publisher, and a source with no key class
+  pass;
 - a source that keeps ``docs/upstream/OBSERVED.md``, the notes of what it observed of
   upstream, is held to three rules of it, one test each, and a source without the file
   passes all three (conventions §3, ADR-0044). ``FETCHED.md`` lists the file in a row of
@@ -129,6 +138,7 @@ from packaging.requirements import InvalidRequirement, Requirement
 from packaging.utils import canonicalize_name
 from packaging.version import Version
 
+from xippios.core.client import AsyncClient, KeyAuth
 from xippios.core.models import Result
 from xippios.core.reference import PackagedCodes, PackagedList, _named_parameters
 from xippios.core.tenants import Tenants, _lists_tenants
@@ -143,6 +153,7 @@ __all__ = [
     "test_family_every_packaged_list_is_declared_for_the_live_run",
     "test_family_fetched_md_lists_observed_md_in_a_row_of_its_own",
     "test_family_http_router_routes_the_tasks",
+    "test_family_key_class_names_the_package_s_own_slug",
     "test_family_mcp_server_registers_the_tasks",
     "test_family_namespace_levels_are_empty",
     "test_family_observed_md_cites_files_that_exist",
@@ -614,6 +625,54 @@ def test_family_tasks_take_one_tenant(family_source: FamilySource) -> None:
         problems,
         f"every task of a multi-tenant source takes exactly one tenant, {param}, the parameter "
         "its Tenants registry declares, required, the tenant list excepted (conventions §7):",
+    )
+
+
+def _key_classes(client: ModuleType) -> list[tuple[str, KeyAuth]]:
+    """Every key class ``client`` holds by a name, each once, under the first name that holds it.
+
+    A module-level ``KeyAuth``, the ``auth`` of a module-level ``AsyncClient``, and the ``auth``
+    of any other module-level object, a publisher's gateway say, in the order of the names.
+    """
+    found: dict[int, tuple[str, KeyAuth]] = {}
+    for name, value in sorted(vars(client).items()):
+        if isinstance(value, KeyAuth):
+            held: object = value
+            label = name
+        elif isinstance(value, AsyncClient):
+            held, label = value._auth, f"{name}'s auth"
+        elif isinstance(value, type | ModuleType):
+            continue
+        else:
+            held, label = getattr(value, "auth", None), f"{name}.auth"
+        if isinstance(held, KeyAuth):
+            found.setdefault(id(held), (label, held))
+    return list(found.values())
+
+
+def test_family_key_class_names_the_package_s_own_slug(family_source: FamilySource) -> None:
+    """The key class a source's client uses names the package's slug (conventions §10).
+
+    A ``KeyAuth`` registers its query parameter as a credential of the slug it names, and an
+    envelope reads the names of its own slug alone (ADR-0040, decision 6, amendment
+    2026-11-24), so a key class that names another slug would leave the key as sent in the
+    source's envelopes. The check reads what ``_client.py`` holds by a name: a ``KeyAuth``,
+    the ``auth`` of an ``AsyncClient`` and the ``auth`` of a shared object such as a
+    publisher's gateway, which builds its key class with the slug it is given
+    (https://github.com/xippios/sdk-core/issues/526). A ``KeyAuth`` that names no source
+    passes, and so does a source with none.
+    """
+    client = importlib.import_module(f"{family_source.import_path}._client")
+    slug = family_source.source
+    problems = [
+        f"{label} names {auth.source!r}"
+        for label, auth in _key_classes(client)
+        if auth.source is not None and auth.source != slug
+    ]
+    _fail(
+        problems,
+        "so that no envelope of the package keeps its key as sent (conventions §10, ADR-0040, "
+        f"decision 6), _client.py's key class must name the package's slug, {slug!r}:",
     )
 
 

@@ -33,7 +33,7 @@ from xippios.core.errors import (
     parse_retry_after,
     request_description,
 )
-from xippios.core.redaction import _hold_key, register_credential_name
+from xippios.core.redaction import register_credential_name
 
 __all__ = [
     "RENEWAL_MARGIN",
@@ -69,9 +69,7 @@ class EnvKeyAuth(httpx.Auth):
 
     ``KeyAuth`` is the one subclass core ships. ``apply`` reads the key through
     ``self.key()`` where it attaches it, and keeps it in no local variable, so no traceback
-    frame holds the key as an argument or a local. While the object lives, its key reads
-    ``REDACTED`` wherever ``xippios.core.redaction`` finds it as a value, in an envelope's
-    ``request`` of any source and in the testing helpers.
+    frame holds the key as an argument or a local.
 
     Args:
         env_var: Variable that holds the key, named as the upstream documents it.
@@ -89,14 +87,6 @@ class EnvKeyAuth(httpx.Auth):
         self._override = key
         self._key: str | None = None
         self._lock = threading.Lock()
-        _hold_key(self)
-
-    def _held_key(self) -> str | None:
-        """The key, for the redaction to find it as a value; ``None`` while none is set."""
-        try:
-            return self.key()
-        except ConfigError:
-            return None
 
     def key(self) -> str:
         """The key, resolved on first use and cached for the life of the object."""

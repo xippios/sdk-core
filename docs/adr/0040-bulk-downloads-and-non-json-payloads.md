@@ -169,7 +169,9 @@ key does for `key`, `register_data_name` takes the source too, as sdk-x's two de
 `ResultMeta` reads the names of its own source alone, which serves the redaction of every
 envelope of the family (ADR-0030), a reader given no source, a testing helper's, reads those of
 every source with a credential of any one winning, one source's key name no longer turns another
-source's data into `REDACTED` in a process that imports both, and a text value that is the key of
-a `KeyAuth` the process holds reads `REDACTED` whatever its name and whatever source a reader is
-given, so that an envelope whose slug differs from its key class's never shows the key, while
-decisions 2, 4 and 5, the rest of decisions 1, 3 and 6 and the consequences stand as written.
+source's data into `REDACTED` in a process that imports both, and the family check fails a source
+whose key class names another slug than the package's own, a `KeyAuth` of its `_client.py`, the
+`auth` of its client or that of a gateway that a publisher's shared package builds with the slug it
+is given, so that no envelope keeps a key as sent
+(https://github.com/xippios/sdk-core/issues/526), while decisions 2, 4 and 5, the rest of
+decisions 1, 3 and 6 and the consequences stand as written.

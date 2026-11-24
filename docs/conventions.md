@@ -557,10 +557,9 @@ not on the list: it is a credential of a source whose one key class sends the ke
 that name as a query parameter, `KeyAuth("EXAMPLE_API_KEY", location="query", name="key",
 source=SOURCE)`, which registers it for that source when built (ADR-0059, decision 7), and
 data of every other source, a source's own series `key` say, also in a host that loads
-both (ADR-0040, decision 6, amendment 2026-11-24). Whatever its name and whatever the
-envelope's `source`, a value that is the key of a `KeyAuth` the process holds reads
-`REDACTED`, so a slug that differs from the key class's never shows the key (the same
-amendment). A source declares a name with a
+both (ADR-0040, decision 6, amendment 2026-11-24). A source's key class names the
+package's own slug, so that its envelopes read its key's name as a credential, and the
+family check holds it (§10). A source declares a name with a
 whole-word `token` data where its value is data, a paging cursor such as `next_token` and
 `pagination_token`, once, with `xippios.core.redaction.register_data_name(name,
 source=SOURCE)`: the envelope of that source, the recorder and replay keep its value.
@@ -1402,6 +1401,12 @@ standalone from the package. A task named in `BULK_TASKS` gets no route:
   field `<stem>_number` or `<stem>_label` stands beside a field `<stem>` of the same model that
   holds no text, and it passes a name whose part before the suffix names no field of its model,
   which is upstream's own name and no reading (ADR-0060, decision 9).
+- The family check fails a source whose key class names another slug than the package's own,
+  `_client.SOURCE`: a `KeyAuth` that `_client.py` holds by a name, the `auth` of its
+  `AsyncClient`, or the `auth` of a shared object of it, such as the gateway that a
+  publisher's shared package builds with the slug it is given, `Gateway(SOURCE)`. A key class
+  that names no source, and a source with none, pass
+  (https://github.com/xippios/sdk-core/issues/526).
 - A value set that a package writes by hand from upstream's document, an enumeration or a table
   of allowed values, is held by an offline test that reads it against the document under
   `docs/upstream/` (ADR-0061, decision 12).
