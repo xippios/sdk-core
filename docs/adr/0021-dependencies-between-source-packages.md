@@ -1,7 +1,7 @@
 # ADR-0021: Dependencies between source packages
 
 Status: Accepted · Date: 2026-10-26 · Decided by Johannes on 2026-10-26 (architect
-interview)
+interview) · Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/485
 
 ## Context
 
@@ -70,3 +70,12 @@ sdk-usda-wasde 0.2.0 briefing required on 2026-10-29 (queue row 273).
    alone (ADR-0026, decision 9).
 
 Conventions §12 states points 1 and 2 from 1.23 on, §15 point 3.
+
+## Amendment 2026-11-24
+
+Amended by ADR-0065 (https://github.com/xippios/sdk-core/issues/485): a source may depend on
+its publisher's shared package, the code that knows one publisher and that two or more of its
+sources share, by decisions 1 and 3 to 6 and the amendment of 2026-10-29 as for a source
+package, importing the shared package's public names where decision 1 has it import the task
+layer, while decision 2 binds nothing there, since a shared package registers no task and runs no
+server.
