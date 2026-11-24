@@ -1,4 +1,6 @@
+import importlib
 import logging
+import sys
 from pathlib import Path
 
 import httpcore
@@ -714,11 +716,12 @@ def test_a_live_test_reads_the_shell_and_caches_the_key(placeholder_api_key):
     assert TENANTS["a"].key() == SHELL["TENANT_A_KEY"]  # now cached on the object
 
 
-def test_the_named_variables_hold_the_placeholder(placeholder_api_key):
+def test_the_secret_variables_hold_the_placeholder(placeholder_api_key):
     assert placeholder_api_key == PLACEHOLDER_KEY
     assert os.environ["EXAMPLE_API_KEY"] == PLACEHOLDER_KEY
     assert os.environ["OTHER_TOKEN"] == PLACEHOLDER_KEY
-    assert os.environ["TENANT_A_KEY"] == SHELL["TENANT_A_KEY"]  # not named in the ini option
+    assert os.environ["EXAMPLE_REGION"] == SHELL["EXAMPLE_REGION"]  # declared, but no secret
+    assert os.environ["TENANT_A_KEY"] == SHELL["TENANT_A_KEY"]  # not declared in ENV_VARS
 
 
 def test_every_auth_object_sends_the_placeholder(respx_mock):
@@ -746,19 +749,192 @@ def shell_keys(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(LIVE_ENV, "1")
     monkeypatch.setenv("EXAMPLE_API_KEY", "shell-key")
     monkeypatch.setenv("OTHER_TOKEN", "shell-token")
+    monkeypatch.setenv("EXAMPLE_REGION", "shell-region")
     monkeypatch.setenv("TENANT_A_KEY", "shell-tenant-a")
     monkeypatch.delenv("TENANT_B_KEY", raising=False)
+
+
+PLUGIN_CONFTEST = 'pytest_plugins = ["xippios.core.testing.plugin"]\n'
+
+
+def write_source(
+    pytester: pytest.Pytester, client: str, tests: str, conftest: str = PLUGIN_CONFTEST
+) -> None:
+    """A source laid out as the template renders it: ``xippios.example`` and its tests.
+
+    ``client`` is its ``_client.py``, which the plugin reads ``ENV_VARS`` from, ``tests``
+    its ``tests/test_source.py`` and ``conftest`` its ``tests/conftest.py``.
+    """
+    files = {
+        "src/xippios/example/__init__.py": "",
+        "src/xippios/example/tasks.py": "__all__: list[str] = []\n",
+        "src/xippios/example/_client.py": client,
+        "tests/conftest.py": conftest,
+        "tests/test_source.py": tests,
+    }
+    for path, content in files.items():
+        target = pytester.path / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+    pytester.syspathinsert(pytester.path / "src")
+    for name in [m for m in sys.modules if m.split(".")[:2] == ["xippios", "example"]]:
+        del sys.modules[name]  # a second run in one test imports the changed files
+    importlib.invalidate_caches()
+
+
+def secret_client(*names: str) -> str:
+    """A ``_client.py`` whose ``ENV_VARS`` declares each of ``names`` secret and required."""
+    entries = "".join(f"    EnvVar({name!r}, secret=True, required=True),\n" for name in names)
+    return f"from xippios.core import EnvVar\n\nENV_VARS = (\n{entries})\n"
+
+
+KEY_CLIENT = """
+from xippios.core import EnvVar
+
+ENV_VARS = (
+    EnvVar("EXAMPLE_API_KEY", secret=True, required=True),
+    EnvVar("OTHER_TOKEN", secret=True, required=False),
+    EnvVar("EXAMPLE_REGION", secret=False, required=False),
+)
+"""
 
 
 @pytest.mark.usefixtures("shell_keys")
 def test_offline_tests_send_the_placeholder_key(pytester: pytest.Pytester) -> None:
     # Row 12 (sdk-comtrade): every source carried this fixture by hand (sdk-template 0.1.5).
-    pytester.makeini("[pytest]\nxippios_placeholder_key_envs = EXAMPLE_API_KEY OTHER_TOKEN\n")
-    pytester.makeconftest('pytest_plugins = ["xippios.core.testing.plugin"]\n')
-    pytester.makepyfile(PLACEHOLDER_TESTS)
-    result = pytester.runpytest("--strict-markers", "--strict-config")
+    # The variables are the secret ones of _client.ENV_VARS, which the source declares once
+    # (https://github.com/xippios/sdk-core/issues/475, part 6).
+    write_source(pytester, KEY_CLIENT, PLACEHOLDER_TESTS)
+    result = pytester.runpytest("tests", "--strict-markers", "--strict-config")
     result.assert_outcomes(passed=4)
     assert EnvKeyAuth.key is KEY
+
+
+TENANT_CLIENT = """
+from xippios.core import EnvVar, Tenants
+
+ENV_VARS = (
+    EnvVar("EXAMPLE_TENANTS", secret=False, required=False),
+    EnvVar("EXAMPLE_<NAME>_SUBDOMAIN", secret=True, required=True),
+    EnvVar("EXAMPLE_<NAME>_API_KEY", secret=True, required=True),
+)
+TENANTS = Tenants(
+    "example",
+    list_var="EXAMPLE_TENANTS",
+    param="org",
+    fields=("SUBDOMAIN", "API_KEY"),
+    reserved=("demo", "sandbox"),
+)
+"""
+
+TENANT_CONFTEST = """
+import pytest
+
+from xippios.example._client import TENANTS
+
+pytest_plugins = ["xippios.core.testing.plugin"]
+
+
+@pytest.fixture(autouse=True)
+def demo_subdomain(request, monkeypatch):
+    # As a source sets the host its fixtures were recorded at, after the plugin's fixture.
+    if request.node.get_closest_marker("live") is None:
+        monkeypatch.setenv(TENANTS.var("demo", "SUBDOMAIN"), "demo")
+"""
+
+TENANT_TESTS = """
+import os
+
+import pytest
+
+from xippios.core.testing.plugin import PLACEHOLDER_KEY
+from xippios.example._client import TENANTS
+
+SHELL = dict(os.environ)
+
+
+def test_each_reserved_tenant_s_secret_variables_hold_the_placeholder():
+    assert os.environ["EXAMPLE_DEMO_API_KEY"] == PLACEHOLDER_KEY
+    assert os.environ["EXAMPLE_SANDBOX_API_KEY"] == PLACEHOLDER_KEY
+    assert os.environ["EXAMPLE_SANDBOX_SUBDOMAIN"] == PLACEHOLDER_KEY
+    assert os.environ["EXAMPLE_DEMO_SUBDOMAIN"] == "demo"  # the conftest's, set after
+    assert os.environ["EXAMPLE_ACME_API_KEY"] == SHELL["EXAMPLE_ACME_API_KEY"]  # no reserved one
+    assert os.environ["EXAMPLE_TENANTS"] == SHELL["EXAMPLE_TENANTS"]  # declared, but no secret
+    assert TENANTS.names() == ("acme", "demo", "sandbox")
+
+
+@pytest.mark.live
+def test_a_live_test_reads_the_shell():
+    assert os.environ["EXAMPLE_DEMO_API_KEY"] == SHELL["EXAMPLE_DEMO_API_KEY"]
+    assert os.environ["EXAMPLE_DEMO_SUBDOMAIN"] == SHELL["EXAMPLE_DEMO_SUBDOMAIN"]
+    assert "EXAMPLE_SANDBOX_API_KEY" not in os.environ
+"""
+
+
+def test_a_pattern_holds_the_placeholder_for_each_reserved_tenant(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # https://github.com/xippios/sdk-core/issues/475, part 6: a variable per tenant is set
+    # for each reserved tenant of the registry that _client.py holds, and a source's own
+    # fixture that sets one of them, its recorded host say, runs after the plugin's.
+    monkeypatch.setenv(LIVE_ENV, "1")
+    monkeypatch.setattr(tenants, "_declared", False)  # no registry but the inner run's
+    monkeypatch.setenv("EXAMPLE_TENANTS", "acme")
+    monkeypatch.setenv("EXAMPLE_ACME_API_KEY", "shell-acme-key")
+    monkeypatch.setenv("EXAMPLE_ACME_SUBDOMAIN", "shell-acme")
+    monkeypatch.setenv("EXAMPLE_DEMO_API_KEY", "shell-demo-key")
+    monkeypatch.setenv("EXAMPLE_DEMO_SUBDOMAIN", "shell-demo")
+    monkeypatch.delenv("EXAMPLE_SANDBOX_API_KEY", raising=False)
+    monkeypatch.delenv("EXAMPLE_SANDBOX_SUBDOMAIN", raising=False)
+    write_source(pytester, TENANT_CLIENT, TENANT_TESTS, TENANT_CONFTEST)
+    result = pytester.runpytest("tests", "--strict-markers", "--strict-config")
+    result.assert_outcomes(passed=2)
+
+
+OTHER_PACKAGE_TESTS = """
+import os
+
+
+def test_no_variable_holds_the_placeholder():
+    assert os.environ["EXAMPLE_API_KEY"] == "shell-key"  # pragma: allowlist secret
+"""
+
+
+@pytest.mark.usefixtures("shell_keys")
+def test_a_repository_without_one_source_package_sets_no_variable(
+    pytester: pytest.Pytester,
+) -> None:
+    # The source is the one package with a tasks.py under src/xippios/, as the family check
+    # finds it; core's own repository has none, and two leave the plugin none to read.
+    write_source(pytester, KEY_CLIENT, OTHER_PACKAGE_TESTS)
+    (pytester.path / "src" / "xippios" / "other").mkdir()
+    (pytester.path / "src" / "xippios" / "other" / "tasks.py").write_text("__all__ = []\n")
+    result = pytester.runpytest("tests", "--strict-markers", "--strict-config")
+    result.assert_outcomes(passed=1)
+
+
+def test_the_plugin_registers_no_ini_option(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The placeholder's list and the package under test left the ini file in 0.5.0
+    # (https://github.com/xippios/sdk-core/issues/475): pytest warns a source that still
+    # sets either, and refuses it under --strict-config.
+    monkeypatch.delenv(LIVE_ENV, raising=False)
+    pytester.makeini(
+        "[pytest]\nxippios_placeholder_key_envs = EXAMPLE_API_KEY\n"
+        "xippios_package = xippios.example\n"
+    )
+    pytester.makeconftest(PLUGIN_CONFTEST)
+    pytester.makepyfile(TEST_FILE)
+    result = pytester.runpytest()
+    result.assert_outcomes(passed=1, skipped=1, warnings=2)
+    result.stdout.fnmatch_lines(
+        [
+            "*Unknown config option: xippios_package*",
+            "*Unknown config option: xippios_placeholder_key_envs*",
+        ]
+    )
+    assert pytester.runpytest("--strict-config").ret == pytest.ExitCode.USAGE_ERROR
 
 
 SOURCE_CONFTEST = """
@@ -811,10 +987,8 @@ def test_a_source_fixture_of_the_same_name_overrides_the_plugin(
     pytester: pytest.Pytester,
 ) -> None:
     # A source on core 0.2.0 may keep the fixture it carries from sdk-template 0.1.5.
-    pytester.makeini("[pytest]\nxippios_placeholder_key_envs = OTHER_TOKEN\n")
-    pytester.makeconftest(SOURCE_CONFTEST)
-    pytester.makepyfile(SOURCE_TESTS)
-    result = pytester.runpytest("--strict-markers", "--strict-config")
+    write_source(pytester, secret_client("OTHER_TOKEN"), SOURCE_TESTS, SOURCE_CONFTEST)
+    result = pytester.runpytest("tests", "--strict-markers", "--strict-config")
     result.assert_outcomes(passed=1)
 
 
@@ -849,8 +1023,8 @@ def test_a_live_test_reads_the_shell(placeholder_api_key):
 
 def test_every_credential_of_a_token_request_is_the_placeholder():
     auth = Login(credentials={"EXAMPLE_GIVEN": "given-value"})
-    assert auth.credential("EXAMPLE_USER") == PLACEHOLDER_KEY  # named in the ini option
-    assert auth.credential("EXAMPLE_SECRET") == PLACEHOLDER_KEY  # not named: the shell's
+    assert auth.credential("EXAMPLE_USER") == PLACEHOLDER_KEY  # declared secret in ENV_VARS
+    assert auth.credential("EXAMPLE_SECRET") == PLACEHOLDER_KEY  # not declared: the shell's
     assert auth.credential("EXAMPLE_GIVEN") == PLACEHOLDER_KEY  # given to the constructor
 
 
@@ -885,11 +1059,9 @@ def test_offline_tests_pin_the_placeholder_on_every_credential_of_a_token_reques
     pytester: pytest.Pytester,
 ) -> None:
     # https://github.com/xippios/sdk-core/issues/156: the pin covered EnvKeyAuth.key alone,
-    # so a client id and secret held the placeholder only where the ini option named them.
-    pytester.makeini("[pytest]\nxippios_placeholder_key_envs = EXAMPLE_USER\n")
-    pytester.makeconftest('pytest_plugins = ["xippios.core.testing.plugin"]\n')
-    pytester.makepyfile(BEARER_TESTS)
-    result = pytester.runpytest("--strict-markers", "--strict-config")
+    # so a client id and secret held the placeholder only where the source declared them.
+    write_source(pytester, secret_client("EXAMPLE_USER"), BEARER_TESTS)
+    result = pytester.runpytest("tests", "--strict-markers", "--strict-config")
     result.assert_outcomes(passed=4)
     assert RenewingBearerAuth.credential is CREDENTIAL
 
