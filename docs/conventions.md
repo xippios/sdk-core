@@ -612,9 +612,9 @@ NamedBy("item")]` for the field of the same record in which upstream sends the n
 every task that returns the model is named: the `Result` puts each code that the list names in
 `meta.names`, says the codes that the list lacks in one note per field and withholds no answer,
 and a code whose name its record carries takes no entry (ADR-0067, decisions 6 and 7). The
-family check fails a field that `NamedBy` marks twice or that holds no code, and a named field
-that is no other field of the model or holds no text, so that a code and its label stand side
-by side, and it reads the model's declaration and no word of a parameter's name, so that
+family check fails a field that `NamedBy` marks twice or that holds no code, a mark inside the
+field's type that no answer reads, and a named field that is no other field of the model or
+holds no text, so that a code and its label stand side by side, and it reads the model's declaration and no word of a parameter's name, so that
 whether a code is owed a name is the review's (ADR-0067, decision 8). The name comes from the
 same source's list of the code and maps nothing between sources (ADR-0028; ADR-0067,
 decision 9).

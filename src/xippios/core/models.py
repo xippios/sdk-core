@@ -308,21 +308,57 @@ def _reaches_model(annotation: Any) -> bool:
     return any(_reaches_model(argument) for argument in typing.get_args(annotation))
 
 
+_UNREAD = (
+    "carries NamedBy inside its type, where no answer reads it: mark the field, "
+    "Annotated[str | None, NamedBy(...)] or Annotated[str, NamedBy(...)] | None"
+)
+
+
+def _marks_in(annotation: Any) -> bool:
+    """Whether a ``NamedBy`` stands anywhere in ``annotation``, at any depth."""
+    if typing.get_origin(annotation) is typing.Annotated:
+        if any(isinstance(mark, NamedBy) for mark in annotation.__metadata__):
+            return True
+        return _marks_in(typing.get_args(annotation)[0])
+    return any(_marks_in(argument) for argument in typing.get_args(annotation))
+
+
+def _field_marks(info: FieldInfo) -> tuple[list[NamedBy], bool]:
+    """The marks of a field that a ``Result`` reads, and whether another stands unread.
+
+    A mark reads on the field, ``Annotated[str | None, NamedBy(...)]``, whose metadata pydantic
+    keeps, and on an optional code, ``Annotated[str, NamedBy(...)] | None`` or ``Optional`` of
+    it, the plain spelling. A mark anywhere else, on a list's items or in a union of codes,
+    would name nothing (https://github.com/xippios/sdk-core/pull/537, finding 1).
+    """
+    marks = [mark for mark in info.metadata if isinstance(mark, NamedBy)]
+    inside: Any = info.annotation
+    if typing.get_origin(inside) in (typing.Union, type(int | str)):
+        kinds = [kind for kind in typing.get_args(inside) if kind is not type(None)]
+        if len(kinds) == 1 and typing.get_origin(kinds[0]) is typing.Annotated:
+            marks += [mark for mark in kinds[0].__metadata__ if isinstance(mark, NamedBy)]
+            inside = typing.get_args(kinds[0])[0]
+    return marks, _marks_in(inside)
+
+
 def _named_by(model: type[BaseModel]) -> tuple[list[tuple[str, NamedBy]], list[str]]:
     """Each field of ``model`` that a ``NamedBy`` marks, with it, and what is wrong with them.
 
-    A field marked twice, a field that holds no code, and a name that is no other field of the
-    model or one that holds no text are wrong (ADR-0067, decision 6); each problem is one text
-    that names the model and the field.
+    A field marked twice, a mark that no answer reads, a field that holds no code, and a name
+    that is no other field of the model or one that holds no text are wrong (ADR-0067,
+    decision 6); each problem is one text that names the model and the field.
     """
     marked: list[tuple[str, NamedBy]] = []
     problems: list[str] = []
     fields = model.model_fields
     for field, info in fields.items():
-        marks = [mark for mark in info.metadata if isinstance(mark, NamedBy)]
+        marks, unread = _field_marks(info)
+        where = f"{model.__name__}.{field}"
+        if unread:
+            problems.append(f"{where} {_UNREAD}")
+            continue
         if not marks:
             continue
-        where = f"{model.__name__}.{field}"
         if len(marks) > 1:
             problems.append(f"{where} is marked by NamedBy twice; keep one")
             continue
@@ -414,7 +450,9 @@ class _Names:
 
     def __init__(self) -> None:
         self.names: dict[str, dict[str, str]] = {}
-        self.lacking: dict[str, tuple[_Codes, dict[str, None]]] = {}
+        # Each field with its list, then the codes that the list lacks in order, since two models
+        # of one answer may mark fields of one name with two lists.
+        self.lacking: dict[tuple[str, _Codes], dict[str, None]] = {}
 
     def read(self, value: object) -> None:
         """Name the codes of every record that ``value`` holds, at any depth."""
@@ -436,15 +474,22 @@ class _Names:
         text, compared = _code(member, listed.integer)
         name = listed.name_of(compared)
         if name is None:
-            self.lacking.setdefault(field, (listed, {}))[1][text] = None
+            self.lacking.setdefault((field, listed), {})[text] = None
         else:
             self.names.setdefault(field, {}).setdefault(text, " ".join(name.split()) or text)
 
     def notes(self) -> list[str]:
-        """One sentence per field whose list lacks a code (ADR-0067, decision 7)."""
+        """One sentence per field and list that lacks a code (ADR-0067, decision 7).
+
+        A code that another list names under the field's name, as the answer is read whole,
+        stands in ``meta.names`` and is no gap.
+        """
         notes = []
-        for field, (listed, texts) in self.lacking.items():
-            codes = list(texts)
+        for (field, listed), texts in self.lacking.items():
+            named = self.names.get(field, {})
+            codes = [code for code in texts if code not in named]
+            if not codes:
+                continue
             notes.append(
                 f"The packaged {listed.list_name} list (fetched "
                 f"{listed.packaged.fetched:%Y-%m-%d}) holds no name for {field} "

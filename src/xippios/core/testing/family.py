@@ -110,8 +110,9 @@ are read from pytest's rootdir.
   that needs an optional dependency or a key skips in itself or in its fixture;
 - in every pydantic model that a task's ``Result[T]`` reaches, read or write, through its
   fields, each field that ``NamedBy`` marks holds codes, text or integers, one or a list of
-  them, and is marked once, and a field that it names as the one in which upstream sends the
-  name stands in the same model and holds text: a code and its label stand side by side
+  them, and is marked once, on the field or on an optional code, and a field that it names as
+  the one in which upstream sends the name stands in the same model and holds text: a code and
+  its label stand side by side
   (conventions §4, ADR-0067, decision 8; ADR-0060, decision 7). The check reads the model's
   declaration and no word of a parameter's name: whether a code is owed a name is the
   review's.
@@ -893,9 +894,12 @@ def test_family_code_names_are_declared_on_the_model(family_source: FamilySource
     ``NamedBy(REGIONS)``, or with the field beside it in which upstream sends the name,
     ``NamedBy("item")`` (ADR-0067, decision 6). The check reads every pydantic model that a
     task's ``Result[T]`` reaches, read and write tasks alike, bulk or not, through its fields
-    and computed fields, and fails a field marked twice, a marked field that holds no code, text
-    or integers, one or a list of them, and a named field that is no other field of the model or
-    holds no text, so a code and its label stand side by side (ADR-0060, decision 7). It reads
+    and computed fields, and fails a field marked twice, a mark inside the field's type that no
+    answer reads, on a list's items or in a union of codes, a marked field that holds no code,
+    text or integers, one or a list of them, and a named field that is no other field of the
+    model or holds no text, so a code and its label stand side by side (ADR-0060, decision 7).
+    A mark reads on the field and on an optional code, ``Annotated[str, NamedBy(...)] | None``.
+    It reads
     the declaration and no word of a parameter's name: whether a code is owed a name, a
     country's say, is the review's (ADR-0067, decision 8).
     """

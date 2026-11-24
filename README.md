@@ -1030,10 +1030,13 @@ tuple, a set or a mapping's values and in a record's fields whose annotation nam
 call, since upstream returned it: the answer stands, the code is left out of the map, and one
 note per field says which codes are left out. A field marked `NamedBy("item")` names its code by
 the field of the same record in which upstream sends the name, so the name stands on the record
-beside its code and `meta.names` takes nothing for it. A mark that cannot name, a field marked
-twice, a marked field that holds no code, text or integers, one or a list of them, or a named
-field that is no other field of the model or holds no text, raises `TypeError` when an answer
-holds the record, and the family check names it first.
+beside its code and `meta.names` takes nothing for it. A mark reads on the field and on an
+optional code, `Annotated[str, NamedBy(REGIONS)] | None`. A mark that cannot name, a field
+marked twice, a mark on a list's items or in a union of codes, which no answer reads, a marked
+field that holds no code, text or integers, one or a list of them, or a named field that is no
+other field of the model or holds no text, raises `TypeError` when an answer holds the record,
+and the family check names it first. Where two models of one answer mark fields of one name
+with two lists, each list's note says its own gaps and no code that the other names.
 
 `meta.notes` holds one sentence per fact that a task says about its answer and that neither a
 record nor another field states, such as the periods that a series passed over or the rule that

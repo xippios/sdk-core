@@ -84,12 +84,16 @@ the same, named in its decision.
    field's name takes no entry: the name stands on the record beside its code in upstream's
    words, and a value that upstream's record states stays on the record (ADR-0060, decisions 3, 7
    and 8). A field holds one code, text or an integer, or a list of them, and `None` holds none. A
-   mark that cannot name, a field marked twice, a marked field that holds no code, or a named field
-   that is no other field of the model or holds no text, raises `TypeError` when an answer holds
-   the record. `NamedBy` is one public name, and its consumers are sdk-usda-psd, sdk-usda-esr and
+   mark reads on the field and on an optional code, `Annotated[str, NamedBy(REGIONS)] | None` or
+   `Optional` of it, the plain spelling. A mark that cannot name, a field marked twice, a mark on
+   a list's items or in a union of codes, which no answer would read, a marked field that holds
+   no code, or a named field that is no other field of the model or holds no text, raises
+   `TypeError` when an answer holds the record. `NamedBy` is one public name, and its consumers are sdk-usda-psd, sdk-usda-esr and
    sdk-usda-gats by their lists and sdk-faostat by its label field.
 7. **A record's code that the list lacks is left out and noted.** It is left out of `meta.names`,
-   and one note per field names the codes left out, the list and its fetch date. The answer is not
+   and one note per field and list names the codes left out, the list and its fetch date, so
+   that where two models of one answer mark fields of one name with two lists, each note says
+   its own list's gaps and no code that the other list names in `meta.names`. The answer is not
    withheld, as it is for a code of the request, since upstream returned the code
    (https://github.com/xippios/sdk-core/issues/478, part 5 of its recommendation, which the
    answer kept). A composed answer built again says the note once.
