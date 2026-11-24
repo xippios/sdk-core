@@ -694,13 +694,16 @@ import os
 import httpx
 import pytest
 
-from xippios.core.client import HeaderKeyAuth, QueryKeyAuth
+from xippios.core.client import KeyAuth
 from xippios.core.client.auth import EnvKeyAuth
 from xippios.core.testing.plugin import PLACEHOLDER_KEY
 
 KEY = EnvKeyAuth.key
 SHELL = dict(os.environ)  # at collection, before any fixture: what direnv loaded
-TENANTS = {name: HeaderKeyAuth("X-Key", f"TENANT_{name.upper()}_KEY") for name in ("a", "b")}
+TENANTS = {
+    name: KeyAuth(f"TENANT_{name.upper()}_KEY", location="header", name="X-Key")
+    for name in ("a", "b")
+}
 
 
 @pytest.mark.live
@@ -724,7 +727,7 @@ def test_every_auth_object_sends_the_placeholder(respx_mock):
         httpx.get("https://h.test/h", auth=auth)
     assert header.call_count == 2
     query = respx_mock.get("https://h.test/q", params={"key": PLACEHOLDER_KEY}).respond(200)
-    httpx.get("https://h.test/q", auth=QueryKeyAuth("key", "EXAMPLE_API_KEY"))
+    httpx.get("https://h.test/q", auth=KeyAuth("EXAMPLE_API_KEY", location="query", name="key"))
     assert query.called
 
 
@@ -761,12 +764,12 @@ def test_offline_tests_send_the_placeholder_key(pytester: pytest.Pytester) -> No
 SOURCE_CONFTEST = """
 import pytest
 
-from xippios.core.client import QueryKeyAuth
+from xippios.core.client import KeyAuth
 
 pytest_plugins = ["xippios.core.testing.plugin"]
 
 VARIABLE = "EXAMPLE_API_KEY"
-auth = QueryKeyAuth("key", VARIABLE)
+auth = KeyAuth(VARIABLE, location="query", name="key")
 PLACEHOLDER_KEY = "placeholder-for-fixture-replay"  # pragma: allowlist secret
 
 

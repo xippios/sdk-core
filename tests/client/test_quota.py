@@ -19,7 +19,7 @@ import respx
 from xippios.core.client import (
     AsyncClient,
     ClientConfig,
-    HeaderKeyAuth,
+    KeyAuth,
     MemoryCache,
     QuotaPolicy,
     RateLimit,
@@ -531,7 +531,7 @@ async def test_a_keyless_call_into_a_spent_quota_is_sent_and_paced() -> None:
     config = policy.install(
         make_config(retry=RetryPolicy(max_attempts=1), rate_limit=RateLimit(per_minute=60, burst=1))
     )
-    key = HeaderKeyAuth("X-Api-Key", "EXAMPLE_API_KEY")
+    key = KeyAuth("EXAMPLE_API_KEY", location="header", name="X-Api-Key")
     client = AsyncClient(config, auth=key, transport=upstream, sleep=Sleeper(events))
     await client.get("/v1/x")  # leaves nothing: spent for the window
     assert await client.get_json("/v1/public", auth=None) == []

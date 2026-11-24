@@ -11,8 +11,9 @@ EXPORTS = {
     "xippios.core": {
         # client
         "AsyncClient", "ClientConfig", "MemoryCache", "QuotaPolicy", "RateLimit",
-        "RetryPolicy", "Timeouts", "QueryKeyAuth", "HeaderKeyAuth", "BearerAuth",
-        "BasicKeyAuth", "Downloaded", "Answer", "RenewingBearerAuth", "BearerToken",
+        "RetryPolicy", "Downloaded", "Answer", "RenewingBearerAuth", "BearerToken",
+        # the one key class, where the key travels (ADR-0059, decision 7)
+        "KeyAuth",
         # errors
         "AuthError", "ConfigError", "InvalidRequestError", "NotFoundError", "RateLimitError",
         "TransportError", "UpstreamError", "ValidationError", "XippiosError", "UnknownCode",
@@ -45,10 +46,9 @@ EXPORTS = {
         "names_codes",
     },
     "xippios.core.client": {
-        "AsyncClient", "BasicKeyAuth", "BearerAuth", "CachedResponse", "ClientConfig",
-        "HeaderKeyAuth", "MemoryCache", "QueryKeyAuth", "QuotaPolicy", "RateLimit",
-        "RetryPolicy", "Timeouts", "cache_key", "decode_json", "decode_text", "decode_csv",
-        "Downloaded", "Answer", "RenewingBearerAuth", "BearerToken",
+        "AsyncClient", "CachedResponse", "ClientConfig", "KeyAuth", "MemoryCache",
+        "QuotaPolicy", "RateLimit", "RetryPolicy", "cache_key", "decode_csv", "Downloaded",
+        "Answer", "RenewingBearerAuth", "BearerToken",
     },
     "xippios.core.testing": {
         "CLOCK_SLACK", "REDACTED", "Fixture", "FixtureResponse", "ReplayFixture", "Scrub",

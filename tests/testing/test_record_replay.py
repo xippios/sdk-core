@@ -13,9 +13,8 @@ from respx.models import AllMockedAssertionError
 from xippios.core.client import (
     AsyncClient,
     ClientConfig,
-    HeaderKeyAuth,
+    KeyAuth,
     MemoryCache,
-    QueryKeyAuth,
     RetryPolicy,
 )
 from xippios.core.errors import NotFoundError, TransportError, error_from_response
@@ -150,7 +149,9 @@ async def test_record_without_the_client_s_auth(
 ) -> None:
     # sdk-comtrade: a keyless reference file is recorded without sending the key.
     route = respx_mock.get(f"{BASE}/files/ref.json").respond(200, json={"codes": []})
-    client = AsyncClient(config, auth=HeaderKeyAuth("X-Api-Key", "EXAMPLE_API_KEY"))
+    client = AsyncClient(
+        config, auth=KeyAuth("EXAMPLE_API_KEY", location="header", name="X-Api-Key")
+    )
     await record(client, "/files/ref.json", tmp_path / "ref.json", auth=None)
     assert "x-api-key" not in route.calls.last.request.headers
     await record(client, "/files/ref.json", tmp_path / "ref.json")
@@ -256,7 +257,9 @@ async def test_a_recording_keeps_the_client_s_key_to_its_origin_and_marks_its_re
         before_request=lambda request: before.append(marks(request)),
         observe=lambda response: observed.append(marks(response.request)),
     )
-    client = AsyncClient(config, auth=HeaderKeyAuth("X-Api-Key", "EXAMPLE_API_KEY"))
+    client = AsyncClient(
+        config, auth=KeyAuth("EXAMPLE_API_KEY", location="header", name="X-Api-Key")
+    )
     await record(client, "https://files.example.test/bulk/x.csv", tmp_path / "file.json")
     await record(client, "/v1/x", tmp_path / "x.json")
     await record(client, "/v1/x", tmp_path / "keyless.json", auth=None)
@@ -455,13 +458,14 @@ def test_match_params_refuses_a_credential_or_absent_name(
 
 
 def test_match_params_on_a_key_that_is_data(respx_mock: respx.MockRouter) -> None:
-    # Eurostat's SDMX series key, keyless (ADR-0040, decision 6); NASS's QueryKeyAuth("key")
-    # makes it a credential, and a value recorded as REDACTED cannot be matched.
+    # Eurostat's SDMX series key, keyless (ADR-0040, decision 6); NASS's query key, a
+    # KeyAuth(location="query", name="key"), makes it a credential, and a value recorded as
+    # REDACTED cannot be matched.
     series = _recorded(f"{BASE}/data/prc_hicp_manr?key=M.DE.CP00", [1])
     route = mount_fixture(respx_mock, series, match_params=["key"])
     assert httpx.get(f"{BASE}/data/prc_hicp_manr?key=M.DE.CP00").json() == [1]
     assert sent_urls(route) == [f"{BASE}/data/prc_hicp_manr?key=M.DE.CP00"]
-    QueryKeyAuth("key", "EXAMPLE_API_KEY")
+    KeyAuth("EXAMPLE_API_KEY", location="query", name="key")
     with pytest.raises(ValueError, match=r"^match_params: 'key' names a credential"):
         mount_fixture(respx_mock, series, match_params=["key"])
     nass = _recorded(f"{BASE}/api/api_GET?key=SECRET&year=2024", [1])

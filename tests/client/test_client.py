@@ -15,14 +15,13 @@ from xippios.core.client import (
     Answer,
     AsyncClient,
     ClientConfig,
-    HeaderKeyAuth,
+    KeyAuth,
     MemoryCache,
-    QueryKeyAuth,
     RateLimit,
     RetryPolicy,
     cache_key,
-    decode_json,
 )
+from xippios.core.client._core import decode_json
 from xippios.core.errors import (
     AuthError,
     InvalidRequestError,
@@ -65,12 +64,38 @@ def config() -> ClientConfig:
 @pytest.mark.anyio
 async def test_headers_url_and_params(respx_mock: respx.MockRouter, config: ClientConfig) -> None:
     route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={"ok": True})
-    async with AsyncClient(config) as client:
-        assert await client.get_json("/v1/x", params={"a": 1}) == {"ok": True}
+    client = AsyncClient(config)
+    assert await client.get_json("/v1/x", params={"a": 1}) == {"ok": True}
+    await client.aclose()
     headers = route.calls.last.request.headers
     assert headers["user-agent"] == "xippios-example/1.2.3 (+https://github.com/xippios)"
     assert headers["x-family"] == "xippios"
     assert sent_urls(route) == [f"{BASE}/v1/x?a=1"]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("read_timeout", [None, 180.0], ids=["default", "raised"])
+async def test_the_read_timeout_is_the_config_s_and_the_others_ten_seconds(
+    respx_mock: respx.MockRouter, read_timeout: float | None
+) -> None:
+    # One read timeout of ClientConfig in place of Timeouts (https://github.com/xippios/sdk-core/issues/475).
+    route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
+    config = ClientConfig(source="example", version="1", base_url=BASE)
+    if read_timeout is not None:
+        config = dataclasses.replace(config, read_timeout=read_timeout)
+    await AsyncClient(config).get("/v1/x")
+    assert route.calls.last.request.extensions["timeout"] == {
+        "connect": 10.0,
+        "read": 60.0 if read_timeout is None else read_timeout,
+        "write": 10.0,
+        "pool": 10.0,
+    }
+
+
+def test_the_client_is_closed_by_aclose_and_is_no_context_manager() -> None:
+    # No source opened it in an async with (https://github.com/xippios/sdk-core/issues/475).
+    assert not hasattr(AsyncClient, "__aenter__")
+    assert not hasattr(AsyncClient, "__aexit__")
 
 
 @pytest.mark.anyio
@@ -810,7 +835,7 @@ async def test_auth_none_sends_a_keyed_client_s_request_without_the_key(
 ) -> None:
     # sdk-comtrade: the public reference files on the same host needed a second client.
     route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
-    client = AsyncClient(config, auth=QueryKeyAuth("key", KEY_ENV))
+    client = AsyncClient(config, auth=KeyAuth(KEY_ENV, location="query", name="key"))
     await client.get("/v1/x", params={"a": 1})
     await client.get("/v1/x", params={"a": 1}, auth=None)
     await client.get_json("/v1/x", params={"a": 1}, auth=None)
@@ -830,7 +855,7 @@ async def test_another_auth_replaces_the_client_s_for_one_request(
     respx_mock: respx.MockRouter, config: ClientConfig
 ) -> None:
     route = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
-    client = AsyncClient(config, auth=HeaderKeyAuth("X-Api-Key", KEY_ENV))
+    client = AsyncClient(config, auth=KeyAuth(KEY_ENV, location="header", name="X-Api-Key"))
     await client.get("/v1/x", auth=httpx.BasicAuth("user", "pw"))
     other = route.calls.last.request.headers
     assert other["authorization"].startswith("Basic ")
@@ -848,7 +873,9 @@ async def test_auth_none_holds_for_every_retry(
     route = respx_mock.get(f"{BASE}/v1/x").mock(
         side_effect=[httpx.Response(503), httpx.Response(200, json={})]
     )
-    client = AsyncClient(config, auth=HeaderKeyAuth("X-Api-Key", KEY_ENV), sleep=sleeper)
+    client = AsyncClient(
+        config, auth=KeyAuth(KEY_ENV, location="header", name="X-Api-Key"), sleep=sleeper
+    )
     await client.get("/v1/x", auth=None)
     assert route.call_count == 2
     assert not any("x-api-key" in call.request.headers for call in route.calls)
@@ -864,7 +891,7 @@ async def test_a_call_with_its_own_auth_bypasses_the_cache(respx_mock: respx.Moc
     )
     cache = MemoryCache()
     config = ClientConfig(source="example", version="1", base_url=BASE, cache=cache)
-    client = AsyncClient(config, auth=HeaderKeyAuth("X-Api-Key", KEY_ENV))
+    client = AsyncClient(config, auth=KeyAuth(KEY_ENV, location="header", name="X-Api-Key"))
     assert (await client.get_answer("/v1/x")).payload == {"who": "client"}
     other = await client.get_answer("/v1/x", auth=httpx.BasicAuth("user", "pw"))
     assert other.payload == {"who": "other"}  # reached the transport, not the keyed entry
@@ -903,7 +930,7 @@ async def test_the_client_s_auth_goes_to_the_base_url_s_origin_only(
     # https://github.com/xippios/sdk-core/issues/163: a file link on another host got the key.
     elsewhere = respx_mock.get(url).respond(200, json={})
     home = respx_mock.get(f"{BASE}/v1/x").respond(200, json={})
-    client = AsyncClient(config, auth=HeaderKeyAuth("X-Api-Key", KEY_ENV))
+    client = AsyncClient(config, auth=KeyAuth(KEY_ENV, location="header", name="X-Api-Key"))
     await client.get(url)
     await client.get_json(url)
     await client.request("GET", url, raise_on_error=False)
@@ -920,7 +947,7 @@ async def test_a_query_key_stays_off_a_link_to_another_host(
     respx_mock: respx.MockRouter, config: ClientConfig
 ) -> None:
     route = respx_mock.get("https://files.example.test/f.json").respond(200, json={})
-    client = AsyncClient(config, auth=QueryKeyAuth("key", KEY_ENV))
+    client = AsyncClient(config, auth=KeyAuth(KEY_ENV, location="query", name="key"))
     await client.get_json("https://files.example.test/f.json", params={"year": 2024})
     assert sent_urls(route) == ["https://files.example.test/f.json?year=2024"]
 
@@ -931,7 +958,7 @@ async def test_an_auth_of_the_call_s_own_goes_to_any_origin(
 ) -> None:
     # A publisher's mirror that takes the key gets it when the call passes it (conventions §6).
     route = respx_mock.get("https://mirror.example.test/v1/x").respond(200, json={})
-    key = HeaderKeyAuth("X-Api-Key", KEY_ENV)
+    key = KeyAuth(KEY_ENV, location="header", name="X-Api-Key")
     client = AsyncClient(config, auth=key)
     await client.get("https://mirror.example.test/v1/x", auth=key)
     assert "x-api-key" in route.calls.last.request.headers
@@ -963,7 +990,9 @@ async def test_every_request_tells_the_hooks_its_auth_and_its_origin(
         before_request=lambda request: mark("before", request),
         observe=lambda response: mark("observe", response.request),
     )
-    client = AsyncClient(hooked, auth=HeaderKeyAuth("X-Api-Key", KEY_ENV), sleep=sleeper)
+    client = AsyncClient(
+        hooked, auth=KeyAuth(KEY_ENV, location="header", name="X-Api-Key"), sleep=sleeper
+    )
     await client.get("/v1/x")
     assert marks == [
         ("before", "client", "base"),
@@ -988,7 +1017,7 @@ async def test_every_request_tells_the_hooks_its_auth_and_its_origin(
 async def test_auth_none_and_the_default_share_the_cache(respx_mock: respx.MockRouter) -> None:
     route = respx_mock.get(f"{BASE}/v1/reference").respond(200, json={"codes": [1]})
     config = ClientConfig(source="example", version="1", base_url=BASE, cache=MemoryCache())
-    client = AsyncClient(config, auth=QueryKeyAuth("key", KEY_ENV))
+    client = AsyncClient(config, auth=KeyAuth(KEY_ENV, location="query", name="key"))
     await client.get_answer("/v1/reference", auth=None)
     hit = await client.get("/v1/reference")
     assert hit.extensions["xippios_cache"] == "hit"

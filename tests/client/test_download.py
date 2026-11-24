@@ -19,11 +19,10 @@ from xippios.core.client import (
     AsyncClient,
     ClientConfig,
     Downloaded,
+    KeyAuth,
     MemoryCache,
-    QueryKeyAuth,
     RetryPolicy,
     decode_csv,
-    decode_text,
 )
 from xippios.core.errors import (
     AuthError,
@@ -92,7 +91,7 @@ async def test_download_streams_the_file_and_keeps_what_upstream_said(
     }
     route = respx_mock.get(f"{BASE}/files/psd.csv").respond(200, text=CSV, headers=headers)
     cache = MemoryCache()
-    client = make_client(cache=cache, auth=QueryKeyAuth("key", "EXAMPLE_API_KEY"))
+    client = make_client(cache=cache, auth=KeyAuth("EXAMPLE_API_KEY", location="query", name="key"))
     before = datetime.now(UTC)
     got = await client.download("/files/psd.csv", tmp_path / "psd.csv")
     assert got == Downloaded(
@@ -122,7 +121,7 @@ async def test_a_download_from_another_host_carries_no_credential(
     route = respx_mock.get(link).respond(200, text=CSV)
     seen: list[object] = []
     client = make_client(
-        auth=QueryKeyAuth("key", "EXAMPLE_API_KEY"),
+        auth=KeyAuth("EXAMPLE_API_KEY", location="query", name="key"),
         before_request=lambda request: seen.append(request.extensions.get("xippios_origin")),
         observe=lambda response: seen.append(response.request.extensions.get("xippios_auth")),
     )
@@ -272,29 +271,20 @@ async def test_a_final_transport_failure_or_a_cancel_leaves_no_partial_file(
     assert list(tmp_path.iterdir()) == []
 
 
-def test_decode_text_reads_the_charset_and_strips_a_bom() -> None:
-    plain = {"Content-Type": "text/plain; charset=latin-1"}
-    latin = httpx.Response(200, content="Côte".encode("latin-1"), headers=plain)
-    assert decode_text(latin) == "Côte"
-    assert decode_text(httpx.Response(200, content="\ufeffCôte".encode())) == "Côte"
-    request = httpx.Request("GET", f"{BASE}/v1/file.txt")
-    broken = httpx.Response(200, content=b"\xff\xfe", request=request)
-    message = (
-        r"^example: response from /v1/file.txt is not utf-8 text: invalid start byte at byte 0$"
-    )
-    with pytest.raises(ValidationError, match=message):
-        decode_text(broken, source="example")
+def test_decode_csv_reads_a_file_or_a_stream_and_nothing_else() -> None:
+    # No source read a response or another separator through it, nor decode_text
+    # (https://github.com/xippios/sdk-core/issues/475).
+    assert list(inspect.signature(decode_csv).parameters) == ["data", "source"]
+    assert "Response" not in str(inspect.signature(decode_csv).parameters["data"].annotation)
 
 
 def test_decode_csv_reads_a_file_row_by_row(tmp_path: Path) -> None:
-    path = tmp_path / "psd.tsv"
-    path.write_text("\ufeffCommodity\tValue (1000 MT)\nCORN\t15,341\nWHEAT\t\n", encoding="utf-8")
-    rows = decode_csv(path, delimiter="\t")
+    path = tmp_path / "psd.csv"
+    path.write_text('\ufeffCommodity,Value (1000 MT)\nCORN,"15,341"\nWHEAT,\n', encoding="utf-8")
+    rows = decode_csv(path)
     assert inspect.isgenerator(rows)
     assert next(rows) == {"Commodity": "CORN", "Value (1000 MT)": "15,341"}  # as printed
     assert list(rows) == [{"Commodity": "WHEAT", "Value (1000 MT)": ""}]
-    response = httpx.Response(200, text=CSV, headers={"Content-Type": "text/csv"})
-    assert list(decode_csv(response)) == [{"commodity": "CORN", "Value (1000 MT)": "15,341"}]
     (tmp_path / "latin.csv").write_bytes("a\nC\xf4te\n".encode("latin-1"))
     with pytest.raises(
         ValidationError, match=r"^latin.csv is not UTF-8 text: invalid continuation"
@@ -308,12 +298,12 @@ def test_decode_csv_reads_a_file_row_by_row(tmp_path: Path) -> None:
 
 def test_decode_csv_reads_an_open_text_stream_row_by_row(tmp_path: Path) -> None:
     """https://github.com/xippios/sdk-core/issues/89: a gzip member, read as it is taken."""
-    path = tmp_path / "qs.crops.txt.gz"
-    rows = "".join(f"CORN\t{year}\n" for year in range(100_000))
+    path = tmp_path / "crops.csv.gz"
+    rows = "".join(f"CORN,{year}\n" for year in range(100_000))
     with gzip.open(path, "wt", encoding="utf-8", newline="") as packed:
-        packed.write("\ufeffCommodity\tYear\n" + rows)
+        packed.write("\ufeffCommodity,Year\n" + rows)
     with gzip.open(path) as raw, io.TextIOWrapper(raw, encoding="utf-8", newline="") as text:
-        read = decode_csv(text, delimiter="\t", source="usda-nass")
+        read = decode_csv(text, source="usda-nass")
         assert inspect.isgenerator(read)
         assert next(read) == {"Commodity": "CORN", "Year": "0"}  # the byte order mark stripped
         assert raw.tell() < len(rows) // 2  # row by row: most of the member is still unread
