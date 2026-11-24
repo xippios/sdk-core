@@ -156,13 +156,16 @@ path, the longest prefix winning, `None` for the life of the process and `0` or 
 nothing stored, which the cache reads from the path that the client hands its `set`, and which
 sdk-comtrade, sdk-usda-nass and sdk-usda-gats take in place of the filters, the `ttl` and the
 `PathCaches` of their `_client.py`, and the cache drops an entry once its lifetime has passed and
-bounds the bytes of the bodies it holds in all by `max_bytes=`, which no source passes yet and
-whose default of 64 MiB bounds every client that keeps a `MemoryCache`, those of sdk-comtrade,
+bounds the bytes of the bodies it holds in all by `max_bytes=`, which has no consumer and enters
+with fewer than two consumers since part 4 of the answer on that issue decided it (ADR-0059,
+amendment 2026-11-24), and whose default of 64 MiB bounds every client that keeps a `MemoryCache`, those of sdk-comtrade,
 sdk-eurostat, sdk-faostat, sdk-usda-gats and sdk-usda-nass, beside `cache_max_bytes`, the bound of
 one answer, which stays; in decision 1 `download` takes `params` and `headers` as its siblings take
 them, the first for sdk-cashctrl and sdk-eurostat, which write a download's query into its URL by
 hand (`src/xippios/cashctrl/api/_download.py`, `src/xippios/eurostat/api/sdmx.py`), and the second
-with no caller yet; and in decision 6 the registries of credential names and of data names are kept
+with no consumer, entering with fewer than two consumers since the answer on
+https://github.com/xippios/sdk-core/issues/555 decided it (ADR-0059, amendment 2026-11-24); and in
+decision 6 the registries of credential names and of data names are kept
 for each source, by part 4 of the answer on https://github.com/xippios/sdk-core/issues/485, so that
 a query `KeyAuth` registers its name for the `source` that it then must name, as sdk-usda-nass's
 key does for `key`, `register_data_name` takes the source too, as sdk-x's two declarations do,

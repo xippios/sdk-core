@@ -83,7 +83,9 @@ the repository it reviews.
 11. **Core PR** (`sdk-core`, code added): it names the two consumers of each piece it adds
     that a caller can name (in its ADR, or in its description when it has none), or, in its
     ADR, the part of the family's contract that a piece with one consumer serves (ADR-0059,
-    decisions 1, 2 and 4).
+    decisions 1, 2 and 4), or, in its ADR, for a piece that a maintainer's answer adds and
+    decided with fewer than two consumers, that answer and the piece's one consumer or none
+    (ADR-0059, amendment 2026-11-24).
 12. **Adoption PR** (conventions §15): judged against conventions §15's items, its routes
     and its reading for the host, with the definition of done's Enforced by CI and Process
     blocks, and nothing else; it deletes only what the adoption itself makes dead (ADR-0039,

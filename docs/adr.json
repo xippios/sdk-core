@@ -1146,7 +1146,12 @@
       "status": "Accepted",
       "date": "2026-11-24",
       "decided_by": "https://github.com/xippios/sdk-core/issues/473",
-      "amended": [],
+      "amended": [
+        {
+          "date": "2026-11-24",
+          "by": "https://github.com/xippios/sdk-core/issues/555"
+        }
+      ],
       "amends": [],
       "supersedes": [
         "ADR-0023"

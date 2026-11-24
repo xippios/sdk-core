@@ -1,6 +1,6 @@
 # ADR-0059: Core's scope: what a consumer is and how far the two-consumer rule reaches
 
-Status: Accepted · Date: 2026-11-24 · Decided by https://github.com/xippios/sdk-core/issues/473 · Supersedes ADR-0023
+Status: Accepted · Date: 2026-11-24 · Decided by https://github.com/xippios/sdk-core/issues/473 · Supersedes ADR-0023 · Amended 2026-11-24 by https://github.com/xippios/sdk-core/issues/555
 
 ## Context
 
@@ -101,3 +101,19 @@ with it; ADR-0058, decision 2, stands.
   item 11 name decision 4 here in place of ADR-0023, decision 3, and ADR-0058, decision 1.
   Conventions §15, items 3 and 4, cite this record for the code that core removes for its one
   consumer and for the copies that a source carries.
+
+## Amendment 2026-11-24
+
+Amended by https://github.com/xippios/sdk-core/issues/555: a piece that a maintainer's answer adds
+enters core with fewer than two consumers when that answer decided it, beside decision 5's two
+consumers and decision 4's part of the family's contract, so that decision 4's "alone", in "one
+consumer is enough for the family's contract alone", and its "the maintainer's decision on a step's
+design question stops being a reason of its own" give way for a piece that a maintainer's answer to
+a question names as added and stand for every other piece, since every decided addition is in 0.5.0
+(https://github.com/xippios/sdk-core/issues/485, part 6) and nothing decided is removed, and the
+record of its mechanism names the answer and the piece with its one consumer or with none, as the
+release's statement of core's surface names it too (ADR-0068, decision 6), so that decision 8's
+review holds a core pull request to that naming for such a piece, as ADR-0034 and ADR-0040 name
+`fetch_pages(stop=, key=)`, `download(headers=)` and `MemoryCache(max_bytes=)` in their amendments
+of 2026-11-24, while the rest of decisions 4, 5 and 8, the other decisions and the consequences
+stand as written.

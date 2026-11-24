@@ -339,8 +339,9 @@ with its retries. `stop` takes each page's items and answers `True` for the last
 task wants, a page that reaches back before its `since` say, and the page it marks is kept
 whole; one source uses it, the one that ADR-0034's amendment of 2026-11-24 names. `key` takes
 an item and answers what tells it apart, and an item whose key an earlier item had is dropped,
-as a list that changes between two requests repeats one; no source uses it yet. Both stay,
-since nothing leaves by the count alone (ADR-0059, decision 6). A cursor-paged task keeps its
+as a list that changes between two requests repeats one; no source uses it yet. Both enter
+with fewer than two consumers, since a maintainer's answer decided them (ADR-0059, amendment
+2026-11-24). A cursor-paged task keeps its
 own loop (ADR-0034, decision 2).
 
 ## Quotas, hooks and keyless calls

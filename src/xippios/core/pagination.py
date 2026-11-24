@@ -59,8 +59,8 @@ async def fetch_pages[T](
         returns nothing; pass page to fetch one page at a time.
 
     ``stop`` has one consumer, the source that ADR-0034's amendment of 2026-11-24 names, and
-    ``key`` none yet; both are built, since nothing leaves by the count alone (ADR-0059,
-    decision 6).
+    ``key`` none yet; both enter with fewer than two consumers, since a maintainer's answer
+    decided them (ADR-0059, amendment 2026-11-24).
 
     Args:
         fetch: Async function taking the offset and returning one page's items with

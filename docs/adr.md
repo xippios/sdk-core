@@ -38,7 +38,7 @@ records in `docs/adr/`. A record changes, and this file follows when the script 
 - <a id="0054"></a>[ADR-0054](adr/0054-one-helper-for-a-series-over-periods.md): One helper for a series over periods · Accepted · 2026-11-22 · amended 2026-11-22
 - <a id="0055"></a>[ADR-0055](adr/0055-one-live-comparison-of-a-packaged-list.md): One live comparison of a packaged list · Accepted · 2026-11-21
 - <a id="0058"></a>[ADR-0058](adr/0058-a-fourth-reason-for-one-consumer-and-what-a-core-patch-keeps.md): A fourth reason for one consumer and what a core patch keeps compatible · Accepted · 2026-11-22 · amended 2026-11-24
-- <a id="0059"></a>[ADR-0059](adr/0059-core-s-scope-what-a-consumer-is-and-how-far-the-two-consumer.md): Core's scope: what a consumer is and how far the two-consumer rule reaches · Accepted · 2026-11-24
+- <a id="0059"></a>[ADR-0059](adr/0059-core-s-scope-what-a-consumer-is-and-how-far-the-two-consumer.md): Core's scope: what a consumer is and how far the two-consumer rule reaches · Accepted · 2026-11-24 · amended 2026-11-24
 - <a id="0060"></a>[ADR-0060](adr/0060-the-boundary-of-a-source-package-and-the-four-rules-of-a.md): The boundary of a source package and the four rules of a record that a package shapes itself · Accepted · 2026-11-24
 - <a id="0061"></a>[ADR-0061](adr/0061-the-one-way-of-each-feature.md): The one way of each feature · Accepted · 2026-11-24
 - <a id="0062"></a>[ADR-0062](adr/0062-the-two-refresh-frames-one-declaration-one-table-header-the.md): The two refresh frames: one declaration, one table header, the fetch through the client and no check without a request · Accepted · 2026-11-24
