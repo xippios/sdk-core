@@ -501,6 +501,30 @@ async def test_a_truncated_array_records_replays_and_decodes(
     assert (await client.get_answer("/v1/rows")).payload == [{"n": n} for n in range(7)]
 
 
+@pytest.mark.parametrize(
+    ("options", "refusal"),
+    [
+        ({"max_bytes": 0}, r"^max_bytes must be at least 1$"),
+        ({"keep": "last"}, r"^keep='last' chooses what max_bytes cuts, and max_bytes is None$"),
+        ({"max_bytes": 60, "keep": "middle"}, r"^keep must be 'first' or 'last', not 'middle'$"),
+    ],
+)
+def test_record_refuses_a_cut_it_cannot_make_before_anything_is_sent(
+    respx_mock: respx.MockRouter,
+    config: ClientConfig,
+    tmp_path: Path,
+    options: dict[str, Any],
+    refusal: str,
+) -> None:
+    # fixture_from_response refuses the same arguments, but only after the request: record
+    # refuses them first, so a bad cut spends no request (ADR-0066, decision 12).
+    route = respx_mock.get(f"{BASE}/v1/rows").respond(200, json=[1, 2])
+    with pytest.raises(ValueError, match=refusal):
+        record(AsyncClient(config), "/v1/rows", tmp_path / "rows.json", **options)
+    assert not route.called, "refused before anything is sent"
+    assert not (tmp_path / "rows.json").exists()
+
+
 @pytest.mark.anyio
 async def test_an_array_records_its_last_elements_and_replays(
     respx_mock: respx.MockRouter, replay_fixture: ReplayFixture, fixtures_dir: Path
