@@ -1,4 +1,4 @@
-"""The frame of a source's snapshot script, ``scripts/refresh_upstream.py`` (ADR-0046).
+"""The frame of a source's snapshot script, ``scripts/refresh_upstream.py`` (ADR-0062).
 
 A source's script declares its snapshot, its pages, its attribution and its hooks, and runs
 it; the frame does the rest, the same in every source::
@@ -8,10 +8,14 @@ it; the frame does the rest, the same in every source::
     if __name__ == "__main__":
         raise SystemExit(run(SNAPSHOT))
 
-Everything is fetched before anything is written, one request at a time after a pause,
-each URL retried at most once after a network error or a 5xx. No redirect to another host
-is followed, no browser is imitated, and only a keyed sample sends a credential
-(conventions §3). Each page with a file is written under ``docs/upstream/``, and
+Every request goes through core's client, the source's own that the snapshot hands the frame
+or one that the frame builds from the slug, on core's loop, and the frame keeps its own record
+of redirects, since the client follows none (ADR-0062, decision 4). Everything is fetched
+before anything is written, one request at a time after a pause, each URL retried at most
+once after a network error or a 5xx, and after a 429 where the client's retry policy gives it
+a wait. No redirect to another host is followed, no browser is imitated, and only a keyed
+sample sends a credential, the client's (conventions §3). Each page with a file is written
+under ``docs/upstream/``, and
 ``FETCHED.md`` is regenerated whole, in the one form this module writes: the UTC time of
 the run with an explicit ``Z``, the attribution, one row per file with its page's HTTP
 status, the size and sha256 of the body as fetched, its ETag in a code span and its
@@ -37,32 +41,37 @@ refresh is the one comparison, and each refresh writes the file whole (ADR-0062,
 
 import argparse
 import hashlib
-import http.client
 import json
 import os
 import re
 import textwrap
 import time
-import urllib.error
-import urllib.request
 from collections import Counter
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
-from email.message import Message
 from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
+from importlib import metadata
 from pathlib import Path
-from typing import IO, Any
+from typing import Any
 from urllib.parse import urljoin, urlsplit
+
+import httpx
+
+from xippios.core._loop import run as _run_coroutine
+from xippios.core.client import AsyncClient, ClientConfig
+from xippios.core.errors import RateLimitError, TransportError, XippiosError, parse_retry_after
 
 COMMAND = "uv run scripts/refresh_upstream.py"
 """How a source runs its snapshot script, from its repository's root."""
-TIMEOUT = 60.0
 PAUSE = 2.0
 """Seconds before every request, unless the snapshot says otherwise; never in parallel."""
 RETRY_PAUSE = 10.0
 """Seconds before the one retry after a network error or a 5xx."""
+REDIRECTS = 10
+"""The most redirects on a page's host that the frame follows for one request, as many as
+``urllib`` followed before the frame sent through core's client."""
 FETCHED = "FETCHED.md"
 OBSERVED = "OBSERVED.md"
 """What upstream does but never documents, each note with its evidence: the one file under
@@ -75,11 +84,13 @@ INFO_TERMS = ("license", "termsOfService", "contact")
 each one it holds must be recorded in the attribution from that document."""
 HAND = "written by hand: what upstream does but never documents; not fetched or checked"
 """The note of ``OBSERVED.md``'s row, whose first cell is the file's name."""
-FORM = 1
+FORM = 2
 """The form of the ``FETCHED.md`` this module writes, which the file's last line names.
 
 Every change of what the frame writes into the file raises it, so that the mark tells which
-frame wrote the file (ADR-0062, decision 8)."""
+frame wrote the file (ADR-0062, decision 8). Core 0.4.1 wrote form 1; form 2 is the fetch
+through core's client, which names the client's User-Agent and leaves the clauses of a file
+kept as recorded and of a second origin (ADR-0062, decisions 4 and 6)."""
 _MARK = "<!-- form {} of the FETCHED.md that xippios.core.refresh writes -->"
 _NO_FILE = "(no file)"
 _NOT_REQUESTED = "(not requested)"
@@ -113,17 +124,11 @@ class Page:
             and it is not searched, being no documentation.
         names: A text the page must hold as served, such as the URL of the API document
             for the page that names it: a page that no longer holds it stops the run.
-        keep_recorded: A writing run leaves the recorded file as it is where this run's
-            content is the same after the snapshot's ``canonical``, for a document served
-            in a new order on each request, so that a refresh shows real changes only.
         split: The page gives several files, which the snapshot's ``split`` makes from its
             answer: it names no ``file`` of its own.
-        origin: The page's URL on a second origin the publisher runs itself (conventions
-            §2), from which its file is kept where ``url`` answers 403: that answer then
-            has a row in ``Not fetched``.
-        keyed: A sample whose operation needs the source's credentials: it is requested
-            with what the snapshot's ``credentials`` give, follows no redirect and is never
-            retried (conventions §3).
+        keyed: A sample whose operation needs the source's credentials: it is sent with
+            those of the snapshot's ``client``, on the origin of the client's base URL alone,
+            follows no redirect and is never retried (conventions §3).
     """
 
     url: str
@@ -135,9 +140,7 @@ class Page:
     terms: bool = False
     sample: bool = False
     names: str = ""
-    keep_recorded: bool = False
     split: bool = False
-    origin: str | None = None
     keyed: bool = False
 
 
@@ -189,7 +192,8 @@ class Response:
         url: The URL requested; where redirects on its host were followed, the last of
             ``redirects`` is the URL that answered.
         status: The final HTTP status.
-        body: The body as fetched.
+        body: The body as fetched, as core's client gives it, a compressed transfer
+            decoded.
         content_type: The ``Content-Type`` header, if sent.
         etag: The ``ETag`` header, if sent.
         last_modified: The ``Last-Modified`` header, if sent.
@@ -237,28 +241,6 @@ class Section:
     text: str
 
 
-@dataclass(frozen=True)
-class Credentials:
-    """The source's credentials, for the keyed samples alone (conventions §3).
-
-    Attributes:
-        variables: The environment variables the login reads, by name: each must be set
-            before anything is fetched, and ``FETCHED.md`` names them, never a value.
-        base: The URL every keyed sample lies under, the only place a credential goes: a
-            sample has its origin, its scheme, host and port as parsed, as core's client
-            holds its own credentials (ADR-0037, decision 4), and a path under its path by
-            segments, so that a trailing slash changes nothing.
-        login: Called once, right before the first keyed sample: it logs in, reading the
-            variables itself, and returns the headers every keyed sample sends, such as
-            ``{"Authorization": f"Bearer {token}"}``. The frame prints, logs and writes
-            none of them; the login prints nothing of its answer either.
-    """
-
-    variables: tuple[str, ...]
-    base: str
-    login: Callable[[], Mapping[str, str]]
-
-
 def _as_fetched(page: Page, response: Response) -> bytes:
     return response.body
 
@@ -283,9 +265,9 @@ class Snapshot:
     anything is written.
 
     Attributes:
-        name: The source's name as ``FETCHED.md``'s title gives it (``USDA NASS Quick
-            Stats``).
-        slug: The source's slug, which names the script's ``User-Agent``.
+        name: The source's name as ``FETCHED.md``'s title gives it (``Example Statistics``).
+        slug: The source's slug, from which the frame builds its client where the snapshot
+            hands it none, named ``xippios-<slug>/<version>`` in every request.
         pages: Every page the snapshot records, in the order of ``FETCHED.md``'s rows; the
             API document is one of them.
         attribution: Every copyright line, licence or terms of use the documentation
@@ -296,16 +278,18 @@ class Snapshot:
             them, and ``capture`` says why.
         capture: ``FETCHED.md``'s "How this is captured": what is converted, cut or left
             out, and why, its paragraphs parted by a blank line.
-        out: The snapshot's directory, ``docs/upstream/`` of the repository; ``--out``
-            overrides it.
+        out: The snapshot's directory, ``docs/upstream/`` of the repository.
         pause: Seconds before every request.
         reduce: The content a page's file is written with, from the page and its answer:
             the body as fetched by default. An HTML page becomes Markdown through the
             source's converter, its own dependency; a shared document is cut to the
-            source's part with ``load_json`` and ``dump_json``, its page an excerpt.
-        canonical: The form ``--check`` compares a page's file in, and a page marked
-            ``keep_recorded`` is kept in: its content as written by default; for a
-            document served in a new order on each request, the form with the order fixed.
+            source's part with ``read_json`` and ``dump_json``, its page an excerpt; a
+            document served in a new order on each request is kept as recorded where only
+            that noise moved, the hook returning the recorded file's content where it is
+            the answer's after ``canonical`` (ADR-0062, decision 5).
+        canonical: The form ``--check`` compares a page's file in: its content as written
+            by default; for a document served in a new order on each request, the form
+            with the order fixed.
         linked: The pages whose URL a row's page gives, captured right after it, such as
             the newest release's page read from the first row of a list of releases.
         note: The row's note made from the row, its answer included, where the note says
@@ -314,11 +298,14 @@ class Snapshot:
         split: The files a page marked ``split`` gives, by name under ``docs/upstream/``,
             in their order, from the page and its answer.
         sections: The sections of the source's own in ``FETCHED.md``, made from the rows.
-        quota_wait: The seconds to wait before the one retry of a 429, read from its
-            headers; it stops the run where the wait is too long. ``None``: a 429 stops the
-            run as any refusal does.
-        credentials: The source's credentials, for the samples marked ``keyed``; ``None``
-            for a source whose snapshot sends none, which has no ``--keyless`` either.
+        client: The source's own client, which every request goes through, for its
+            credentials, sent on the samples marked ``keyed`` alone, or for its pace, its
+            headers or the wait its retry policy gives a 429; ``None``: the frame builds one
+            from the slug, which holds no credentials (ADR-0062, decision 4).
+        variables: The environment variables that the credentials of ``client`` read, by
+            name, for a snapshot with keyed samples: each must be set before anything is
+            fetched, ``FETCHED.md`` names them, never a value, and they give the command
+            line ``--keyless``. Empty for a snapshot that sends no credential.
     """
 
     name: str
@@ -336,8 +323,8 @@ class Snapshot:
     note: Callable[[Row], str] | None = None
     split: Callable[[Page, Response], Mapping[str, bytes]] | None = None
     sections: Callable[[Sequence[Row]], Sequence[Section]] = _no_sections
-    quota_wait: Callable[[Message], float] | None = None
-    credentials: Credentials | None = None
+    client: AsyncClient | None = None
+    variables: tuple[str, ...] = ()
 
 
 _STATEMENT = re.compile(
@@ -411,30 +398,33 @@ def _no_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return dict(pairs)
 
 
-def dump_json(value: Any, indent: int = 2) -> bytes:
-    """``value`` as JSON in the order it holds, ``ensure_ascii=False``, with a final newline.
+def dump_json(value: Any) -> bytes:
+    """``value`` as JSON in the order it holds, with a final newline.
+
+    Indented by two, ``ensure_ascii=False``: the form that ``read_json`` holds a fetched
+    document to.
 
     Args:
         value: The document or the part of it a file keeps.
-        indent: The indent upstream serves the document with.
 
     Returns:
         The file's content.
     """
-    return (json.dumps(value, indent=indent, ensure_ascii=False) + "\n").encode("utf-8")
+    return (json.dumps(value, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
 
 
-def load_json(response: Response, indent: int = 2) -> Any:
+def read_json(response: Response) -> Any:
     """The JSON document of ``response``, once re-serialising it reproduces the fetched text.
 
-    A source that keeps a JSON document cut to its part, or in the form ``canonical`` gives
-    it, writes it with ``dump_json``; this check makes sure that the whole document, written
-    the same way, is the fetched text up to line endings, so what is written is upstream's
-    text. A duplicate key, which ``json.loads`` would drop silently, stops the run too.
+    The frame's reader of a JSON answer, named apart from the root's ``load_json``, which
+    reads a packaged file (ADR-0062, decision 4). A source that keeps a JSON document cut to
+    its part, or in the form ``canonical`` gives it, writes it with ``dump_json``; this check
+    makes sure that the whole document, written the same way, is the fetched text up to line
+    endings, so what is written is upstream's text. A duplicate key, which ``json.loads``
+    would drop silently, stops the run too.
 
     Args:
         response: The answer that holds the document.
-        indent: The indent upstream serves it with.
 
     Returns:
         The document.
@@ -444,9 +434,9 @@ def load_json(response: Response, indent: int = 2) -> Any:
     except ValueError as error:
         raise SystemExit(f"GET {response.url}: not usable JSON ({error})") from None
     fetched = response.body.replace(b"\r\n", b"\n").rstrip(b"\n")
-    if dump_json(document, indent).rstrip(b"\n") != fetched:
+    if dump_json(document).rstrip(b"\n") != fetched:
         raise SystemExit(
-            f"GET {response.url}: re-serialised with json.dumps(indent={indent}, "
+            f"GET {response.url}: re-serialised with json.dumps(indent=2, "
             "ensure_ascii=False), the document no longer reproduces the fetched text up to "
             "line endings, so what is written from it would not be upstream's text."
             "\nLook at the document by hand and update scripts/refresh_upstream.py. Nothing "
@@ -459,45 +449,46 @@ def load_json(response: Response, indent: int = 2) -> Any:
 
 
 class _RetryableError(Exception):
-    """A network error, a 5xx or a 429 the snapshot waits for: worth one more attempt."""
+    """A network error, a 5xx or a 429 the client waits for: worth one more attempt."""
 
     def __init__(self, message: str, wait: float) -> None:
         super().__init__(message)
         self.wait = wait
 
 
-class _Redirects(urllib.request.HTTPRedirectHandler):
-    """Follow redirects on the page's host as urllib does, remembering each status and target.
-
-    A redirect to another host is remembered and not followed, and a keyed request follows
-    none: the page then answers its 3xx (conventions §3).
-    """
-
-    def __init__(self, *, follow: bool) -> None:
-        super().__init__()
-        self.follow = follow
-        self.hops: list[tuple[int, str]] = []
-        self.followed = 0
-
-    def redirect_request(
-        self,
-        req: urllib.request.Request,
-        fp: IO[bytes],
-        code: int,
-        msg: str,
-        headers: http.client.HTTPMessage,
-        newurl: str,
-    ) -> urllib.request.Request | None:
-        """Record the hop, then let urllib build the follow-up request on the same host."""
-        self.hops.append((code, newurl))
-        if not self.follow or urlsplit(newurl).netloc != urlsplit(req.full_url).netloc:
-            return None
-        self.followed += 1
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
-
-
 def _user_agent(snapshot: Snapshot) -> str:
-    return f"xippios-{snapshot.slug} refresh_upstream (+https://github.com/xippios)"
+    """The User-Agent of the frame's requests as ``FETCHED.md`` names it, without a version.
+
+    The client's own form (``ClientConfig.user_agent``), its source the client's that the
+    snapshot hands the frame or else the slug, and ``<version>`` where the request names the
+    source package's version, which a release moves.
+    """
+    source = snapshot.slug if snapshot.client is None else snapshot.client.source
+    return f"xippios-{source}/<version> (+https://github.com/xippios)"
+
+
+def _built(snapshot: Snapshot) -> AsyncClient:
+    """The client the frame builds where the snapshot hands it none.
+
+    It names itself as every client of the source does, ``xippios-<slug>/<version>``, the
+    version that of the installed distribution ``xippios-<slug>``, holds no credentials, and
+    takes the first page's origin for its base URL, the frame's every URL being absolute.
+    """
+    distribution = f"xippios-{snapshot.slug}"
+    try:
+        version = metadata.version(distribution)
+    except metadata.PackageNotFoundError:
+        raise SystemExit(
+            f"{distribution} is not installed, and the frame names itself in each request as "
+            "the source's client does, by the package's version. Run the script in the "
+            f"source's project, {COMMAND}, or hand the frame the source's client as "
+            "Snapshot.client. Nothing was fetched or written."
+        ) from None
+    first = urlsplit(snapshot.pages[0].url)
+    config = ClientConfig(
+        source=snapshot.slug, version=version, base_url=f"{first.scheme}://{first.netloc}"
+    )
+    return AsyncClient(config)
 
 
 def _unread(page: Page) -> bool:
@@ -505,47 +496,44 @@ def _unread(page: Page) -> bool:
     return page.status in (401, 403) or 300 <= page.status < 400
 
 
-_PORTS = {"http": 80, "https": 443}
-"""The schemes a credential may go to, with the port each one means where a URL names none."""
+def _origin(url: str) -> tuple[str, str, int | None] | None:
+    """A URL's origin as core's client compares it, or ``None`` for one httpx cannot parse.
 
-
-def _place(url: str) -> tuple[tuple[str, str, int], tuple[str, ...]] | None:
-    """A URL's origin, its scheme, host and port as parsed, and its path's segments.
-
-    ``None`` for a URL that cannot be compared so: not http or https, with no host, with a
-    user before the host, with a port out of range, or with a ``.`` or ``..`` segment.
+    Its scheme, its host in lower case and its port, ``None`` for the scheme's default, as
+    httpx parses them (ADR-0037, decision 4).
     """
-    parts = urlsplit(url)
     try:
-        port = parts.port
-    except ValueError:
+        parsed = httpx.URL(url)
+    except httpx.InvalidURL:
         return None
-    scheme = parts.scheme.lower()
-    segments = tuple(segment for segment in parts.path.split("/") if segment)
-    if scheme not in _PORTS or not parts.hostname or "@" in parts.netloc:
-        return None
-    if {".", ".."} & set(segments):
-        return None
-    return (scheme, parts.hostname, port or _PORTS[scheme]), segments
+    return parsed.scheme, parsed.host, parsed.port
 
 
-def _comparable(base: str) -> bool:
-    """Whether a credentials' base can be compared with a page's URL: no query, no fragment."""
-    parts = urlsplit(base)
-    return _place(base) is not None and not parts.query and not parts.fragment
+def _on_base(client: AsyncClient, url: str) -> bool:
+    """Whether ``url`` lies on the origin of the client's base URL, where it sends its auth."""
+    at = _origin(url)
+    return at is not None and at == _origin(client.config.base_url)
 
 
-def _under(base: str, url: str) -> bool:
-    """Whether ``url`` has the origin of ``base`` and a path under the base's, by segments.
+def _quota_wait(client: AsyncClient, answer: httpx.Response) -> float | None:
+    """The client's wait before the one retry of a 429, or ``None`` where it gives none.
 
-    Core's client sends its credentials to its base URL's origin alone, its scheme, host and
-    port (ADR-0037, decision 4); a keyed sample is held to the same origin, and to the
-    base's path, so that a base with or without its trailing slash admits the same URLs.
+    As the client waits before it repeats a read (ADR-0037): its ``classify`` may name the wait
+    in a ``RateLimitError``, from a header of upstream's own, else the answer's ``Retry-After``
+    names it, and the client's retry policy bounds it for the first attempt, so a policy of one
+    attempt, a wait past its ``backoff_max`` or another error of ``classify`` gives none
+    (ADR-0062, decision 4).
     """
-    at, within = _place(base), _place(url)
-    if at is None or within is None or within[0] != at[0]:
-        return False
-    return within[1][: len(at[1])] == at[1]
+    config = client.config
+    retry_after = parse_retry_after(answer.headers.get("Retry-After"))
+    if config.classify is not None:
+        classified = config.classify(answer)
+        if isinstance(classified, RateLimitError):
+            if classified.retry_after is not None:
+                retry_after = classified.retry_after
+        elif classified is not None:
+            return None
+    return config.retry.delay(1, retry_after=retry_after)
 
 
 def _check_file(url: str, name: str) -> None:
@@ -567,91 +555,109 @@ def _check_page(snapshot: Snapshot, page: Page) -> None:
         raise SystemExit(
             f"{page.url}: a page marked split names no file, and the snapshot's split makes them"
         )
-    if page.origin and (not page.file or page.status != 200 or page.keyed or page.split):
-        raise SystemExit(f"{page.url}: a page with a second origin keeps one file, answering 200")
-    credentials = snapshot.credentials
+    client = snapshot.client
     if page.keyed and (
-        credentials is None or not page.sample or not _under(credentials.base, page.url)
+        client is None
+        or not snapshot.variables
+        or not page.sample
+        or not _on_base(client, page.url)
     ):
         raise SystemExit(
-            f"{page.url}: a keyed page is a sample under the base of the snapshot's "
-            "credentials, its origin and the base's path, the only requests that send one "
+            f"{page.url}: a keyed page is a sample on the origin of the base URL of the "
+            "snapshot's client, its scheme, host and port, the one place where the client "
+            "sends its credentials, and the snapshot names the variables they are read from "
             "(conventions §3; ADR-0037, decision 4)"
         )
 
 
 class _Capture:
-    """One run's requests: the pause, the one retry, the login and the count."""
+    """One run's requests through the client: the pause, the redirects, the retry, the count."""
 
-    def __init__(self, snapshot: Snapshot, *, keyless: bool) -> None:
+    def __init__(self, snapshot: Snapshot, client: AsyncClient, *, keyless: bool) -> None:
         self.snapshot = snapshot
+        self.client = client
         self.keyless = keyless
-        self.headers: dict[str, str] | None = None
         self.sent = 0
 
-    def _login(self) -> dict[str, str]:
-        if self.headers is None:
-            credentials = self.snapshot.credentials
-            if credentials is None:  # _check_page refuses a keyed page without them
-                raise SystemExit("a keyed page needs the snapshot's credentials")
-            self.headers = dict(credentials.login())
-            _log("  logged in for the keyed samples; nothing of the login is shown")
-        return self.headers
+    def _send(self, url: str, keyed: bool) -> httpx.Response:
+        """One GET through the client on core's loop, its answer whatever its status.
+
+        The client's request that is sent once, never retried, cached or raised for its
+        status, as the recorder's is (ADR-0066, decision 4): the client's limiter, its hooks,
+        its headers and, for a keyed sample alone, its credentials apply. The request is
+        counted once it answers or fails in transit, where it may have reached upstream.
+        """
+        try:
+            if keyed:
+                answer = _run_coroutine(self.client._send_once("GET", url))
+            else:
+                answer = _run_coroutine(self.client._send_once("GET", url, auth=None))
+        except TransportError:
+            self.sent += 1
+            raise
+        self.sent += 1
+        return answer
 
     def _get(self, url: str, expect: tuple[int, ...], keyed: bool) -> Response:
-        headers = {"User-Agent": _user_agent(self.snapshot)}
-        if keyed:
-            headers.update(self._login())
-        redirects = _Redirects(follow=not keyed)
-        opener = urllib.request.build_opener(redirects)
-        request = urllib.request.Request(url, headers=headers)
-        self.sent += 1
+        """GET ``url``, following its redirects on its host, and read the final answer.
+
+        The client follows no redirect, so the frame keeps its own record of them: each hop
+        is noted and one on the page's host followed, up to ``REDIRECTS``, while one to
+        another host is not, and a keyed request follows none (conventions §3).
+        """
+        hops: list[tuple[int, str]] = []
+        at = url
         try:
-            with opener.open(request, timeout=TIMEOUT) as answer:
-                body: bytes = answer.read()
-                status: int = answer.status
-                received: Message = answer.headers
-        except urllib.error.HTTPError as error:
-            self.sent += redirects.followed
-            wait = self.snapshot.quota_wait
-            if error.code == 429 and wait is not None and not keyed:
-                raise _RetryableError(f"HTTP 429 {error.reason}", wait(error.headers)) from None
-            if error.code >= 500:
-                raise _RetryableError(f"HTTP {error.code} {error.reason}", RETRY_PAUSE) from None
-            hop = redirects.hops[-1] if redirects.hops else None
-            if keyed and hop:
-                raise SystemExit(
-                    f"GET {url}: redirected ({error.code}), and a keyed request follows no "
-                    "redirect. Nothing was written."
-                ) from None
-            if error.code not in expect and hop and urlsplit(hop[1]).netloc != urlsplit(url).netloc:
-                raise SystemExit(
-                    f"GET {url}: redirected ({error.code}) to another host, {hop[1]}, and no "
-                    "redirect to another host is followed (conventions §3).\nFetch the target "
-                    f"where it is documentation, or record the page with status={error.code} "
-                    "where it asks for a login. Nothing was written."
-                ) from None
-            if error.code not in expect:
-                raise SystemExit(f"GET {url}: HTTP {error.code} {error.reason}") from None
-            body, status, received = error.read(), error.code, error.headers
-        except (http.client.HTTPException, OSError) as error:  # URLError is an OSError
-            self.sent += redirects.followed
+            answer = self._send(at, keyed)
+            while answer.is_redirect:
+                target = urljoin(at, answer.headers["Location"])
+                hops.append((answer.status_code, target))
+                if keyed or urlsplit(target).netloc != urlsplit(at).netloc:
+                    break
+                if len(hops) > REDIRECTS:
+                    raise SystemExit(
+                        f"GET {url}: more than {REDIRECTS} redirects on its host. Nothing was "
+                        "written."
+                    )
+                at = target
+                answer = self._send(at, keyed)
+        except TransportError as error:
             raise _RetryableError(str(error), RETRY_PAUSE) from None
-        else:
-            self.sent += redirects.followed
-        if status not in expect:
+        except XippiosError as error:  # the client's hooks or its auth refused the request
+            said = str(error).rstrip().removesuffix(".")
+            raise SystemExit(f"GET {url}: {said}. Nothing was written.") from None
+        status, reason = answer.status_code, answer.reason_phrase
+        if keyed and hops:
+            raise SystemExit(
+                f"GET {url}: redirected ({status}), and a keyed request follows no "
+                "redirect. Nothing was written."
+            )
+        if status >= 500:
+            raise _RetryableError(f"HTTP {status} {reason}", RETRY_PAUSE)
+        if status == 429 and not keyed:
+            wait = _quota_wait(self.client, answer)
+            if wait is not None:
+                raise _RetryableError(f"HTTP 429 {reason}", wait)
+        if status not in expect and hops and urlsplit(hops[-1][1]).netloc != urlsplit(at).netloc:
+            raise SystemExit(
+                f"GET {url}: redirected ({status}) to another host, {hops[-1][1]}, and no "
+                "redirect to another host is followed (conventions §3).\nFetch the target "
+                f"where it is documentation, or record the page with status={status} "
+                "where it asks for a login. Nothing was written."
+            )
+        if status not in expect and status < 300:
             raise SystemExit(f"GET {url}: expected HTTP {expect[0]}, got {status}")
-        encoding = received.get("Content-Encoding", "identity").strip().lower()
-        if encoding != "identity":
-            raise SystemExit(f"GET {url}: unexpected Content-Encoding {encoding!r}")
+        if status not in expect:
+            raise SystemExit(f"GET {url}: HTTP {status} {reason}")
+        headers = answer.headers
         return Response(
             url,
             status,
-            body,
-            received.get("Content-Type"),
-            received.get("ETag"),
-            received.get("Last-Modified"),
-            tuple(redirects.hops),
+            answer.content,
+            headers.get("Content-Type"),
+            headers.get("ETag"),
+            headers.get("Last-Modified"),
+            tuple(hops),
         )
 
     def fetch(self, url: str, expect: tuple[int, ...], *, keyed: bool = False) -> Response:
@@ -703,20 +709,9 @@ class _Capture:
         return [self.row(page, response, content)]
 
     def capture(self, page: Page) -> list[Row]:
-        """Fetch ``page``, from its second origin where it answers 403, and read it."""
+        """Fetch ``page`` and read it."""
         _check_page(self.snapshot, page)
-        if page.origin is None:
-            response = self.fetch(page.url, (page.status,), keyed=page.keyed)
-            return self.read(page, response)
-        response = self.fetch(page.url, (200, 403))
-        if response.status == 200:
-            return self.read(page, response)
-        reason = f"answers 403 to this script; kept from {page.origin}"
-        refused = replace(page, file=None, status=403, origin=None, stable=False, note=reason)
-        return [
-            self.row(refused, response, None),
-            *self.read(page, self.fetch(page.origin, (200,))),
-        ]
+        return self.read(page, self.fetch(page.url, (page.status,), keyed=page.keyed))
 
     def capture_all(self) -> list[Row]:
         """Capture every page in order, each page that ``linked`` names right after its own.
@@ -1124,26 +1119,15 @@ def _row(cells: Sequence[str]) -> str:
     return "| " + " | ".join(_cell(cell) for cell in cells) + " |"
 
 
-def _declared(page: Page, url: str) -> list[str]:
-    """The clauses of a row's note that its page's declaration gives, its row's URL being ``url``.
-
-    The clause of a second origin stands where the file was kept from it, ``url`` naming it.
-    """
+def _declared(page: Page) -> list[str]:
+    """The clauses of a row's note that its page's declaration gives."""
     parts = []
-    if page.origin and url == page.origin:
-        parts.append(
-            f"the copy of {page.url}, which answers 403, from the publisher's second origin"
-        )
     if page.split:
         parts.append("one of the files split from one page; Bytes and sha256 are the page's")
     if page.excerpt:
         parts.append("excerpt of a shared document; Bytes and sha256 are the whole document's")
     if page.sample:
         parts.append("a sample: an answer of the API, kept verbatim; no test fixture")
-    if page.keep_recorded:
-        parts.append(
-            "kept as recorded while the answer is the same after the script's canonical form"
-        )
     return parts
 
 
@@ -1154,7 +1138,7 @@ def _note_cell(clauses: Sequence[str], note: str) -> str:
 
 def _note(row: Row) -> str:
     redirected = [f"redirected ({code}) to {target}" for code, target in row.response.redirects]
-    return _note_cell([*redirected, *_declared(row.page, row.response.url)], row.note)
+    return _note_cell([*redirected, *_declared(row.page)], row.note)
 
 
 def _attribution(snapshot: Snapshot, read: Collection[str]) -> list[str]:
@@ -1187,7 +1171,6 @@ def _attribution(snapshot: Snapshot, read: Collection[str]) -> list[str]:
 
 def _how(snapshot: Snapshot) -> list[str]:
     """The sentences of "How this is captured" that the frame states for every source."""
-    retried = ", a 429 after the wait it names" if snapshot.quota_wait else ""
     sentences = [
         "Fetched is the UTC time the run started, in ISO 8601 with an explicit Z, the same",
         "for every row. Bytes and sha256 are those of the body as fetched: a converted page's",
@@ -1198,20 +1181,19 @@ def _how(snapshot: Snapshot) -> list[str]:
         "page recorded without a file is `(no file)`, and a body that changes on every",
         "request records no size, sha256 or ETag. A sample is a small answer of the API kept",
         "verbatim under `samples/`, which documents the answer's shape and is no test fixture.",
-        f"Requests go one at a time, {snapshot.pause:g} s apart, each retried at most",
-        f"once{retried}, identified as `{_user_agent(snapshot)}`. No redirect to another",
-        "host is followed and no browser is imitated.",
+        f"Requests go one at a time, {snapshot.pause:g} s apart, through core's client, each",
+        "retried at most once, a 429 after the wait the client gives it, and are identified",
+        f"as `{_user_agent(snapshot)}`, the source package's version in place of",
+        "`<version>`. No redirect to another host is followed and no browser is imitated.",
     ]
-    credentials = snapshot.credentials
-    if credentials is None:
+    if not snapshot.variables:
         sentences.append("No key is sent or read.")
     else:
-        names = " and ".join(f"`{name}`" for name in credentials.variables)
+        names = " and ".join(f"`{name}`" for name in snapshot.variables)
         sentences += [
-            "Only the keyed samples send a credential: the script logs in once, right before",
-            f"the first of them, with {names}, and sends what the login gives on those",
-            "requests alone, which follow no redirect and are never retried; neither a",
-            "credential nor a token is written.",
+            "Only the keyed samples send a credential, the one the source's client reads from",
+            f"{names}, to its base URL's origin alone; they follow no redirect and are never",
+            "retried, and neither a credential nor a token is written.",
         ]
     sentences.append(
         "A page an anonymous client cannot read is requested once and listed under Not fetched."
@@ -1343,11 +1325,10 @@ def _compose(
         lines.append(_row([OBSERVED, *["-"] * 7, HAND]))
     listed = [_row([page.url, _NOT_REQUESTED, "-", page.reason]) for page in snapshot.not_fetched]
     lines += ["", "## Not fetched", "", _LEFT_OUT, _LEFT_OUT_RULE, *left_out, *listed, ""]
-    credentials = snapshot.credentials
-    if credentials is None:
+    if not snapshot.variables:
         lines.append(f"Regenerate: `{COMMAND}`")
     else:
-        names = " and ".join(f"`{name}`" for name in credentials.variables)
+        names = " and ".join(f"`{name}`" for name in snapshot.variables)
         lines.append(f"Regenerate, with {names} set: `{COMMAND}`")
     lines += ["", _MARK.format(FORM)]
     return "\n".join(lines) + "\n"
@@ -1369,24 +1350,6 @@ def _stale(out: Path, files: Collection[str]) -> list[str]:
     found = [path for subdir in subdirs for path in sorted((out / subdir).rglob("*"))]
     names = [path.relative_to(out).as_posix() for path in found if path.is_file()]
     return [name for name in names if name not in files]
-
-
-def _kept(snapshot: Snapshot, out: Path, rows: Sequence[Row]) -> list[Row]:
-    """The rows, each page marked ``keep_recorded`` with its recorded file's content.
-
-    A row takes it where this run's content is the same after ``canonical``.
-    """
-    result: list[Row] = []
-    for row in rows:
-        page, path = row.page, out / (row.page.file or ".")
-        if page.keep_recorded and row.content is not None and path.is_file():
-            recorded = path.read_bytes()
-            same = snapshot.canonical(page, recorded) == snapshot.canonical(page, row.content)
-            if recorded != row.content and same:
-                _log(f"  {page.file}: the same after canonical, kept as recorded")
-                row = replace(row, content=recorded)
-        result.append(row)
-    return result
 
 
 def write_snapshot(out: Path, rows: Sequence[Row], fetched_md: str) -> None:
@@ -1490,9 +1453,10 @@ def compare(
 def run(snapshot: Snapshot, argv: Sequence[str] | None = None) -> int:
     """Fetch every page of ``snapshot``, then write the snapshot, or with ``--check`` compare it.
 
-    The command line takes ``--out DIR`` and ``--check``, and ``--keyless`` where the
-    snapshot declares credentials: it fetches and compares the pages that send none, logs
-    in nowhere and writes nothing.
+    The command line takes ``--check``, and ``--keyless`` where the snapshot names the
+    variables of its client's credentials: it fetches and compares the pages that send
+    none, needs no variable and writes nothing. Every request goes through the snapshot's
+    client, or one built from its slug, which the run closes after its last request.
 
     Args:
         snapshot: The source's declaration.
@@ -1502,42 +1466,40 @@ def run(snapshot: Snapshot, argv: Sequence[str] | None = None) -> int:
         The exit status: 1 where ``--check`` or ``--keyless`` finds a difference, else 0.
     """
     parser = argparse.ArgumentParser(description=f"Refresh docs/upstream/ from {snapshot.name}.")
-    parser.add_argument("--out", type=Path, default=snapshot.out, help="snapshot directory")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
         "--check", action="store_true", help="fetch and compare with the snapshot; write nothing"
     )
-    if snapshot.credentials is not None:
+    if snapshot.variables:
         mode.add_argument(
             "--keyless",
             action="store_true",
-            help="fetch and compare the pages that send no credential; no login, write nothing",
+            help="fetch and compare the pages that send no credential; write nothing",
         )
     args = parser.parse_args(argv)
-    out: Path = args.out
+    out = snapshot.out
     keyless: bool = getattr(args, "keyless", False)
     if not snapshot.pages:
         raise SystemExit("Nothing to fetch: declare the snapshot's pages, the API document's too.")
-    if snapshot.credentials is not None and not _comparable(snapshot.credentials.base):
-        raise SystemExit(
-            f"The base of the snapshot's credentials, {snapshot.credentials.base!r}, cannot be "
-            "compared with a page's URL: give an http or https URL with a host, no user, no "
-            "query, no fragment and no dot segment. Nothing was fetched or written."
-        )
     for page in snapshot.pages:
         _check_page(snapshot, page)
-    if snapshot.credentials is not None and not keyless:
-        for name in snapshot.credentials.variables:
+    if not keyless:
+        for name in snapshot.variables:
             if not os.environ.get(name):
                 raise SystemExit(
                     f"{name} is not set. The keyed samples need it; set it, or run with "
                     "--keyless. Nothing was fetched or written."
                 )
+    client = snapshot.client if snapshot.client is not None else _built(snapshot)
     fetched = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     count = len(snapshot.pages)
     _log(f"Fetching {count} pages and those they link; nothing is written before the last")
-    capture = _Capture(snapshot, keyless=keyless)
-    rows = capture.capture_all()
+    capture = _Capture(snapshot, client, keyless=keyless)
+    try:
+        rows = capture.capture_all()
+    finally:
+        if snapshot.client is None:
+            _run_coroutine(client.aclose())
     if args.check or keyless:
         differ, moved = compare(snapshot, out, rows, keyless=keyless)
         for line in moved:
@@ -1551,7 +1513,6 @@ def run(snapshot: Snapshot, argv: Sequence[str] | None = None) -> int:
         )
         _log(f"{capture.sent} requests sent, each redirect and retry counted")
         return 1 if differ else 0
-    rows = _kept(snapshot, out, rows)
     write_snapshot(out, rows, render_fetched(snapshot, rows, fetched, (out / OBSERVED).is_file()))
     written = sum(1 for row in rows if row.content is not None)
     _log(f"Wrote {written} files and {FETCHED} under {out} (Fetched {fetched})")

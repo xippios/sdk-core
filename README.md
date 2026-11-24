@@ -1036,8 +1036,8 @@ UNNAMED_CODES = {
 
 A source's `scripts/refresh_upstream.py`, which snapshots its upstream documentation into
 `docs/upstream/` (conventions §3), declares a `Snapshot` and runs it; `xippios.core.refresh`
-does the rest, in the standard library alone (ADR-0046). sdk-template renders this script
-for a new source, which fills the declaration:
+does the rest, sending each request through core's client (ADR-0062). sdk-template renders
+this script for a new source, which fills the declaration:
 
 ```python
 """Refresh the upstream documentation snapshot in ``docs/upstream/`` (``/refresh-upstream``).
@@ -1096,11 +1096,22 @@ if __name__ == "__main__":
 ```
 
 The script carries no `# /// script` block: it runs in the project's environment, where
-`xippios-core` and the converter of the source's dev group are installed. `run` fetches
-every page before it writes one, one request at a time, `pause` seconds apart (2 by
-default), each retried once after a network error or a 5xx, and follows no redirect to
+`xippios-core`, the source's own package and the converter of the source's dev group are
+installed. `run` fetches every page before it writes one, one request at a time, `pause`
+seconds apart (2 by default), each retried once after a network error or a 5xx, and once
+after a 429 where the client's retry policy gives it a wait, and follows no redirect to
 another host: such a page stops the run unless it is recorded by that status, and then
-`FETCHED.md` lists it under `Not fetched` with the host. The run stops, before writing,
+`FETCHED.md` lists it under `Not fetched` with the host.
+
+Every request goes through core's `AsyncClient` on core's loop (ADR-0062, decision 4). The
+frame builds one from the slug, without credentials, which names itself as every client of
+the source does, `xippios-example/<version>`, the version that of the installed distribution
+`xippios-example`; a source hands its own as `Snapshot(client=...)` for its credentials, its
+pace, its headers or the wait its retry policy gives a 429, which its `classify` may read from
+a header of upstream's own. The client follows no redirect, so the frame follows one on the
+page's host itself, up to ten, and notes each hop in the page's row. The command line takes
+`--check`, and `--keyless` where the snapshot names the variables of its client's
+credentials; the declaration's `out` names where the snapshot stands. The run stops, before writing,
 when a page states a copyright, a licence or terms of use that `attribution` does not
 record, or no longer prints one it records; `vocabulary` names words that state none.
 The check reads an HTML page's visible text, an image's alternative text included where
@@ -1121,10 +1132,12 @@ each row on one line, a line feed in a note or a reason written as a space.
 `--check` exits 1 when a file differs from what upstream serves, compared after
 `canonical`, or when `FETCHED.md` would change in more than its rows' measures.
 
-The last line of `FETCHED.md` names the file's form, `<!-- form 1 of the FETCHED.md that
+The last line of `FETCHED.md` names the file's form, `<!-- form 2 of the FETCHED.md that
 xippios.core.refresh writes -->`, and every change of core that rewords what the frame writes
 raises it (`FORM`), so a file that the frame wrote tells itself from a copy's (ADR-0062,
-decision 8). No check reads a committed `FETCHED.md` without a request: `--check` at a refresh
+decision 8). Form 2 names the client's User-Agent, its version written `<version>`, so that a
+release of the source moves no line of the file, and a source's first refresh on it rewrites
+the file whole (ADR-0062, decision 6). No check reads a committed `FETCHED.md` without a request: `--check` at a refresh
 is the one comparison, and each refresh writes the file whole (ADR-0062, decision 9). The
 script names its declaration `SNAPSHOT` at its top level, which imports and declares alone,
 sends no request and writes no file, its run under `if __name__ == "__main__":`, the form that
@@ -1136,23 +1149,26 @@ it does not recognise:
 
 | The source does | The declaration takes | As in |
 | --- | --- | --- |
-| sends credentials on a sample whose operation needs them | `credentials=Credentials(variables, base, login)` and `Page(..., sample=True, keyed=True)`; `--keyless` fetches the rest | sdk-faostat |
-| keeps a file as recorded where only its order moved | `Page(..., keep_recorded=True)` with `canonical` | sdk-eurostat's WADL |
+| sends credentials on a sample whose operation needs them | `client=` its own client with its auth, `variables=(name, ...)` and `Page(..., sample=True, keyed=True)`; `--keyless` fetches the rest | sdk-faostat |
+| keeps a file as recorded where only its order moved | `reduce` returns the recorded file's content where `canonical` finds it the answer's | sdk-eurostat's WADL |
 | makes several files from one page | `Page(url, split=True)` and `split=lambda page, response: {name: content}` | sdk-cashctrl |
-| keeps a page from the publisher's second origin after a 403 | `Page(url, file, origin=second_url)` | sdk-usda-wasde |
-| waits out a 429 before the one retry | `quota_wait=lambda headers: seconds` | sdk-eurostat |
+| keeps a page from the publisher's second origin after a 403 | two pages, `Page(url, status=403, note=...)` and `Page(second_url, file)` | sdk-usda-wasde |
+| waits out a 429 as upstream names the wait | `client=` its own client, whose `RetryPolicy` bounds the wait and whose `classify` may read it | sdk-eurostat |
 | writes a section of its own in `FETCHED.md` | `sections=lambda rows: [Section(heading, text)]` | sdk-comtrade |
 | makes a row's note from its answer | `note=lambda row: f"{row.note}; {count} operations"` | sdk-faostat, the FAS sources |
 
-A keyed sample alone sends what `login` returns, once it was called right before the first
-of them; it follows no redirect, is never retried, and the frame prints nothing of it. It
-lies under the credentials' `base`, its origin, scheme, host and port as parsed, as the
-client holds its own credentials (ADR-0037, decision 4), and a path under the base's by
-segments, so `https://api.example.org/v1` and `https://api.example.org/v1/` admit the same
-samples and `https://api.example.org.elsewhere.net/v1/items` none. `FETCHED.md` names the
-login's variables, which must be set before anything is fetched. A `Last-Modified` stands
-in UTC, a date without a zone read as GMT as HTTP has it, and one that is no HTTP date as
-sent, in a code span.
+A keyed sample alone is sent with the credentials of the snapshot's `client`, which reads
+them itself, a login's included; it follows no redirect, is never retried, and the frame
+prints nothing of it. It lies on the origin of the client's base URL, its scheme, host and
+port, where alone the client sends its credentials (ADR-0037, decision 4), so
+`https://api.example.org/v2/items` is a keyed sample of a client on
+`https://api.example.org/v1` and `https://api.example.org.elsewhere.net/v1/items` none.
+`variables` names the environment variables that the credentials are read from: `FETCHED.md`
+names them and never a value, and each must be set before anything is fetched. A shared
+document is cut to the source's part in `reduce` with `read_json`, which refuses a document
+that `dump_json` does not write again as fetched or that holds a key twice, and `dump_json`,
+both indenting by two (ADR-0062, decision 4). A `Last-Modified` stands in UTC, a date without
+a zone read as GMT as HTTP has it, and one that is no HTTP date as sent, in a code span.
 
 ## The reference refresh script's frame
 
