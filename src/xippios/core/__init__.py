@@ -43,6 +43,7 @@ from xippios.core.errors import (
     request_description,
 )
 from xippios.core.models import (
+    NamedBy,
     Result,
     ResultCap,
     ResultMeta,
@@ -80,6 +81,7 @@ __all__ = [
     "InvalidRequestError",
     "KeyAuth",
     "MemoryCache",
+    "NamedBy",
     "NotFoundError",
     "PackagedCodes",
     "PackagedList",
