@@ -14,7 +14,10 @@ import re
 import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-WORKFLOWS = sorted((ROOT / ".github" / "workflows").glob("*.yml"))
+WORKFLOWS = sorted(
+    path for suffix in ("*.yml", "*.yaml") for path in (ROOT / ".github" / "workflows").glob(suffix)
+)
+"""Every workflow GitHub runs: a file of `.github/workflows/` named `*.yml` or `*.yaml`."""
 PINNED = re.compile(r"^\s*(?:- )?uses: [\w./-]+@[0-9a-f]{40} # v\d+(?:\.\d+)*$")
 """A pinned action with its version: the one line of a workflow that may hold a comment."""
 
