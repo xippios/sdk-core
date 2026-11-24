@@ -132,8 +132,9 @@ since `v0.4.1`. Each points to the sentence that states it in its section, with 
 source, and the history of its rules left (ADR-0068, decisions 2 and 3), which changes no rule of
 its own. §9 and §11 are unchanged.
 
-- **The header**: what binds names no source but `example` outside the citation of a record or of
-  a public decision, and the organization's check is planned (ADR-0065, decisions 5 and 6;
+- **The header**: what binds names no source but `example` outside the citation of a public
+  record of the organization, which is an issue, a pull request, a record or a report, and the
+  organization's check is planned (ADR-0065, decisions 5 and 6;
   ADR-0068, decision 1).
 - **§1, naming**: the slug `example` is the invented source's (ADR-0065, decision 4), the list of
   the family's sources leaves (ADR-0068, decision 2), and the verbs of a task's name and the words

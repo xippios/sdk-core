@@ -43,7 +43,8 @@ CITATION = re.compile(
     r"(?:(?:issues|pull)/\d+|blob/[\w.-]+/docs/(?:adr|reports)/[\w.-]+\.md)"
     r"(?:#[\w-]+)?"
 )
-"""A citation of a public record: an issue, a pull request, a record or a dated report."""
+"""A citation of a public record of the organization: an issue, a pull request, a record or a
+report."""
 
 HOST_ENDINGS = "com|org|net|gov|edu|int|io|eu|dev|ai|us|uk|ch|de|fr"
 """The endings of a host that a publisher's documents and APIs stand under: the six generic ones,
