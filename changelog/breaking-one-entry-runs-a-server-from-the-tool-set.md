@@ -6,8 +6,9 @@
   `mcp_apply_options` and `MCP_LOOPBACK_ONLY`, so a rendered `mcp.py` holds no line that a
   source edits. `apply_options` takes the parsed options alone and returns nothing, the noun
   of a tenant goes from `TenantLock` to `Tenants(noun=)`, both servers of a source are named
-  `xippios-<source>`, and `build_parser(server=)` and the three wordings of the help of
-  `--allow-remote` leave. (ADR-0063, ADR-0036, §4, §8,
+  `xippios-<source>`, and `build_parser(server=)`, the three wordings of the help of
+  `--allow-remote` and the entry `ResultCap` of `xippios.core.mcp`, which no source imports
+  from there, leave. (ADR-0063, ADR-0036, §4, §8,
   https://github.com/xippios/sdk-core/issues/476)
   - Hand-apply: `src/xippios/<package>/tasks.py` (every source) — `MCP_INSTRUCTIONS` holds
     the text that `mcp.py` held as `INSTRUCTIONS`, and a multi-tenant source's

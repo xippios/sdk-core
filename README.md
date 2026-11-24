@@ -1338,8 +1338,8 @@ or a table's page, with the rows and bytes it needs and a note that says how to 
 part of it (ADR-0038, decision 4); every other tool keeps 200 rows or
 64 KB. The note says "narrow the query to see the rest" and
 promises no filter; a tool with filters names them in its cap, `ResultCap(note="filter
-by year to see the rest")`. `ResultCap` comes from `xippios.core`, so the `MCP_CAPS` in
-a source's `tasks.py` need no `mcp` extra. A write tool set (`ToolSet(...,
+by year to see the rest")`. `ResultCap` comes from `xippios.core` alone, so the `MCP_CAPS`
+in a source's `tasks.py` need no `mcp` extra. A write tool set (`ToolSet(...,
 read_only=False)`) refuses, with `ValueError` when it is built, a task that does not take
 `confirm: bool = False`, and `--http` serves its server on a loopback `--host` only
 (`LOOPBACK_HOSTS`: `127.0.0.1`, `localhost`, `::1`): it carries no authentication.

@@ -34,8 +34,8 @@ server from several with ``register_tasks(server, tool_set)`` and applies each o
 with ``option_defaults()`` (ADR-0063, decisions 1 and 3).
 
 ``ResultCap`` is defined in ``xippios.core.models`` and exported from ``xippios.core``
-too, so a source's ``tasks.py`` declares its caps without this extra; it is re-exported
-here for the sources that import it from this package. A host such as xippios-mcp
+alone, so a source's ``tasks.py`` declares its caps without this extra; this package does
+not export it (https://github.com/xippios/sdk-core/issues/475). A host such as xippios-mcp
 imports ``ToolSet``, ``build_server``, ``register_tasks``, ``LOOPBACK_HOSTS`` and
 ``quiet_request_logging`` from here, and reads whether a tool set writes or is held to
 loopback from its ``read_only`` and ``loopback_only`` (ADR-0063, decision 4).
@@ -54,11 +54,9 @@ from xippios.core.mcp.errors import error_to_text
 from xippios.core.mcp.results import cap_result
 from xippios.core.mcp.server import build_server, quiet_request_logging, register_tasks
 from xippios.core.mcp.toolset import ToolSet
-from xippios.core.models import ResultCap
 
 __all__ = [
     "LOOPBACK_HOSTS",
-    "ResultCap",
     "ToolSet",
     "build_parser",
     "build_server",
