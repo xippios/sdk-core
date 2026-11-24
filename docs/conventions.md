@@ -856,8 +856,9 @@ status, by default the taxonomy error of the status, quoting nothing of the answ
 reads each credential through `credential(name)`, from `credentials=` or else from the
 variable, when it builds the request. The base keeps the bearer until 60 seconds before
 its `expires_in` runs out, and on a status of `renew_on`, 401 by
-default, exchanges once more and sends the request again, once (ADR-0025, amendment
-2026-11-18, point c). No config files, no dotenv loading inside the package — the
+default, exchanges once more and sends a read again, once, while a write's refusal goes back to
+its caller and the next request exchanges first (ADR-0025, amendment 2026-11-18, point c;
+ADR-0011, amendment 2026-11-24). No config files, no dotenv loading inside the package — the
 environment is the contract (direnv in development, secrets in CI). A source behind
 api.data.gov takes its key, its gateway answers and its
 quota from `xippios.core.data_gov`: `Gateway(SOURCE)` gives the `auth` on

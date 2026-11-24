@@ -493,14 +493,15 @@ def _sent_once(message: str, failure: httpx.RequestError | None = None) -> str:
 
     A write that met a 5xx, or ``failure`` in transit, may have been applied, so the sentence
     says that the request was sent once and that its outcome is unknown, unless the connection
-    failed before anything was sent. One full stop parts it from ``message``.
+    failed before anything was sent. One full stop parts it from ``message``, whose colon
+    goes where no text follows it, ``ReadTimeout. The request was sent once ...``.
     """
     said = (
         "Nothing was sent."
         if isinstance(failure, _NOTHING_SENT)
         else "The request was sent once and its outcome is unknown."
     )
-    text = message.rstrip()
+    text = message.rstrip().removesuffix(":")
     return f"{text} {said}" if text.endswith((".", "!", "?")) else f"{text}. {said}"
 
 

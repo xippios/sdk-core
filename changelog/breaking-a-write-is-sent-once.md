@@ -1,6 +1,7 @@
-- Core's client sends a `POST`, `PUT`, `PATCH` or `DELETE` once, after a 429 too, and
-  `RetryPolicy` loses `retry_non_idempotent` and `retry_transport_errors`, so that a read alone
-  is repeated and no keyword or mark asks for a repeat. The error of a write that met a 5xx or
+- Core's client sends a `POST`, `PUT`, `PATCH` or `DELETE` once, after a 429 and after a
+  renewing bearer's 401 too, and `RetryPolicy` loses `retry_non_idempotent` and
+  `retry_transport_errors`, so that a read alone is repeated and no keyword or mark asks for a
+  repeat. The error of a write that met a 5xx or
   failed in transit says that the request was sent once and that its outcome is unknown, or that
   nothing was sent where the connection failed, while a 4xx keeps upstream's words. A client
   whose reads upstream bills takes `RetryPolicy(max_attempts=1)`, and a write task's docstring
@@ -28,6 +29,16 @@
     label `DRAFT` for `create_draft` and `delete_draft`, `search_messages` with `in:sent` for
     `send_message`, and `get_message`, its `label_ids`, for `modify_message` and
     `trash_message` — no test breaks, and the review holds it.
+    `src/xippios/google/mail/_client.py` (sdk-google-mail) — `classify`'s 401 `authError`
+    says "also after one refresh" of a read alone, while a write task that meets it now raises
+    after one send, Gmail having refused the write before acting on it, and the next call
+    refreshes the access token, so its message says that the write can be sent again — no test
+    breaks, since every test of a 401 sends a `GET` (`tests/test_auth.py`,
+    `tests/test_tasks.py`), and the review holds it.
+    `src/xippios/google/mail/_auth.py` (sdk-google-mail) — `RefreshTokenAuth`'s docstring
+    sentence that a request answered with HTTP 401 refreshes once more and goes out again
+    holds for a read, and a write's 401 goes back to its caller while the next request
+    refreshes — no test breaks, and the review holds the stale sentence.
     `src/xippios/google/mail/api/<operation>.py` (sdk-google-mail: `drafts_create`,
     `drafts_delete`, `messages_send`, `messages_modify` and `messages_trash`) — the docstring's
     sentence that core never repeats the write after a 5xx or a transport failure names a 429

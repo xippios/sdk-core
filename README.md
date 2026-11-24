@@ -608,7 +608,8 @@ client = AsyncClient(
 The first request sends the token request ahead of it, with its `User-Agent`, and the
 bearer, kept as a `SecretStr`, goes out as `Authorization: Bearer` until 60 seconds before
 its `expires_in` runs out, when the next request exchanges again. An answer whose status is in `renew_on`, `{401}` by default,
-makes one more exchange and sends the request again, once; a source whose upstream
+makes one more exchange and sends a read again, once, while a write's refusal goes back to
+its caller, the write sent once, and the next request exchanges first; a source whose upstream
 refuses a bearer with a 403 too sets `renew_on = frozenset({401, 403})` on its class. A
 request that finds an exchange running on its event loop waits for it, so two first
 requests exchange once, and two requests refused with one bearer renew it once.
