@@ -284,3 +284,11 @@ def test_a_host_outside_the_list_fails_however_it_starts() -> None:
     # A host that begins like an allowed one is another host.
     planted = "api.example.org.elsewhere" + ".gov"
     assert names_in(f"https://{planted}/v1") == [(1, "host", planted)]
+
+
+@pytest.mark.parametrize("ending", HOST_ENDINGS.split("|"))
+def test_a_host_under_each_ending_fails(ending: str) -> None:
+    # The endings that the shape reads, each stated in `HOST_ENDINGS`
+    # (finding 2 of the review of https://github.com/xippios/sdk-core/pull/556).
+    planted = f"api.planted.{ending}"
+    assert names_in(f"https://{planted}/v1") == [(1, "host", planted)]
