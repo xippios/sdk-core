@@ -7,8 +7,9 @@
   the count with its consumers. The additions that no proving package uses yet are built here and
   first used by their sources at their adoptions: the option hooks of a tool set without
   `server`, the loopback declaration of a read tool set, the cache's lifetime by path prefix, the
-  walk's stop rule and key, the key class for a query key and for a bearer, `after` of `Lists`,
-  and the snapshot frame's `pause`.
+  walk's stop rule and key, the key class for a query key and for a bearer, and `after` of
+  `Lists`.
   (ADR-0059, ADR-0068, https://github.com/xippios/sdk-core/issues/485,
   https://github.com/xippios/sdk-core/issues/582,
-  https://github.com/xippios/sdk-core/blob/main/docs/reports/2026-11-25-the-surface-and-its-consumers.md)
+  https://github.com/xippios/sdk-core/blob/main/docs/reports/2026-11-25-the-surface-and-its-consumers.md,
+  https://github.com/xippios/sdk-core/blob/main/docs/reports/2026-11-25-the-surface-at-the-proof-s-final-heads.md)
