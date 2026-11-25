@@ -58,7 +58,10 @@ source stands on a frozen template tag or before a release from which a rule bin
    the coming release, and it names no source: the changes that a source's callers see, the
    conventions' changed rules by section, and what every source does. Each source's own list
    stands on its adoption issue, and the part of an earlier release leaves the file when the
-   next part enters, since the records and the changelog tell history.
+   next part enters, since the records and the changelog tell history. In the same way
+   sdk-template's own `CHANGELOG.md` keeps the sections after the oldest tag that a source
+   records and names the tag whose file holds the older ones
+   (https://github.com/xippios/sdk-template/issues/300, part 4).
 6. **A release states core's surface in two counts.** The statement of core's surface before
    and after a release counts the run-time part and the workbench apart, the workbench being
    `xippios.core.testing` and `xippios.core.refresh` with the modules under `testing/` and

@@ -112,8 +112,12 @@ had judged no source.
    snapshot's `split` makes: one source, sdk-cashctrl, needs it, and it stays, since no hook of
    a source can write a second file (https://github.com/xippios/sdk-core/issues/482, part 3). A
    section of the source's own in `FETCHED.md`, sdk-comtrade's "Products found", is `sections`,
-   placed after "How this is captured". A row's note made from its answer, as sdk-faostat's and
-   the FAS portal kit's notes count what an answer holds, is `note`, which also stops the run on
+   placed after "How this is captured". A check of one page against another, the FAS portal
+   kit's comparison of its two documents say, runs in `sections` too, which sees every row after
+   the last request and before anything is written, returns `()` where it adds no section and
+   stops the run with `changed` where the pages disagree. A row's note made from its answer, as
+   sdk-faostat's and the FAS portal kit's notes count what an answer holds, is `note`, which also
+   stops the run on
    an answer it does not recognise. sdk-eurostat's five seconds between requests are `pause`, and
    a sample whose operation needs the source's credentials, sdk-faostat's, is a page marked
    `keyed`. `canonical` is the form in which `--check` compares a file, as sdk-faostat's samples

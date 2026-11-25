@@ -44,15 +44,18 @@ of its own, to which ADR-0039 points.
    finishes, and a release PR is not merged while another release run waits at `pypi`. That is
    the one constraint that the missing group imposes on when a release PR merges, and this record
    adds it to ADR-0039, decision 3; everything else about who merges a release PR, and when, stays
-   the process of the work.
+   the process of the work. The constraint holds where a release has a `pypi` stage, as
+   `publish.yml`'s has; sdk-template's `release.yml`, which publishes nothing to PyPI, has none.
 4. **Two runs that found the version untagged.** The second run's push of the tag fails or,
    where the first run's `ci` failed, the second tags a later commit. The failed jobs of the run
    whose commit is the release are re-run, and where the other run tagged a later commit, a
-   maintainer rejects its deployment at `pypi` and the release is made again as a patch.
+   maintainer rejects its deployment at `pypi` and the release is made again as a patch. The
+   rejection holds where a release has a `pypi` stage, as decision 3's constraint does.
 
 ## Consequences
 
-- Conventions §12 states decisions 1 to 4, one sentence each that cites its decision. The
+- Conventions §12 states decisions 1 to 4, each in a sentence that cites its decision, and the
+  scope of decisions 3 and 4 in one more. The
   handover's part for 0.5.0 cites this record for how a release run that fails is finished.
 - Who merges a release PR, and when, stays the process of the work by ADR-0039, decision 3, but
   for the one constraint of decision 3 here.
