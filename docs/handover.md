@@ -250,9 +250,10 @@ its own. §9 and §11 are unchanged.
      to its task's `ResultMeta` (ADR-0037). A live test that holds `meta.retrieved_at` to the
      test's own window with `assert_time_between` fails where the run's cache serves an answer
      that an earlier test stored, since a kept answer's time is when it was stored and a task
-     dates its answer by the oldest of its reads, so the test asserts that the time is no later
-     than the call's end and no earlier than the cache's lifetime before its start (§4;
-     ADR-0037, decision 5; https://github.com/xippios/sdk-core/issues/479).
+     dates its answer by the oldest of its reads, so the test checks the time as the task dates
+     it: equal to the oldest of the call's reads, or no later than the call's end and no earlier
+     than the cache's lifetime before its start (§4; ADR-0037, decision 5;
+     https://github.com/xippios/sdk-core/issues/479).
   2. Each refusal before a request says `Nothing was sent.`, a loop over codes becomes one call of
      `check` with the list, and a check of a download's `dest` gives way to `check_dest`
      (ADR-0045, ADR-0053).
