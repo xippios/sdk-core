@@ -1323,11 +1323,25 @@ SNAPSHOT_RULES = [
             "before anything is written",
             "returns `()`",
             "`changed`",
-            "ADR-0062, decisions 3 and 5",
+            "ADR-0062, decision 5",
         ),
         id="s3-a-check-across-pages-runs-in-sections",
     ),
 ]
+
+
+def test_adr_0062_decision_5_states_the_check_of_one_page_against_another() -> None:
+    # §3 cites the decision that states the rule, not two that state none of it: finding 2 of the
+    # organization's conventions check on
+    # https://github.com/xippios/sdk-core/pull/595#issuecomment-7155690175.
+    held = decisions("ADR-0062")[5]
+    for name in (
+        "A check of one page against another",
+        "before anything is written",
+        "returns `()`",
+        "`changed`",
+    ):
+        assert name in held, f"ADR-0062, decision 5, does not state {name!r}"
 
 
 @pytest.mark.parametrize(("phrase", "names"), SNAPSHOT_RULES)
@@ -1783,6 +1797,45 @@ def test_the_handover_cites_the_record_for_a_failed_release_run() -> None:
     rule = sentence(item, "how a release run that fails is finished")
     assert FAILED_RUN in rule, f"the handover: {rule!r} does not cite {FAILED_RUN}"
     assert f"{RELEASE_TRAIN}, decision 6" not in rule, f"the handover: {rule!r} cites decision 6"
+
+
+# The two sentences that step 26 added to §12 cite the records that state them: findings 1 and 2
+# of the organization's conventions check on
+# https://github.com/xippios/sdk-core/pull/595#issuecomment-7155690175
+# (https://github.com/xippios/sdk-core/issues/597).
+
+TEMPLATE_CHANGELOG = "https://github.com/xippios/sdk-template/issues/300, part 4"
+"""The maintainer's answer on how sdk-template's own changelog keeps its older sections."""
+
+
+def test_section_12_s_sentence_on_sdk_template_s_changelog_cites_adr_0068() -> None:
+    rule = sentence(section(12), "sdk-template's own `CHANGELOG.md`")
+    names = (
+        "the oldest tag that a source records",
+        "names the tag whose file holds the older ones",
+    )
+    for name in (*names, f"{DOCUMENTS}, decision 5", TEMPLATE_CHANGELOG):
+        assert name in rule, f"§12: {rule!r} does not name {name!r}"
+    held = decisions(DOCUMENTS)[5]
+    for name in ("sdk-template's own `CHANGELOG.md`", *names, TEMPLATE_CHANGELOG):
+        assert name in held, f"{DOCUMENTS}, decision 5, does not state {name!r}"
+    text = flat((ROOT / "docs" / "handover.md").read_text(encoding="utf-8"))
+    item = text.split("**§12, versioning and releases**", 1)[1].split("- **§13", 1)[0]
+    line = sentence(item, "sdk-template's own `CHANGELOG.md`")
+    assert f"{DOCUMENTS}, decision 5" in line, f"the handover: {line!r} does not cite it"
+
+
+def test_section_12_scopes_the_race_s_remedy_to_a_release_with_a_pypi_stage() -> None:
+    rule = sentence(section(12), "This remedy of the race")
+    for name in ("a `pypi` stage", "`release.yml`", f"{FAILED_RUN}, decisions 3 and 4"):
+        assert name in rule, f"§12: {rule!r} does not name {name!r}"
+    held = decisions(FAILED_RUN)
+    for decision in (3, 4):
+        assert "a `pypi` stage" in held[decision], f"{FAILED_RUN}, decision {decision}: no scope"
+    assert "`release.yml`" in held[3], f"{FAILED_RUN}, decision 3, does not name `release.yml`"
+    (path,) = (ROOT / "docs" / "adr").glob(f"{FAILED_RUN.removeprefix('ADR-')}-*.md")
+    consequences = flat(path.read_text(encoding="utf-8").split("## Consequences", 1)[1])
+    assert "one sentence each" not in consequences, "the Consequences count one sentence each"
 
 
 def test_section_13_s_rule_on_a_workflow_s_comments_cites_its_record() -> None:

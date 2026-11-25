@@ -174,7 +174,7 @@ skip it (§8, §9; ADR-0040).
   `FETCHED.md` is written as the source's hooks make it (ADR-0062, decision 6).
   A check of one page against another runs in the snapshot's `sections`, which sees every
   row before anything is written, returns `()` where it adds no section and stops the run
-  with `changed` where the pages disagree (ADR-0062, decisions 3 and 5).
+  with `changed` where the pages disagree (ADR-0062, decision 5).
   The script names its `Snapshot` `SNAPSHOT` at its top level, which imports and declares
   alone, sends no request and writes no file, its run standing under
   `if __name__ == "__main__":`, the form that sdk-template renders, which the review holds
@@ -1403,8 +1403,8 @@ which §12 bounds to one minor.
   label, such as a decision's number or a plan's item, in plain words, since
   `publish.yml` makes the section the message of the tag it pushes (ADR-0039,
   decision 6). sdk-template's own `CHANGELOG.md` keeps the sections after the oldest tag that a
-  source records and names the tag whose file holds the older ones
-  (https://github.com/xippios/sdk-template/issues/300, part 4).
+  source records and names the tag whose file holds the older ones (ADR-0068, decision 5;
+  https://github.com/xippios/sdk-template/issues/300, part 4).
 - The release train (ADR-0039, decision 6): the reference-data refresh, where
   a source has one, runs before the release. It is a PR of its own, merged before the
   release PR, only when a record changed or `fetched` goes from a bare date to the full

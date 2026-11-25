@@ -183,9 +183,9 @@ its own. §9 and §11 are unchanged.
   `ENV_VARS` and the checks that keep what a source uses (ADR-0035), and the recorder (ADR-0066).
 - **§12, versioning and releases**: a dependency on a publisher's shared package and the sections
   that bind one (ADR-0021, amendment 2026-11-24; ADR-0065, decision 3), sdk-template's own
-  `CHANGELOG.md`, which names the tag whose file holds its older sections
-  (https://github.com/xippios/sdk-template/issues/300, part 4), and how a release run that fails is finished, the remedy of the race where a release
-  has a `pypi` stage (ADR-0069).
+  `CHANGELOG.md`, which names the tag whose file holds its older sections (ADR-0068, decision 5;
+  https://github.com/xippios/sdk-template/issues/300, part 4), and how a release run that fails
+  is finished, the remedy of the race where a release has a `pypi` stage (ADR-0069).
 - **§13, repository hygiene**: a workflow carries no comment but the version after a pinned action
   (ADR-0039, decision 7, amendment 2026-11-24; https://github.com/xippios/.github/issues/111).
 - **§14, the boundary of a source package**: the six sentences, word for word (ADR-0060).
@@ -247,7 +247,12 @@ its own. §9 and §11 are unchanged.
   - `xippios.core.data_gov`, which a publisher's shared package holds (ADR-0065, decision 1).
 - **What a source does by hand**, each by the fragment that names it, the files on its issue:
   1. Each wrapper reads JSON by `get_answer`, takes `answer.payload` and hands `answer.retrieved_at`
-     to its task's `ResultMeta` (ADR-0037).
+     to its task's `ResultMeta` (ADR-0037). A live test that holds `meta.retrieved_at` to the
+     test's own window with `assert_time_between` fails where the run's cache serves an answer
+     that an earlier test stored, since a kept answer's time is when it was stored and a task
+     dates its answer by the oldest of its reads, so the test asserts that the time is no later
+     than the call's end and no earlier than the cache's lifetime before its start (§4;
+     ADR-0037, decision 5; https://github.com/xippios/sdk-core/issues/479).
   2. Each refusal before a request says `Nothing was sent.`, a loop over codes becomes one call of
      `check` with the list, and a check of a download's `dest` gives way to `check_dest`
      (ADR-0045, ADR-0053).
