@@ -5,8 +5,8 @@ source's callers see, the conventions' rules that changed, by section, and what 
 (ADR-0068, decision 5; ADR-0065, decisions 4 and 5). The part of an earlier release stands in that
 release's tag, `git show v0.4.1:docs/handover.md` for the parts of core 0.2.0 to 0.4.1, and the
 records and `CHANGELOG.md` tell its history. Each source's own list, every Hand-apply item of the
-release's changelog fragments that names it, one item per file with the tests that break without
-it, stands on the source's adoption issue in its own repository
+release's section of `CHANGELOG.md` that names it, one item per file with the tests that break
+without it, stands on the source's adoption issue in its own repository
 (https://github.com/xippios/sdk-core/issues/485, part 4).
 
 ## Adopting core 0.5.0
@@ -24,10 +24,11 @@ before the tag (https://github.com/xippios/sdk-core/issues/485). The other sourc
 tags.
 
 The two lists below and the items on each adoption issue are written from the release's changelog
-fragments, read on `main` with every step of the package merged: each Hand-apply note gives a file,
-what changes in it and the tests that break without it, at the line numbers of the source's `main`
-on 2026-11-24, and the adoption PR confirms every item against the source as it is then. §15 items
-8 and 9 hold an adoption against the two lists (https://github.com/xippios/sdk-core/issues/334,
+entries, read as fragments on `main` with every step of the package merged and assembled into the
+release's section of `CHANGELOG.md`: each Hand-apply note gives a file, what changes in it and the
+tests that break without it, at the line numbers of the source's `main` on 2026-11-24, and the
+adoption PR confirms every item against the source as it is then. §15 items 8 and 9 hold an adoption
+against the two lists (https://github.com/xippios/sdk-core/issues/334,
 https://github.com/xippios/sdk-core/issues/349).
 
 What binds in core names no source, and core's test `tests/test_what_core_names.py` refuses every
@@ -228,7 +229,7 @@ its own. §9 and §11 are unchanged.
   a task that takes `start` fails the tool set when `mcp.py` builds it, and so every test that
   imports the server (ADR-0063, decision 3).
 - **The names that left**, each failing a source at its import or its call until the port stands,
-  with what takes its place in the fragment that names it:
+  with what takes its place in the changelog entry that names it:
   - the client's: `get_json`, `delete_json`, `request(raise_on_error=)`, `Timeouts`, `decode_text`,
     `decode_csv`'s response branch and `delimiter=`, `decode_json` from the lists, `QueryKeyAuth`,
     `HeaderKeyAuth`, `BearerAuth`, `BasicKeyAuth`, `RenewingBearerAuth(margin=)`, the client's
@@ -253,7 +254,8 @@ its own. §9 and §11 are unchanged.
     `Page.keep_recorded`, `Page.origin`, `--out`, `indent`, `load_json`, now `read_json`, and
     `compare_fetched`;
   - `xippios.core.data_gov`, which a publisher's shared package holds (ADR-0065, decision 1).
-- **What a source does by hand**, each by the fragment that names it, the files on its issue:
+- **What a source does by hand**, each by the changelog entry that names it, the files on its
+  issue:
   1. Each wrapper reads JSON by `get_answer`, takes `answer.payload` and hands `answer.retrieved_at`
      to its task's `ResultMeta` (ADR-0037). A live test that holds `meta.retrieved_at` to the
      test's own window with `assert_time_between` fails where the run's cache serves an answer
