@@ -4,6 +4,6 @@
   another origin of the publisher goes through the one client as its files go, and a documented
   parameter that a caller cannot set yet stands while the README's `## Scope` names it with its
   public issue. A recorded body that no route serves and no `classify` reads is an input of the
-  test, and a recording's status served with its body removed is a body of the second kind.
+  test.
   (ADR-0060, ADR-0061, ADR-0064, §2, §4, §8, §10,
   https://github.com/xippios/sdk-core/issues/612)

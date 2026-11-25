@@ -1983,17 +1983,6 @@ OPEN_CASES = [
         id="s10-a-recorded-body-as-an-input",
     ),
     pytest.param(
-        10,
-        "A recording's status served with its body removed",
-        (
-            "the second kind",
-            "ADR-0043, decision 5",
-            "https://github.com/xippios/sdk-core/issues/609",
-        ),
-        None,
-        id="s10-a-status-without-its-body",
-    ),
-    pytest.param(
         4,
         "A catalogue on another origin of the publisher goes as its files go",
         (

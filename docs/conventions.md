@@ -1157,9 +1157,7 @@ standalone from the package. A task named in `BULK_TASKS` gets no route:
   changed in its status, its content type and its body at once is a new answer composed in a
   recorded shape, the second kind, which stands only where the snapshot documents it, and not
   a recording changed in memory, the fourth (the invented source's status errors, composed in
-  the shape of its recorded 401 rather than changed from it; ADR-0043). A recording's status
-  served with its body removed is a new answer composed in a recorded shape, the second kind
-  (ADR-0043, decision 5; https://github.com/xippios/sdk-core/issues/609). A value that no route
+  the shape of its recorded 401 rather than changed from it; ADR-0043). A value that no route
   serves as an
   answer and no `classify` reads, handed to the code under test, is an input of the test and
   takes no kind, such as a literal given to a model or a scrub, or an exchange given to a
