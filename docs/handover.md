@@ -265,7 +265,8 @@ its own. §9 and §11 are unchanged.
      task's facts about its answer go to `meta.notes` (ADR-0067).
   8. A write task's docstring names the read that shows whether a failed write was applied, and a
      client whose reads upstream bills takes `RetryPolicy(max_attempts=1)` (ADR-0011).
-  9. A walk of offset pages is one `fetch_pages` with its bound, which the task's docstring states
+  9. A walk of offset pages is one `fetch_pages` with its bound, and the tool's description, the
+     task's docstring before `Args:`, states the most requests of a call, retries counted
      (ADR-0034; ADR-0061, decision 8).
   10. A read-only source of public data gives its client core's cache with a lifetime per path
       prefix (ADR-0040; ADR-0061, decision 11).
