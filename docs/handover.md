@@ -142,8 +142,10 @@ its own. §9 and §11 are unchanged.
 - **§2, layering**: several values of one filter as a list, a filter of the package's own only
   where upstream has none and one order of arguments (ADR-0061, decisions 1, 2, 4 and 5), the
   arguments that identify a record in the order of upstream's path
-  (https://github.com/xippios/sdk-usda-esr/issues/60, part 1), and what an answer holds (ADR-0060,
-  decisions 4 and 8; ADR-0001, amendment 2026-11-24).
+  (https://github.com/xippios/sdk-usda-esr/issues/60, part 1), what an answer holds (ADR-0060,
+  decisions 4 and 8; ADR-0001, amendment 2026-11-24), and a documented parameter that a caller
+  cannot set yet, which stands while the README's `## Scope` names it with its public issue
+  (ADR-0060, decision 8; https://github.com/xippios/sdk-core/issues/611).
 - **§3, upstream fidelity**: values, labels and a record that a package shapes itself (ADR-0060,
   decisions 1, 3, 7 and 8; ADR-0020, amendment 2026-11-24), a printed time
   (https://github.com/xippios/sdk-usda-esr/issues/60, part 3), a number's form in JSON (ADR-0067,
@@ -154,8 +156,10 @@ its own. §9 and §11 are unchanged.
 - **§4, the envelope**: notes and the names of a record's codes (ADR-0067), `retrieved_at` from
   `get_answer` (ADR-0037), the walk of pages that refuses at its bound and the stated bound of
   requests per call (ADR-0034, amendment 2026-11-24; ADR-0061, decision 8), credential and data
-  names kept for each source (ADR-0040), the entry's names (ADR-0063, decision 7) and a release as
-  upstream states it (ADR-0060, decisions 2 and 8).
+  names kept for each source (ADR-0040), the entry's names (ADR-0063, decision 7), a release as
+  upstream states it (ADR-0060, decisions 2 and 8), and a catalogue on another origin of the
+  publisher, which goes as its files go, through the one client without its credentials and under
+  its one limiter (ADR-0060, decision 8; https://github.com/xippios/sdk-core/issues/610).
 - **§5, errors**: the refusal that says nothing was sent and the check of a list (ADR-0045 and
   ADR-0053, amendments 2026-11-24), one answer for "no data" per kind of task, with a period not
   yet released answered by §4's case of one period (ADR-0041, decision 6), one refusal that names
@@ -174,13 +178,17 @@ its own. §9 and §11 are unchanged.
 - **§8, MCP**: a tool set alone builds a server and is checked when it is built, a paged cap only
   for a task that takes no `start`, one entry, the adapter's refusal and the host's reading
   (ADR-0063, decisions 1 to 7; ADR-0061, decision 9), a tool's description and its bound (ADR-0063,
-  decision 9), a write tool's preview in every call (ADR-0050), and a stated bound of requests in
-  the tool's description, about two dozen before the client's retries (ADR-0061, decision 8).
+  decision 9), a write tool's preview in every call (ADR-0050), a stated bound of requests in
+  the tool's description, about two dozen before the client's retries (ADR-0061, decision 8), and
+  the answer that the response cache holds for a paged continuation, one under its bound within
+  its path's lifetime (ADR-0061, decision 9; https://github.com/xippios/sdk-core/issues/608).
 - **§10, testing**: the family check's contract tests and what a source no longer tests (ADR-0063,
   decision 8), a reading's form and a value set held offline (ADR-0060, decision 9; ADR-0061,
   decisions 3 and 12), the key class's slug (ADR-0040;
-  https://github.com/xippios/sdk-core/issues/526), the built-answer check (ADR-0064), the plugin's
-  `ENV_VARS` and the checks that keep what a source uses (ADR-0035), and the recorder (ADR-0066).
+  https://github.com/xippios/sdk-core/issues/526), the built-answer check (ADR-0064), with a
+  recorded body that no route serves and no `classify` reads an input of the test (ADR-0064,
+  decision 3; https://github.com/xippios/sdk-core/issues/609), the plugin's `ENV_VARS` and the
+  checks that keep what a source uses (ADR-0035), and the recorder (ADR-0066).
 - **§12, versioning and releases**: a dependency on a publisher's shared package and the sections
   that bind one (ADR-0021, amendment 2026-11-24; ADR-0065, decision 3), sdk-template's own
   `CHANGELOG.md`, which names the tag whose file holds its older sections (ADR-0068, decision 5;
