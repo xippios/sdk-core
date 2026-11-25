@@ -134,7 +134,8 @@
     record — a test that asserts the other answer breaks (ADR-0061, decision 6).
     `src/xippios/<package>/tasks.py` (sdk-usda-psd, sdk-usda-esmis, sdk-usda-nass,
     sdk-cashctrl) — each task that spends more than one request states the most that one call
-    spends, retries counted, in its docstring and its tool's note — no test breaks, and the
+    spends, retries counted, in its tool's description, the text of its docstring before
+    `Args:` — no test breaks, and the
     review holds it (ADR-0061, decision 8).
     `src/xippios/<package>/tasks.py` (each source with `MCP_CAPS`) — `ResultCap(paged=True)`
     only where a second run sends upstream no request, an answer of a packaged table or of the

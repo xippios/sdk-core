@@ -157,8 +157,11 @@ its own. §9 and §11 are unchanged.
   names kept for each source (ADR-0040), the entry's names (ADR-0063, decision 7) and a release as
   upstream states it (ADR-0060, decisions 2 and 8).
 - **§5, errors**: the refusal that says nothing was sent and the check of a list (ADR-0045 and
-  ADR-0053, amendments 2026-11-24), one answer for "no data" per kind of task and one refusal that
-  names the first problem (ADR-0061, decisions 6 and 7).
+  ADR-0053, amendments 2026-11-24), one answer for "no data" per kind of task, with a period not
+  yet released answered by §4's case of one period (ADR-0041, decision 6), one refusal that names
+  the first problem (ADR-0061, decisions 6 and 7), a refusal after another operation's read that
+  names that read (ADR-0054, amendment 2026-11-22), and `request_description` in a shared
+  package's messages about an answer (ADR-0043, decision 6; ADR-0065, decision 3).
 - **§6, the HTTP client**: a write and a billed read sent once (ADR-0011, amendment 2026-11-24;
   ADR-0061, decision 10), `get_answer` the one reader of JSON and `request("DELETE", ...)` in place
   of `delete_json` (ADR-0037), the cache by path prefix (ADR-0040; ADR-0061, decision 11), a
@@ -171,16 +174,18 @@ its own. §9 and §11 are unchanged.
 - **§8, MCP**: a tool set alone builds a server and is checked when it is built, a paged cap only
   for a task that takes no `start`, one entry, the adapter's refusal and the host's reading
   (ADR-0063, decisions 1 to 7; ADR-0061, decision 9), a tool's description and its bound (ADR-0063,
-  decision 9), a write tool's preview in every call (ADR-0050), and a stated bound of requests
-  (ADR-0061, decision 8).
+  decision 9), a write tool's preview in every call (ADR-0050), and a stated bound of requests in
+  the tool's description, about two dozen before the client's retries (ADR-0061, decision 8).
 - **§10, testing**: the family check's contract tests and what a source no longer tests (ADR-0063,
   decision 8), a reading's form and a value set held offline (ADR-0060, decision 9; ADR-0061,
   decisions 3 and 12), the key class's slug (ADR-0040;
   https://github.com/xippios/sdk-core/issues/526), the built-answer check (ADR-0064), the plugin's
   `ENV_VARS` and the checks that keep what a source uses (ADR-0035), and the recorder (ADR-0066).
 - **§12, versioning and releases**: a dependency on a publisher's shared package and the sections
-  that bind one (ADR-0021, amendment 2026-11-24; ADR-0065, decision 3), and how a release run that
-  fails is finished (ADR-0069).
+  that bind one (ADR-0021, amendment 2026-11-24; ADR-0065, decision 3), sdk-template's own
+  `CHANGELOG.md`, which names the tag whose file holds its older sections
+  (https://github.com/xippios/sdk-template/issues/300, part 4), and how a release run that fails is finished, the remedy of the race where a release
+  has a `pypi` stage (ADR-0069).
 - **§13, repository hygiene**: a workflow carries no comment but the version after a pinned action
   (ADR-0039, decision 7, amendment 2026-11-24; https://github.com/xippios/.github/issues/111).
 - **§14, the boundary of a source package**: the six sentences, word for word (ADR-0060).
@@ -193,7 +198,10 @@ its own. §9 and §11 are unchanged.
 - **Item 1, the core floor**: `core_version=0.5.0`, so `xippios-core~=0.5.0` and each of its
   extras likewise, from PyPI, with `uv.lock` updated. A dependency on another source package or on
   a publisher's shared package takes its minor on core 0.5.0, released first (§12; ADR-0021;
-  ADR-0065, decision 3).
+  ADR-0065, decision 3). The environment then takes every extra, `uv sync --all-extras`: a
+  `uv sync` or a `uv run --exact` without `--all-extras` removes the extras, and
+  `uv run --isolated` builds an environment without them, so an isolated `pytest` run of a test
+  that imports an extra takes `--all-extras` too, while a plain `uv run` keeps what is installed.
 - **Item 2, `copier update` to sdk-template 0.5.0**, which renders what the template's changelog
   lists for 0.5.0: among it, a rendered `mcp.py` holds no line that a source edits (ADR-0063,
   decision 7), `reference/README.md` takes the one header of its provenance table (ADR-0062), and
@@ -258,18 +266,38 @@ its own. §9 and §11 are unchanged.
      task's facts about its answer go to `meta.notes` (ADR-0067).
   8. A write task's docstring names the read that shows whether a failed write was applied, and a
      client whose reads upstream bills takes `RetryPolicy(max_attempts=1)` (ADR-0011).
-  9. A walk of offset pages is one `fetch_pages` with its bound, which the task's docstring states
+  9. A walk of offset pages is one `fetch_pages` with its bound, and the tool's description, the
+     task's docstring before `Args:`, states the most requests of a call, retries counted
      (ADR-0034; ADR-0061, decision 8).
   10. A read-only source of public data gives its client core's cache with a lifetime per path
       prefix (ADR-0040; ADR-0061, decision 11).
   11. The reference script declares a `Lists`, the snapshot script fetches through core's client,
       and the first refresh on this core writes `FETCHED.md` whole, in its form 2 (ADR-0062).
+      A count of a snapshot run's most requests takes at most 22 a page and one a keyed sample:
+      the frame sends each request once through the client, whose retries never apply, asks a
+      page once more at most, after a network error, a 5xx or a 429 that the client gives a
+      wait, and follows at most ten redirects on the page's host in each attempt, while a
+      renewing auth's token requests and its one resend come beside them (ADR-0062,
+      decision 4). A page that answers 401 or 403 has its row under `Not fetched` with its
+      status and host and no size or hash, so its body may differ from run to run while
+      `--check` holds (ADR-0062, decision 7). After a reference refresh the records, not the
+      files, tell what changed: the frame writes each list it fetched, the provenance table and
+      `enums.py` again with the new fetch time and prints each list's count of records alone,
+      so a refresh that changed no record still leaves a diff in each, and §12 asks a pull
+      request of its own only for a changed record
+      (https://github.com/xippios/sdk-core/issues/592). A script that wraps a frame tells a
+      run that fetches nothing by what the frame reports, the line of the requests sent that a
+      run prints once it began to fetch, never by the literal `--render-only`: the frame's
+      parser takes `--render` as the same option, and `--help` and a refused `--only` fetch
+      nothing either (https://github.com/xippios/sdk-core/issues/591).
   12. A script that records and the one-off recordings call `record` and `send_once`, sync under
       their plain names or awaited by `async_fn`, and a recording names a secret once, `Scrub`
       covering its encoded forms (ADR-0066).
   13. `tests/test_built_answers.py` keeps its collecting line alone, its empty `READERS` and
       `ALLOWED` with the comment above them deleted where a render wrote them, and each place the
-      check fails takes a kind of §10 or the input's sentence (ADR-0064).
+      check fails takes a kind of §10 or the input's sentence (ADR-0064). A publisher's shared
+      package collects the same check, so a test of its own that builds an answer takes the
+      mark there too (§10; ADR-0065, decision 3).
   14. Each way of ADR-0061 and each sentence of ADR-0060 that the source does not meet yet: a
       renamed read task, a reading beside its text, the arguments in upstream's order, a printed
       time read naive, and the tasks that fix filters, sorts, ranks or cuts left (§14).
@@ -280,8 +308,16 @@ its own. §9 and §11 are unchanged.
       `src/xippios/core/testing/record.py`, each listed in the PR with the record that moved it
       (§15 item 3; ADR-0059, decision 2).
   16. A source behind a publisher's shared package imports the gateway's names from it, declares
-      it with one minor through the template's answer, and deletes the tests of the gateway that
-      the shared package holds (ADR-0065, decisions 1 and 3; §12).
+      it with one minor through the template's answer, and deletes its tests of the gateway's
+      own answers, the 429 cases and the quota policy's headers among them, which the shared
+      package holds (ADR-0065, decisions 1 and 3; §12). The shared package's gateway names the
+      request of each of its three messages about an answer, the refusal of a key, the answer
+      to a spent rate limit and the answer for an unknown route, with `request_description`,
+      as §5 asks of a source's `classify`, though they came from core word for word (ADR-0030,
+      decision 4; ADR-0043, decision 6; ADR-0065, decision 3). A package that builds on the
+      script frames, a shared package's kit of the snapshot frame say, keeps them out of its
+      root's imports, so that a source's run time loads no frame, as `xippios.core` keeps
+      `xippios.core.refresh` out of its own (ADR-0062, decision 1).
   17. The adoption's `breaking` fragment names the core bound `~=0.5.0`, the template's tag
       `v0.5.0` and conventions 1.30, and each change of the first list that the adoption brings to
       its callers has its entry among the adoption's fragments (§15 item 9).
