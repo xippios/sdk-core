@@ -714,6 +714,11 @@ decision 4).
 The messages that name their request are those about an answer, core's and the errors that
 a source's `classify` maps, and a refusal of a request already built, as the quota policy's
 is, while two kinds of a source's own messages name none (ADR-0030, decision 4; ADR-0043).
+A publisher's shared package is held to it as a source is: the messages of a gateway that it
+carries, its refusal of a key, its answer to a spent rate limit and its answer for a route it
+does not know, are messages about an answer, so each names its request with
+`request_description`, those carried word for word from an earlier core included (ADR-0030,
+decision 4; ADR-0043, decision 6; ADR-0065, decision 3).
 A refusal that the package makes of the call as given, before any request or after a read
 and before the write, names no request: it names the argument, the record or the tool that
 it refuses and says that nothing was sent (the invented source's refusal of a
@@ -725,9 +730,10 @@ refusal before a request says it the same way, and core gives no helper for it, 
 (ADR-0045, amendment 2026-11-24). A task that refuses only after a request of the call words
 what was sent itself, and a refusal that names the read of another operation that the call sent,
 a count or a list of releases say, words it so, as a refusal after a count says that the count
-was sent and no data fetched (ADR-0054, amendment 2026-11-22). The subject of a decoder that reads a body without its response
-names no request either: it names the operation that its caller gives it, as core's `parse`
-names the `endpoint` that a wrapper passes (ADR-0030, decision 4; ADR-0043).
+was sent and no data fetched (ADR-0054, amendment 2026-11-22). The subject of a decoder that
+reads a body without its response names no request either: it names the operation that its
+caller gives it, as core's `parse` names the `endpoint` that a wrapper passes (ADR-0030,
+decision 4; ADR-0043).
 
 A refusal of a code names what the caller can send in its place: the closest known codes
 (`UnknownCode`), or the refused code's parent and the codes listed under its name, as

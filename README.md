@@ -300,8 +300,9 @@ as the `year` that alone is over the limit.
 A task that collects every page of an offset-paged list walks them with `fetch_pages`, under
 its bound of pages, the most requests one call sends before the client's retries, and its
 tool's description, the text of its docstring before `Args:`, states the most that one call
-spends, retries counted (ADR-0061, decision 8). Its `fetch` answers a page's items with upstream's count, and the walk sends no
-request at or past that count (ADR-0034, amendment 2026-11-24):
+spends, retries counted (ADR-0061, decision 8). Its `fetch` answers a page's items with
+upstream's count, and the walk sends no request at or past that count (ADR-0034, amendment
+2026-11-24):
 
 ```python
 from xippios.core import Result, ResultMeta, fetch_pages

@@ -159,8 +159,10 @@ its own. §9 and §11 are unchanged.
 - **§5, errors**: the refusal that says nothing was sent and the check of a list (ADR-0045 and
   ADR-0053, amendments 2026-11-24), one answer for "no data" per kind of task, with a period not
   yet released refused by a list task that can tell it from an empty one
-  (https://github.com/xippios/sdk-usda-esr/issues/60, part 2), and one refusal that names the
-  first problem (ADR-0061, decisions 6 and 7).
+  (https://github.com/xippios/sdk-usda-esr/issues/60, part 2), one refusal that names the
+  first problem (ADR-0061, decisions 6 and 7), a refusal after another operation's read that
+  names that read (ADR-0054, amendment 2026-11-22), and `request_description` in a shared
+  package's messages about an answer (ADR-0043, decision 6; ADR-0065, decision 3).
 - **§6, the HTTP client**: a write and a billed read sent once (ADR-0011, amendment 2026-11-24;
   ADR-0061, decision 10), `get_answer` the one reader of JSON and `request("DELETE", ...)` in place
   of `delete_json` (ADR-0037), the cache by path prefix (ADR-0040; ADR-0061, decision 11), a
@@ -284,11 +286,11 @@ its own. §9 and §11 are unchanged.
       `enums.py` again with the new fetch time and prints each list's count of records alone,
       so a refresh that changed no record still leaves a diff in each, and §12 asks a pull
       request of its own only for a changed record
-      (https://github.com/xippios/sdk-core/issues/592). A script that wraps a frame tells a run that fetches nothing by what the
-      frame reports, the line of the requests sent that a run prints once it began to fetch,
-      never by the literal `--render-only`: the frame's parser takes `--render` as the same
-      option, and `--help` and a refused `--only` fetch nothing either
-      (https://github.com/xippios/sdk-core/issues/591).
+      (https://github.com/xippios/sdk-core/issues/592). A script that wraps a frame tells a
+      run that fetches nothing by what the frame reports, the line of the requests sent that a
+      run prints once it began to fetch, never by the literal `--render-only`: the frame's
+      parser takes `--render` as the same option, and `--help` and a refused `--only` fetch
+      nothing either (https://github.com/xippios/sdk-core/issues/591).
   12. A script that records and the one-off recordings call `record` and `send_once`, sync under
       their plain names or awaited by `async_fn`, and a recording names a secret once, `Scrub`
       covering its encoded forms (ADR-0066).
@@ -309,9 +311,13 @@ its own. §9 and §11 are unchanged.
   16. A source behind a publisher's shared package imports the gateway's names from it, declares
       it with one minor through the template's answer, and deletes its tests of the gateway's
       own answers, the 429 cases and the quota policy's headers among them, which the shared
-      package holds (ADR-0065, decisions 1 and 3; §12). A package that builds on the script
-      frames, a shared package's kit of the snapshot frame say, keeps them out of its root's
-      imports, so that a source's run time loads no frame, as `xippios.core` keeps
+      package holds (ADR-0065, decisions 1 and 3; §12). The shared package's gateway names the
+      request of each of its three messages about an answer, the refusal of a key, the answer
+      to a spent rate limit and the answer for an unknown route, with `request_description`,
+      as §5 asks of a source's `classify`, though they came from core word for word (ADR-0030,
+      decision 4; ADR-0043, decision 6; ADR-0065, decision 3). A package that builds on the
+      script frames, a shared package's kit of the snapshot frame say, keeps them out of its
+      root's imports, so that a source's run time loads no frame, as `xippios.core` keeps
       `xippios.core.refresh` out of its own (ADR-0062, decision 1).
   17. The adoption's `breaking` fragment names the core bound `~=0.5.0`, the template's tag
       `v0.5.0` and conventions 1.30, and each change of the first list that the adoption brings to
