@@ -12,37 +12,45 @@ mechanism's record does not name stands below, for the ledger of the next minor.
 ## Basis
 
 - Core: the candidate,
-  https://github.com/xippios/sdk-core/commit/4060d9615012b09487d87a51064c610de34be069, and the
-  tag https://github.com/xippios/sdk-core/tree/v0.4.1, each counted by
+  [4060d96](https://github.com/xippios/sdk-core/commit/4060d9615012b09487d87a51064c610de34be069),
+  and the tag https://github.com/xippios/sdk-core/tree/v0.4.1, each counted by
   `python3 -I scripts/count_surface.py --json --core <tree>` of the candidate, which reads by
   `ast` and imports nothing (README, Counting the surface and its consumers).
 - The five proving packages, as consumers, each counted at the commit that the proof ends on,
   extracted by `git archive` and read as committed:
   - sdk-faostat, the tree of its adoption's second step,
-    https://github.com/xippios/sdk-faostat/commit/0e4d3bd26154f52ffdc9d96401b49cbbd47b4954
+    [0e4d3bd](https://github.com/xippios/sdk-faostat/commit/0e4d3bd26154f52ffdc9d96401b49cbbd47b4954)
     (https://github.com/xippios/sdk-faostat/pull/70), with `scripts/refresh_reference.py` of its
     third step put in its place, from
-    https://github.com/xippios/sdk-faostat/commit/81e48a10ca9f11b889644edd6619115c7acd96cc
+    [81e48a1](https://github.com/xippios/sdk-faostat/commit/81e48a10ca9f11b889644edd6619115c7acd96cc)
     (https://github.com/xippios/sdk-faostat/pull/76), which declares its lists in `Lists` with
     `Listed`, `run` and the `before` hook; the two count as one consumer;
   - sdk-cashctrl,
-    https://github.com/xippios/sdk-cashctrl/commit/16ea4a086d8a3030d66d499a73b8a84fb4aca542
+    [16ea4a0](https://github.com/xippios/sdk-cashctrl/commit/16ea4a086d8a3030d66d499a73b8a84fb4aca542)
     (https://github.com/xippios/sdk-cashctrl/pull/157);
   - sdk-usda-esr, at commit `40ae344e4b4f256d4cc030b5c701af38c255f8f0`, not yet public;
   - sdk-usda-fas, the shared package of the three FAS sources, proven as code before its
     repository exists, at commit `f3f02faf5f2b059c2d7299d28a1b7e83247bdeeb`, not yet public;
   - xippios-mcp, the host, at commit `a2557c4001a55e14192e1aecdc1e52659e9b51ce`, not yet public.
 - The nine other sources, as a second count that a later adoption changes, on `main` before
-  their adoption of 0.5.0:
-  https://github.com/xippios/sdk-comtrade/commit/da27cd23d4dc26853698fd0bb93d58e56c576743,
-  https://github.com/xippios/sdk-eurostat/commit/1713cf7ff17283a012f1b40721140b10a82b54c3,
-  https://github.com/xippios/sdk-google-mail/commit/bae345a5c167d2b0e1a554e7d7d8b8b98f912e72,
-  https://github.com/xippios/sdk-usda-esmis/commit/755aa6810cce1d0a6e9e74aa062fd9f1bd2f4cc2,
-  https://github.com/xippios/sdk-usda-gats/commit/2bcd2c6924059d321645179a349f02cebfae2784,
-  https://github.com/xippios/sdk-usda-nass/commit/58f376df35072c25fc9d8d9a3cc85a2f2e6c028c,
-  https://github.com/xippios/sdk-usda-psd/commit/dacd424fbe3bd36a0127ee9d27e3ca16d0cfe235,
-  https://github.com/xippios/sdk-usda-wasde/commit/8ab32e1e16101b36cdd7cfd81981f5afdf85fe85 and
-  https://github.com/xippios/sdk-x/commit/fca9eb27a5bdedd6cd4be3df16170d843598c09c. Their code
+  their adoption of 0.5.0: sdk-comtrade at
+  [da27cd2](https://github.com/xippios/sdk-comtrade/commit/da27cd23d4dc26853698fd0bb93d58e56c576743),
+  sdk-eurostat at
+  [1713cf7](https://github.com/xippios/sdk-eurostat/commit/1713cf7ff17283a012f1b40721140b10a82b54c3),
+  sdk-google-mail at
+  [bae345a](https://github.com/xippios/sdk-google-mail/commit/bae345a5c167d2b0e1a554e7d7d8b8b98f912e72),
+  sdk-usda-esmis at
+  [755aa68](https://github.com/xippios/sdk-usda-esmis/commit/755aa6810cce1d0a6e9e74aa062fd9f1bd2f4cc2),
+  sdk-usda-gats at
+  [2bcd2c6](https://github.com/xippios/sdk-usda-gats/commit/2bcd2c6924059d321645179a349f02cebfae2784),
+  sdk-usda-nass at
+  [58f376d](https://github.com/xippios/sdk-usda-nass/commit/58f376df35072c25fc9d8d9a3cc85a2f2e6c028c),
+  sdk-usda-psd at
+  [dacd424](https://github.com/xippios/sdk-usda-psd/commit/dacd424fbe3bd36a0127ee9d27e3ca16d0cfe235),
+  sdk-usda-wasde at
+  [8ab32e1](https://github.com/xippios/sdk-usda-wasde/commit/8ab32e1e16101b36cdd7cfd81981f5afdf85fe85)
+  and sdk-x at
+  [fca9eb2](https://github.com/xippios/sdk-x/commit/fca9eb27a5bdedd6cd4be3df16170d843598c09c). Their code
   imports core 0.4.1's names, so a name that 0.5.0 renamed, `record` for `record_sync` say,
   counts none there.
 - The lines of core's `tests/` are the lines of its Python files.
