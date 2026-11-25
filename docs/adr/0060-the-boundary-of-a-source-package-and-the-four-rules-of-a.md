@@ -69,7 +69,10 @@ prints is read into the type that keeps all of it, and no text stands beside it.
      answered. A date computed from the rows and another flow's release list leave it empty, and
      the task's docstring says why. A task that reads a file has one reading of it, the catalog's
      release identifier (decision 2; ADR-0041, decisions 1 and 6, and ADR-0020, decision 5, as
-     amended on this date).
+     amended on this date). A catalogue on another origin of the publisher, which names the
+     files, goes as its files go, through the source's one client without its credentials and
+     under its one limiter (ADR-0037, decision 4; ADR-0033, decision 1;
+     https://github.com/xippios/sdk-core/issues/610).
    - A value that upstream's record does not state stands in the envelope, never on the record,
      and core gives it its place: the names of the codes in an answer's rows and one place for a
      task's note, as https://github.com/xippios/sdk-core/issues/478 decided (decisions 1 and 6).
@@ -81,7 +84,9 @@ prints is read into the type that keeps all of it, and no text stands beside it.
      `releaseTimeStamp` reads as a time that keeps upstream's fraction of a second, and the
      private attribute that kept its text goes (decision 1; https://github.com/xippios/sdk-usda-esr/issues/60, part 3).
    - A caller can set what upstream documents as a parameter, and a package's default is upstream's
-     own (decision 4).
+     own (decision 4). A documented parameter that a caller cannot set yet stands while the
+     README's `## Scope` names it with its public issue, and the organization's check reports it
+     only where a change touches that task (https://github.com/xippios/sdk-core/issues/611).
    - `meta.total` is upstream's count and is summed no more than it is computed: a task that
      assembles its answer from several requests leaves it `None` unless upstream counts the whole
      request (decision 1; ADR-0034, decision 4, as amended on this date).

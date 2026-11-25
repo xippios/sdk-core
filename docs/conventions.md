@@ -117,7 +117,9 @@ Supporting modules: `models.py` (pydantic models), `reference/` (packaged data f
 plus a loader), `_client.py` (the configured `xippios.core.client` instance).
 
 A caller can set what upstream documents as a parameter, and a package's default for it is
-upstream's own (ADR-0060, decision 8).
+upstream's own (ADR-0060, decision 8). A documented parameter that a caller cannot set yet stands
+while the README's `## Scope` names it with its public issue (ADR-0060, decision 8;
+https://github.com/xippios/sdk-core/issues/611).
 Several values of one upstream filter are one argument that takes a list, which the package
 joins as upstream wants them, and a comma-separated text is no argument form (ADR-0061,
 decision 1).
@@ -521,7 +523,10 @@ catalog names, goes without the client's credentials (§6): `endpoint` is named 
 all the same, `request` holds the link as `ResultMeta` writes it, a signature in its
 query `REDACTED`, and the fixture of that download carries no key, neither the
 placeholder nor a credential header, so a leak check counts none in it (ADR-0037,
-decision 4). A download of an
+decision 4). A catalogue on another origin of the publisher goes as its files go, through the
+source's one client without its credentials and under its one limiter (ADR-0037, decision 4;
+ADR-0033, decision 1; ADR-0060, decision 8; https://github.com/xippios/sdk-core/issues/610).
+A download of an
 operation's answer is no file upstream names and keeps the operation's name. Where
 upstream's file name carries the dataset's name, `endpoint` names the part that every
 dataset's file shares, and the dataset stays in `request`: the invented source's
@@ -989,7 +994,11 @@ decision 2).
   A source pages a tool only where a second run of its task costs upstream nothing, an answer
   of a packaged table or one that the response cache holds, and leaves a tool unpaged where a
   second run sends upstream any request (ADR-0061, decision 9; ADR-0047, decision 2, amendment
-  2026-11-24). A
+  2026-11-24). An answer that the response cache holds is one under `cache_max_bytes` within its
+  path's lifetime, so a paged continuation within that lifetime sends no request, and a tool
+  whose answer can pass the bound stays unpaged unless the source raises the bound and says why
+  in its `CLAUDE.md` (ADR-0061, decision 9; ADR-0040, decision 3;
+  https://github.com/xippios/sdk-core/issues/608). A
   tool set refuses a paged cap when it is built for a task that takes `start`, which pages
   upstream itself and keeps its `resume with start=` note, and for a task that takes a
   parameter named `offset`, which the adapter's would shadow. A write task is never paged: a
@@ -1148,12 +1157,18 @@ standalone from the package. A task named in `BULK_TASKS` gets no route:
   changed in its status, its content type and its body at once is a new answer composed in a
   recorded shape, the second kind, which stands only where the snapshot documents it, and not
   a recording changed in memory, the fourth (the invented source's status errors, composed in
-  the shape of its recorded 401 rather than changed from it; ADR-0043). A value that no route
+  the shape of its recorded 401 rather than changed from it; ADR-0043). A recording's status
+  served with its body removed is a new answer composed in a recorded shape, the second kind
+  (ADR-0043, decision 5; https://github.com/xippios/sdk-core/issues/609). A value that no route
   serves as an
   answer and no `classify` reads, handed to the code under test, is an input of the test and
   takes no kind, such as a literal given to a model or a scrub, or an exchange given to a
   recorder's step alone, while an answer that a route serves or that `classify` reads takes
-  a kind (a time value given to a model, an exchange given to a recorder's step; ADR-0043).
+  a kind (ADR-0043). A recorded body that no route serves and no `classify` reads, handed to the
+  code under test by a replaced wrapper or straight to a parser, is such an input and takes the
+  input's sentence, while a recorded answer that a route serves keeps its kind, `kind 3` or
+  `kind 4` (ADR-0043, decision 5; ADR-0064, decision 3;
+  https://github.com/xippios/sdk-core/issues/609).
   A recording replayed at its own path for other parameters is the third kind, and where the
   test says where its body comes from, it names the condition under which upstream answers
   alike at those parameters, or says that the test asserts only what was sent (the invented

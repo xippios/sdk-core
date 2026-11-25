@@ -44,7 +44,11 @@ what it reverses: its decision 7 takes the place of ADR-0049's decisions 7 and 8
    an answer and no `classify` reads, handed to the code under test, is an input of the test
    (ADR-0043), and says so in the sentence `<the value> is an input of the test, not an answer
    from <upstream>.`, whose words are fixed up to "test" and whose upstream is the source's
-   own. A served answer takes a kind. The check reads the sentence as a mark at any place
+   own. A served answer takes a kind. A recorded body that no route serves and no `classify`
+   reads, handed to the code under test by a replaced wrapper or straight to a parser, is such an
+   input and takes the sentence, while a recorded answer that a route serves keeps its kind,
+   `kind 3` or `kind 4` (ADR-0043, decision 5; https://github.com/xippios/sdk-core/issues/609).
+   The check reads the sentence as a mark at any place
    (decision 9), so that a served answer takes a kind is the review's to hold, as whether a
    mark is true is.
 4. **The places.** Carried from ADR-0049, decision 4, without the functions that a source names
