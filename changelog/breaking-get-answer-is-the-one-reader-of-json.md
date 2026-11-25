@@ -194,3 +194,11 @@
     `scripts/probe_accounts.py` (sdk-x) — at `:1181`, `partial(client.get_json,
     USAGE_PATH)` takes `get_answer` and reads `.payload` — mypy over `scripts/` fails at
     `get_json`, and the script at its call.
+    `tests/test_live.py` (sdk-faostat, the one source whose live tests hold `retrieved_at` to
+    their own window) — at `:99` and `:144`, `assert_time_between(meta.retrieved_at, before,
+    after)`, and at `:237` the same of `result.meta.retrieved_at`, no longer hold the time to
+    the test's own window and check it as the task dates it, the oldest of its reads, which the
+    cache may have stored before the call, as an assertion that it equals the oldest read or a
+    bound from the cache's lifetime before the call's start to the call's end — the run's
+    cache can serve an answer that an earlier test stored, whose `retrieved_at` is the time it
+    was stored, and the live test fails on it (§4, ADR-0037, decision 5).

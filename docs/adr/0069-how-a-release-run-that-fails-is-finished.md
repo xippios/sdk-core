@@ -19,7 +19,8 @@ decision 3, leaves to the process of the work: the organization's conventions ch
 (finding 2 of https://github.com/xippios/sdk-core/pull/558#issuecomment-7140020024;
 https://github.com/xippios/sdk-core/issues/559).
 
-This record states the four sentences of §12 as they stand, so no rule changes, and supersedes
+This record states the four sentences of §12 on a failed release run as they stand, and the
+scope of the third and the fourth that a fifth sentence gives, so no rule changes, and supersedes
 no record, since these rules were never among ADR-0039's decisions. ADR-0039, decision 3, leaves
 who merges a release PR, and when, to the process of the work, which binds no repository. This
 record adds to it the one constraint that the missing `concurrency` group imposes on when a
