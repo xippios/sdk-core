@@ -3,7 +3,7 @@
   `assert_list_current` takes one as `current`. An `Answer` whose payload is not the list, the
   body that holds the records say, stops the frame's run or fails the comparison, and so does a
   mapping, a text or bytes handed to the comparison as either side, no longer read as codes of
-  its keys or characters; each says to hand the records.
+  its keys or characters. Each says to hand the records.
   (ADR-0062, ADR-0055, https://github.com/xippios/sdk-core/issues/577)
   - Hand-apply: `scripts/refresh_reference.py` (sdk-comtrade, sdk-eurostat, sdk-faostat,
     sdk-usda-esmis, sdk-usda-esr, sdk-usda-gats, sdk-usda-nass, sdk-usda-psd, sdk-usda-wasde)
