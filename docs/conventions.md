@@ -614,8 +614,9 @@ every page is collected, the count kept is the one upstream reported on the last
 fetched, and a mismatch with `len(data)` is upstream's and is not corrected; a task that
 returns one page, or whose stop rule ends its walk, can have `total > len(data)` by design.
 A task collects every page of an offset-paged list with core's `fetch_pages(fetch, *,
-page_size, most, paging)`, under a bound of `most` pages that its docstring states as the most
-requests one call spends, retries counted (ADR-0061, decision 8): the walk sends no request at
+page_size, most, paging)`, under a bound of `most` pages, the most requests one call sends
+before the client's retries, while its docstring states the most that one call spends, retries
+counted (ADR-0061, decision 8): the walk sends no request at
 or past upstream's count and returns nothing where it needs more pages than the bound, refusing
 with `InvalidRequestError` once the count shows it, or at the bound where the task's stop rule
 runs, and its refusal names the count, the bound, the paging argument, the requests sent, the
@@ -640,7 +641,8 @@ XippiosError
 ├── RateLimitError       429, or a source's documented answer to a spent limit
 │                        (ADR-0033); carries retry_after
 ├── NotFoundError        404 or empty where upstream signals absence, for a task that
-│                        returns one record (ADR-0061, decision 6)
+│                        returns one record, and a period that upstream has not
+│                        released, for a task of either kind (ADR-0061, decision 6)
 ├── ValidationError      we could not parse what upstream returned (carries raw body)
 ├── UpstreamError        other 4xx/5xx (carries status, body)
 ├── TransportError       network, timeout
@@ -655,7 +657,12 @@ XippiosError
 
 No data has one answer per kind of task: a task that returns a list answers it with the empty
 list, and a task that returns one record raises `NotFoundError`, as a period that upstream has
-not released does where the package knows the latest release (§4; ADR-0061, decision 6).
+not released does where the package knows the latest release (§4; ADR-0061, decision 6). A
+period that upstream has not released is no "no data" of a list: a task that returns a list and
+can tell such a period from an empty one, by a list of releases that it reads say, refuses it
+with `NotFoundError` too, naming the latest released period, and answers a released period
+without data with the empty list (§4; ADR-0061, decision 6;
+https://github.com/xippios/sdk-usda-esr/issues/60, part 2).
 
 Source packages subclass only when upstream has a distinct, documented failure mode;
 a refusal the package makes itself, such as an unknown filter name, subclasses
@@ -716,7 +723,9 @@ an empty list, `check_dest`'s and `Tenants.require`'s of an unknown tenant. A so
 refusal before a request says it the same way, and core gives no helper for it, while core's
 `names_codes`, which checks an answer's codes after the call, says that upstream was asked
 (ADR-0045, amendment 2026-11-24). A task that refuses only after a request of the call words
-what was sent itself. The subject of a decoder that reads a body without its response
+what was sent itself, and a refusal that names the read of another operation that the call sent,
+a count or a list of releases say, words it so, as a refusal after a count says that the count
+was sent and no data fetched (ADR-0054, amendment 2026-11-22). The subject of a decoder that reads a body without its response
 names no request either: it names the operation that its caller gives it, as core's `parse`
 names the `endpoint` that a wrapper passes (ADR-0030, decision 4; ADR-0043).
 
@@ -945,9 +954,11 @@ decision 2).
   of the host xippios-mcp follows
   the rule (`accounting-read`, `accounting-write`) and never mixes read and write tools;
   the host refuses one that does at startup.
-- A task that spends more than one request states in its docstring and in its tool's note the
-  most requests that one call can spend, retries counted, and one tool call over MCP spends at
-  most about two dozen requests (ADR-0061, decision 8).
+- A task that spends more than one request states in its tool's description, the text of its
+  docstring before `Args:`, the most requests that one call can spend, retries counted, and one
+  tool call over MCP sends at most about two dozen requests before the client's retries, as a
+  walk of 24 pages spends 96 at the client's default of four attempts (ADR-0061, decision 8;
+  ADR-0063, decision 9).
 - Result cap: default 200 rows or 64 KB, whichever first, bytes counted in the UTF-8
   encoding of the compact JSON text. Over the cap, return the first page plus a note on
   how to narrow the query. Never truncate silently.
@@ -1389,7 +1400,10 @@ which §12 bounds to one minor.
   `## [Unreleased]` of `CHANGELOG.md` instead. A release's section says an internal
   label, such as a decision's number or a plan's item, in plain words, since
   `publish.yml` makes the section the message of the tag it pushes (ADR-0039,
-  decision 6).
+  decision 6). A `CHANGELOG.md` may keep only the sections after a tag and name the tag whose
+  file holds the older ones, with a link to it there, as sdk-template's keeps those after the
+  oldest tag that a source records
+  (https://github.com/xippios/sdk-template/issues/300, part 4).
 - The release train (ADR-0039, decision 6): the reference-data refresh, where
   a source has one, runs before the release. It is a PR of its own, merged before the
   release PR, only when a record changed or `fetched` goes from a bare date to the full
@@ -1422,7 +1436,9 @@ which §12 bounds to one minor.
   the tag fails or, where the first run's `ci` failed, the second tags a later commit: the
   failed jobs of the run whose commit is the release are re-run, and where the other run tagged
   a later commit, a maintainer rejects its deployment at `pypi` and the release is made again
-  as a patch (ADR-0069, decision 4).
+  as a patch (ADR-0069, decision 4). This remedy of the race, no release PR merged while a run
+  waits at `pypi` and the rejection there, holds where a release has a `pypi` stage, as
+  `publish.yml`'s has; sdk-template's `release.yml` has none (ADR-0069, decisions 3 and 4).
 - A source may depend on another source package, consuming its task layer only: it
   imports `xippios.<dep>.tasks` and its models, never `api/` or `_client`, and declares
   `xippios-<dep>~=X.Y.0`, one minor, like core (ADR-0021). Both share one core minor:

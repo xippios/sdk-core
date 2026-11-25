@@ -298,8 +298,9 @@ none. A source subclasses it only for an attribute of its own, worded in `narrow
 as the `year` that alone is over the limit.
 
 A task that collects every page of an offset-paged list walks them with `fetch_pages`, under
-the bound of pages that its docstring states as the most requests one call spends (ADR-0061,
-decision 8). Its `fetch` answers a page's items with upstream's count, and the walk sends no
+its bound of pages, the most requests one call sends before the client's retries, and its
+tool's description, the text of its docstring before `Args:`, states the most that one call
+spends, retries counted (ADR-0061, decision 8). Its `fetch` answers a page's items with upstream's count, and the walk sends no
 request at or past that count (ADR-0034, amendment 2026-11-24):
 
 ```python
@@ -1020,7 +1021,10 @@ the source does, `xippios-example/<version>`, the version that of the installed 
 pace, its headers or the wait its retry policy gives a 429, which its `classify` may read from
 a header of upstream's own. The client follows no redirect, so the frame follows one on the
 page's host itself, up to ten, and notes each hop in the page's row: a 301, 302, 303, 307 or
-308 that names a `Location`, while any other 3xx is the page's own answer. The command line takes
+308 that names a `Location`, while any other 3xx is the page's own answer. The frame sends each
+request once through the client, whose retry policy never repeats one, so a page costs at most
+22 requests, two attempts of at most eleven, the page and ten redirects, and a keyed sample
+one, besides the token requests of a renewing auth and its one resend. The command line takes
 `--check`, and `--keyless` where the snapshot names the variables of its client's
 credentials; the declaration's `out` names where the snapshot stands. The run stops, before writing,
 when a page states a copyright, a licence or terms of use that `attribution` does not
@@ -1094,7 +1098,9 @@ both indenting by two (ADR-0062, decision 4). A hook that reads a JSON answer an
 nothing of the document again, a `note` that names the API document's version or a
 `sections` that compares two pages, reads it with `parse_json`, which refuses a key twice
 and a body that is no JSON with `changed` and holds the document to no form, so compact JSON
-kept as served is read; `read_json` reads through it (ADR-0062, decision 4). A
+kept as served is read; `read_json` reads through it (ADR-0062, decision 4). Both read an
+answer whole: a JSON value embedded in another document, an object in a page's script say, is
+the source's to cut out and parse. A
 `Last-Modified` stands in UTC, a date without
 a zone read as GMT as HTTP has it, and one that is no HTTP date as sent, in a code span.
 

@@ -66,8 +66,10 @@ sdk-usda-esr's adoption, read decision 5 for the family on the same day.
    problem that it finds, in core's words, and a package gathers no list of every problem into
    one refusal. The collectors of sdk-cashctrl and sdk-comtrade leave at their adoptions.
 8. **A stated bound of requests per call.** A task that spends more than one request states in
-   its docstring and in its tool's note the most requests that one call can spend, retries
-   counted, and one tool call over MCP spends at most about two dozen requests.
+   its tool's description, the text of its docstring before `Args:` (ADR-0063, decision 9), the
+   most requests that one call can spend, retries counted, and one tool call over MCP sends at
+   most about two dozen requests before the client's retries, as a walk of 24 pages spends 96
+   at the client's default of four attempts.
 9. **A paged cap only where a continuation costs upstream nothing.** A tool takes
    `ResultCap(paged=True)` only where a second run of its task sends upstream no request, an
    answer of a packaged table or one that the response cache holds. This tightens ADR-0047,
