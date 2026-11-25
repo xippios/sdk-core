@@ -615,8 +615,8 @@ fetched, and a mismatch with `len(data)` is upstream's and is not corrected; a t
 returns one page, or whose stop rule ends its walk, can have `total > len(data)` by design.
 A task collects every page of an offset-paged list with core's `fetch_pages(fetch, *,
 page_size, most, paging)`, under a bound of `most` pages, the most requests one call sends
-before the client's retries, while its docstring states the most that one call spends, retries
-counted (ADR-0061, decision 8): the walk sends no request at
+before the client's retries, while the tool's description, the docstring before `Args:`, states
+the most that one call spends, retries counted (ADR-0061, decision 8): the walk sends no request at
 or past upstream's count and returns nothing where it needs more pages than the bound, refusing
 with `InvalidRequestError` once the count shows it, or at the bound where the task's stop rule
 runs, and its refusal names the count, the bound, the paging argument, the requests sent, the
@@ -641,8 +641,7 @@ XippiosError
 ├── RateLimitError       429, or a source's documented answer to a spent limit
 │                        (ADR-0033); carries retry_after
 ├── NotFoundError        404 or empty where upstream signals absence, for a task that
-│                        returns one record, and a period that upstream has not
-│                        released, for a task of either kind (ADR-0061, decision 6)
+│                        returns one record (ADR-0061, decision 6)
 ├── ValidationError      we could not parse what upstream returned (carries raw body)
 ├── UpstreamError        other 4xx/5xx (carries status, body)
 ├── TransportError       network, timeout
@@ -658,11 +657,8 @@ XippiosError
 No data has one answer per kind of task: a task that returns a list answers it with the empty
 list, and a task that returns one record raises `NotFoundError`, as a period that upstream has
 not released does where the package knows the latest release (§4; ADR-0061, decision 6). A
-period that upstream has not released is no "no data" of a list: a task that returns a list and
-can tell such a period from an empty one, by a list of releases that it reads say, refuses it
-with `NotFoundError` too, naming the latest released period, and answers a released period
-without data with the empty list (§4; ADR-0061, decision 6;
-https://github.com/xippios/sdk-usda-esr/issues/60, part 2).
+task that fetches one period, a list task among them, answers a period that upstream has not
+released by §4's case of one period (ADR-0041, decision 6).
 
 Source packages subclass only when upstream has a distinct, documented failure mode;
 a refusal the package makes itself, such as an unknown filter name, subclasses
@@ -1406,9 +1402,8 @@ which §12 bounds to one minor.
   `## [Unreleased]` of `CHANGELOG.md` instead. A release's section says an internal
   label, such as a decision's number or a plan's item, in plain words, since
   `publish.yml` makes the section the message of the tag it pushes (ADR-0039,
-  decision 6). A `CHANGELOG.md` may keep only the sections after a tag and name the tag whose
-  file holds the older ones, with a link to it there, as sdk-template's keeps those after the
-  oldest tag that a source records
+  decision 6). sdk-template's own `CHANGELOG.md` keeps the sections after the oldest tag that a
+  source records and names the tag whose file holds the older ones
   (https://github.com/xippios/sdk-template/issues/300, part 4).
 - The release train (ADR-0039, decision 6): the reference-data refresh, where
   a source has one, runs before the release. It is a PR of its own, merged before the

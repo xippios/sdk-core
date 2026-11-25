@@ -158,9 +158,8 @@ its own. §9 and §11 are unchanged.
   upstream states it (ADR-0060, decisions 2 and 8).
 - **§5, errors**: the refusal that says nothing was sent and the check of a list (ADR-0045 and
   ADR-0053, amendments 2026-11-24), one answer for "no data" per kind of task, with a period not
-  yet released refused by a list task that can tell it from an empty one
-  (https://github.com/xippios/sdk-usda-esr/issues/60, part 2), one refusal that names the
-  first problem (ADR-0061, decisions 6 and 7), a refusal after another operation's read that
+  yet released answered by §4's case of one period (ADR-0041, decision 6), one refusal that names
+  the first problem (ADR-0061, decisions 6 and 7), a refusal after another operation's read that
   names that read (ADR-0054, amendment 2026-11-22), and `request_description` in a shared
   package's messages about an answer (ADR-0043, decision 6; ADR-0065, decision 3).
 - **§6, the HTTP client**: a write and a billed read sent once (ADR-0011, amendment 2026-11-24;
@@ -183,9 +182,9 @@ its own. §9 and §11 are unchanged.
   https://github.com/xippios/sdk-core/issues/526), the built-answer check (ADR-0064), the plugin's
   `ENV_VARS` and the checks that keep what a source uses (ADR-0035), and the recorder (ADR-0066).
 - **§12, versioning and releases**: a dependency on a publisher's shared package and the sections
-  that bind one (ADR-0021, amendment 2026-11-24; ADR-0065, decision 3), a `CHANGELOG.md` that names
-  the tag whose file holds its older sections (https://github.com/xippios/sdk-template/issues/300,
-  part 4), and how a release run that fails is finished, the remedy of the race where a release
+  that bind one (ADR-0021, amendment 2026-11-24; ADR-0065, decision 3), sdk-template's own
+  `CHANGELOG.md`, which names the tag whose file holds its older sections
+  (https://github.com/xippios/sdk-template/issues/300, part 4), and how a release run that fails is finished, the remedy of the race where a release
   has a `pypi` stage (ADR-0069).
 - **§13, repository hygiene**: a workflow carries no comment but the version after a pinned action
   (ADR-0039, decision 7, amendment 2026-11-24; https://github.com/xippios/.github/issues/111).
