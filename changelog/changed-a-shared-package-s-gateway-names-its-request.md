@@ -7,6 +7,6 @@
   https://github.com/xippios/sdk-core/issues/597)
   - Hand-apply: `src/xippios/usda/fas/data_gov.py` (sdk-usda-fas) — the gateway's refusal of a
     key, its answer to a spent rate limit and its answer for an unknown route name their request
-    with `request_description`, as the package's commit `f3f02fa` already does, and the adoption
-    checks that they still do and that `tests/test_data_gov.py` asserts those words — §5 binds a
-    shared package's messages about an answer (ADR-0065, decision 3).
+    with `request_description`, as the package's gateway already does before its first release,
+    and the adoption checks that they still do and that `tests/test_data_gov.py` asserts those
+    words — §5 binds a shared package's messages about an answer (ADR-0065, decision 3).

@@ -184,8 +184,8 @@ its own. §9 and §11 are unchanged.
 - **§12, versioning and releases**: a dependency on a publisher's shared package and the sections
   that bind one (ADR-0021, amendment 2026-11-24; ADR-0065, decision 3), sdk-template's own
   `CHANGELOG.md`, which names the tag whose file holds its older sections (ADR-0068, decision 5;
-  https://github.com/xippios/sdk-template/issues/300, part 4), and how a release run that fails is finished, the remedy of the race where a release
-  has a `pypi` stage (ADR-0069).
+  https://github.com/xippios/sdk-template/issues/300, part 4), and how a release run that fails
+  is finished, the remedy of the race where a release has a `pypi` stage (ADR-0069).
 - **§13, repository hygiene**: a workflow carries no comment but the version after a pinned action
   (ADR-0039, decision 7, amendment 2026-11-24; https://github.com/xippios/.github/issues/111).
 - **§14, the boundary of a source package**: the six sentences, word for word (ADR-0060).

@@ -117,18 +117,17 @@ had judged no source.
    the last request and before anything is written, returns `()` where it adds no section and
    stops the run with `changed` where the pages disagree. A row's note made from its answer, as
    sdk-faostat's and the FAS portal kit's notes count what an answer holds, is `note`, which also
-   stops the run on
-   an answer it does not recognise. sdk-eurostat's five seconds between requests are `pause`, and
-   a sample whose operation needs the source's credentials, sdk-faostat's, is a page marked
-   `keyed`. `canonical` is the form in which `--check` compares a file, as sdk-faostat's samples
-   and sdk-x's document take it. A file kept as recorded where only noise differs, sdk-eurostat's
-   WADL, is kept by the source's `reduce` hook, and a page that answers 403 where the publisher
-   serves a copy from a second origin, sdk-usda-wasde's, is declared twice, the refused page and
-   its copy (https://github.com/xippios/sdk-core/issues/482, part 3), so `Page.keep_recorded`
-   and `Page.origin` leave, which reverses those parts of ADR-0046, decision 5. The FAS portal's
-   kit that three snapshot scripts carry, the reader of the portal's shell and of its Swagger UI,
-   the cut of the shared Swagger document to one API and the comparison of the two documents,
-   stands in `sdk-usda-fas` and enters no module of core
+   stops the run on an answer it does not recognise. sdk-eurostat's five seconds between requests
+   are `pause`, and a sample whose operation needs the source's credentials, sdk-faostat's, is a
+   page marked `keyed`. `canonical` is the form in which `--check` compares a file, as sdk-faostat's
+   samples and sdk-x's document take it. A file kept as recorded where only noise differs,
+   sdk-eurostat's WADL, is kept by the source's `reduce` hook, and a page that answers 403 where the
+   publisher serves a copy from a second origin, sdk-usda-wasde's, is declared twice, the refused
+   page and its copy (https://github.com/xippios/sdk-core/issues/482, part 3), so
+   `Page.keep_recorded` and `Page.origin` leave, which reverses those parts of ADR-0046, decision 5.
+   The FAS portal's kit that three snapshot scripts carry, the reader of the portal's shell and of
+   its Swagger UI, the cut of the shared Swagger document to one API and the comparison of the two
+   documents, stands in `sdk-usda-fas` and enters no module of core
    (https://github.com/xippios/sdk-core/issues/482, part 4;
    https://github.com/xippios/sdk-core/issues/485, part 3). Every hook stops the run with
    `changed(url, what)` on a page that it does not recognise.
