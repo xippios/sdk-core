@@ -73,7 +73,11 @@ sdk-usda-esr's adoption, read decision 5 for the family on the same day.
 9. **A paged cap only where a continuation costs upstream nothing.** A tool takes
    `ResultCap(paged=True)` only where a second run of its task sends upstream no request, an
    answer of a packaged table or one that the response cache holds. This tightens ADR-0047,
-   decision 2, whose second run that "costs little" becomes one that costs upstream nothing.
+   decision 2, whose second run that "costs little" becomes one that costs upstream nothing. An
+   answer that the response cache holds is one under `cache_max_bytes` within its path's
+   lifetime, so a continuation within that lifetime sends no request, and a tool whose answer
+   can pass the bound stays unpaged unless the source raises the bound and says why in its
+   `CLAUDE.md` (ADR-0040, decision 3; https://github.com/xippios/sdk-core/issues/608).
 10. **A billed read and a write are sent once.** A request that upstream bills and a request that
     writes are sent once, and the error of a write that failed says that its outcome is unknown.
     This changes ADR-0011 for a write and a billed read. Core's client takes the write's half by

@@ -1949,3 +1949,86 @@ def test_adr_0039_points_to_the_record_that_tells_a_release_pr_by_its_title() ->
         "stand as written",
     ):
         assert name in pointer, f"{RELEASE_TRAIN}'s pointer does not name {name!r}"
+
+
+# Four cases that the conventions check on the proving pull requests found open, each answered by
+# the maintainer in a prompted dialog: one sentence of the conventions each, citing its record and
+# its question, and the record new in 0.5.0 states it (https://github.com/xippios/sdk-core/issues/612).
+
+OPEN_CASES = [
+    pytest.param(
+        8,
+        "An answer that the response cache holds is one under `cache_max_bytes`",
+        (
+            "within its path's lifetime",
+            "says why in its `CLAUDE.md`",
+            "ADR-0061, decision 9",
+            "ADR-0040, decision 3",
+            "https://github.com/xippios/sdk-core/issues/608",
+        ),
+        ("ADR-0061", 9, ("under `cache_max_bytes` within its path's lifetime", "`CLAUDE.md`")),
+        id="s8-an-answer-that-the-cache-holds",
+    ),
+    pytest.param(
+        10,
+        "A recorded body that no route serves and no `classify` reads",
+        (
+            "a replaced wrapper or straight to a parser",
+            "the input's sentence",
+            "`kind 3` or `kind 4`",
+            "ADR-0043, decision 5",
+            "https://github.com/xippios/sdk-core/issues/609",
+        ),
+        ("ADR-0064", 3, ("A recorded body that no route serves", "`kind 3` or `kind 4`")),
+        id="s10-a-recorded-body-as-an-input",
+    ),
+    pytest.param(
+        4,
+        "A catalogue on another origin of the publisher goes as its files go",
+        (
+            "without its credentials",
+            "under its one limiter",
+            "ADR-0037, decision 4",
+            "ADR-0033, decision 1",
+            "ADR-0060, decision 8",
+            "https://github.com/xippios/sdk-core/issues/610",
+        ),
+        ("ADR-0060", 8, ("A catalogue on another origin of the publisher", "one limiter")),
+        id="s4-a-catalogue-on-another-origin",
+    ),
+    pytest.param(
+        2,
+        "A documented parameter that a caller cannot set yet stands",
+        (
+            "`## Scope`",
+            "its public issue",
+            "ADR-0060, decision 8",
+            "https://github.com/xippios/sdk-core/issues/611",
+        ),
+        ("ADR-0060", 8, ("A documented parameter that a caller cannot set yet", "`## Scope`")),
+        id="s2-a-parameter-a-caller-cannot-set-yet",
+    ),
+]
+
+
+@pytest.mark.parametrize(("number", "phrase", "names", "held"), OPEN_CASES)
+def test_each_open_case_is_one_sentence_that_its_record_states(
+    number: int,
+    phrase: str,
+    names: tuple[str, ...],
+    held: tuple[str, int, tuple[str, ...]] | None,
+) -> None:
+    rule = sentence(section(number), phrase)
+    for name in names:
+        assert name in rule, f"§{number}: {rule!r} does not name {name!r}"
+    if held is not None:
+        record, decision, words = held
+        stated = decisions(record)[decision]
+        for word in words:
+            assert word in stated, f"{record}, decision {decision}, does not state {word!r}"
+
+
+def test_section_10_s_input_case_gives_no_example_that_takes_a_kind() -> None:
+    # The examples of a value that takes a kind went stale: the input case cites its record alone.
+    rule = sentence(section(10), "is an input of the test and takes no kind")
+    assert "a time value given to a model" not in rule, f"§10: {rule!r} keeps its stale example"
