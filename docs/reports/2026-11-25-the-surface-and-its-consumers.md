@@ -1,9 +1,5 @@
 # The surface of core 0.5.0 and its consumers among the proving packages, 2026-11-25
 
-**A draft.** The five proving packages were still moving when this was counted: the figures of
-core's own surface below are final for its candidate, and the consumers' figures are counted again
-on the commits that the proof ends on, before this report lands.
-
 Core's surface went from 126 unique names in 17,045 lines at v0.4.1 to 112 in 16,480 lines on the
 candidate for 0.5.0: the run-time part from 81 names in 9,068 lines to 72 in 8,740, and the
 workbench from 46 names in 7,977 lines to 41 in 7,740. Of the 112 names, 51 have fewer than two
@@ -20,17 +16,35 @@ mechanism's record does not name stands below, for the ledger of the next minor.
   tag https://github.com/xippios/sdk-core/tree/v0.4.1, each counted by
   `python3 -I scripts/count_surface.py --json --core <tree>` of the candidate, which reads by
   `ast` and imports nothing (README, Counting the surface and its consumers).
-- The five proving packages, as consumers, at the commits counted:
-  - sdk-faostat, https://github.com/xippios/sdk-faostat/commit/5ab5f48e7997a3d7347ef5c85eda54b8063b054a;
-  - sdk-cashctrl, https://github.com/xippios/sdk-cashctrl/commit/a3aa9f9e56345627a8079cbfa1fa0b2cb37df11b;
-  - sdk-usda-esr, https://github.com/xippios/sdk-usda-esr/commit/8acbdcd5e19f06194a742bdbac19b692bbac9164;
+- The five proving packages, as consumers, each counted at the commit that the proof ends on,
+  extracted by `git archive` and read as committed:
+  - sdk-faostat, the tree of its adoption's second step,
+    https://github.com/xippios/sdk-faostat/commit/0e4d3bd26154f52ffdc9d96401b49cbbd47b4954
+    (https://github.com/xippios/sdk-faostat/pull/70), with `scripts/refresh_reference.py` of its
+    third step put in its place, from
+    https://github.com/xippios/sdk-faostat/commit/81e48a10ca9f11b889644edd6619115c7acd96cc
+    (https://github.com/xippios/sdk-faostat/pull/76), which declares its lists in `Lists` with
+    `Listed`, `run` and the `before` hook; the two count as one consumer;
+  - sdk-cashctrl,
+    https://github.com/xippios/sdk-cashctrl/commit/16ea4a086d8a3030d66d499a73b8a84fb4aca542
+    (https://github.com/xippios/sdk-cashctrl/pull/157);
+  - sdk-usda-esr, at commit `40ae344e4b4f256d4cc030b5c701af38c255f8f0`, not yet public;
   - sdk-usda-fas, the shared package of the three FAS sources, proven as code before its
-    repository exists, at its commit `fdb28c2a747b0597a8bcd0fa0d43e629a33b5e57`;
-  - xippios-mcp, the host, https://github.com/xippios/xippios-mcp/commit/cd682d954ac2cc60c1235024c3e0d8427b56f6f2.
-- The nine other sources, as a second count that a later adoption changes, on `main`, before
-  their adoption of 0.5.0: sdk-comtrade, sdk-eurostat, sdk-google-mail, sdk-usda-esmis,
-  sdk-usda-gats, sdk-usda-nass, sdk-usda-psd, sdk-usda-wasde and sdk-x. Their code imports core
-  0.4.1's names, so a name that 0.5.0 renamed, `record` for `record_sync` say, counts none there.
+    repository exists, at commit `f3f02faf5f2b059c2d7299d28a1b7e83247bdeeb`, not yet public;
+  - xippios-mcp, the host, at commit `a2557c4001a55e14192e1aecdc1e52659e9b51ce`, not yet public.
+- The nine other sources, as a second count that a later adoption changes, on `main` before
+  their adoption of 0.5.0:
+  https://github.com/xippios/sdk-comtrade/commit/da27cd23d4dc26853698fd0bb93d58e56c576743,
+  https://github.com/xippios/sdk-eurostat/commit/1713cf7ff17283a012f1b40721140b10a82b54c3,
+  https://github.com/xippios/sdk-google-mail/commit/bae345a5c167d2b0e1a554e7d7d8b8b98f912e72,
+  https://github.com/xippios/sdk-usda-esmis/commit/755aa6810cce1d0a6e9e74aa062fd9f1bd2f4cc2,
+  https://github.com/xippios/sdk-usda-gats/commit/2bcd2c6924059d321645179a349f02cebfae2784,
+  https://github.com/xippios/sdk-usda-nass/commit/58f376df35072c25fc9d8d9a3cc85a2f2e6c028c,
+  https://github.com/xippios/sdk-usda-psd/commit/dacd424fbe3bd36a0127ee9d27e3ca16d0cfe235,
+  https://github.com/xippios/sdk-usda-wasde/commit/8ab32e1e16101b36cdd7cfd81981f5afdf85fe85 and
+  https://github.com/xippios/sdk-x/commit/fca9eb27a5bdedd6cd4be3df16170d843598c09c. Their code
+  imports core 0.4.1's names, so a name that 0.5.0 renamed, `record` for `record_sync` say,
+  counts none there.
 - The lines of core's `tests/` are the lines of its Python files.
 
 ## The surface before and after
@@ -60,7 +74,7 @@ five, then among the nine on `main` (a count where more than three):
 | name | among the five | among the nine |
 | --- | --- | --- |
 | `xippios.core:BODY_LIMIT` | sdk-cashctrl | none |
-| `xippios.core:REDACTED` | sdk-cashctrl, also by `xippios.core.testing` | four, by `xippios.core.testing` |
+| `xippios.core:REDACTED` | sdk-cashctrl, also by `xippios.core.testing` | four |
 | `xippios.core:BearerToken` | sdk-faostat | sdk-google-mail |
 | `xippios.core:QueryTooLarge` | none | none |
 | `xippios.core:QuotaPolicy` | sdk-usda-fas | sdk-comtrade, sdk-google-mail |
@@ -160,10 +174,22 @@ Their records name these with their consumer: `fetch_pages(stop=, key=)` (ADR-00
 and the frames' `split`, `Snapshot.pause`, `Page.keyed` and `Lists.before` (ADR-0062). The rest
 stand here for the ledger of the next minor.
 
+## The additions that no proving package uses
+
+Some additions of 0.5.0 are values or fields that the script does not count, so the five trees
+were read for them. No proving package uses these yet; each is built in core and first used by
+its source at that source's adoption: the option hooks of a tool set without `server`
+(`ToolSet(add_options=, apply_options=)`), the loopback declaration of a read tool set
+(`ToolSet(loopback_only=)`), the cache's lifetime by path prefix (`MemoryCache(lifetimes=)`),
+the walk's stop rule and key (`fetch_pages(stop=, key=)`), the key class for a query key and for
+a bearer (`KeyAuth` with `location="query"` or `"bearer"`), `after` of `Lists`, and the snapshot
+frame's `pause`. Three pieces that ADR-0062 names with one consumer each are used here:
+sdk-cashctrl's snapshot marks its page `split`, sdk-faostat's marks its samples `keyed`, and
+sdk-faostat's reference script, from its third step, hands its declaration a `before` hook.
+
 ## Imports from outside the lists
 
-Among the five, sdk-faostat imports `INFO_TERMS` in a script and `check_attribution` and
-`render_fetched` in its tests from `xippios.core.refresh.upstream`, and sdk-cashctrl imports
-`replay` in its tests from `xippios.core.testing.replay`: four names that no list pins. The
-modules of the family check, the built-answer check, the live comparison and the plugin are
-imported as the template renders them, and `request_description` is pinned in `xippios.core`.
+None of the five imports a name that no list pins. The modules of the family check, the
+built-answer check, the live comparison, the plugin and the recorder are imported by their path
+as the template renders them, and sdk-usda-esr imports `request_description` from
+`xippios.core.errors`, whose object `xippios.core` pins.
